@@ -2459,16 +2459,16 @@ async function guardarYEnviarPDF() {
   const pdfBlob = doc.output('blob');
   console.log('PDF completo size:', pdfBlob.size, 'bytes');
 
-  // --- Subir PDF a Cloudinary para tener URL de descarga directa ---
+  // --- Subir PDF a Cloudinary como base64 (mas confiable que blob) ---
   let pdfUrlCloudinary = null;
   try {
     toast('Subiendo PDF a la nube...');
-    const nombrePdf = 'OT_' + estado.otNumero + '_' + (estado.local || 'local').replace(/\s+/g, '_') + '.pdf';
     const formData = new FormData();
-    formData.append('file', pdfBlob, nombrePdf);
-    formData.append('upload_preset', CLOUDINARY.uploadPreset);
+    // Subir como data URI base64 - mas confiable que blob
+    formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
+    formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('resource_type', 'raw');
+    formData.append('public_id', 'OT_' + estado.otNumero);
     const resp = await fetch(
       'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
       { method: 'POST', body: formData }
@@ -2524,7 +2524,8 @@ async function guardarYEnviarPDF() {
       console.log('Tamano PDF para email:', pdfSize, 'bytes');
 
       // Siempre enviar URL limpia para que funcione como href en el template
-      const linkDescarga = pdfUrlCloudinary || pdfUrlFirestore || '';
+      // Usar link de Firestore primero (mas confiable que Cloudinary para PDFs)
+      const linkDescarga = pdfUrlFirestore || pdfUrlCloudinary || '';
       await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
         email_admin: email,
         ot_numero: String(estado.otNumero),
