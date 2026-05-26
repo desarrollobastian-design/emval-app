@@ -2257,8 +2257,8 @@ async function generarPDFRecepcionObra() {
     if (firmaConfirmada) {
       try {
         const firmaCanvas = document.getElementById('firma-canvas');
-        const firmaData = firmaCanvas.toDataURL('image/png');
-        doc.addImage(firmaData, 'PNG', margin+18, afterY+1, 55, 16);
+        const firmaData = await comprimirImagen(firmaCanvas.toDataURL('image/png'), 400, 0.7);
+        doc.addImage(firmaData, 'JPEG', margin+18, afterY+1, 55, 16);
         doc.setFontSize(7);
         doc.setTextColor(39, 160, 107);
         doc.text('Firma digital confirmada', margin+18, afterY+20);
@@ -2292,7 +2292,8 @@ async function generarPDFRecepcionObra() {
     doc.text('Timbre del Receptor:', notaX + 3, afterY + 31);
     if (estado.fotoTimbre) {
       try {
-        doc.addImage(estado.fotoTimbre, 'JPEG', notaX + 3, afterY + 33, 35, 25);
+        const timbreComp = await comprimirImagen(estado.fotoTimbre, 300, 0.4);
+        doc.addImage(timbreComp, 'JPEG', notaX + 3, afterY + 33, 35, 25);
       } catch(e) {
         doc.line(notaX + 5, afterY + 36, notaX + notaW - 5, afterY + 36);
       }
@@ -2315,6 +2316,24 @@ function verPDF() {
       if(doc) doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
     });
   }
+}
+
+// Compress image to max 800px and quality 0.5
+async function comprimirImagen(dataUrl, maxWidth, quality) {
+  return new Promise(function(resolve) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality || 0.5));
+    };
+    img.onerror = function() { resolve(dataUrl); };
+    img.src = dataUrl;
+  });
 }
 
 async function agregarFotosAlPDF(doc) {
@@ -2359,11 +2378,11 @@ async function agregarFotosAlPDF(doc) {
 
     if (fotosA[i]) {
       try {
-        doc.addImage(fotosA[i], 'JPEG', margin, currentY + 6, imgW, imgH);
+        const imgAComp = await comprimirImagen(fotosA[i], 600, 0.4);
+        doc.addImage(imgAComp, 'JPEG', margin, currentY + 6, imgW, imgH);
       } catch(e) {
         doc.setDrawColor(200);
         doc.rect(margin, currentY + 6, imgW, imgH);
-        doc.text('Foto no disponible', margin + imgW/2, currentY + 6 + imgH/2, { align: 'center' });
       }
     } else {
       doc.setDrawColor(200);
@@ -2380,11 +2399,11 @@ async function agregarFotosAlPDF(doc) {
 
     if (fotosD[i]) {
       try {
-        doc.addImage(fotosD[i], 'JPEG', despX, currentY + 6, imgW, imgH);
+        const imgDComp = await comprimirImagen(fotosD[i], 600, 0.4);
+        doc.addImage(imgDComp, 'JPEG', despX, currentY + 6, imgW, imgH);
       } catch(e) {
         doc.setDrawColor(200);
         doc.rect(despX, currentY + 6, imgW, imgH);
-        doc.text('Foto no disponible', despX + imgW/2, currentY + 6 + imgH/2, { align: 'center' });
       }
     } else {
       doc.setDrawColor(200);
