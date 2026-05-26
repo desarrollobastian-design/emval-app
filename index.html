@@ -996,21 +996,25 @@ const CLOUDINARY = {
 };
 
 async function subirCloudinary(dataUrl, carpeta, nombre) {
-  // Compress images before upload
-  if (nombre.match(/\.(jpg|jpeg|png)$/i)) {
-    try { dataUrl = await comprimirImagen(dataUrl, 800, 0.6); } catch(e) {}
-  }
   try {
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const formData = new FormData();
-    formData.append('file', blob, nombre);
+    if (nombre.match(/\.(jpg|jpeg|png)$/i)) {
+      try { dataUrl = await comprimirImagen(dataUrl, 800, 0.6); } catch(e) {}
+    }
+    var esAudio = nombre.match(/\.(mp4|webm|mp3|ogg|wav)$/i);
+    var esPdf = nombre.match(/\.pdf$/i);
+    var resourceType = esAudio ? 'video' : (esPdf ? 'raw' : 'image');
+    var endpoint = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/' + resourceType + '/upload';
+    var formData = new FormData();
     formData.append('upload_preset', CLOUDINARY.uploadPreset);
     formData.append('folder', 'emval/' + carpeta);
-    const resp = await fetch(
-      'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/auto/upload',
-      { method: 'POST', body: formData }
-    );
+    if (resourceType === 'image') {
+      formData.append('file', dataUrl);
+    } else {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      formData.append('file', blob, nombre);
+    }
+    const resp = await fetch(endpoint, { method: 'POST', body: formData });
     const data = await resp.json();
     if (data.secure_url) return data.secure_url;
     console.error('Cloudinary error:', data);
