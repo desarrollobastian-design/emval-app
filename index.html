@@ -493,8 +493,8 @@
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
-      <label>Carpeta del cliente</label>
-      <input type="text" id="cot-carpeta" placeholder="Ej: Unimarc, Rodrigo, S10..." />
+      <label>Carpeta (tecnico)</label>
+      <input type="text" id="cot-carpeta" placeholder="Ej: Ariel Espinoza, Pedro Arce..." />
     </div>
     <div style="display:flex;gap:10px;margin-top:auto;">
       <button class="btn btn-secondary" onclick="guardarCotizacion()" style="flex:1;">Guardar</button>
@@ -1405,8 +1405,8 @@ async function abrirCotizacion(docId) {
       '<div class="summary-row"><span class="sum-label">Tecnico</span><span class="sum-val">' + cotizacionActual.tecnico + '</span></div>' +
       '<div class="summary-row"><span class="sum-label">Fecha</span><span class="sum-val">' + cotizacionActual.fecha + '</span></div>' +
       '<div class="summary-row" style="border:none"><span class="sum-label">Trabajo</span><span class="sum-val" style="font-size:11px;text-align:right;max-width:60%">' + (cotizacionActual.descripcionTrabajo || '') + '</span></div>';
-    // Pre-fill carpeta
-    document.getElementById('cot-carpeta').value = cotizacionActual.local || '';
+    // Pre-fill carpeta con nombre del tecnico
+    document.getElementById('cot-carpeta').value = cotizacionActual.tecnico || cotizacionActual.local || '';
     document.getElementById('cot-descuento').value = '0';
     renderItemsCot();
     go('s-cotizacion');
@@ -1507,10 +1507,10 @@ async function cargarCarpetas() {
     const carpetas = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const c = d.carpeta || 'Sin carpeta';
-      if (!carpetas[c]) carpetas[c] = [];
-      carpetas[c].push({ id: doc.id, local: d.local, fecha: d.fecha, total: d.total,
-        descripcionTrabajo: d.descripcionTrabajo, items: d.items });
+      const c = d.carpeta || d.tecnico || 'Sin asignar';
+      if (!carpetas[c]) carpetas[c] = { tecnico: d.tecnico || c, items: [] };
+      carpetas[c].items.push({ id: doc.id, local: d.local, fecha: d.fecha, total: d.total,
+        descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico });
     });
     const lista = document.getElementById('lista-carpetas');
     lista.innerHTML = '';
@@ -1519,30 +1519,65 @@ async function cargarCarpetas() {
       lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones guardadas aun</p>';
       return;
     }
-    keys.forEach(function(carpeta) {
-      const items = carpetas[carpeta];
+    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
+    keys.forEach(function(carpeta, ci) {
+      const grupo = carpetas[carpeta];
+      const items = grupo.items;
+      const totalGeneral = items.reduce(function(s,i){ return s + (i.total||0); }, 0);
+      const letra = (grupo.tecnico || carpeta).charAt(0).toUpperCase();
+      const color = colores[ci % colores.length];
+
       const carpDiv = document.createElement('div');
       carpDiv.className = 'card';
-      carpDiv.style.marginBottom = '10px';
-      const titulo = document.createElement('div');
-      titulo.style = 'font-size:14px;font-weight:600;color:var(--azul);margin-bottom:8px;';
-      titulo.textContent = 'Carpeta: ' + carpeta + ' (' + items.length + ')';
-      carpDiv.appendChild(titulo);
+      carpDiv.style.marginBottom = '12px';
+
+      // Header tecnico
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+      const avatar = document.createElement('div');
+      avatar.style.cssText = 'width:44px;height:44px;border-radius:12px;background:' + color + ';display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:600;flex-shrink:0;';
+      avatar.textContent = letra;
+      const headerInfo = document.createElement('div');
+      headerInfo.style.flex = '1';
+      const nombreTec = document.createElement('div');
+      nombreTec.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
+      nombreTec.textContent = grupo.tecnico || carpeta;
+      const resumen = document.createElement('div');
+      resumen.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      resumen.textContent = items.length + ' cotizacion' + (items.length !== 1 ? 'es' : '') + ' | Total: $' + totalGeneral.toLocaleString('es-CL');
+      headerInfo.appendChild(nombreTec);
+      headerInfo.appendChild(resumen);
+      header.appendChild(avatar);
+      header.appendChild(headerInfo);
+      carpDiv.appendChild(header);
+
+      // Lista de OTs
       items.forEach(function(it) {
         const row = document.createElement('div');
-        row.style = 'padding:8px 0;border-bottom:1px solid var(--gris2);font-size:13px;';
-        const info = document.createElement('div');
-        info.style.fontWeight = '500';
-        info.textContent = (it.local || '') + ' - ' + (it.fecha || '');
-        const total = document.createElement('div');
-        total.style = 'color:var(--verde);font-weight:600;';
-        total.textContent = 'Total: $' + (it.total||0).toLocaleString('es-CL');
+        row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
+        const rowHeader = document.createElement('div');
+        rowHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+        const localFecha = document.createElement('div');
+        localFecha.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
+        localFecha.textContent = it.local || '';
+        const fechaDiv = document.createElement('div');
+        fechaDiv.style.cssText = 'font-size:11px;color:var(--texto3);';
+        fechaDiv.textContent = it.fecha || '';
+        rowHeader.appendChild(localFecha);
+        rowHeader.appendChild(fechaDiv);
+        const totalDiv = document.createElement('div');
+        totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
+        totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
+        const descDiv = document.createElement('div');
+        descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+        descDiv.textContent = (it.descripcionTrabajo || '').substring(0, 60) + (it.descripcionTrabajo && it.descripcionTrabajo.length > 60 ? '...' : '');
         const btn = document.createElement('button');
         btn.textContent = 'Enviar por email';
-        btn.style = 'margin-top:6px;background:var(--azul);color:white;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;';
+        btn.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;';
         btn.onclick = function() { enviarCotGuardadaData(it); };
-        row.appendChild(info);
-        row.appendChild(total);
+        row.appendChild(rowHeader);
+        row.appendChild(totalDiv);
+        row.appendChild(descDiv);
         row.appendChild(btn);
         carpDiv.appendChild(row);
       });
