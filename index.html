@@ -2595,22 +2595,53 @@ async function cargarOTsSupervisor() {
     if (statNums[2]) statNums[2].textContent = correctivos;
     if (statNums[3]) statNums[3].textContent = preventivos;
 
+    // Cargar cadenas para logos en el panel supervisor
+    const cadenasSnap2 = await db.collection('cadenas').get();
+    const cadenaMapSup = {};
+    cadenasSnap2.docs.forEach(function(cd) {
+      const cdata = cd.data();
+      cadenaMapSup[cdata.nombre] = cdata;
+      if (cdata.sucursales) {
+        cdata.sucursales.forEach(function(s) {
+          var sNombre = typeof s === 'object' ? s.nombre : s;
+          cadenaMapSup[sNombre] = cdata;
+        });
+      }
+    });
+
     snap.docs.forEach(doc => {
       const d = doc.data();
       const card = document.createElement('div');
       card.className = 'ot-card';
-      const icon = d.tipo === 'correctivo' ? '(!)' : '[wrench]';
       const bg = d.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
       const badge = d.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
       const label = d.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
       const docId = doc.id;
+      const cadena = cadenaMapSup[d.local] || null;
       const iconEl = document.createElement('div');
       iconEl.className = 'ot-icon';
-      iconEl.style.background = bg;
-      iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-      iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
-      iconEl.style.fontWeight = '700';
-      iconEl.style.fontSize = '14px';
+      iconEl.style.overflow = 'hidden';
+      if (cadena && cadena.logo) {
+        iconEl.style.background = cadena.color || bg;
+        const logoImg = document.createElement('img');
+        logoImg.src = cadena.logo;
+        logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        logoImg.onerror = function() {
+          iconEl.removeChild(logoImg);
+          iconEl.style.background = bg;
+          iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
+          iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
+          iconEl.style.fontWeight = '700';
+          iconEl.style.fontSize = '14px';
+        };
+        iconEl.appendChild(logoImg);
+      } else {
+        iconEl.style.background = bg;
+        iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
+        iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
+        iconEl.style.fontWeight = '700';
+        iconEl.style.fontSize = '14px';
+      }
       const infoEl = document.createElement('div');
       infoEl.className = 'ot-info';
       const tituloEl = document.createElement('div');
