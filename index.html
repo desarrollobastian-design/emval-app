@@ -2437,16 +2437,16 @@ async function guardarYEnviarPDF() {
     toast('Subiendo PDF...');
     const formData = new FormData();
     formData.append('file', pdfBlob, 'recepcion_obra_' + estado.otNumero + '.pdf');
-    formData.append('upload_preset', 'emval_pdf');
+    formData.append('upload_preset', 'emval_unsigned');
     formData.append('folder', 'emval/pdfs');
     formData.append('public_id', 'ot_' + estado.otNumero + '_' + Date.now());
-    const resp = await fetch('https://api.cloudinary.com/v1_1/dcrf29tna/raw/upload', {
+    const resp = await fetch('https://api.cloudinary.com/v1_1/dcrf29tna/image/upload', {
       method: 'POST', body: formData
     });
     const data = await resp.json();
     if (data.secure_url) {
-      // Make URL publicly accessible by adding fl_attachment
-      pdfUrl = data.secure_url.replace('/raw/upload/', '/raw/upload/fl_attachment/');
+      // Use fl_attachment to force PDF download
+      pdfUrl = data.secure_url.replace('/image/upload/', '/image/upload/fl_attachment/');
       estado.pdfUrl = pdfUrl;
       console.log('PDF subido OK:', pdfUrl);
     } else {
