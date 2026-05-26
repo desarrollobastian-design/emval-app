@@ -2446,84 +2446,138 @@ async function guardarYEnviarPDF() {
   const doc = await generarPDFRecepcionObra();
   if (!doc) { toast('Error generando PDF'); return; }
 
-  // Generate page 1 only PDF for upload (small size)
-  const pdfBlobSmall = doc.output('blob');
-  console.log('PDF pagina 1 size:', pdfBlobSmall.size, 'bytes');
-
-  // Add photos page for local download only
+  // Agregar pagina de fotos al PDF
   await agregarFotosAlPDF(doc);
-  const pdfBlob = pdfBlobSmall; // Upload only page 1
 
-  // Guardar PDF en Firestore como base64 y generar link de vista
-  let pdfUrl = null;
+  // Obtener PDF como base64 string (sin prefijo data:)
+  const pdfBase64 = doc.output('datauristring');
+  const pdfBase64Solo = pdfBase64.split(',')[1]; // solo la parte base64
+  const pdfBlob = doc.output('blob');
+  console.log('PDF completo size:', pdfBlob.size, 'bytes');
+
+  // --- Subir PDF a Cloudinary para tener URL de descarga directa ---
+  let pdfUrlCloudinary = null;
+  try {
+    toast('Subiendo PDF a la nube...');
+    const nombrePdf = 'OT_' + estado.otNumero + '_' + (estado.local || 'local').replace(/\s+/g, '_') + '.pdf';
+    const formData = new FormData();
+    formData.append('file', pdfBlob, nombrePdf);
+    formData.append('upload_preset', CLOUDINARY.uploadPreset);
+    formData.append('folder', 'emval/pdfs');
+    formData.append('resource_type', 'raw');
+    const resp = await fetch(
+      'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
+      { method: 'POST', body: formData }
+    );
+    const data = await resp.json();
+    if (data.secure_url) {
+      pdfUrlCloudinary = data.secure_url;
+      console.log('PDF subido a Cloudinary:', pdfUrlCloudinary);
+    } else {
+      console.error('Cloudinary PDF error:', data);
+    }
+  } catch(e) {
+    console.error('Error subiendo PDF a Cloudinary:', e);
+  }
+
+  // --- Guardar en Firestore para el supervisor ---
+  let pdfUrlFirestore = null;
   try {
     toast('Guardando PDF...');
-    const pdfBase64 = doc.output('datauristring');
-    // Store in Firestore
     if (window._firebaseReady) {
       const db = window.firebase.firestore();
+      // Guardar solo pagina 1 en Firestore (sin fotos, mas liviano)
+      const docPage1 = await generarPDFRecepcionObra();
+      const pdfPage1Base64 = docPage1 ? docPage1.output('datauristring') : pdfBase64;
       const pdfDoc = await db.collection('pdfs').add({
         otNumero: estado.otNumero,
         local: estado.local,
         tecnico: estado.usuario,
         fecha: new Date().toLocaleDateString('es-CL'),
-        pdfData: pdfBase64,
+        pdfData: pdfPage1Base64,
+        pdfUrl: pdfUrlCloudinary || '',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       });
-      // Link to supervisor panel to view PDF
-      pdfUrl = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
-      estado.pdfUrl = pdfUrl;
+      pdfUrlFirestore = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
+      estado.pdfUrl = pdfUrlFirestore;
       console.log('PDF guardado en Firestore:', pdfDoc.id);
     }
   } catch(e) {
-    console.error('Error guardando PDF:', e);
+    console.error('Error guardando PDF en Firestore:', e);
   }
 
-  // Enviar email con link del PDF
+  // --- Enviar email al admin del local con PDF adjunto (base64) ---
   const email = estado.emailSucursal || estado.emailAdmin;
   if (email) {
     try {
-      toast('Enviando email...');
+      toast('Enviando email con PDF...');
       const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
-      const linkPdf = pdfUrl ? pdfUrl : '(PDF no disponible)';
-      await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
-        email_admin: email,
-        ot_numero: String(estado.otNumero),
-        local: String(estado.local || ''),
-        fecha: new Date().toLocaleDateString('es-CL'),
-        tecnico: String(estado.usuario || ''),
-        tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-        trabajo: String(trabajo),
-        pdf_url: 'Ver y descargar PDF: ' + linkPdf,
-        fotos_antes: (estado.fotosAntes || []).filter(function(f){return f;}).map(function(f,i){return 'Antes '+(i+1)+': '+f;}).join(' | ').substring(0,500),
-        fotos_despues: (estado.fotosDespues || []).filter(function(f){return f;}).map(function(f,i){return 'Despues '+(i+1)+': '+f;}).join(' | ').substring(0,500)
-      });
-      toast('Email enviado con link al PDF');
+      const nombreArchivo = 'Recepcion_Obra_OT' + estado.otNumero + '.pdf';
+
+      // EmailJS soporta adjuntos via content (base64) hasta ~50KB
+      // Si el PDF es grande, enviamos link de Cloudinary como descarga directa
+      const pdfSize = pdfBlob.size;
+      console.log('Tamano PDF para email:', pdfSize, 'bytes');
+
+      if (pdfSize <= 45000 && pdfBase64Solo) {
+        // PDF pequeno: adjuntar directamente
+        await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+          email_admin: email,
+          ot_numero: String(estado.otNumero),
+          local: String(estado.local || ''),
+          fecha: new Date().toLocaleDateString('es-CL'),
+          tecnico: String(estado.usuario || ''),
+          tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+          trabajo: String(trabajo),
+          pdf_url: pdfUrlCloudinary ? 'Descargar PDF adjunto o desde: ' + pdfUrlCloudinary : 'PDF adjunto en este correo',
+          pdf_content: pdfBase64Solo,
+          pdf_name: nombreArchivo
+        });
+        toast('Email enviado con PDF adjunto');
+      } else {
+        // PDF grande: enviar link de Cloudinary (descarga directa)
+        const linkDescarga = pdfUrlCloudinary || pdfUrlFirestore || '(no disponible)';
+        await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+          email_admin: email,
+          ot_numero: String(estado.otNumero),
+          local: String(estado.local || ''),
+          fecha: new Date().toLocaleDateString('es-CL'),
+          tecnico: String(estado.usuario || ''),
+          tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+          trabajo: String(trabajo),
+          pdf_url: 'DESCARGAR PDF (clic aqui): ' + linkDescarga,
+          pdf_content: '',
+          pdf_name: nombreArchivo
+        });
+        toast('Email enviado con link de descarga');
+      }
     } catch(e) {
       console.error('Error email:', e);
-      toast('PDF listo (email fallo)');
+      toast('PDF listo (error al enviar email)');
     }
   }
 
-  // Guardar en Firestore con URL del PDF
-  if (window._firebaseReady && pdfUrl) {
+  // --- Actualizar orden en Firestore con URL del PDF ---
+  if (window._firebaseReady && (pdfUrlCloudinary || pdfUrlFirestore)) {
     try {
       const db = window.firebase.firestore();
       const snap = await db.collection('ordenes')
         .where('numero', '==', estado.otNumero).get();
       if (!snap.empty) {
-        await db.collection('ordenes').doc(snap.docs[0].id).update({ pdfUrl: pdfUrl });
+        await db.collection('ordenes').doc(snap.docs[0].id).update({
+          pdfUrl: pdfUrlCloudinary || pdfUrlFirestore
+        });
       }
-    } catch(e) { console.error('Error guardando PDF URL:', e); }
+    } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
   }
 
-  // Descargar localmente
+  // Descargar localmente en el dispositivo del tecnico
   doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
 
   var btnPdf = document.getElementById('btn-ver-pdf');
   if (btnPdf) btnPdf.style.display = 'block';
 
-  return pdfUrl;
+  return pdfUrlCloudinary || pdfUrlFirestore;
 }
 
 // =========== TOAST ===========
