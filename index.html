@@ -990,6 +990,10 @@ const CLOUDINARY = {
 };
 
 async function subirCloudinary(dataUrl, carpeta, nombre) {
+  // Compress images before upload
+  if (nombre.match(/\.(jpg|jpeg|png)$/i)) {
+    try { dataUrl = await comprimirImagen(dataUrl, 800, 0.6); } catch(e) {}
+  }
   try {
     const res = await fetch(dataUrl);
     const blob = await res.blob();
@@ -2292,7 +2296,7 @@ async function generarPDFRecepcionObra() {
     doc.text('Timbre del Receptor:', notaX + 3, afterY + 31);
     if (estado.fotoTimbre) {
       try {
-        const timbreComp = await comprimirImagen(estado.fotoTimbre, 300, 0.4);
+        const timbreComp = await comprimirImagen(estado.fotoTimbre, 250, 0.25);
         doc.addImage(timbreComp, 'JPEG', notaX + 3, afterY + 33, 35, 25);
       } catch(e) {
         doc.line(notaX + 5, afterY + 36, notaX + notaW - 5, afterY + 36);
@@ -2378,7 +2382,7 @@ async function agregarFotosAlPDF(doc) {
 
     if (fotosA[i]) {
       try {
-        const imgAComp = await comprimirImagen(fotosA[i], 600, 0.4);
+        const imgAComp = await comprimirImagen(fotosA[i], 400, 0.25);
         doc.addImage(imgAComp, 'JPEG', margin, currentY + 6, imgW, imgH);
       } catch(e) {
         doc.setDrawColor(200);
@@ -2399,7 +2403,7 @@ async function agregarFotosAlPDF(doc) {
 
     if (fotosD[i]) {
       try {
-        const imgDComp = await comprimirImagen(fotosD[i], 600, 0.4);
+        const imgDComp = await comprimirImagen(fotosD[i], 400, 0.25);
         doc.addImage(imgDComp, 'JPEG', despX, currentY + 6, imgW, imgH);
       } catch(e) {
         doc.setDrawColor(200);
@@ -2419,10 +2423,13 @@ async function guardarYEnviarPDF() {
   const doc = await generarPDFRecepcionObra();
   if (!doc) { toast('Error generando PDF'); return; }
 
-  // Agregar pagina de fotos antes/despues
-  await agregarFotosAlPDF(doc);
+  // Generate page 1 only PDF for upload (small size)
+  const pdfBlobSmall = doc.output('blob');
+  console.log('PDF pagina 1 size:', pdfBlobSmall.size, 'bytes');
 
-  const pdfBlob = doc.output('blob');
+  // Add photos page for local download only
+  await agregarFotosAlPDF(doc);
+  const pdfBlob = pdfBlobSmall; // Upload only page 1
 
   // Subir a Cloudinary
   let pdfUrl = null;
@@ -2438,7 +2445,8 @@ async function guardarYEnviarPDF() {
     });
     const data = await resp.json();
     if (data.secure_url) {
-      pdfUrl = data.secure_url;
+      // Make URL publicly accessible by adding fl_attachment
+      pdfUrl = data.secure_url.replace('/raw/upload/', '/raw/upload/fl_attachment/');
       estado.pdfUrl = pdfUrl;
       console.log('PDF subido OK:', pdfUrl);
     } else {
@@ -2463,7 +2471,9 @@ async function guardarYEnviarPDF() {
         tecnico: String(estado.usuario || ''),
         tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
         trabajo: String(trabajo),
-        pdf_url: 'Ver y descargar PDF: ' + linkPdf
+        pdf_url: 'Ver y descargar PDF: ' + linkPdf,
+        fotos_antes: (estado.fotosAntes || []).filter(function(f){return f;}).map(function(f,i){return 'Antes '+(i+1)+': '+f;}).join(' | ').substring(0,500),
+        fotos_despues: (estado.fotosDespues || []).filter(function(f){return f;}).map(function(f,i){return 'Despues '+(i+1)+': '+f;}).join(' | ').substring(0,500)
       });
       toast('Email enviado con link al PDF');
     } catch(e) {
