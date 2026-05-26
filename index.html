@@ -2519,38 +2519,19 @@ async function guardarYEnviarPDF() {
       const pdfSize = pdfBlob.size;
       console.log('Tamano PDF para email:', pdfSize, 'bytes');
 
-      if (pdfSize <= 45000 && pdfBase64Solo) {
-        // PDF pequeno: adjuntar directamente
-        await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
-          email_admin: email,
-          ot_numero: String(estado.otNumero),
-          local: String(estado.local || ''),
-          fecha: new Date().toLocaleDateString('es-CL'),
-          tecnico: String(estado.usuario || ''),
-          tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-          trabajo: String(trabajo),
-          pdf_url: pdfUrlCloudinary ? 'Descargar PDF adjunto o desde: ' + pdfUrlCloudinary : 'PDF adjunto en este correo',
-          pdf_content: pdfBase64Solo,
-          pdf_name: nombreArchivo
-        });
-        toast('Email enviado con PDF adjunto');
-      } else {
-        // PDF grande: enviar link de Cloudinary (descarga directa)
-        const linkDescarga = pdfUrlCloudinary || pdfUrlFirestore || '(no disponible)';
-        await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
-          email_admin: email,
-          ot_numero: String(estado.otNumero),
-          local: String(estado.local || ''),
-          fecha: new Date().toLocaleDateString('es-CL'),
-          tecnico: String(estado.usuario || ''),
-          tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-          trabajo: String(trabajo),
-          pdf_url: 'DESCARGAR PDF (clic aqui): ' + linkDescarga,
-          pdf_content: '',
-          pdf_name: nombreArchivo
-        });
-        toast('Email enviado con link de descarga');
-      }
+      // Siempre enviar URL limpia para que funcione como href en el template
+      const linkDescarga = pdfUrlCloudinary || pdfUrlFirestore || '';
+      await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+        email_admin: email,
+        ot_numero: String(estado.otNumero),
+        local: String(estado.local || ''),
+        fecha: new Date().toLocaleDateString('es-CL'),
+        tecnico: String(estado.usuario || ''),
+        tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+        trabajo: String(trabajo),
+        pdf_url: linkDescarga
+      });
+      toast('Email enviado con link al PDF');
     } catch(e) {
       console.error('Error email:', e);
       toast('PDF listo (error al enviar email)');
