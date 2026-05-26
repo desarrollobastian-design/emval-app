@@ -674,6 +674,12 @@ firebase.initializeApp({
 });
 window._firebaseReady = true;
 console.log('Firebase v9 compat listo');
+// Check if URL has PDF parameter
+setTimeout(function(){
+  const urlParams = new URLSearchParams(window.location.search);
+  const pdfId = urlParams.get('pdf');
+  if (pdfId) { verPDFById(pdfId); }
+}, 1500);
 setTimeout(function(){ cargarUsuariosApp(); cargarLocalesApp(); cargarCadenasApp(); }, 1000);
 </script>
 
@@ -2312,6 +2318,23 @@ async function generarPDFRecepcionObra() {
   }
 }
 
+async function verPDFById(pdfId) {
+  try {
+    if (!window._firebaseReady) { setTimeout(function(){ verPDFById(pdfId); }, 1000); return; }
+    const db = window.firebase.firestore();
+    const doc = await db.collection('pdfs').doc(pdfId).get();
+    if (!doc.exists) { alert('PDF no encontrado'); return; }
+    const data = doc.data();
+    // Open PDF in new tab
+    const win = window.open('', '_blank');
+    win.document.write('<html><head><title>OT #' + data.otNumero + ' - ' + data.local + '</title></head><body style="margin:0">');
+    win.document.write('<embed src="' + data.pdfData + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;width:100%;height:100%"/>');
+    win.document.write('</body></html>');
+  } catch(e) {
+    console.error('Error:', e);
+  }
+}
+
 function verPDF() {
   if (estado.pdfUrl) {
     window.open(estado.pdfUrl, '_blank');
@@ -2431,29 +2454,29 @@ async function guardarYEnviarPDF() {
   await agregarFotosAlPDF(doc);
   const pdfBlob = pdfBlobSmall; // Upload only page 1
 
-  // Subir a Cloudinary
+  // Guardar PDF en Firestore como base64 y generar link de vista
   let pdfUrl = null;
   try {
-    toast('Subiendo PDF...');
-    const formData = new FormData();
-    formData.append('file', pdfBlob, 'recepcion_obra_' + estado.otNumero + '.pdf');
-    formData.append('upload_preset', 'emval_unsigned');
-    formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', 'ot_' + estado.otNumero + '_' + Date.now());
-    const resp = await fetch('https://api.cloudinary.com/v1_1/dcrf29tna/image/upload', {
-      method: 'POST', body: formData
-    });
-    const data = await resp.json();
-    if (data.secure_url) {
-      // Use fl_attachment to force PDF download
-      pdfUrl = data.secure_url.replace('/image/upload/', '/image/upload/fl_attachment/');
+    toast('Guardando PDF...');
+    const pdfBase64 = doc.output('datauristring');
+    // Store in Firestore
+    if (window._firebaseReady) {
+      const db = window.firebase.firestore();
+      const pdfDoc = await db.collection('pdfs').add({
+        otNumero: estado.otNumero,
+        local: estado.local,
+        tecnico: estado.usuario,
+        fecha: new Date().toLocaleDateString('es-CL'),
+        pdfData: pdfBase64,
+        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+      });
+      // Link to supervisor panel to view PDF
+      pdfUrl = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
       estado.pdfUrl = pdfUrl;
-      console.log('PDF subido OK:', pdfUrl);
-    } else {
-      console.error('Cloudinary error:', JSON.stringify(data));
+      console.log('PDF guardado en Firestore:', pdfDoc.id);
     }
   } catch(e) {
-    console.error('Error subiendo PDF:', e);
+    console.error('Error guardando PDF:', e);
   }
 
   // Enviar email con link del PDF
