@@ -503,6 +503,29 @@
   </div>
 </div>
 
+<!-- ============ SCREEN: OTs POR TECNICO ============ -->
+<div class="screen" id="s-ots-tecnicos">
+  <div class="topbar">
+    <button class="back" onclick="go('s-supervisor')">←</button>
+    <h2>OTs por tecnico</h2>
+  </div>
+  <div class="content">
+    <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un tecnico para ver sus OTs</div>
+    <div id="lista-tecnicos-ots"></div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: OTs DE UN TECNICO ============ -->
+<div class="screen" id="s-ots-tecnico-detalle">
+  <div class="topbar">
+    <button class="back" onclick="go('s-ots-tecnicos')">←</button>
+    <h2 id="detalle-tecnico-nombre">OTs</h2>
+  </div>
+  <div class="content">
+    <div id="lista-ots-tecnico-detalle"></div>
+  </div>
+</div>
+
 <!-- ============ SCREEN: CARPETAS COTIZACIONES ============ -->
 <div class="screen" id="s-carpetas">
   <div class="topbar">
@@ -561,7 +584,8 @@
       <div class="stat-card"><div class="stat-num">4</div><div class="stat-label">Preventivos</div></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:4px;">
-      <button class="btn btn-secondary btn-sm" onclick="go('s-carpetas');cargarCarpetas();" style="flex:1;font-size:12px;">Ver cotizaciones</button>
+      <button class="btn btn-secondary btn-sm" onclick="go('s-ots-tecnicos');cargarOTsTecnicos();" style="flex:1;font-size:12px;">Ver OTs</button>
+      <button class="btn btn-secondary btn-sm" onclick="go('s-carpetas');cargarCarpetas();" style="flex:1;font-size:12px;">Cotizaciones</button>
       <button class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="flex:1;font-size:12px;">Administrar</button>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
@@ -2601,6 +2625,172 @@ async function guardarYEnviarPDF() {
   if (btnPdf) btnPdf.style.display = 'block';
 
   return pdfUrlCloudinary || pdfUrlFirestore;
+}
+
+// =========== OTs POR TECNICO ===========
+async function cargarOTsTecnicos() {
+  try {
+    if (!window._firebaseReady) { setTimeout(cargarOTsTecnicos, 800); return; }
+    const db = window.firebase.firestore();
+    const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
+    const tecnicos = {};
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const t = d.tecnico || 'Sin asignar';
+      if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
+      tecnicos[t].ots.push({ id: doc.id, ...d });
+    });
+    const lista = document.getElementById('lista-tecnicos-ots');
+    lista.innerHTML = '';
+    if (Object.keys(tecnicos).length === 0) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay OTs registradas</p>';
+      return;
+    }
+    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
+    Object.keys(tecnicos).forEach(function(nombre, i) {
+      const grupo = tecnicos[nombre];
+      const color = colores[i % colores.length];
+      const correctivos = grupo.ots.filter(function(o){ return o.tipo === 'correctivo'; }).length;
+      const preventivos = grupo.ots.filter(function(o){ return o.tipo === 'preventivo'; }).length;
+      const card = document.createElement('div');
+      card.className = 'usuario-item';
+      card.style.marginBottom = '10px';
+      card.onclick = (function(n){ return function(){ verOTsTecnico(n, tecnicos[n]); }; })(nombre);
+      const avatar = document.createElement('div');
+      avatar.className = 'usuario-avatar';
+      avatar.style.background = color;
+      avatar.style.cssText += ';width:48px;height:48px;font-size:20px;border-radius:12px;flex-shrink:0;';
+      avatar.textContent = nombre.charAt(0).toUpperCase();
+      const info = document.createElement('div');
+      info.className = 'usuario-info';
+      info.style.flex = '1';
+      const nombreDiv = document.createElement('div');
+      nombreDiv.className = 'nombre';
+      nombreDiv.textContent = nombre;
+      const statsDiv = document.createElement('div');
+      statsDiv.className = 'cargo';
+      statsDiv.textContent = grupo.ots.length + ' OTs | ' + correctivos + ' correctivas / ' + preventivos + ' preventivas';
+      info.appendChild(nombreDiv);
+      info.appendChild(statsDiv);
+      const arrow = document.createElement('svg');
+      arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
+      arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
+      arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+      card.appendChild(avatar); card.appendChild(info); card.appendChild(arrow);
+      lista.appendChild(card);
+    });
+  } catch(e) {
+    console.error('Error cargando tecnicos:', e);
+    toast('Error cargando OTs');
+  }
+}
+
+async function verOTsTecnico(nombre, grupo) {
+  document.getElementById('detalle-tecnico-nombre').textContent = nombre;
+  const lista = document.getElementById('lista-ots-tecnico-detalle');
+  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);">Cargando...</p>';
+  go('s-ots-tecnico-detalle');
+
+  // Cargar cadenas para logos
+  const db = window.firebase.firestore();
+  const cadenasSnap = await db.collection('cadenas').get();
+  const cadenaMap = {};
+  cadenasSnap.docs.forEach(function(cd) {
+    const cdata = cd.data();
+    cadenaMap[cdata.nombre] = cdata;
+    if (cdata.sucursales) {
+      cdata.sucursales.forEach(function(s) {
+        var sNombre = typeof s === 'object' ? s.nombre : s;
+        cadenaMap[sNombre] = cdata;
+      });
+    }
+  });
+
+  lista.innerHTML = '';
+  const ots = grupo.ots;
+  if (ots.length === 0) {
+    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin OTs registradas</p>';
+    return;
+  }
+
+  ots.forEach(function(ot) {
+    const cadena = cadenaMap[ot.local] || null;
+    const badge = ot.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
+    const label = ot.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
+    const bg = ot.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '12px';
+
+    // Header con logo + info
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+
+    const iconEl = document.createElement('div');
+    iconEl.style.cssText = 'width:48px;height:48px;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : bg) + ';';
+    if (cadena && cadena.logo) {
+      const logoImg = document.createElement('img');
+      logoImg.src = cadena.logo;
+      logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+      logoImg.onerror = function(){ iconEl.removeChild(logoImg); iconEl.textContent = (ot.local||'?').charAt(0); iconEl.style.cssText += ';color:white;font-weight:700;font-size:16px;'; };
+      iconEl.appendChild(logoImg);
+    } else {
+      iconEl.textContent = (ot.local||'?').charAt(0);
+      iconEl.style.cssText += ';color:white;font-weight:700;font-size:16px;';
+    }
+
+    const headerInfo = document.createElement('div');
+    headerInfo.style.flex = '1';
+    const localDiv = document.createElement('div');
+    localDiv.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
+    localDiv.textContent = ot.local || 'Sin local';
+    const subDiv = document.createElement('div');
+    subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
+    subDiv.innerHTML = (ot.fecha||'') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
+    headerInfo.appendChild(localDiv);
+    headerInfo.appendChild(subDiv);
+    header.appendChild(iconEl);
+    header.appendChild(headerInfo);
+    card.appendChild(header);
+
+    // Descripcion
+    if (ot.descripcionTrabajo) {
+      const descDiv = document.createElement('div');
+      descDiv.style.cssText = 'font-size:13px;color:var(--texto2);padding:8px 0;border-top:1px solid var(--gris2);line-height:1.5;';
+      descDiv.textContent = ot.descripcionTrabajo;
+      card.appendChild(descDiv);
+    }
+
+    // Stats fotos
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = 'display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto3);';
+    const fa = (ot.fotosAntes && ot.fotosAntes.length) ? ot.fotosAntes.length : 0;
+    const fd = (ot.fotosDespues && ot.fotosDespues.length) ? ot.fotosDespues.length : 0;
+    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
+    card.appendChild(statsDiv);
+
+    // Botones PDF y Cotizacion
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+
+    if (ot.pdfUrl) {
+      const btnPdf = document.createElement('button');
+      btnPdf.textContent = 'Ver PDF';
+      btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnPdf.onclick = (function(url){ return function(){ window.open(url, '_blank'); }; })(ot.pdfUrl);
+      btns.appendChild(btnPdf);
+    }
+
+    const btnCot = document.createElement('button');
+    btnCot.textContent = '+ Cotizacion';
+    btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
+    btns.appendChild(btnCot);
+    card.appendChild(btns);
+    lista.appendChild(card);
+  });
 }
 
 // =========== TOAST ===========
