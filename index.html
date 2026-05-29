@@ -2447,8 +2447,13 @@ async function verPDFById(pdfId) {
     const doc = await db.collection('pdfs').doc(pdfId).get();
     if (!doc.exists) { alert('PDF no encontrado'); return; }
     const data = doc.data();
-    // Open PDF in new tab
+    // Si tiene URL de Cloudinary usar esa, sino usar pdfData base64
+    if (data.pdfUrl && data.pdfUrl.includes('cloudinary')) {
+      window.open(data.pdfUrl, '_blank');
+      return;
+    }
     const win = window.open('', '_blank');
+    if (!win) { alert('Permite ventanas emergentes para ver el PDF'); return; }
     win.document.write('<html><head><title>OT #' + data.otNumero + ' - ' + data.local + '</title></head><body style="margin:0">');
     win.document.write('<embed src="' + data.pdfData + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;width:100%;height:100%"/>');
     win.document.write('</body></html>');
@@ -2623,12 +2628,13 @@ async function guardarYEnviarPDF() {
         tecnico: estado.usuario,
         fecha: new Date().toLocaleDateString('es-CL'),
         pdfData: pdfPage1Base64,
-        pdfUrl: pdfUrlCloudinary || '',
+        pdfUrl: '',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       });
       pdfUrlFirestore = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
-      // Para el boton Ver PDF: usar Cloudinary (descarga directa), Firestore solo para el email
-      estado.pdfUrl = pdfUrlCloudinary || pdfUrlFirestore;
+      // Guardar ambas URLs: Firestore para ver en app, Cloudinary para email
+      estado.pdfUrl = pdfUrlFirestore;
+      estado.pdfUrlCloudinary = pdfUrlCloudinary || '';
       console.log('PDF guardado en Firestore:', pdfDoc.id);
     }
   } catch(e) {
@@ -2648,9 +2654,8 @@ async function guardarYEnviarPDF() {
       const pdfSize = pdfBlob.size;
       console.log('Tamano PDF para email:', pdfSize, 'bytes');
 
-      // Siempre enviar URL limpia para que funcione como href en el template
-      // Usar link de Firestore primero (mas confiable que Cloudinary para PDFs)
-      const linkDescarga = pdfUrlFirestore || pdfUrlCloudinary || '';
+      // Email: usar Cloudinary para descarga directa del PDF
+      const linkDescarga = pdfUrlCloudinary || '';
       await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
         email_admin: email,
         ot_numero: String(estado.otNumero),
@@ -2676,7 +2681,7 @@ async function guardarYEnviarPDF() {
         .where('numero', '==', estado.otNumero).get();
       if (!snap.empty) {
         await db.collection('ordenes').doc(snap.docs[0].id).update({
-          pdfUrl: pdfUrlCloudinary || pdfUrlFirestore
+          pdfUrl: pdfUrlCloudinary || ''
         });
       }
     } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
