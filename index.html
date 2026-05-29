@@ -1540,8 +1540,8 @@ async function cargarCarpetas() {
       const d = doc.data();
       const c = d.carpeta || d.tecnico || 'Sin asignar';
       if (!carpetas[c]) carpetas[c] = { tecnico: d.tecnico || c, items: [] };
-      carpetas[c].items.push({ id: doc.id, local: d.local, fecha: d.fecha, total: d.total,
-        descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico });
+      carpetas[c].items.push({ id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
+        descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico, descuento: d.descuento || 0 });
     });
     const lista = document.getElementById('lista-carpetas');
     lista.innerHTML = '';
@@ -2641,10 +2641,18 @@ async function generarPDFCotizacionGuardada(cotData) {
   try {
     // Cargar datos completos de la OT desde Firestore
     let otData = null;
+    console.log('Cargando OT para PDF, otId:', cotData.otId);
     if (window._firebaseReady && cotData.otId) {
       const db = window.firebase.firestore();
       const otDoc = await db.collection('ordenes').doc(cotData.otId).get();
-      if (otDoc.exists) otData = otDoc.data();
+      if (otDoc.exists) {
+        otData = otDoc.data();
+        console.log('OT cargada:', otData.numero, 'fotos antes:', (otData.fotosAntes||[]).length, 'fotos despues:', (otData.fotosDespues||[]).length);
+      } else {
+        console.warn('OT no encontrada en Firestore para id:', cotData.otId);
+      }
+    } else {
+      console.warn('Sin otId o Firebase no listo. otId:', cotData.otId, '_firebaseReady:', window._firebaseReady);
     }
 
     // Preparar cotizacionActual temporalmente con datos guardados
