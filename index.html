@@ -480,6 +480,10 @@
   </div>
   <div class="content">
     <div class="card" id="cot-resumen-ot" style="background:var(--gris1);margin-bottom:4px;"></div>
+    <div class="field">
+      <label>Detalle del trabajo realizado</label>
+      <textarea id="cot-detalle-trabajo" placeholder="Describe los trabajos realizados que apareceran en el PDF..." style="min-height:80px;resize:vertical;"></textarea>
+    </div>
     <div style="font-size:13px;font-weight:600;color:var(--texto2);">ITEMS A COTIZAR</div>
     <div id="cot-items"></div>
     <button class="btn btn-secondary" onclick="agregarItemCot()" style="margin-top:4px;">+ Agregar item</button>
@@ -1432,6 +1436,7 @@ async function abrirCotizacion(docId) {
       '<div class="summary-row" style="border:none"><span class="sum-label">Trabajo</span><span class="sum-val" style="font-size:11px;text-align:right;max-width:60%">' + (cotizacionActual.descripcionTrabajo || '') + '</span></div>';
     // Pre-fill carpeta con nombre del tecnico
     document.getElementById('cot-carpeta').value = cotizacionActual.tecnico || cotizacionActual.local || '';
+    document.getElementById('cot-detalle-trabajo').value = cotizacionActual.descripcionTrabajo || '';
     document.getElementById('cot-descuento').value = '0';
     renderItemsCot();
     go('s-cotizacion');
@@ -1496,13 +1501,14 @@ async function guardarCotizacion() {
       local: cotizacionActual.local,
       tecnico: cotizacionActual.tecnico,
       fecha: cotizacionActual.fecha,
-      descripcionTrabajo: cotizacionActual.descripcionTrabajo || '',
+      descripcionTrabajo: document.getElementById('cot-detalle-trabajo').value.trim() || cotizacionActual.descripcionTrabajo || '',
       items: itemsCot,
       subtotal: totales.subtotal,
       descuento: totales.desc,
       descuentoMonto: totales.descMonto,
       total: totales.total,
       carpeta: carpeta,
+      fechaCodigo: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2); })(),
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     });
     toast('Cotizacion guardada en carpeta: ' + carpeta);
@@ -2316,65 +2322,58 @@ async function generarPDFRecepcionObra() {
 
     const afterY = tableY + rowH + (rowsNeeded * rowH) + 8;
 
-    // ---- FIRMA SECCION IZQUIERDA ----
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text('Recepciona Conforme', margin, afterY);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Nombre:', margin, afterY + 9);
-    doc.line(margin+18, afterY+9, margin+85, afterY+9);
-    doc.text('Rut', margin, afterY + 16);
-    doc.line(margin+8, afterY+16, margin+85, afterY+16);
-    doc.text('Cargo:', margin, afterY + 23);
-    doc.line(margin+16, afterY+23, margin+85, afterY+23);
-
-    // FIRMA DIGITAL del administrador
+    // ---- FIRMA IZQUIERDA (sin fondo oscuro, solo firma negra) ----
+    const firmaW = 85;
+    const firmaH = 30;
     if (firmaConfirmada) {
       try {
         const firmaCanvas = document.getElementById('firma-canvas');
-        const firmaData = await comprimirImagen(firmaCanvas.toDataURL('image/png'), 400, 0.7);
-        doc.addImage(firmaData, 'JPEG', margin+18, afterY+1, 55, 16);
-        doc.setFontSize(7);
-        doc.setTextColor(39, 160, 107);
-        doc.text('Firma digital confirmada', margin+18, afterY+20);
-        doc.setTextColor(0, 0, 0);
+        // Crear canvas temporal con fondo blanco para evitar fondo oscuro
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = firmaCanvas.width;
+        tempCanvas.height = firmaCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        // Fondo blanco
+        tempCtx.fillStyle = '#FFFFFF';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        // Dibujar firma encima
+        tempCtx.drawImage(firmaCanvas, 0, 0);
+        const firmaData = await comprimirImagen(tempCanvas.toDataURL('image/jpeg', 1.0), 600, 0.95);
+        doc.addImage(firmaData, 'JPEG', margin, afterY, firmaW, firmaH);
       } catch(e) { console.error('Firma error:', e); }
+    } else {
+      // Recuadro vacio si no hay firma
+      doc.setDrawColor(180, 180, 180);
+      doc.rect(margin, afterY, firmaW, firmaH);
     }
-
-    // ---- NOTA + TIMBRE DERECHA ----
-    const notaX = 105;
-    const notaW = 90;
-    const notaH = 40;
-    doc.setDrawColor(0);
-    doc.rect(notaX, afterY - 2, notaW, notaH);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text('Nota:', notaX + 3, afterY + 4);
+    // Texto debajo de la firma
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    const notaLines = doc.splitTextToSize(
-      'Se garantiza trabajo por tres meses dejando constancia del administrador o supervisor del local con:', notaW - 6);
-    notaLines.forEach(function(line, i) {
-      doc.text(line, notaX + 3, afterY + 10 + (i * 4.5));
-    });
-    doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.text('CONFIRMA / RUT / TIMBRE', notaX + 3, afterY + 25);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Firma del Receptor', margin + firmaW/2, afterY + firmaH + 5, { align: 'center' });
 
-    // FOTO DEL TIMBRE real de la app
+    // ---- TIMBRE DERECHA (solo foto + texto, sin nota) ----
+    const timbreX = 115;
+    const timbreW = 80;
+    const timbreH = 42;
+    doc.setDrawColor(180, 180, 180);
+    doc.rect(timbreX, afterY - 2, timbreW, timbreH);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text('Timbre del Receptor:', notaX + 3, afterY + 31);
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
     if (estado.fotoTimbre) {
       try {
-        const timbreComp = await comprimirImagen(estado.fotoTimbre, 250, 0.25);
-        doc.addImage(timbreComp, 'JPEG', notaX + 3, afterY + 33, 35, 25);
+        const timbreComp = await comprimirImagen(estado.fotoTimbre, 300, 0.5);
+        doc.addImage(timbreComp, 'JPEG', timbreX + 5, afterY, timbreW - 10, timbreH - 12);
       } catch(e) {
-        doc.line(notaX + 5, afterY + 36, notaX + notaW - 5, afterY + 36);
+        doc.setDrawColor(200, 200, 200);
+        doc.rect(timbreX + 5, afterY, timbreW - 10, timbreH - 12);
       }
     } else {
-      doc.line(notaX + 5, afterY + 36, notaX + notaW - 5, afterY + 36);
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(timbreX + 5, afterY, timbreW - 10, timbreH - 12);
     }
+    doc.text('Timbre del Receptor:', timbreX + timbreW/2, afterY + timbreH - 2, { align: 'center' });
 
     return doc;
   } catch(e) {
@@ -2637,7 +2636,22 @@ async function generarPDFCotizacion() {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, margin = 15;
   const fecha = new Date().toLocaleDateString('es-CL');
-  const numCot = Math.floor(Math.random() * 9000000 + 1000000);
+  // Numero correlativo: dia + mes + anio(2) + correlativo(2)
+  // Ej: 29-05-2026, cotizacion 3 -> 2905263
+  const hoy = new Date();
+  const diaCot = String(hoy.getDate());
+  const mesCot = String(hoy.getMonth() + 1).padStart(2, '0');
+  const anioCot = String(hoy.getFullYear()).slice(2);
+  // Obtener correlativo del dia desde Firestore
+  let correlativo = 1;
+  try {
+    const db2 = window.firebase.firestore();
+    const hoyStr = diaCot + mesCot + anioCot;
+    const cotSnap = await db2.collection('cotizaciones')
+      .where('fechaCodigo', '==', hoyStr).get();
+    correlativo = cotSnap.size + 1;
+  } catch(ecorr) { correlativo = 1; }
+  const numCot = diaCot + mesCot + anioCot + String(correlativo).padStart(2, '0');
 
   // Colores
   const VERDE = [100, 180, 150];
@@ -2710,7 +2724,8 @@ async function generarPDFCotizacion() {
   doc.setTextColor(0,0,0);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  const descTrabajo = cotizacionActual.descripcionTrabajo || '';
+  const detalleEl = document.getElementById('cot-detalle-trabajo');
+  const descTrabajo = (detalleEl ? detalleEl.value.trim() : '') || cotizacionActual.descripcionTrabajo || '';
   const descLines = doc.splitTextToSize(descTrabajo, W - margin*2 - 4);
   const descBoxH = Math.max(16, descLines.length * 5 + 6);
   doc.setDrawColor(180,180,180);
@@ -2828,8 +2843,200 @@ async function generarPDFCotizacion() {
   doc.setFontSize(8);
   doc.text('Cotizacion Valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
 
-  doc.save('Cotizacion_EMVAL_' + (cotizacionActual.local||'').replace(/\s+/g,'_') + '_' + numCot + '.pdf');
-  toast('PDF de cotizacion descargado');
+  // ---- AGREGAR RECEPCION DE OBRA + FOTOS ----
+  toast('Cargando datos de la OT...');
+  try {
+    // Cargar datos completos de la OT desde Firestore
+    if (window._firebaseReady && cotizacionActual.otId) {
+      const db = window.firebase.firestore();
+      const otDoc = await db.collection('ordenes').doc(cotizacionActual.otId).get();
+      if (otDoc.exists) {
+        const otData = otDoc.data();
+
+        // Pagina 2: Recepcion de Obra
+        toast('Generando recepcion de obra...');
+        doc.addPage();
+        const W2 = 210, m2 = 15;
+
+        // Titulo
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0,0,0);
+        doc.text('RECEPCI' + String.fromCharCode(211) + 'N OBRA', W2/2, 15, { align: 'center' });
+
+        // Datos empresa
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Servicios Emval ltda', m2, 25);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', m2, 29);
+        doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', m2, 33);
+        doc.text('Fono: 995720003 - RUT.: 76.166.407-7', m2, 37);
+        doc.text('E-mail: Servicios.emval@gmail.com', m2, 41);
+
+        // Caja OT numero
+        doc.setDrawColor(0);
+        doc.rect(140, 18, 55, 20);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('N  ' + (otData.numero || ''), 167, 28, { align: 'center' });
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, { align: 'center' });
+
+        // Caja fecha/local
+        doc.rect(140, 44, 55, 24);
+        doc.line(140, 52, 195, 52);
+        doc.line(140, 60, 195, 60);
+        doc.line(158, 44, 158, 68);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text('Fecha', 142, 50);
+        doc.text('Local', 142, 58);
+        doc.text('Direcci' + String.fromCharCode(243) + 'n', 142, 66);
+        doc.setFont('helvetica', 'normal');
+        doc.text(otData.fecha || '', 160, 50);
+        doc.text((otData.local || '').substring(0,16), 160, 58);
+        doc.text((otData.local || '').substring(0,16), 160, 66);
+
+        // Tipo trabajo
+        const tipoY2 = 72;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('TRABAJOS EJECUTADOS', m2, tipoY2);
+        doc.rect(80, tipoY2 - 4, 5, 5);
+        if (otData.tipo === 'preventivo') {
+          doc.setLineWidth(0.8);
+          doc.line(81, tipoY2 - 3, 84, tipoY2); doc.line(84, tipoY2 - 3, 81, tipoY2);
+          doc.setLineWidth(0.2);
+        }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        doc.text('PREVENTIVO', 86, tipoY2);
+        doc.rect(115, tipoY2 - 4, 5, 5);
+        if (otData.tipo === 'correctivo') {
+          doc.setLineWidth(0.8);
+          doc.line(116, tipoY2 - 3, 119, tipoY2); doc.line(119, tipoY2 - 3, 116, tipoY2);
+          doc.setLineWidth(0.2);
+        }
+        doc.text('CORRECTIVO', 121, tipoY2);
+
+        // Tabla detalle trabajo
+        const tabY2 = 78;
+        const col1 = 20, col2 = 130, col3 = 30;
+        const rowH2 = 7;
+        const descT = otData.descripcionTrabajo || '';
+        const descLines2 = doc.splitTextToSize(descT, col2 - 4);
+        const rowsN = Math.max(descLines2.length + 1, 10);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.rect(m2, tabY2, col1+col2+col3, rowH2);
+        doc.rect(m2, tabY2, col1, rowH2);
+        doc.rect(m2+col1, tabY2, col2, rowH2);
+        doc.rect(m2+col1+col2, tabY2, col3, rowH2);
+        doc.text('ITEM', m2+col1/2, tabY2+5, {align:'center'});
+        doc.text('DETALLE', m2+col1+col2/2, tabY2+5, {align:'center'});
+        doc.text('EJECUCION', m2+col1+col2+col3/2, tabY2+5, {align:'center'});
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        for (var ri = 0; ri < rowsN; ri++) {
+          var ry2 = tabY2 + rowH2 + (ri * rowH2);
+          doc.rect(m2, ry2, col1, rowH2);
+          doc.rect(m2+col1, ry2, col2, rowH2);
+          doc.rect(m2+col1+col2, ry2, col3, rowH2);
+          if (descLines2[ri]) doc.text(descLines2[ri], m2+col1+2, ry2+rowH2-2);
+        }
+
+        var afterY2 = tabY2 + rowH2 + (rowsN * rowH2) + 8;
+
+        // Firma izquierda con fondo blanco
+        var firmaW2 = 85, firmaH2 = 30;
+        if (otData.firmada) {
+          try {
+            const firmaCanvas2 = document.getElementById('firma-canvas');
+            const tempC = document.createElement('canvas');
+            tempC.width = firmaCanvas2.width; tempC.height = firmaCanvas2.height;
+            const tempCtx2 = tempC.getContext('2d');
+            tempCtx2.fillStyle = '#FFFFFF';
+            tempCtx2.fillRect(0, 0, tempC.width, tempC.height);
+            tempCtx2.drawImage(firmaCanvas2, 0, 0);
+            const firmaD2 = await comprimirImagen(tempC.toDataURL('image/jpeg', 1.0), 600, 0.95);
+            doc.addImage(firmaD2, 'JPEG', m2, afterY2, firmaW2, firmaH2);
+          } catch(ef) {}
+        } else {
+          doc.setDrawColor(180,180,180);
+          doc.rect(m2, afterY2, firmaW2, firmaH2);
+        }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+        doc.text('Firma del Receptor', m2 + firmaW2/2, afterY2 + firmaH2 + 5, { align: 'center' });
+
+        // Timbre derecha
+        var timbreX2 = 115, timbreW2 = 80, timbreH2 = 42;
+        doc.setDrawColor(180,180,180);
+        doc.rect(timbreX2, afterY2 - 2, timbreW2, timbreH2);
+        if (otData.fotoTimbre) {
+          try {
+            const timbreC2 = await comprimirImagen(otData.fotoTimbre, 300, 0.5);
+            doc.addImage(timbreC2, 'JPEG', timbreX2 + 5, afterY2, timbreW2 - 10, timbreH2 - 12);
+          } catch(et) {}
+        }
+        doc.setFont('helvetica','normal'); doc.setFontSize(8);
+        doc.text('Timbre del Receptor:', timbreX2 + timbreW2/2, afterY2 + timbreH2 - 2, { align: 'center' });
+
+        // Paginas de fotos
+        const fotosA2 = otData.fotosAntes || [];
+        const fotosD2 = otData.fotosDespues || [];
+        if (fotosA2.length > 0 || fotosD2.length > 0) {
+          toast('Agregando fotos...');
+          doc.addPage();
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
+          doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W2/2, 15, { align: 'center' });
+          doc.setFontSize(9);
+          doc.text('OT #' + (otData.numero||'') + ' - ' + (otData.local||''), W2/2, 22, { align: 'center' });
+
+          var curY2 = 30;
+          const imgW2 = 85, imgH2 = 65;
+          const maxP = Math.max(fotosA2.length, fotosD2.length);
+          for (var pi = 0; pi < maxP; pi++) {
+            if (curY2 + imgH2 + 15 > 285) { doc.addPage(); curY2 = 20; }
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+            doc.text('Punto ' + (pi+1), m2, curY2);
+            curY2 += 5;
+            // ANTES
+            doc.setFillColor(27,58,107);
+            doc.rect(m2, curY2, imgW2, 6, 'F');
+            doc.setTextColor(255,255,255); doc.setFontSize(7);
+            doc.text('ANTES', m2+imgW2/2, curY2+4, {align:'center'});
+            doc.setTextColor(0,0,0);
+            if (fotosA2[pi]) {
+              try {
+                const imgAc = await comprimirImagen(fotosA2[pi], 400, 0.25);
+                doc.addImage(imgAc, 'JPEG', m2, curY2+6, imgW2, imgH2);
+              } catch(e2) { doc.setDrawColor(200); doc.rect(m2, curY2+6, imgW2, imgH2); }
+            } else { doc.setDrawColor(200); doc.rect(m2, curY2+6, imgW2, imgH2); }
+            // DESPUES
+            var despX2 = m2 + imgW2 + 10;
+            doc.setFillColor(39,160,107);
+            doc.rect(despX2, curY2, imgW2, 6, 'F');
+            doc.setTextColor(255,255,255);
+            doc.text('DESPU' + String.fromCharCode(201) + 'S', despX2+imgW2/2, curY2+4, {align:'center'});
+            doc.setTextColor(0,0,0);
+            if (fotosD2[pi]) {
+              try {
+                const imgDc = await comprimirImagen(fotosD2[pi], 400, 0.25);
+                doc.addImage(imgDc, 'JPEG', despX2, curY2+6, imgW2, imgH2);
+              } catch(e3) { doc.setDrawColor(200); doc.rect(despX2, curY2+6, imgW2, imgH2); }
+            } else { doc.setDrawColor(200); doc.rect(despX2, curY2+6, imgW2, imgH2); }
+            curY2 += imgH2 + 16;
+          }
+        }
+      }
+    }
+  } catch(eOT) {
+    console.error('Error cargando OT para PDF:', eOT);
+    toast('Cotizacion lista (sin datos de OT)');
+  }
+
+  const nombreArchivo = 'EMVAL_Cotizacion_OT' + (cotizacionActual.otNumero||'') + '_' + (cotizacionActual.local||'').replace(/\s+/g,'_') + '.pdf';
+  doc.save(nombreArchivo);
+  toast('PDF completo descargado');
 }
 
 // =========== OTs POR TECNICO ===========
