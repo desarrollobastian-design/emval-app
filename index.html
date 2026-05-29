@@ -2604,10 +2604,7 @@ async function guardarYEnviarPDF() {
     );
     const data = await resp.json();
     if (data.secure_url) {
-      // Asegurar que la URL termine en .pdf para que el navegador la reconozca
-      var cUrl = data.secure_url;
-      if (!cUrl.endsWith('.pdf')) cUrl = cUrl + '.pdf';
-      pdfUrlCloudinary = cUrl;
+      pdfUrlCloudinary = data.secure_url;
       console.log('PDF subido a Cloudinary:', pdfUrlCloudinary);
     } else {
       console.error('Cloudinary PDF error:', data);
@@ -2655,8 +2652,8 @@ async function guardarYEnviarPDF() {
       const pdfSize = pdfBlob.size;
       console.log('Tamano PDF para email:', pdfSize, 'bytes');
 
-      // Email: usar Cloudinary para descarga directa del PDF
-      const linkDescarga = pdfUrlCloudinary || '';
+      // Email: usar Firestore para ver PDF en la app
+      const linkDescarga = pdfUrlFirestore || '';
       await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
         email_admin: email,
         ot_numero: String(estado.otNumero),
