@@ -2081,16 +2081,35 @@ async function eliminarLocal(id) {
 }
 
 // Cargar imagen desde URL externa como base64 (evita CORS tainted canvas)
-async function cargarImagenComoBase64(url) {
+async function cargarImagenComoBase64(url, maxWidth, quality) {
   try {
     const resp = await fetch(url);
     const blob = await resp.blob();
-    return new Promise(function(resolve) {
+    const base64 = await new Promise(function(resolve) {
       const reader = new FileReader();
       reader.onloadend = function() { resolve(reader.result); };
       reader.onerror = function() { resolve(null); };
       reader.readAsDataURL(blob);
     });
+    if (!base64) return null;
+    // Comprimir si se especifican dimensiones
+    if (maxWidth && base64.startsWith('data:')) {
+      return new Promise(function(resolve) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality || 0.4));
+        };
+        img.onerror = function() { resolve(base64); };
+        img.src = base64;
+      });
+    }
+    return base64;
   } catch(e) {
     console.warn('Error cargando imagen:', url, e);
     return null;
@@ -2434,8 +2453,14 @@ function verPDF() {
   }
 }
 
-// Compress image to max 800px and quality 0.5
+// Compress image - si es URL externa devuelve base64 via fetch (evita CORS)
 async function comprimirImagen(dataUrl, maxWidth, quality) {
+  // Si es URL http (Cloudinary), ya fue convertida a base64 por cargarImagenComoBase64
+  // Solo comprimir si es data URL local
+  if (typeof dataUrl === 'string' && dataUrl.startsWith('http')) {
+    // URL externa - devolver tal cual (debio convertirse antes con cargarImagenComoBase64)
+    return dataUrl;
+  }
   return new Promise(function(resolve) {
     const img = new Image();
     img.onload = function() {
@@ -2886,10 +2911,9 @@ async function generarPDFCotizacionGuardada(cotData) {
       doc.setDrawColor(180,180,180); doc.rect(tX,afterY2-2,tW,tH);
       if (otData.fotoTimbre) {
         try {
-          const timbreB64 = await cargarImagenComoBase64(otData.fotoTimbre);
+          const timbreB64 = await cargarImagenComoBase64(otData.fotoTimbre, 300, 0.5);
           if (timbreB64) {
-            const timbreComp = await comprimirImagen(timbreB64, 300, 0.5);
-            doc.addImage(timbreComp,'JPEG',tX+5,afterY2,tW-10,tH-12);
+            doc.addImage(timbreB64,'JPEG',tX+5,afterY2,tW-10,tH-12);
           }
         } catch(et){ console.warn('Error timbre:', et); }
       }
@@ -2917,8 +2941,8 @@ async function generarPDFCotizacionGuardada(cotData) {
           doc.text('ANTES',m2+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
           if(fotosA[pi]){
             try{
-              const b64A = await cargarImagenComoBase64(fotosA[pi]);
-              if(b64A){ const iA=await comprimirImagen(b64A,400,0.35); doc.addImage(iA,'JPEG',m2,curY+6,imgW,imgH); }
+              const b64A = await cargarImagenComoBase64(fotosA[pi], 400, 0.4);
+              if(b64A){ doc.addImage(b64A,'JPEG',m2,curY+6,imgW,imgH); }
               else { doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
             }catch(e){ doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
           } else { doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
@@ -2928,8 +2952,8 @@ async function generarPDFCotizacionGuardada(cotData) {
           doc.text('DESPU' + String.fromCharCode(201) + 'S',dX+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
           if(fotosD[pi]){
             try{
-              const b64D = await cargarImagenComoBase64(fotosD[pi]);
-              if(b64D){ const iD=await comprimirImagen(b64D,400,0.35); doc.addImage(iD,'JPEG',dX,curY+6,imgW,imgH); }
+              const b64D = await cargarImagenComoBase64(fotosD[pi], 400, 0.4);
+              if(b64D){ doc.addImage(b64D,'JPEG',dX,curY+6,imgW,imgH); }
               else { doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
             }catch(e){ doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
           } else { doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
