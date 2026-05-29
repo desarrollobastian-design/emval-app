@@ -2080,6 +2080,23 @@ async function eliminarLocal(id) {
   } catch(e) { toast('Error eliminando'); }
 }
 
+// Cargar imagen desde URL externa como base64 (evita CORS tainted canvas)
+async function cargarImagenComoBase64(url) {
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    return new Promise(function(resolve) {
+      const reader = new FileReader();
+      reader.onloadend = function() { resolve(reader.result); };
+      reader.onerror = function() { resolve(null); };
+      reader.readAsDataURL(blob);
+    });
+  } catch(e) {
+    console.warn('Error cargando imagen:', url, e);
+    return null;
+  }
+}
+
 // Cargar tecnicos dinamicos en pantalla de seleccion
 async function cargarUsuariosApp() {
   try {
@@ -2859,32 +2876,27 @@ async function generarPDFCotizacionGuardada(cotData) {
         if(descL2[ri]) doc.text(descL2[ri],m2+col1+2,ry2+rowH2-2);
       }
       var afterY2 = tabY2+rowH2+(rowsN*rowH2)+8;
-      // Firma
+      // Firma - cargar desde URL externa evitando CORS
       var firmaW2=85, firmaH2=30;
-      if (otData.firmada) {
-        try {
-          const fC = document.getElementById('firma-canvas');
-          const tC = document.createElement('canvas');
-          tC.width=fC.width; tC.height=fC.height;
-          const tCtx = tC.getContext('2d');
-          tCtx.fillStyle='#FFFFFF'; tCtx.fillRect(0,0,tC.width,tC.height);
-          tCtx.drawImage(fC,0,0);
-          const fD = await comprimirImagen(tC.toDataURL('image/jpeg',1.0),600,0.95);
-          doc.addImage(fD,'JPEG',m2,afterY2,firmaW2,firmaH2);
-        } catch(ef){}
-      } else { doc.setDrawColor(180,180,180); doc.rect(m2,afterY2,firmaW2,firmaH2); }
+      doc.setDrawColor(180,180,180); doc.rect(m2,afterY2,firmaW2,firmaH2);
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
       doc.text('Firma del Receptor', m2+firmaW2/2, afterY2+firmaH2+5, {align:'center'});
-      // Timbre
+      // Timbre - cargar desde Cloudinary
       var tX=115, tW=80, tH=42;
       doc.setDrawColor(180,180,180); doc.rect(tX,afterY2-2,tW,tH);
       if (otData.fotoTimbre) {
-        try { const tComp=await comprimirImagen(otData.fotoTimbre,300,0.5); doc.addImage(tComp,'JPEG',tX+5,afterY2,tW-10,tH-12); } catch(et){}
+        try {
+          const timbreB64 = await cargarImagenComoBase64(otData.fotoTimbre);
+          if (timbreB64) {
+            const timbreComp = await comprimirImagen(timbreB64, 300, 0.5);
+            doc.addImage(timbreComp,'JPEG',tX+5,afterY2,tW-10,tH-12);
+          }
+        } catch(et){ console.warn('Error timbre:', et); }
       }
       doc.setFont('helvetica','normal'); doc.setFontSize(8);
       doc.text('Timbre del Receptor:', tX+tW/2, afterY2+tH-2, {align:'center'});
 
-      // ---- PAGINAS FOTOS ----
+      // ---- PAGINAS FOTOS desde Cloudinary ----
       const fotosA = otData.fotosAntes || [];
       const fotosD = otData.fotosDespues || [];
       if (fotosA.length > 0 || fotosD.length > 0) {
@@ -2903,14 +2915,24 @@ async function generarPDFCotizacionGuardada(cotData) {
           doc.setFillColor(27,58,107); doc.rect(m2,curY,imgW,6,'F');
           doc.setTextColor(255,255,255); doc.setFontSize(7);
           doc.text('ANTES',m2+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
-          if(fotosA[pi]){try{const iA=await comprimirImagen(fotosA[pi],400,0.25);doc.addImage(iA,'JPEG',m2,curY+6,imgW,imgH);}catch(e){}}
-          else{doc.setDrawColor(200);doc.rect(m2,curY+6,imgW,imgH);}
+          if(fotosA[pi]){
+            try{
+              const b64A = await cargarImagenComoBase64(fotosA[pi]);
+              if(b64A){ const iA=await comprimirImagen(b64A,400,0.35); doc.addImage(iA,'JPEG',m2,curY+6,imgW,imgH); }
+              else { doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
+            }catch(e){ doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
+          } else { doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
           var dX=m2+imgW+10;
           doc.setFillColor(39,160,107); doc.rect(dX,curY,imgW,6,'F');
           doc.setTextColor(255,255,255);
           doc.text('DESPU' + String.fromCharCode(201) + 'S',dX+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
-          if(fotosD[pi]){try{const iD=await comprimirImagen(fotosD[pi],400,0.25);doc.addImage(iD,'JPEG',dX,curY+6,imgW,imgH);}catch(e){}}
-          else{doc.setDrawColor(200);doc.rect(dX,curY+6,imgW,imgH);}
+          if(fotosD[pi]){
+            try{
+              const b64D = await cargarImagenComoBase64(fotosD[pi]);
+              if(b64D){ const iD=await comprimirImagen(b64D,400,0.35); doc.addImage(iD,'JPEG',dX,curY+6,imgW,imgH); }
+              else { doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
+            }catch(e){ doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
+          } else { doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
           curY+=imgH+16;
         }
       }
