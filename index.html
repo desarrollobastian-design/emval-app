@@ -1602,14 +1602,22 @@ async function cargarCarpetas() {
         const descDiv = document.createElement('div');
         descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
         descDiv.textContent = (it.descripcionTrabajo || '').substring(0, 60) + (it.descripcionTrabajo && it.descripcionTrabajo.length > 60 ? '...' : '');
+        const btnsRow = document.createElement('div');
+        btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+        const btnPdfCot = document.createElement('button');
+        btnPdfCot.textContent = 'Ver PDF';
+        btnPdfCot.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnPdfCot.onclick = (function(data){ return function(){ generarPDFCotizacionGuardada(data); }; })(it);
         const btn = document.createElement('button');
-        btn.textContent = 'Enviar por email';
-        btn.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;';
-        btn.onclick = function() { enviarCotGuardadaData(it); };
+        btn.textContent = 'Enviar email';
+        btn.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+        btn.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
+        btnsRow.appendChild(btnPdfCot);
+        btnsRow.appendChild(btn);
         row.appendChild(rowHeader);
         row.appendChild(totalDiv);
         row.appendChild(descDiv);
-        row.appendChild(btn);
+        row.appendChild(btnsRow);
         carpDiv.appendChild(row);
       });
       lista.appendChild(carpDiv);
@@ -2628,6 +2636,292 @@ async function guardarYEnviarPDF() {
 }
 
 // =========== PDF COTIZACION ===========
+async function generarPDFCotizacionGuardada(cotData) {
+  toast('Generando PDF...');
+  try {
+    // Cargar datos completos de la OT desde Firestore
+    let otData = null;
+    if (window._firebaseReady && cotData.otId) {
+      const db = window.firebase.firestore();
+      const otDoc = await db.collection('ordenes').doc(cotData.otId).get();
+      if (otDoc.exists) otData = otDoc.data();
+    }
+
+    // Preparar cotizacionActual temporalmente con datos guardados
+    const cotBackup = cotizacionActual;
+    const itemsBackup = itemsCot.slice();
+    cotizacionActual = {
+      id: cotData.otId || '',
+      otId: cotData.otId || '',
+      numero: cotData.otNumero,
+      local: cotData.local,
+      tecnico: cotData.tecnico,
+      fecha: cotData.fecha,
+      descripcionTrabajo: cotData.descripcionTrabajo || ''
+    };
+    itemsCot = cotData.items || [];
+
+    // Poner detalle en el campo (aunque no sea visible)
+    const detalleEl = document.getElementById('cot-detalle-trabajo');
+    const detalleBackup = detalleEl ? detalleEl.value : '';
+    if (detalleEl) detalleEl.value = cotData.descripcionTrabajo || '';
+
+    // Generar PDF pagina 1 cotizacion
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210, margin = 15;
+    const fecha = new Date().toLocaleDateString('es-CL');
+    const VERDE = [100, 180, 150];
+
+    // Numero cotizacion
+    const hoy = new Date();
+    const diaCot = String(hoy.getDate());
+    const mesCot = String(hoy.getMonth() + 1).padStart(2, '0');
+    const anioCot = String(hoy.getFullYear()).slice(2);
+    const numCot = diaCot + mesCot + anioCot + '01';
+
+    // ---- TITULO ----
+    doc.setFontSize(22); doc.setFont('helvetica', 'bold'); doc.setTextColor(0,0,0);
+    doc.text('Cotizaci' + String.fromCharCode(243) + 'n', W/2, 20, { align: 'center' });
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text('N' + String.fromCharCode(186), 160, 18);
+    doc.setDrawColor(0); doc.setLineWidth(0.5);
+    doc.rect(168, 14, 25, 8);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.text(String(numCot), 180, 20, { align: 'center' });
+
+    // ---- CAJA EMPRESA ----
+    doc.setDrawColor(100, 180, 150);
+    doc.rect(margin, 25, 90, 35);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
+    doc.text('Nombre : SERVICIOS EMVAL LTDA.', margin + 28, 31);
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
+    doc.text('"SERVICIOS EMVAL"', margin + 28, 36);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text('Rut', margin + 28, 42); doc.text(': 76.166.407-7', margin + 42, 42);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
+    doc.text(': A. Pinto 372 of 53, Concepci' + String.fromCharCode(243) + 'n', margin + 42, 47);
+    doc.text('Fono', margin + 28, 52); doc.text(': 995720003', margin + 42, 52);
+    doc.text('Email', margin + 28, 57); doc.text(': servicios.emval@gmail.com', margin + 42, 57);
+
+    // ---- CAJA OT ----
+    doc.setDrawColor(100, 180, 150);
+    doc.rect(115, 25, 80, 35);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text('Fecha', 120, 32); doc.text(': ' + fecha, 142, 32);
+    doc.text('Fecha ejecuci' + String.fromCharCode(243) + 'n', 120, 38); doc.text(': ' + (cotData.fecha||''), 142, 38);
+    doc.text('Local', 120, 44); doc.text(': ' + (cotData.local||''), 142, 44);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n', 120, 50); doc.text(':', 142, 50);
+    doc.text('Supervisor', 120, 56); doc.text(': ' + (cotData.tecnico||''), 142, 56);
+
+    // ---- DETALLE TRABAJOS ----
+    const secY = 68;
+    doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+    doc.rect(margin, secY, W - margin*2, 8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
+    doc.text('DETALLE DE TRABAJOS', W/2, secY + 5.5, { align: 'center' });
+    doc.setTextColor(0,0,0); doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const descT = cotData.descripcionTrabajo || '';
+    const descLines = doc.splitTextToSize(descT, W - margin*2 - 4);
+    const descBoxH = Math.max(16, descLines.length * 5 + 6);
+    doc.setDrawColor(180,180,180);
+    doc.rect(margin, secY + 8, W - margin*2, descBoxH);
+    descLines.forEach(function(line, i) { doc.text(line, margin + 2, secY + 14 + (i * 5)); });
+
+    // ---- TABLA ITEMS ----
+    const tabY = secY + 8 + descBoxH + 6;
+    const colAncho = [12, 80, 20, 30, 30];
+    const colX = [margin];
+    for (var ci = 0; ci < colAncho.length - 1; ci++) colX.push(colX[ci] + colAncho[ci]);
+    const rowH = 7;
+    doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+    doc.rect(margin, tabY, W - margin*2, rowH, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+    ['Cantidad','Detalle','Real','$ unitario','Total'].forEach(function(h,i){ doc.text(h, colX[i]+colAncho[i]/2, tabY+5, {align:'center'}); });
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(0,0,0);
+    var maxFilas = 14;
+    var items = cotData.items || [];
+    for (var fi = 0; fi < maxFilas; fi++) {
+      var rowY = tabY + rowH + (fi * rowH);
+      doc.setDrawColor(200,200,200);
+      doc.rect(margin, rowY, W - margin*2, rowH);
+      var xAcc = margin;
+      for (var ci2 = 0; ci2 < colAncho.length - 1; ci2++) { xAcc += colAncho[ci2]; doc.line(xAcc, rowY, xAcc, rowY + rowH); }
+      var item = items[fi];
+      if (item) {
+        doc.setFontSize(8);
+        doc.text(String(item.qty||1), colX[0]+colAncho[0]/2, rowY+5, {align:'center'});
+        var descI = doc.splitTextToSize(item.desc||'', colAncho[1]-2);
+        doc.text(descI[0]||'', colX[1]+2, rowY+5);
+        doc.text('cu', colX[2]+colAncho[2]/2, rowY+5, {align:'center'});
+        doc.text('$ '+(item.precio||0).toLocaleString('es-CL'), colX[3]+colAncho[3]-2, rowY+5, {align:'right'});
+        var totI = (item.qty||1)*(item.precio||0);
+        doc.text('$ '+totI.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, rowY+5, {align:'right'});
+      } else {
+        doc.setTextColor(180,180,180);
+        doc.text('-', colX[3]+colAncho[3]-2, rowY+5, {align:'right'});
+        doc.text('-', colX[4]+colAncho[4]-2, rowY+5, {align:'right'});
+        doc.setTextColor(0,0,0);
+      }
+    }
+    var afterTabY = tabY + rowH + (maxFilas * rowH);
+    var subtotal = items.reduce(function(s,i){ return s+(i.qty||1)*(i.precio||0); }, 0);
+    var descPct = cotData.descuento || 0;
+    var descMonto = Math.round(subtotal * descPct / 100);
+    var total = subtotal - descMonto;
+    doc.setFillColor(240,240,240);
+    doc.rect(margin, afterTabY, W - margin*2, rowH, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('Total', colX[3]+colAncho[3]-2, afterTabY+5, {align:'right'});
+    doc.text('$ '+subtotal.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, afterTabY+5, {align:'right'});
+
+    var cosY = afterTabY + rowH + 4;
+    doc.setFillColor(220,220,220);
+    doc.rect(margin+40, cosY, 80, 7, 'F');
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text('Costos Operacionales + traslados', W/2, cosY+5, {align:'center'});
+    doc.text('Total', 155, cosY+5);
+    doc.setDrawColor(180,180,180); doc.rect(165, cosY, 25, 7);
+    doc.text('$ -', 188, cosY+5, {align:'right'});
+
+    var totY = cosY + 14;
+    doc.setFont('helvetica','italic');
+    doc.text('Cotizacion Valida por 10 Dias', margin, totY);
+    [['Sub Total Neto', subtotal],['Descuentos', descMonto],['TOTAL NETO', total]].forEach(function(r,i){
+      var ry = totY + (i*8);
+      doc.setFont('helvetica', i===2?'bold':'normal');
+      doc.text(r[0], 130, ry);
+      doc.setDrawColor(180,180,180); doc.rect(165, ry-5, 30, 7);
+      doc.text('$ '+r[1].toLocaleString('es-CL'), 194, ry, {align:'right'});
+    });
+
+    var firmY = totY + 30;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text('Cotizacion Valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
+
+    // ---- PAGINA 2: RECEPCION DE OBRA ----
+    if (otData) {
+      doc.addPage();
+      const m2 = 15, W2 = 210;
+      doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+      doc.text('RECEPCI' + String.fromCharCode(211) + 'N OBRA', W2/2, 15, {align:'center'});
+      doc.setFontSize(8); doc.setFont('helvetica','bold');
+      doc.text('Servicios Emval ltda', m2, 25);
+      doc.setFont('helvetica','normal');
+      doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', m2, 29);
+      doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', m2, 33);
+      doc.text('Fono: 995720003 - RUT.: 76.166.407-7', m2, 37);
+      doc.text('E-mail: Servicios.emval@gmail.com', m2, 41);
+      doc.setDrawColor(0); doc.rect(140, 18, 55, 20);
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.text('N  ' + (otData.numero||''), 167, 28, {align:'center'});
+      doc.setFontSize(7); doc.setFont('helvetica','normal');
+      doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, {align:'center'});
+      doc.rect(140,44,55,24); doc.line(140,52,195,52); doc.line(140,60,195,60); doc.line(158,44,158,68);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      doc.text('Fecha',142,50); doc.text('Local',142,58); doc.text('Direcci' + String.fromCharCode(243) + 'n',142,66);
+      doc.setFont('helvetica','normal');
+      doc.text(otData.fecha||'',160,50);
+      doc.text((otData.local||'').substring(0,16),160,58);
+      doc.text((otData.local||'').substring(0,16),160,66);
+      const tipoY2 = 72;
+      doc.setFontSize(9); doc.setFont('helvetica','bold');
+      doc.text('TRABAJOS EJECUTADOS', m2, tipoY2);
+      doc.rect(80,tipoY2-4,5,5);
+      if (otData.tipo==='preventivo'){doc.setLineWidth(0.8);doc.line(81,tipoY2-3,84,tipoY2);doc.line(84,tipoY2-3,81,tipoY2);doc.setLineWidth(0.2);}
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text('PREVENTIVO',86,tipoY2);
+      doc.rect(115,tipoY2-4,5,5);
+      if (otData.tipo==='correctivo'){doc.setLineWidth(0.8);doc.line(116,tipoY2-3,119,tipoY2);doc.line(119,tipoY2-3,116,tipoY2);doc.setLineWidth(0.2);}
+      doc.text('CORRECTIVO',121,tipoY2);
+      const tabY2=78, col1=20, col2=130, col3=30, rowH2=7;
+      const descT2 = otData.descripcionTrabajo||'';
+      const descL2 = doc.splitTextToSize(descT2, col2-4);
+      const rowsN = Math.max(descL2.length+1, 10);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      doc.rect(m2,tabY2,col1+col2+col3,rowH2); doc.rect(m2,tabY2,col1,rowH2);
+      doc.rect(m2+col1,tabY2,col2,rowH2); doc.rect(m2+col1+col2,tabY2,col3,rowH2);
+      doc.text('ITEM',m2+col1/2,tabY2+5,{align:'center'});
+      doc.text('DETALLE',m2+col1+col2/2,tabY2+5,{align:'center'});
+      doc.text('EJECUCION',m2+col1+col2+col3/2,tabY2+5,{align:'center'});
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      for(var ri=0;ri<rowsN;ri++){
+        var ry2=tabY2+rowH2+(ri*rowH2);
+        doc.rect(m2,ry2,col1,rowH2); doc.rect(m2+col1,ry2,col2,rowH2); doc.rect(m2+col1+col2,ry2,col3,rowH2);
+        if(descL2[ri]) doc.text(descL2[ri],m2+col1+2,ry2+rowH2-2);
+      }
+      var afterY2 = tabY2+rowH2+(rowsN*rowH2)+8;
+      // Firma
+      var firmaW2=85, firmaH2=30;
+      if (otData.firmada) {
+        try {
+          const fC = document.getElementById('firma-canvas');
+          const tC = document.createElement('canvas');
+          tC.width=fC.width; tC.height=fC.height;
+          const tCtx = tC.getContext('2d');
+          tCtx.fillStyle='#FFFFFF'; tCtx.fillRect(0,0,tC.width,tC.height);
+          tCtx.drawImage(fC,0,0);
+          const fD = await comprimirImagen(tC.toDataURL('image/jpeg',1.0),600,0.95);
+          doc.addImage(fD,'JPEG',m2,afterY2,firmaW2,firmaH2);
+        } catch(ef){}
+      } else { doc.setDrawColor(180,180,180); doc.rect(m2,afterY2,firmaW2,firmaH2); }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+      doc.text('Firma del Receptor', m2+firmaW2/2, afterY2+firmaH2+5, {align:'center'});
+      // Timbre
+      var tX=115, tW=80, tH=42;
+      doc.setDrawColor(180,180,180); doc.rect(tX,afterY2-2,tW,tH);
+      if (otData.fotoTimbre) {
+        try { const tComp=await comprimirImagen(otData.fotoTimbre,300,0.5); doc.addImage(tComp,'JPEG',tX+5,afterY2,tW-10,tH-12); } catch(et){}
+      }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text('Timbre del Receptor:', tX+tW/2, afterY2+tH-2, {align:'center'});
+
+      // ---- PAGINAS FOTOS ----
+      const fotosA = otData.fotosAntes || [];
+      const fotosD = otData.fotosDespues || [];
+      if (fotosA.length > 0 || fotosD.length > 0) {
+        toast('Agregando fotos...');
+        doc.addPage();
+        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
+        doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W2/2, 15, {align:'center'});
+        doc.setFontSize(9);
+        doc.text('OT #'+(otData.numero||'')+' - '+(otData.local||''), W2/2, 22, {align:'center'});
+        var curY=30;
+        const imgW=85, imgH=65;
+        for (var pi=0; pi<Math.max(fotosA.length,fotosD.length); pi++){
+          if(curY+imgH+15>285){doc.addPage();curY=20;}
+          doc.setFont('helvetica','bold'); doc.setFontSize(8);
+          doc.text('Punto '+(pi+1), m2, curY); curY+=5;
+          doc.setFillColor(27,58,107); doc.rect(m2,curY,imgW,6,'F');
+          doc.setTextColor(255,255,255); doc.setFontSize(7);
+          doc.text('ANTES',m2+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
+          if(fotosA[pi]){try{const iA=await comprimirImagen(fotosA[pi],400,0.25);doc.addImage(iA,'JPEG',m2,curY+6,imgW,imgH);}catch(e){}}
+          else{doc.setDrawColor(200);doc.rect(m2,curY+6,imgW,imgH);}
+          var dX=m2+imgW+10;
+          doc.setFillColor(39,160,107); doc.rect(dX,curY,imgW,6,'F');
+          doc.setTextColor(255,255,255);
+          doc.text('DESPU' + String.fromCharCode(201) + 'S',dX+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
+          if(fotosD[pi]){try{const iD=await comprimirImagen(fotosD[pi],400,0.25);doc.addImage(iD,'JPEG',dX,curY+6,imgW,imgH);}catch(e){}}
+          else{doc.setDrawColor(200);doc.rect(dX,curY+6,imgW,imgH);}
+          curY+=imgH+16;
+        }
+      }
+    }
+
+    // Restaurar estado
+    cotizacionActual = cotBackup;
+    itemsCot = itemsBackup;
+    if (detalleEl) detalleEl.value = detalleBackup;
+
+    const nombrePDF = 'EMVAL_Cotizacion_' + (cotData.local||'').replace(/\s+/g,'_') + '.pdf';
+    doc.save(nombrePDF);
+    toast('PDF descargado');
+  } catch(e) {
+    console.error('Error PDF cotizacion guardada:', e);
+    toast('Error generando PDF');
+  }
+}
+
 async function generarPDFCotizacion() {
   if (!cotizacionActual) { toast('No hay cotizacion activa'); return; }
   toast('Generando PDF cotizacion...');
