@@ -2597,14 +2597,17 @@ async function guardarYEnviarPDF() {
     formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', 'OT_' + estado.otNumero);
+    formData.append('public_id', 'OT_' + estado.otNumero + '_' + (estado.local||'').replace(/\s+/g,'_'));
     const resp = await fetch(
       'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
       { method: 'POST', body: formData }
     );
     const data = await resp.json();
     if (data.secure_url) {
-      pdfUrlCloudinary = data.secure_url;
+      // Asegurar que la URL termine en .pdf para que el navegador la reconozca
+      var cUrl = data.secure_url;
+      if (!cUrl.endsWith('.pdf')) cUrl = cUrl + '.pdf';
+      pdfUrlCloudinary = cUrl;
       console.log('PDF subido a Cloudinary:', pdfUrlCloudinary);
     } else {
       console.error('Cloudinary PDF error:', data);
@@ -2619,15 +2622,13 @@ async function guardarYEnviarPDF() {
     toast('Guardando PDF...');
     if (window._firebaseReady) {
       const db = window.firebase.firestore();
-      // Guardar solo pagina 1 en Firestore (sin fotos, mas liviano)
-      const docPage1 = await generarPDFRecepcionObra();
-      const pdfPage1Base64 = docPage1 ? docPage1.output('datauristring') : pdfBase64;
+      // Guardar PDF completo (con fotos) en Firestore
       const pdfDoc = await db.collection('pdfs').add({
         otNumero: estado.otNumero,
         local: estado.local,
         tecnico: estado.usuario,
         fecha: new Date().toLocaleDateString('es-CL'),
-        pdfData: pdfPage1Base64,
+        pdfData: pdfBase64,
         pdfUrl: '',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -2681,7 +2682,8 @@ async function guardarYEnviarPDF() {
         .where('numero', '==', estado.otNumero).get();
       if (!snap.empty) {
         await db.collection('ordenes').doc(snap.docs[0].id).update({
-          pdfUrl: pdfUrlCloudinary || ''
+          pdfUrl: pdfUrlFirestore || '',
+          pdfUrlCloudinary: pdfUrlCloudinary || ''
         });
       }
     } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
@@ -3582,11 +3584,25 @@ async function verOTsTecnico(nombre, grupo) {
     const btns = document.createElement('div');
     btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
 
-    if (ot.pdfUrl) {
+    // Boton Ver PDF: usar URL de Firestore si existe, sino usar embed con base64
+    const urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
+    if (urlParaVer) {
       const btnPdf = document.createElement('button');
       btnPdf.textContent = 'Ver PDF';
       btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnPdf.onclick = (function(url){ return function(){ window.open(url, '_blank'); }; })(ot.pdfUrl);
+      btnPdf.onclick = (function(url){ return function(){
+        // Si es URL de la app (Firestore), abrir directamente
+        // Si es URL de Cloudinary, forzar descarga con nombre correcto
+        if (url.includes('github.io') || url.includes('?pdf=')) {
+          window.open(url, '_blank');
+        } else {
+          // Cloudinary raw - descargar con nombre PDF
+          var a = document.createElement('a');
+          a.href = url.endsWith('.pdf') ? url : url + '.pdf';
+          a.target = '_blank';
+          a.click();
+        }
+      }; })(urlParaVer);
       btns.appendChild(btnPdf);
     }
 
