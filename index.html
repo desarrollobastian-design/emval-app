@@ -2976,6 +2976,38 @@ async function verOTsTecnico(nombre, grupo) {
     statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
     card.appendChild(statsDiv);
 
+    // Audios del tecnico
+    if (ot.audios && ot.audios.length > 0) {
+      const audioSection = document.createElement('div');
+      audioSection.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
+      const audioTitulo = document.createElement('div');
+      audioTitulo.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
+      audioTitulo.textContent = 'Notas de voz (' + ot.audios.length + ')';
+      audioSection.appendChild(audioTitulo);
+      ot.audios.forEach(function(audioUrl, ai) {
+        const audioItem = document.createElement('div');
+        audioItem.style.cssText = 'background:var(--gris1);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;';
+        const audioIcon = document.createElement('div');
+        audioIcon.style.cssText = 'width:32px;height:32px;background:var(--azul);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0;';
+        audioIcon.textContent = String.fromCharCode(9654);
+        const audioInfo = document.createElement('div');
+        audioInfo.style.flex = '1';
+        const audioNombre = document.createElement('div');
+        audioNombre.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto);';
+        audioNombre.textContent = 'Nota de voz ' + (ai + 1);
+        const audioPlayer = document.createElement('audio');
+        audioPlayer.controls = true;
+        audioPlayer.src = audioUrl;
+        audioPlayer.style.cssText = 'width:100%;height:32px;margin-top:4px;';
+        audioInfo.appendChild(audioNombre);
+        audioInfo.appendChild(audioPlayer);
+        audioItem.appendChild(audioIcon);
+        audioItem.appendChild(audioInfo);
+        audioSection.appendChild(audioItem);
+      });
+      card.appendChild(audioSection);
+    }
+
     // Botones PDF y Cotizacion
     const btns = document.createElement('div');
     btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
