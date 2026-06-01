@@ -634,53 +634,58 @@
   </div>
   <div class="content">
 
-    <!-- ACCIONES RAPIDAS -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;">
-      <button class="btn btn-primary" onclick="mostrarFormTecnico()">+ Tecnico</button>
-      <button class="btn btn-primary" onclick="mostrarFormCadena()">+ Cadena</button>
+    <!-- TABS -->
+    <div style="display:flex;gap:0;background:var(--gris2);border-radius:10px;padding:3px;margin-bottom:16px;">
+      <button id="tab-personal" onclick="adminTab('personal')" style="flex:1;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--azul);color:white;">Personal</button>
+      <button id="tab-cadenas" onclick="adminTab('cadenas')" style="flex:1;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:transparent;color:var(--texto2);">Cadenas</button>
     </div>
 
-    <!-- FORM TECNICO -->
-    <div id="form-tecnico" style="display:none;" class="card">
-      <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo tecnico</div>
-      <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
-      <div class="field"><label>Cargo</label><input type="text" id="tec-cargo" placeholder="Ej: Tecnico en terreno" value="Tecnico en terreno" /></div>
-      <div class="field"><label>PIN (4 numeros)</label><input type="number" id="tec-pin" placeholder="Ej: 1234" maxlength="4" /></div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="cancelarFormTecnico()" style="flex:1;">Cancelar</button>
-        <button class="btn btn-primary btn-sm" onclick="guardarTecnico()" style="flex:1;">Guardar</button>
+    <!-- PANEL PERSONAL -->
+    <div id="panel-personal">
+      <button class="btn btn-primary" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
+      <div id="form-tecnico" style="display:none;" class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo personal</div>
+        <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
+        <div class="field">
+          <label>Rol</label>
+          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;">
+            <option value="Tecnico en terreno">Tecnico en terreno</option>
+            <option value="Supervisor">Supervisor</option>
+          </select>
+        </div>
+        <div class="field"><label>PIN (4 numeros)</label><input type="number" id="tec-pin" placeholder="Ej: 1234" maxlength="4" /></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="cancelarFormTecnico()" style="flex:1;">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="guardarTecnico()" style="flex:1;">Guardar</button>
+        </div>
       </div>
+      <div id="lista-tecnicos-admin"></div>
     </div>
 
-    <!-- FORM CADENA -->
-    <div id="form-cadena" style="display:none;" class="card">
-      <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
-      <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
-      <div class="field"><label>Color (hex)</label><input type="text" id="cad-color" placeholder="#E31837" value="#1B3A6B" /></div>
-      <div class="field"><label>URL del logo</label><input type="text" id="cad-logo" placeholder="https://..." /></div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('form-cadena').style.display='none'" style="flex:1;">Cancelar</button>
-        <button class="btn btn-primary btn-sm" onclick="guardarCadena()" style="flex:1;">Guardar</button>
+    <!-- PANEL CADENAS -->
+    <div id="panel-cadenas" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="flex:1;margin-right:8px;">+ Agregar cadena</button>
+        <button onclick="resetearCadenas()" style="background:none;border:1px solid var(--gris3);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer;color:var(--texto3);white-space:nowrap;">Resetear</button>
       </div>
+      <div id="form-cadena" style="display:none;" class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
+        <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
+        <div class="field"><label>Color (hex)</label><input type="text" id="cad-color" placeholder="#E31837" value="#1B3A6B" /></div>
+        <div class="field"><label>URL del logo</label><input type="text" id="cad-logo" placeholder="https://..." /></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('form-cadena').style.display='none'" style="flex:1;">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="guardarCadena()" style="flex:1;">Guardar</button>
+        </div>
+      </div>
+      <div id="lista-cadenas-admin"></div>
     </div>
 
-    <!-- LISTA TECNICOS -->
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-top:8px;">TECNICOS</div>
-    <div id="lista-tecnicos-admin"></div>
-
-    <!-- LISTA CADENAS -->
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
-      <span>CADENAS Y SUCURSALES</span>
-      <button onclick="resetearCadenas()" style="background:none;border:1px solid var(--gris3);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--texto3);">Resetear</button>
+    <!-- Campos ocultos para compatibilidad con locales -->
+    <div style="display:none;">
+      <div id="form-local"><input type="text" id="loc-nombre" /><input type="text" id="loc-dir" /><select id="loc-tipo"><option value="Unimarc">Unimarc</option><option value="S10">S10</option><option value="Alvi">Alvi</option><option value="Otro">Otro</option></select></div>
+      <div id="lista-locales-admin"></div>
     </div>
-    <div id="lista-cadenas-admin"></div>
-
-    <!-- Form local oculto - mantener para compatibilidad -->
-    <div id="form-local" style="display:none;">
-      <input type="text" id="loc-nombre" /><input type="text" id="loc-dir" />
-      <select id="loc-tipo"><option value="Unimarc">Unimarc</option><option value="S10">S10</option><option value="Alvi">Alvi</option><option value="Otro">Otro</option></select>
-    </div>
-    <div id="lista-locales-admin" style="display:none;"></div>
 
   </div>
 </div>
@@ -1968,9 +1973,19 @@ function seleccionarCadena(cadena) {
 let editandoTecnicoId = null;
 let editandoLocalId = null;
 
+function adminTab(tab) {
+  document.getElementById('panel-personal').style.display = tab === 'personal' ? 'block' : 'none';
+  document.getElementById('panel-cadenas').style.display = tab === 'cadenas' ? 'block' : 'none';
+  document.getElementById('tab-personal').style.background = tab === 'personal' ? 'var(--azul)' : 'transparent';
+  document.getElementById('tab-personal').style.color = tab === 'personal' ? 'white' : 'var(--texto2)';
+  document.getElementById('tab-cadenas').style.background = tab === 'cadenas' ? 'var(--azul)' : 'transparent';
+  document.getElementById('tab-cadenas').style.color = tab === 'cadenas' ? 'white' : 'var(--texto2)';
+  if (tab === 'cadenas') cargarCadenasAdmin();
+  else cargarTecnicosAdmin();
+}
+
 async function cargarAdmin() {
   await cargarTecnicosAdmin();
-  await cargarLocalesAdmin();
   await cargarCadenasAdmin();
 }
 
