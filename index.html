@@ -633,10 +633,14 @@
     <h2>Administrar</h2>
   </div>
   <div class="content">
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);">TECNICOS</div>
-    <div id="lista-tecnicos-admin"></div>
-    <button class="btn btn-primary" onclick="mostrarFormTecnico()" style="margin-bottom:8px;">+ Agregar tecnico</button>
 
+    <!-- ACCIONES RAPIDAS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;">
+      <button class="btn btn-primary" onclick="mostrarFormTecnico()">+ Tecnico</button>
+      <button class="btn btn-primary" onclick="mostrarFormCadena()">+ Cadena</button>
+    </div>
+
+    <!-- FORM TECNICO -->
     <div id="form-tecnico" style="display:none;" class="card">
       <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo tecnico</div>
       <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
@@ -648,10 +652,7 @@
       </div>
     </div>
 
-    <div style="height:16px;"></div>
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);">CADENAS Y SUCURSALES</div>
-    <div id="lista-cadenas-admin"></div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;"><button class="btn btn-primary" onclick="mostrarFormCadena()" style="flex:2;">+ Agregar cadena</button><button class="btn btn-secondary" onclick="resetearCadenas()" style="flex:1;font-size:12px;">Resetear</button></div>
+    <!-- FORM CADENA -->
     <div id="form-cadena" style="display:none;" class="card">
       <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
       <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
@@ -663,29 +664,24 @@
       </div>
     </div>
 
-    <div style="height:16px;"></div>
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);">LOCALES (sistema anterior)</div>
-    <div id="lista-locales-admin"></div>
-    <button class="btn btn-primary" onclick="mostrarFormLocal()">+ Agregar local</button>
+    <!-- LISTA TECNICOS -->
+    <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-top:8px;">TECNICOS</div>
+    <div id="lista-tecnicos-admin"></div>
 
-    <div id="form-local" style="display:none;" class="card" style="margin-top:8px;">
-      <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-local-titulo">Nuevo local</div>
-      <div class="field"><label>Nombre del local</label><input type="text" id="loc-nombre" placeholder="Ej: Unimarc Chillan" /></div>
-      <div class="field"><label>Direccion</label><input type="text" id="loc-dir" placeholder="Ej: Chillan, Nuble" /></div>
-      <div class="field">
-        <label>Tipo</label>
-        <select id="loc-tipo">
-          <option value="Unimarc">Unimarc</option>
-          <option value="S10">S10</option>
-          <option value="Alvi">Alvi</option>
-          <option value="Otro">Otro</option>
-        </select>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="cancelarFormLocal()" style="flex:1;">Cancelar</button>
-        <button class="btn btn-primary btn-sm" onclick="guardarLocal()" style="flex:1;">Guardar</button>
-      </div>
+    <!-- LISTA CADENAS -->
+    <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
+      <span>CADENAS Y SUCURSALES</span>
+      <button onclick="resetearCadenas()" style="background:none;border:1px solid var(--gris3);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--texto3);">Resetear</button>
     </div>
+    <div id="lista-cadenas-admin"></div>
+
+    <!-- Form local oculto - mantener para compatibilidad -->
+    <div id="form-local" style="display:none;">
+      <input type="text" id="loc-nombre" /><input type="text" id="loc-dir" />
+      <select id="loc-tipo"><option value="Unimarc">Unimarc</option><option value="S10">S10</option><option value="Alvi">Alvi</option><option value="Otro">Otro</option></select>
+    </div>
+    <div id="lista-locales-admin" style="display:none;"></div>
+
   </div>
 </div>
 
