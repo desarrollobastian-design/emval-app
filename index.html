@@ -537,8 +537,16 @@
     <button class="back" onclick="go('s-supervisor')">←</button>
     <h2>Cotizaciones guardadas</h2>
   </div>
+  <div id="cot-acciones-bar" style="display:none;padding:10px 16px;background:white;border-bottom:1px solid var(--gris2);display:none;gap:8px;align-items:center;">
+    <span id="cot-seleccionadas-count" style="font-size:13px;color:var(--texto2);flex:1;">0 seleccionadas</span>
+    <button onclick="enviarCotizacionesSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Enviar email</button>
+    <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
+  </div>
   <div class="content">
-    <div style="font-size:13px;color:var(--texto2);">Selecciona una carpeta para ver sus cotizaciones</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div style="font-size:13px;color:var(--texto2);">Selecciona cotizaciones para acciones</div>
+      <button onclick="toggleSeleccionarTodas()" id="btn-sel-todas" style="background:var(--gris2);border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">Seleccionar todas</button>
+    </div>
     <div id="lista-carpetas"></div>
   </div>
 </div>
@@ -1549,13 +1557,16 @@ async function cargarCarpetas() {
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
+    window._todasCotizaciones = {}; // Para acciones multiples
     const carpetas = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
       const c = d.carpeta || d.tecnico || 'Sin asignar';
       if (!carpetas[c]) carpetas[c] = { tecnico: d.tecnico || c, items: [] };
-      carpetas[c].items.push({ id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
-        descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico, descuento: d.descuento || 0 });
+      const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
+        descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico, descuento: d.descuento || 0 };
+      carpetas[c].items.push(cotItem);
+      window._todasCotizaciones[doc.id] = cotItem;
     });
     const lista = document.getElementById('lista-carpetas');
     lista.innerHTML = '';
@@ -1616,6 +1627,16 @@ async function cargarCarpetas() {
         const descDiv = document.createElement('div');
         descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
         descDiv.textContent = (it.descripcionTrabajo || '').substring(0, 60) + (it.descripcionTrabajo && it.descripcionTrabajo.length > 60 ? '...' : '');
+        // Checkbox de seleccion
+        const checkRow = document.createElement('div');
+        checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.style.cssText = 'width:18px;height:18px;margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--azul);';
+        chk.dataset.cotId = it.id;
+        chk.onchange = actualizarBarraAcciones;
+        const rowContent = document.createElement('div');
+        rowContent.style.flex = '1';
         const btnsRow = document.createElement('div');
         btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
         const btnPdfCot = document.createElement('button');
@@ -1628,10 +1649,13 @@ async function cargarCarpetas() {
         btn.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
         btnsRow.appendChild(btnPdfCot);
         btnsRow.appendChild(btn);
-        row.appendChild(rowHeader);
-        row.appendChild(totalDiv);
-        row.appendChild(descDiv);
-        row.appendChild(btnsRow);
+        rowContent.appendChild(rowHeader);
+        rowContent.appendChild(totalDiv);
+        rowContent.appendChild(descDiv);
+        rowContent.appendChild(btnsRow);
+        checkRow.appendChild(chk);
+        checkRow.appendChild(rowContent);
+        row.appendChild(checkRow);
         carpDiv.appendChild(row);
       });
       lista.appendChild(carpDiv);
@@ -3611,6 +3635,73 @@ async function verOTsTecnico(nombre, grupo) {
     card.appendChild(btns);
     lista.appendChild(card);
   });
+}
+
+// =========== SELECCION MULTIPLE COTIZACIONES ===========
+function actualizarBarraAcciones() {
+  const checkboxes = document.querySelectorAll('#lista-carpetas input[type=checkbox]');
+  const seleccionadas = Array.from(checkboxes).filter(function(c){ return c.checked; });
+  const bar = document.getElementById('cot-acciones-bar');
+  const count = document.getElementById('cot-seleccionadas-count');
+  if (seleccionadas.length > 0) {
+    bar.style.display = 'flex';
+    count.textContent = seleccionadas.length + ' seleccionada' + (seleccionadas.length !== 1 ? 's' : '');
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function toggleSeleccionarTodas() {
+  const checkboxes = document.querySelectorAll('#lista-carpetas input[type=checkbox]');
+  const todasMarcadas = Array.from(checkboxes).every(function(c){ return c.checked; });
+  checkboxes.forEach(function(c){ c.checked = !todasMarcadas; });
+  const btn = document.getElementById('btn-sel-todas');
+  if (btn) btn.textContent = todasMarcadas ? 'Seleccionar todas' : 'Deseleccionar';
+  actualizarBarraAcciones();
+}
+
+function obtenerCotizacionesSeleccionadas() {
+  const checkboxes = document.querySelectorAll('#lista-carpetas input[type=checkbox]:checked');
+  return Array.from(checkboxes).map(function(c) {
+    return window._todasCotizaciones[c.dataset.cotId];
+  }).filter(Boolean);
+}
+
+async function enviarCotizacionesSeleccionadas() {
+  const seleccionadas = obtenerCotizacionesSeleccionadas();
+  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
+  const email = prompt('Email del cliente (se enviaran ' + seleccionadas.length + ' cotizaciones):');
+  if (!email) return;
+  for (var i = 0; i < seleccionadas.length; i++) {
+    const it = seleccionadas[i];
+    const itemsTexto = (it.items||[]).map(function(item) {
+      return item.desc + ' x' + item.qty + ' = $' + ((item.qty||1)*(item.precio||0)).toLocaleString('es-CL');
+    }).join('%0A');
+    const body = 'Cotizacion EMVAL%0A%0ALocal: ' + it.local + '%0AFecha: ' + (it.fecha||'') +
+      '%0ATrabajo: ' + (it.descripcionTrabajo||'') + '%0A%0A' + itemsTexto +
+      '%0A%0ATotal: $' + (it.total||0).toLocaleString('es-CL');
+    window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + it.local + '&body=' + body);
+    await new Promise(function(r){ setTimeout(r, 500); });
+  }
+  toast(seleccionadas.length + ' cotizaciones enviadas');
+}
+
+async function eliminarCotizacionesSeleccionadas() {
+  const seleccionadas = obtenerCotizacionesSeleccionadas();
+  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
+  if (!confirm('Eliminar ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '? Esta accion no se puede deshacer.')) return;
+  try {
+    const db = window.firebase.firestore();
+    for (var i = 0; i < seleccionadas.length; i++) {
+      await db.collection('cotizaciones').doc(seleccionadas[i].id).delete();
+    }
+    toast(seleccionadas.length + ' cotizaciones eliminadas');
+    document.getElementById('cot-acciones-bar').style.display = 'none';
+    await cargarCarpetas();
+  } catch(e) {
+    console.error(e);
+    toast('Error eliminando cotizaciones');
+  }
 }
 
 // =========== TOAST ===========
