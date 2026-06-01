@@ -1985,6 +1985,7 @@ function adminTab(tab) {
 }
 
 async function cargarAdmin() {
+  if (!window._firebaseReady) { setTimeout(cargarAdmin, 800); return; }
   await cargarTecnicosAdmin();
   await cargarCadenasAdmin();
 }
