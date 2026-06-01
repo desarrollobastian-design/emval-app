@@ -228,24 +228,20 @@
     <div id="lista-usuarios">
       <div class="usuario-item" onclick="seleccionarUsuario('Ariel Espinoza', 'Técnico', 'A')">
         <div class="usuario-avatar">A</div>
-        <div class="usuario-info"><div class="nombre">Ariel Espinoza</div><div class="cargo">Técnico en terreno</div></div>
+        <div class="usuario-info"><div class="nombre">Ariel Espinoza</div><div class="cargo">Tecnico en terreno</div></div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
       <div class="usuario-item" onclick="seleccionarUsuario('Pedro Arce', 'Técnico', 'P')">
         <div class="usuario-avatar" style="background:#2D5AA0;">P</div>
-        <div class="usuario-info"><div class="nombre">Pedro Arce</div><div class="cargo">Técnico en terreno</div></div>
+        <div class="usuario-info"><div class="nombre">Pedro Arce</div><div class="cargo">Tecnico en terreno</div></div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
       <div class="usuario-item" onclick="seleccionarUsuario('Carlos Mendez', 'Técnico', 'C')">
         <div class="usuario-avatar" style="background:#1D6B5A;">C</div>
-        <div class="usuario-info"><div class="nombre">Carlos Mendez</div><div class="cargo">Técnico en terreno</div></div>
+        <div class="usuario-info"><div class="nombre">Carlos Mendez</div><div class="cargo">Tecnico en terreno</div></div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
-      <div class="usuario-item" onclick="seleccionarUsuario('Supervisor', 'Supervisor', 'S')">
-        <div class="usuario-avatar" style="background:#6B3A1B;">S</div>
-        <div class="usuario-info"><div class="nombre">Supervisor</div><div class="cargo">Panel de supervisión</div></div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
+
     </div>
   </div>
 </div>
@@ -290,7 +286,7 @@
   <div class="topbar" style="justify-content: space-between; padding: 14px 16px;">
     <div>
       <div style="font-size: 16px; font-weight: 600;" id="home-saludo">Hola </div>
-      <div style="font-size: 11px; opacity: 0.7;" id="home-cargo">Técnico en terreno</div>
+      <div style="font-size: 11px; opacity: 0.7;" id="home-cargo">Tecnico en terreno</div>
     </div>
     <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);border:none;color:white;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Salir</button>
   </div>
@@ -476,7 +472,7 @@
 <div class="screen" id="s-cotizacion">
   <div class="topbar">
     <button class="back" onclick="go(window._cotizacionOrigen||'s-supervisor')">←</button>
-    <h2>Generar cotizacion</h2>
+    <h2>Generar cotización</h2>
   </div>
   <div class="content">
     <div class="card" id="cot-resumen-ot" style="background:var(--gris1);margin-bottom:4px;"></div>
@@ -512,10 +508,10 @@
 <div class="screen" id="s-ots-tecnicos">
   <div class="topbar">
     <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>OTs por tecnico</h2>
+    <h2>OTs por técnico</h2>
   </div>
   <div class="content">
-    <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un tecnico para ver sus OTs</div>
+    <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un técnico para ver sus OTs</div>
     <div id="lista-tecnicos-ots"></div>
   </div>
 </div>
@@ -599,7 +595,7 @@
     <div style="display:flex;gap:8px;margin-bottom:4px;">
       <button class="btn btn-secondary btn-sm" onclick="go('s-ots-tecnicos');cargarOTsTecnicos();" style="flex:1;font-size:12px;">Ver OTs</button>
       <button class="btn btn-secondary btn-sm" onclick="go('s-carpetas');cargarCarpetas();" style="flex:1;font-size:12px;">Cotizaciones</button>
-      <button class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="flex:1;font-size:12px;">Administrar</button>
+      <button id="btn-administrar" class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="flex:1;font-size:12px;display:none;">Administrar</button>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
     <div class="ot-card">
@@ -651,6 +647,7 @@
           <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;">
             <option value="Tecnico en terreno">Tecnico en terreno</option>
             <option value="Supervisor">Supervisor</option>
+            <option value="Administrador">Administrador</option>
           </select>
         </div>
         <div class="field"><label>PIN (4 numeros)</label><input type="number" id="tec-pin" placeholder="Ej: 1234" maxlength="4" /></div>
@@ -730,7 +727,7 @@ let estado = {
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
-const PINS = { 'Ariel Espinoza':'1234', 'Pedro Arce':'1234', 'Carlos Mendez':'1234', 'Supervisor':'0000' };
+const PINS = {}; // Cargado dinamicamente desde Firebase
 let pinActual = '';
 
 // =========== NAVEGACION ===========
@@ -774,9 +771,12 @@ function actualizarDots() {
 
 function validarPin() {
   if (pinActual === PINS[estado.usuario]) {
-    if (estado.usuario === 'Supervisor') {
+    if (estado.cargo === 'Supervisor' || estado.cargo === 'Administrador') {
       go('s-supervisor');
       cargarOTsSupervisor();
+      // Mostrar boton Administrar solo para Administrador
+      var btnAdmin = document.getElementById('btn-administrar');
+      if (btnAdmin) btnAdmin.style.display = estado.cargo === 'Administrador' ? 'block' : 'none';
     } else {
       document.getElementById('home-saludo').textContent = 'Hola, ' + estado.usuario.split(' ')[0] + ' :)';
       setTimeout(cargarOTsHome, 500);
@@ -1997,7 +1997,7 @@ async function cargarTecnicosAdmin() {
     const lista = document.getElementById('lista-tecnicos-admin');
     lista.innerHTML = '';
     if (snap.empty) {
-      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay tecnicos registrados aun</p>';
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay personal registrado aun</p>';
       return;
     }
     snap.docs.forEach(function(doc) {
@@ -2239,7 +2239,8 @@ async function cargarUsuariosApp() {
       avatar.textContent = d.letra || d.nombre.charAt(0).toUpperCase();
       const info = document.createElement('div');
       info.className = 'usuario-info';
-      info.innerHTML = '<div class="nombre">' + d.nombre + '</div><div class="cargo">' + (d.cargo || 'Tecnico en terreno') + '</div>';
+      const cargoLabel = d.cargo === 'Administrador' ? 'Administrador' : d.cargo === 'Supervisor' ? 'Supervisor' : 'Tecnico en terreno';
+      info.innerHTML = '<div class="nombre">' + d.nombre + '</div><div class="cargo">' + cargoLabel + '</div>';
       const arrow = document.createElement('svg');
       arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
       arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
@@ -2943,7 +2944,7 @@ async function generarPDFCotizacionGuardada(cotData) {
 
     var totY = cosY + 14;
     doc.setFont('helvetica','italic');
-    doc.text('Cotizacion Valida por 10 Dias', margin, totY);
+    doc.text('Cotizacion valida por 10 Dias', margin, totY);
     [['Sub Total Neto', subtotal],['Descuentos', descMonto],['TOTAL NETO', total]].forEach(function(r,i){
       var ry = totY + (i*8);
       doc.setFont('helvetica', i===2?'bold':'normal');
@@ -2954,7 +2955,7 @@ async function generarPDFCotizacionGuardada(cotData) {
 
     var firmY = totY + 30;
     doc.setFont('helvetica','normal'); doc.setFontSize(8);
-    doc.text('Cotizacion Valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
+    doc.text('Cotizacion valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
 
     // ---- PAGINA 2: RECEPCION DE OBRA ----
     if (otData) {
@@ -3280,7 +3281,7 @@ async function generarPDFCotizacion() {
   var totY = cosY + 14;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'italic');
-  doc.text('Cotizacion Valida por 10 Dias', margin, totY);
+  doc.text('Cotizacion valida por 10 Dias', margin, totY);
 
   doc.setFont('helvetica', 'normal');
   var rows2 = [
@@ -3301,7 +3302,7 @@ async function generarPDFCotizacion() {
   var firmY = totY + 30;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text('Cotizacion Valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
+  doc.text('Cotizacion valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
 
   // ---- AGREGAR RECEPCION DE OBRA + FOTOS ----
   toast('Cargando datos de la OT...');
