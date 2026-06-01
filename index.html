@@ -1441,6 +1441,9 @@ let itemsCot = [];
 async function abrirCotizacion(docId) {
   try {
     window._cotizacionOrigen = document.querySelector('.screen.active') ? document.querySelector('.screen.active').id : 's-supervisor';
+    // Guardar referencia al tecnico activo para recargar su vista despues
+    const headerTec = document.getElementById('detalle-tecnico-nombre');
+    window._cotizacionTecnicoActivo = headerTec ? headerTec.textContent : null;
     const db = window.firebase.firestore();
     const doc = await db.collection('ordenes').doc(docId).get();
     if (!doc.exists) { toast('OT no encontrada'); return; }
@@ -1538,9 +1541,21 @@ async function guardarCotizacion() {
     // Volver segun el origen
     setTimeout(function() {
       const origen = window._cotizacionOrigen || 's-supervisor';
-      if (origen === 's-ots-tecnico-detalle') {
-        go('s-ots-tecnicos');
-        cargarOTsTecnicos();
+      if (origen === 's-ots-tecnico-detalle' && window._cotizacionTecnicoActivo) {
+        // Recargar la vista del tecnico especifico
+        go('s-ots-tecnico-detalle');
+        const nombreTec = window._cotizacionTecnicoActivo;
+        document.getElementById('detalle-tecnico-nombre').textContent = nombreTec;
+        // Recargar OTs del tecnico desde Firestore
+        const db2 = window.firebase.firestore();
+        const snap2 = await db2.collection('ordenes').orderBy('creadoEn','desc').get();
+        const grupo2 = { nombre: nombreTec, ots: [] };
+        snap2.docs.forEach(function(doc) {
+          if (doc.data().tecnico === nombreTec) {
+            grupo2.ots.push({ id: doc.id, ...doc.data() });
+          }
+        });
+        await verOTsTecnico(nombreTec, grupo2);
       } else {
         go('s-supervisor');
         cargarOTsSupervisor();
