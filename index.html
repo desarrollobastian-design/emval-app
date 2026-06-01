@@ -3670,20 +3670,44 @@ function obtenerCotizacionesSeleccionadas() {
 async function enviarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
-  const email = prompt('Email del cliente (se enviaran ' + seleccionadas.length + ' cotizaciones):');
+  const email = prompt('Email del cliente:');
   if (!email) return;
-  for (var i = 0; i < seleccionadas.length; i++) {
-    const it = seleccionadas[i];
-    const itemsTexto = (it.items||[]).map(function(item) {
-      return item.desc + ' x' + item.qty + ' = $' + ((item.qty||1)*(item.precio||0)).toLocaleString('es-CL');
-    }).join('%0A');
-    const body = 'Cotizacion EMVAL%0A%0ALocal: ' + it.local + '%0AFecha: ' + (it.fecha||'') +
-      '%0ATrabajo: ' + (it.descripcionTrabajo||'') + '%0A%0A' + itemsTexto +
-      '%0A%0ATotal: $' + (it.total||0).toLocaleString('es-CL');
-    window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + it.local + '&body=' + body);
-    await new Promise(function(r){ setTimeout(r, 500); });
+
+  toast('Enviando ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '...');
+
+  // Construir resumen de todas las cotizaciones
+  let resumenTotal = 0;
+  let detalles = '';
+  seleccionadas.forEach(function(it, i) {
+    resumenTotal += (it.total || 0);
+    detalles += (i+1) + '. ' + (it.local||'') + ' - ' + (it.fecha||'') + '\n';
+    detalles += '   Trabajo: ' + (it.descripcionTrabajo||'').substring(0,80) + '\n';
+    const itemsTexto = (it.items||[]).filter(function(item){ return item.precio > 0; })
+      .map(function(item){ return '   - ' + item.desc + ' x' + item.qty + ': $' + ((item.qty||1)*(item.precio||0)).toLocaleString('es-CL'); })
+      .join('\n');
+    if (itemsTexto) detalles += itemsTexto + '\n';
+    detalles += '   TOTAL: $' + (it.total||0).toLocaleString('es-CL') + '\n\n';
+  });
+
+  try {
+    await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+      email_admin: email,
+      ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
+      local: seleccionadas.map(function(it){ return it.local; }).join(', '),
+      fecha: new Date().toLocaleDateString('es-CL'),
+      tecnico: seleccionadas[0].tecnico || '',
+      tipo: 'Cotizacion',
+      trabajo: detalles,
+      pdf_url: 'Total general: $' + resumenTotal.toLocaleString('es-CL') + ' (' + seleccionadas.length + ' cotizaciones)'
+    });
+    toast('Email enviado con ' + seleccionadas.length + ' cotizaciones');
+    // Desmarcar checkboxes
+    document.querySelectorAll('#lista-carpetas input[type=checkbox]').forEach(function(c){ c.checked = false; });
+    actualizarBarraAcciones();
+  } catch(e) {
+    console.error('Error enviando email:', e);
+    toast('Error al enviar email: ' + (e.text || e.message || 'desconocido'));
   }
-  toast(seleccionadas.length + ' cotizaciones enviadas');
 }
 
 async function eliminarCotizacionesSeleccionadas() {
