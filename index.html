@@ -712,12 +712,6 @@ firebase.initializeApp({
 });
 window._firebaseReady = true;
 console.log('Firebase v9 compat listo');
-// Check if URL has PDF parameter
-setTimeout(function(){
-  const urlParams = new URLSearchParams(window.location.search);
-  const pdfId = urlParams.get('pdf');
-  if (pdfId) { verPDFById(pdfId); }
-}, 1500);
 </script>
 
 <script>
@@ -3955,6 +3949,11 @@ function toast(msg) {
 }
 
 setTimeout(function(){ cargarUsuariosApp(); cargarLocalesApp(); cargarCadenasApp(); }, 1000);
+setTimeout(function(){
+  var urlParams = new URLSearchParams(window.location.search);
+  var pdfId = urlParams.get('pdf');
+  if (pdfId) { verPDFById(pdfId); }
+}, 1500);
 </script>
 </body>
 </html>
