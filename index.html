@@ -3516,13 +3516,16 @@ async function verOTsTecnico(nombre, grupo) {
     }
   });
 
-  // Cargar cotizaciones existentes para esta vista tambien
+  // Cargar cotizaciones existentes - buscar por otId Y por otNumero como fallback
   const cotSnapT = await db.collection('cotizaciones').get();
   const otsCotizadasT = {};
+  const otsCotizadasPorNumero = {};
   cotSnapT.docs.forEach(function(cd) {
     const cdata = cd.data();
     if (cdata.otId) otsCotizadasT[cdata.otId] = cd.id;
+    if (cdata.otNumero) otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
   });
+  console.log('Cotizaciones encontradas:', Object.keys(otsCotizadasT).length, 'por id,', Object.keys(otsCotizadasPorNumero).length, 'por numero');
 
   lista.innerHTML = '';
   const ots = grupo.ots;
@@ -3647,7 +3650,9 @@ async function verOTsTecnico(nombre, grupo) {
     }
 
     // Boton segun si ya tiene cotizacion
-    if (otsCotizadasT[ot.id]) {
+    const yaCotizadaT = otsCotizadasT[ot.id] || otsCotizadasPorNumero[String(ot.numero || ot.otNumero || '')];
+    console.log('OT', ot.id, 'numero:', ot.numero, 'cotizada:', !!yaCotizadaT);
+    if (yaCotizadaT) {
       const badgeCotT = document.createElement('div');
       badgeCotT.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
       const badgeV = document.createElement('span');
