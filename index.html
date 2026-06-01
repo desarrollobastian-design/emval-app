@@ -3769,6 +3769,14 @@ async function cargarOTsSupervisor() {
       }
     });
 
+    // Cargar cotizaciones existentes para saber que OTs ya tienen cotizacion
+    const cotSnap = await db.collection('cotizaciones').get();
+    const otsCotizadas = {};
+    cotSnap.docs.forEach(function(cd) {
+      const cdata = cd.data();
+      if (cdata.otId) otsCotizadas[cdata.otId] = cd.id;
+    });
+
     snap.docs.forEach(doc => {
       const d = doc.data();
       const card = document.createElement('div');
@@ -3814,14 +3822,34 @@ async function cargarOTsSupervisor() {
       descEl.className = 'ot-sub';
       descEl.style.cssText = 'margin-top:4px;color:var(--texto2)';
       descEl.textContent = d.descripcionTrabajo ? d.descripcionTrabajo.substring(0,60)+'...' : '';
-      const btnCot = document.createElement('button');
-      btnCot.textContent = '+ Generar cotizacion';
-      btnCot.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(docId);
-      infoEl.appendChild(tituloEl);
-      infoEl.appendChild(subEl);
-      infoEl.appendChild(descEl);
-      infoEl.appendChild(btnCot);
+      // Badge y boton segun si ya tiene cotizacion
+      const yaTieneCot = otsCotizadas[docId];
+      if (yaTieneCot) {
+        const badgeCot = document.createElement('div');
+        badgeCot.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;';
+        const badgeVerde = document.createElement('span');
+        badgeVerde.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;';
+        badgeVerde.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
+        const btnVerCot = document.createElement('button');
+        btnVerCot.textContent = 'Ver cotizacion';
+        btnVerCot.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnVerCot.onclick = (function(id){ return function(){ go('s-carpetas'); cargarCarpetas(); }; })(yaTieneCot);
+        badgeCot.appendChild(badgeVerde);
+        badgeCot.appendChild(btnVerCot);
+        infoEl.appendChild(tituloEl);
+        infoEl.appendChild(subEl);
+        infoEl.appendChild(descEl);
+        infoEl.appendChild(badgeCot);
+      } else {
+        const btnCot = document.createElement('button');
+        btnCot.textContent = '+ Generar cotizacion';
+        btnCot.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(docId);
+        infoEl.appendChild(tituloEl);
+        infoEl.appendChild(subEl);
+        infoEl.appendChild(descEl);
+        infoEl.appendChild(btnCot);
+      }
       card.appendChild(iconEl);
       card.appendChild(infoEl);
       lista.appendChild(card);
