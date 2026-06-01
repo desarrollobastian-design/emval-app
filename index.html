@@ -1583,11 +1583,11 @@ async function cargarCarpetas() {
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
-    window._todasCotizaciones = {}; // Para acciones multiples
+    window._todasCotizaciones = {};
     const carpetas = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const c = d.carpeta || d.tecnico || 'Sin asignar';
+      const c = d.tecnico || d.carpeta || 'Sin asignar';
       if (!carpetas[c]) carpetas[c] = { tecnico: d.tecnico || c, items: [] };
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico, descuento: d.descuento || 0 };
@@ -1602,6 +1602,7 @@ async function cargarCarpetas() {
       return;
     }
     const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
+
     keys.forEach(function(carpeta, ci) {
       const grupo = carpetas[carpeta];
       const items = grupo.items;
@@ -1609,13 +1610,15 @@ async function cargarCarpetas() {
       const letra = (grupo.tecnico || carpeta).charAt(0).toUpperCase();
       const color = colores[ci % colores.length];
 
+      // Carpeta colapsable
       const carpDiv = document.createElement('div');
       carpDiv.className = 'card';
-      carpDiv.style.marginBottom = '12px';
+      carpDiv.style.marginBottom = '10px';
+      carpDiv.style.overflow = 'hidden';
 
-      // Header tecnico
+      // Header clickeable - abre/cierra
       const header = document.createElement('div');
-      header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+      header.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatar = document.createElement('div');
       avatar.style.cssText = 'width:44px;height:44px;border-radius:12px;background:' + color + ';display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:600;flex-shrink:0;';
       avatar.textContent = letra;
@@ -1626,55 +1629,79 @@ async function cargarCarpetas() {
       nombreTec.textContent = grupo.tecnico || carpeta;
       const resumen = document.createElement('div');
       resumen.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      resumen.textContent = items.length + ' cotizacion' + (items.length !== 1 ? 'es' : '') + ' | Total: $' + totalGeneral.toLocaleString('es-CL');
+      resumen.textContent = items.length + ' cotizacion' + (items.length !== 1 ? 'es' : '') + ' | $' + totalGeneral.toLocaleString('es-CL');
       headerInfo.appendChild(nombreTec);
       headerInfo.appendChild(resumen);
+      const chevron = document.createElement('div');
+      chevron.style.cssText = 'font-size:18px;color:var(--texto3);transition:transform 0.2s;';
+      chevron.textContent = '>';
       header.appendChild(avatar);
       header.appendChild(headerInfo);
+      header.appendChild(chevron);
       carpDiv.appendChild(header);
 
-      // Lista de OTs
+      // Contenido colapsable - inicialmente oculto
+      const contenido = document.createElement('div');
+      contenido.style.cssText = 'display:none;margin-top:10px;';
+
+      // Boton seleccionar todas de esta carpeta
+      const selRow = document.createElement('div');
+      selRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
+      const btnSelTodas = document.createElement('button');
+      btnSelTodas.textContent = 'Seleccionar todas';
+      btnSelTodas.style.cssText = 'background:var(--gris2);border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+      btnSelTodas.onclick = (function(its) { return function() {
+        its.forEach(function(it) {
+          const chk = document.querySelector('input[data-cot-id="' + it.id + '"]');
+          if (chk) chk.checked = true;
+        });
+        actualizarBarraAcciones();
+      }; })(items);
+      selRow.appendChild(btnSelTodas);
+      contenido.appendChild(selRow);
+
+      // Lista cotizaciones
       items.forEach(function(it) {
         const row = document.createElement('div');
         row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
+        const checkRow = document.createElement('div');
+        checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.dataset.cotId = it.id;
+        chk.setAttribute('data-cot-id', it.id);
+        chk.style.cssText = 'width:18px;height:18px;margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--azul);';
+        chk.onchange = actualizarBarraAcciones;
+        const rowContent = document.createElement('div');
+        rowContent.style.flex = '1';
         const rowHeader = document.createElement('div');
         rowHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
-        const localFecha = document.createElement('div');
-        localFecha.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
-        localFecha.textContent = it.local || '';
+        const localDiv = document.createElement('div');
+        localDiv.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
+        localDiv.textContent = it.local || '';
         const fechaDiv = document.createElement('div');
         fechaDiv.style.cssText = 'font-size:11px;color:var(--texto3);';
         fechaDiv.textContent = it.fecha || '';
-        rowHeader.appendChild(localFecha);
+        rowHeader.appendChild(localDiv);
         rowHeader.appendChild(fechaDiv);
         const totalDiv = document.createElement('div');
         totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
         totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
         const descDiv = document.createElement('div');
         descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-        descDiv.textContent = (it.descripcionTrabajo || '').substring(0, 60) + (it.descripcionTrabajo && it.descripcionTrabajo.length > 60 ? '...' : '');
-        // Checkbox de seleccion
-        const checkRow = document.createElement('div');
-        checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.style.cssText = 'width:18px;height:18px;margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--azul);';
-        chk.dataset.cotId = it.id;
-        chk.onchange = actualizarBarraAcciones;
-        const rowContent = document.createElement('div');
-        rowContent.style.flex = '1';
+        descDiv.textContent = (it.descripcionTrabajo||'').substring(0,60);
         const btnsRow = document.createElement('div');
         btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
-        const btnPdfCot = document.createElement('button');
-        btnPdfCot.textContent = 'Ver PDF';
-        btnPdfCot.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnPdfCot.onclick = (function(data){ return function(){ generarPDFCotizacionGuardada(data); }; })(it);
-        const btn = document.createElement('button');
-        btn.textContent = 'Enviar email';
-        btn.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
-        btn.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
-        btnsRow.appendChild(btnPdfCot);
-        btnsRow.appendChild(btn);
+        const btnPdf = document.createElement('button');
+        btnPdf.textContent = 'Ver PDF';
+        btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnPdf.onclick = (function(data){ return function(){ generarPDFCotizacionGuardada(data); }; })(it);
+        const btnEmail = document.createElement('button');
+        btnEmail.textContent = 'Enviar email';
+        btnEmail.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+        btnEmail.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
+        btnsRow.appendChild(btnPdf);
+        btnsRow.appendChild(btnEmail);
         rowContent.appendChild(rowHeader);
         rowContent.appendChild(totalDiv);
         rowContent.appendChild(descDiv);
@@ -1682,8 +1709,18 @@ async function cargarCarpetas() {
         checkRow.appendChild(chk);
         checkRow.appendChild(rowContent);
         row.appendChild(checkRow);
-        carpDiv.appendChild(row);
+        contenido.appendChild(row);
       });
+
+      carpDiv.appendChild(contenido);
+
+      // Toggle abrir/cerrar
+      header.onclick = (function(cont, chev) { return function() {
+        const abierto = cont.style.display !== 'none';
+        cont.style.display = abierto ? 'none' : 'block';
+        chev.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
+      }; })(contenido, chevron);
+
       lista.appendChild(carpDiv);
     });
   } catch(e) {
