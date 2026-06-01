@@ -475,7 +475,7 @@
 <!-- ============ SCREEN: COTIZACION ============ -->
 <div class="screen" id="s-cotizacion">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
+    <button class="back" onclick="go(window._cotizacionOrigen||'s-supervisor')">←</button>
     <h2>Generar cotizacion</h2>
   </div>
   <div class="content">
@@ -1440,6 +1440,7 @@ let itemsCot = [];
 
 async function abrirCotizacion(docId) {
   try {
+    window._cotizacionOrigen = document.querySelector('.screen.active') ? document.querySelector('.screen.active').id : 's-supervisor';
     const db = window.firebase.firestore();
     const doc = await db.collection('ordenes').doc(docId).get();
     if (!doc.exists) { toast('OT no encontrada'); return; }
@@ -1533,8 +1534,18 @@ async function guardarCotizacion() {
       fechaCodigo: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2); })(),
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     });
-    toast('Cotizacion guardada en carpeta: ' + carpeta);
-    setTimeout(() => go('s-supervisor'), 1500);
+    toast('Cotizacion guardada');
+    // Volver segun el origen
+    setTimeout(function() {
+      const origen = window._cotizacionOrigen || 's-supervisor';
+      if (origen === 's-ots-tecnico-detalle') {
+        go('s-ots-tecnicos');
+        cargarOTsTecnicos();
+      } else {
+        go('s-supervisor');
+        cargarOTsSupervisor();
+      }
+    }, 800);
   } catch(e) {
     console.error(e);
     toast('Error guardando cotizacion');
@@ -3505,6 +3516,14 @@ async function verOTsTecnico(nombre, grupo) {
     }
   });
 
+  // Cargar cotizaciones existentes para esta vista tambien
+  const cotSnapT = await db.collection('cotizaciones').get();
+  const otsCotizadasT = {};
+  cotSnapT.docs.forEach(function(cd) {
+    const cdata = cd.data();
+    if (cdata.otId) otsCotizadasT[cdata.otId] = cd.id;
+  });
+
   lista.innerHTML = '';
   const ots = grupo.ots;
   if (ots.length === 0) {
@@ -3627,11 +3646,27 @@ async function verOTsTecnico(nombre, grupo) {
       btns.appendChild(btnPdf);
     }
 
-    const btnCot = document.createElement('button');
-    btnCot.textContent = '+ Cotizacion';
-    btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
-    btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
-    btns.appendChild(btnCot);
+    // Boton segun si ya tiene cotizacion
+    if (otsCotizadasT[ot.id]) {
+      const badgeCotT = document.createElement('div');
+      badgeCotT.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
+      const badgeV = document.createElement('span');
+      badgeV.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;';
+      badgeV.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
+      const btnVerCotT = document.createElement('button');
+      btnVerCotT.textContent = 'Ver cotizacion';
+      btnVerCotT.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnVerCotT.onclick = function(){ go('s-carpetas'); cargarCarpetas(); };
+      badgeCotT.appendChild(badgeV);
+      badgeCotT.appendChild(btnVerCotT);
+      btns.appendChild(badgeCotT);
+    } else {
+      const btnCot = document.createElement('button');
+      btnCot.textContent = '+ Cotizacion';
+      btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
+      btns.appendChild(btnCot);
+    }
     card.appendChild(btns);
     lista.appendChild(card);
   });
