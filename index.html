@@ -718,7 +718,6 @@ setTimeout(function(){
   const pdfId = urlParams.get('pdf');
   if (pdfId) { verPDFById(pdfId); }
 }, 1500);
-setTimeout(function(){ cargarUsuariosApp(); cargarLocalesApp(); cargarCadenasApp(); }, 1000);
 </script>
 
 <script>
@@ -1539,28 +1538,25 @@ async function guardarCotizacion() {
     });
     toast('Cotizacion guardada');
     // Volver segun el origen
-    setTimeout(function() {
-      const origen = window._cotizacionOrigen || 's-supervisor';
-      if (origen === 's-ots-tecnico-detalle' && window._cotizacionTecnicoActivo) {
-        // Recargar la vista del tecnico especifico
-        go('s-ots-tecnico-detalle');
-        const nombreTec = window._cotizacionTecnicoActivo;
-        document.getElementById('detalle-tecnico-nombre').textContent = nombreTec;
-        // Recargar OTs del tecnico desde Firestore
-        const db2 = window.firebase.firestore();
-        const snap2 = await db2.collection('ordenes').orderBy('creadoEn','desc').get();
-        const grupo2 = { nombre: nombreTec, ots: [] };
-        snap2.docs.forEach(function(doc) {
-          if (doc.data().tecnico === nombreTec) {
-            grupo2.ots.push({ id: doc.id, ...doc.data() });
-          }
-        });
-        await verOTsTecnico(nombreTec, grupo2);
-      } else {
-        go('s-supervisor');
-        cargarOTsSupervisor();
-      }
-    }, 800);
+    const origen = window._cotizacionOrigen || 's-supervisor';
+    if (origen === 's-ots-tecnico-detalle' && window._cotizacionTecnicoActivo) {
+      const nombreTec = window._cotizacionTecnicoActivo;
+      document.getElementById('detalle-tecnico-nombre').textContent = nombreTec;
+      const db2 = window.firebase.firestore();
+      const snap2 = await db2.collection('ordenes').orderBy('creadoEn','desc').get();
+      const grupo2 = { nombre: nombreTec, ots: [] };
+      snap2.docs.forEach(function(doc) {
+        if (doc.data().tecnico === nombreTec) {
+          grupo2.ots.push({ id: doc.id, ...doc.data() });
+        }
+      });
+      toast('Cotizacion guardada');
+      await verOTsTecnico(nombreTec, grupo2);
+    } else {
+      toast('Cotizacion guardada');
+      go('s-supervisor');
+      cargarOTsSupervisor();
+    }
   } catch(e) {
     console.error(e);
     toast('Error guardando cotizacion');
@@ -3957,6 +3953,8 @@ function toast(msg) {
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.style.display = 'none', 2500);
 }
+
+setTimeout(function(){ cargarUsuariosApp(); cargarLocalesApp(); cargarCadenasApp(); }, 1000);
 </script>
 </body>
 </html>
