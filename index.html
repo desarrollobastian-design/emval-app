@@ -780,7 +780,7 @@ function validarPin() {
     } else {
       document.getElementById('home-saludo').textContent = 'Hola, ' + estado.usuario.split(' ')[0] + ' :)';
       setTimeout(cargarOTsHome, 500);
-      document.getElementById('home-cargo').textContent = estado.cargo + ' en terreno';
+      document.getElementById('home-cargo').textContent = estado.cargo;
       go('s-home');
     }
     toast('Bienvenido, ' + estado.usuario.split(' ')[0] + '!');
