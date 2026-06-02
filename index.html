@@ -1477,7 +1477,52 @@ async function resetearCadenas() {
     const snap = await db.collection('cadenas').get();
     for (const doc of snap.docs) { await db.collection('cadenas').doc(doc.id).delete(); }
     toast('Cadenas borradas. Recargando...');
-    setTimeout(function(){ cargarCadenasApp(); cargarCadenasAdmin(); }, 1000);
+
+async function cargarUsuariosApp() {
+  if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 800); return; }
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    const lista = document.getElementById('lista-usuarios');
+    if (!lista) return;
+    lista.innerHTML = '';
+    if (snap.empty) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px 0;">No hay personal registrado aun</p>';
+      return;
+    }
+    const colorRol = { 'Administrador': '#6B1B1B', 'Supervisor': '#1B4D6B', 'Tecnico en terreno': '#1B3A6B' };
+    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
+    snap.docs.forEach(function(doc, i) {
+      const d = doc.data();
+      PINS[d.nombre] = d.pin;
+      const div = document.createElement('div');
+      div.className = 'usuario-item';
+      const letra = d.letra || d.nombre.charAt(0).toUpperCase();
+      const cargo = d.cargo || 'Tecnico en terreno';
+      div.onclick = (function(n, c, l){ return function(){ seleccionarUsuario(n, c, l); }; })(d.nombre, cargo, letra);
+      const avatar = document.createElement('div');
+      avatar.className = 'usuario-avatar';
+      avatar.style.background = colorRol[cargo] || colores[i % colores.length];
+      avatar.textContent = letra;
+      const info = document.createElement('div');
+      info.className = 'usuario-info';
+      info.innerHTML = '<div class="nombre">' + d.nombre + '</div><div class="cargo">' + cargo + '</div>';
+      const arrow = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
+      arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
+      arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+      div.appendChild(avatar); div.appendChild(info); div.appendChild(arrow);
+      lista.appendChild(div);
+    });
+  } catch(e) {
+    console.error('Error cargando usuarios:', e);
+    const lista = document.getElementById('lista-usuarios');
+    if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px 0;">Error cargando usuarios</p>';
+  }
+}
+
+    setTimeout(function(){ cargarUsuariosApp(); cargarCadenasApp(); }, 1000);
   } catch(e) { toast('Error: ' + e.message); }
 }
 
