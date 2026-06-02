@@ -244,6 +244,9 @@
 
     </div>
   </div>
+  <div style="text-align:center;padding:8px 0 4px;">
+    <button onclick="seleccionarUsuario('Admin', 'Administrador', 'A')" style="background:none;border:none;color:var(--texto3);font-size:12px;cursor:pointer;padding:4px 8px;text-decoration:underline;">Acceso administrador</button>
+  </div>
 </div>
 
 <!-- ============ SCREEN: PIN ============ -->
@@ -727,7 +730,7 @@ let estado = {
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
-const PINS = {}; // Cargado dinamicamente desde Firebase
+const PINS = { 'Admin': '9999' }; // Admin de emergencia, resto cargado desde Firebase
 let pinActual = '';
 
 // =========== NAVEGACION ===========
