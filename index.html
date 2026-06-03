@@ -161,6 +161,15 @@
   .success-hero { background: linear-gradient(160deg, var(--verde) 0%, #1D8A5A 100%); padding: 40px 24px; text-align: center; color: white; }
   .success-icon { width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 28px; }
   
+  /* SKELETON LOADING USUARIOS */
+  .usuario-skeleton { background: white; border-radius: var(--radio); padding: 14px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 10px; box-shadow: var(--sombra); }
+  .sk-avatar { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; flex-shrink: 0; }
+  .sk-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .sk-line { height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  .sk-l1 { width: 55%; }
+  .sk-l2 { width: 35%; }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
   /* TOAST */
   #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--sombra-lg); }
 
@@ -226,22 +235,9 @@
       <label>¿Quién eres?</label>
     </div>
     <div id="lista-usuarios">
-      <div class="usuario-item" onclick="seleccionarUsuario('Ariel Espinoza', 'Técnico', 'A')">
-        <div class="usuario-avatar">A</div>
-        <div class="usuario-info"><div class="nombre">Ariel Espinoza</div><div class="cargo">Tecnico en terreno</div></div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="usuario-item" onclick="seleccionarUsuario('Pedro Arce', 'Técnico', 'P')">
-        <div class="usuario-avatar" style="background:#2D5AA0;">P</div>
-        <div class="usuario-info"><div class="nombre">Pedro Arce</div><div class="cargo">Tecnico en terreno</div></div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="usuario-item" onclick="seleccionarUsuario('Carlos Mendez', 'Técnico', 'C')">
-        <div class="usuario-avatar" style="background:#1D6B5A;">C</div>
-        <div class="usuario-info"><div class="nombre">Carlos Mendez</div><div class="cargo">Tecnico en terreno</div></div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-
+      <div class="usuario-skeleton"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
+      <div class="usuario-skeleton"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
+      <div class="usuario-skeleton"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
     </div>
   </div>
 </div>
@@ -2404,38 +2400,58 @@ async function cargarImagenComoBase64(url, maxWidth, quality) {
 // Cargar tecnicos dinamicos en pantalla de seleccion
 async function cargarUsuariosApp() {
   try {
+    if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 300); return; }
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
-    if (snap.empty) return;
     const lista = document.getElementById('lista-usuarios');
     lista.innerHTML = '';
     const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B','#1B5A6B'];
-    snap.docs.forEach(function(doc, i) {
-      const d = doc.data();
-      const div = document.createElement('div');
-      div.className = 'usuario-item';
-      div.onclick = (function(nombre, cargo, letra){ return function(){ seleccionarUsuario(nombre, cargo, letra); }; })(d.nombre, d.cargo || 'Tecnico en terreno', d.letra || d.nombre.charAt(0).toUpperCase());
-      const avatar = document.createElement('div');
-      avatar.className = 'usuario-avatar';
-      avatar.style.background = colores[i % colores.length];
-      avatar.textContent = d.letra || d.nombre.charAt(0).toUpperCase();
-      const info = document.createElement('div');
-      info.className = 'usuario-info';
-      const cargoLabel = d.cargo === 'Administrador' ? 'Administrador' : d.cargo === 'Supervisor' ? 'Supervisor' : 'Tecnico en terreno';
-      info.innerHTML = '<div class="nombre">' + d.nombre + '</div><div class="cargo">' + cargoLabel + '</div>';
-      const arrow = document.createElement('svg');
-      arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
-      arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
-      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
-      div.appendChild(avatar); div.appendChild(info); div.appendChild(arrow);
-      lista.appendChild(div);
-    });
-    // Update PINS dynamically
-    snap.docs.forEach(function(doc) {
-      const d = doc.data();
-      PINS[d.nombre] = d.pin;
-    });
-  } catch(e) { console.error('Error cargando usuarios:', e); }
+    // Siempre agregar Supervisor al inicio
+    const supervisorItem = _crearUsuarioItem('Supervisor', 'Supervisor', 'S', '#6B3A1B');
+    lista.appendChild(supervisorItem);
+    if (!snap.empty) {
+      snap.docs.forEach(function(doc, i) {
+        const d = doc.data();
+        if (d.nombre === 'Supervisor') return; // ya esta arriba
+        PINS[d.nombre] = d.pin;
+        const item = _crearUsuarioItem(d.nombre, d.cargo || 'Tecnico en terreno', d.letra || d.nombre.charAt(0).toUpperCase(), colores[i % colores.length]);
+        lista.appendChild(item);
+      });
+    } else {
+      // Fallback si no hay tecnicos en Firebase
+      [
+        { nombre: 'Ariel Espinoza', cargo: 'Tecnico en terreno', letra: 'A', color: '#1B3A6B' },
+        { nombre: 'Pedro Arce',    cargo: 'Tecnico en terreno', letra: 'P', color: '#2D5AA0' },
+        { nombre: 'Carlos Mendez', cargo: 'Tecnico en terreno', letra: 'C', color: '#1D6B5A' }
+      ].forEach(function(u) {
+        lista.appendChild(_crearUsuarioItem(u.nombre, u.cargo, u.letra, u.color));
+      });
+    }
+  } catch(e) {
+    console.error('Error cargando usuarios:', e);
+    // Fallback de emergencia
+    const lista = document.getElementById('lista-usuarios');
+    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
+  }
+}
+
+function _crearUsuarioItem(nombre, cargo, letra, color) {
+  const div = document.createElement('div');
+  div.className = 'usuario-item';
+  div.onclick = (function(n, c, l){ return function(){ seleccionarUsuario(n, c, l); }; })(nombre, cargo, letra);
+  const avatar = document.createElement('div');
+  avatar.className = 'usuario-avatar';
+  avatar.style.background = color || '#1B3A6B';
+  avatar.textContent = letra;
+  const info = document.createElement('div');
+  info.className = 'usuario-info';
+  info.innerHTML = '<div class="nombre">' + nombre + '</div><div class="cargo">' + cargo + '</div>';
+  const arrow = document.createElement('svg');
+  arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
+  arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+  arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+  div.appendChild(avatar); div.appendChild(info); div.appendChild(arrow);
+  return div;
 }
 
 // Cargar locales dinamicos en pantalla de seleccion de local
