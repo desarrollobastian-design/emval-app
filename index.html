@@ -1333,6 +1333,7 @@ async function cargarCadenasAdmin() {
         const sEmail = typeof s === 'object' ? (s.email || '') : '';
         const sSup = typeof s === 'object' ? (s.supervisor || '') : '';
         const sDir = typeof s === 'object' ? (s.direccion || '') : '';
+        const sCentro = typeof s === 'object' ? (s.centro || '') : '';
 
         const row = document.createElement('div');
         row.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
@@ -1348,6 +1349,7 @@ async function cargarCadenasAdmin() {
         const rDet = document.createElement('div');
         rDet.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
         const parts = [];
+        if (sCentro) parts.push('Centro ' + sCentro);
         if (sDir) parts.push(sDir);
         if (sSup) parts.push('Sup: ' + sSup);
         if (sEmail) parts.push(sEmail);
@@ -1377,6 +1379,9 @@ async function cargarCadenasAdmin() {
       const addTit = document.createElement('div');
       addTit.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;';
       addTit.textContent = 'Agregar sucursal';
+      const inpCentro = document.createElement('input');
+      inpCentro.type = 'text'; inpCentro.placeholder = 'Numero de centro (Ej: 345)';
+      inpCentro.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpNom = document.createElement('input');
       inpNom.type = 'text'; inpNom.placeholder = 'Nombre (Ej: Unimarc Chillan)';
       inpNom.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
@@ -1392,8 +1397,8 @@ async function cargarCadenasAdmin() {
       const btnAdd = document.createElement('button');
       btnAdd.textContent = '+ Agregar sucursal';
       btnAdd.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;';
-      btnAdd.onclick = (function(dId, iNom, iDir, iSup, iEmail){ return function(){ agregarSucursal(dId, iNom, iDir, iSup, iEmail); }; })(docId, inpNom, inpDir, inpSup, inpEmail);
-      sep.appendChild(addTit); sep.appendChild(inpNom); sep.appendChild(inpDir);
+      btnAdd.onclick = (function(dId, iCentro, iNom, iDir, iSup, iEmail){ return function(){ agregarSucursal(dId, iCentro, iNom, iDir, iSup, iEmail); }; })(docId, inpCentro, inpNom, inpDir, inpSup, inpEmail);
+      sep.appendChild(addTit); sep.appendChild(inpCentro); sep.appendChild(inpNom); sep.appendChild(inpDir);
       sep.appendChild(inpSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd);
       body.appendChild(sep);
 
@@ -1417,7 +1422,8 @@ async function eliminarCadena(id) {
   } catch(e) { toast('Error eliminando'); }
 }
 
-async function agregarSucursal(docId, inputNombre, inputDir, inputSup, inputEmail) {
+async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputSup, inputEmail) {
+  const centro = inputCentro ? inputCentro.value.trim() : '';
   const nombre = inputNombre.value.trim();
   const direccion = inputDir ? inputDir.value.trim() : '';
   const supervisor = inputSup ? inputSup.value.trim() : '';
@@ -1427,8 +1433,9 @@ async function agregarSucursal(docId, inputNombre, inputDir, inputSup, inputEmai
     const db = window.firebase.firestore();
     const doc = await db.collection('cadenas').doc(docId).get();
     const subs = doc.data().sucursales || [];
-    subs.push({ nombre: nombre, direccion: direccion, supervisor: supervisor, email: email });
+    subs.push({ centro: centro, nombre: nombre, direccion: direccion, supervisor: supervisor, email: email });
     await db.collection('cadenas').doc(docId).update({ sucursales: subs });
+    if (inputCentro) inputCentro.value = '';
     inputNombre.value = '';
     if (inputDir) inputDir.value = '';
     if (inputSup) inputSup.value = '';
@@ -1501,6 +1508,7 @@ function editarSucursal(docId, idx, s) {
   const sDir = typeof s === 'object' ? (s.direccion || '') : '';
   const sSup = typeof s === 'object' ? (s.supervisor || '') : '';
   const sEmail = typeof s === 'object' ? (s.email || '') : '';
+  const sCentro = typeof s === 'object' ? (s.centro || '') : '';
 
   // Crear modal simple
   const overlay = document.createElement('div');
@@ -1524,12 +1532,14 @@ function editarSucursal(docId, idx, s) {
     return { wrap: w, inp: inp };
   }
 
+  const fCentro = mkInput('Centro (N de centro)', sCentro, 'Ej: 345');
   const fNom = mkInput('Nombre', sNombre, 'Ej: Unimarc Chillan');
   const fDir = mkInput('Direccion', sDir, 'Ej: Av. El Roble 123');
   const fSup = mkInput('Supervisor', sSup, 'Nombre del supervisor');
   const fEmail = mkInput('Email admin', sEmail, 'correo@ejemplo.com');
   fEmail.inp.type = 'email';
 
+  modal.appendChild(fCentro.wrap);
   modal.appendChild(fNom.wrap);
   modal.appendChild(fDir.wrap);
   modal.appendChild(fSup.wrap);
@@ -1552,7 +1562,7 @@ function editarSucursal(docId, idx, s) {
       const ref = db.collection('cadenas').doc(docId);
       const docSnap = await ref.get();
       const subs = docSnap.data().sucursales || [];
-      subs[idx] = { nombre: nuevoNombre, direccion: fDir.inp.value.trim(), supervisor: fSup.inp.value.trim(), email: fEmail.inp.value.trim() };
+      subs[idx] = { centro: fCentro.inp.value.trim(), nombre: nuevoNombre, direccion: fDir.inp.value.trim(), supervisor: fSup.inp.value.trim(), email: fEmail.inp.value.trim() };
       await ref.update({ sucursales: subs });
       toast('Sucursal actualizada');
       document.body.removeChild(overlay);
@@ -2104,6 +2114,7 @@ function seleccionarCadena(cadena) {
     const emailSuc = typeof suc_item === 'object' ? (suc_item.email || '') : '';
     const dirSuc = typeof suc_item === 'object' ? (suc_item.direccion || '') : '';
     const supSuc = typeof suc_item === 'object' ? (suc_item.supervisor || '') : '';
+    const centroSuc = typeof suc_item === 'object' ? (suc_item.centro || '') : '';
     const wrapper = document.createElement('div');
     wrapper.onclick = (function(n, em){ return function(){ seleccionarLocal(n, cadena.nombre, em); }; })(nombre, emailSuc);
     const item = document.createElement('div');
@@ -2122,6 +2133,7 @@ function seleccionarCadena(cadena) {
     const info = document.createElement('div');
     info.className = 'local-info';
     const detalle = [];
+    if (centroSuc) detalle.push('C.' + centroSuc);
     if (dirSuc) detalle.push(dirSuc);
     if (supSuc) detalle.push('Sup: ' + supSuc);
     info.innerHTML = '<div class="local-name">' + nombre + '</div>' + (detalle.length ? '<div class="local-addr">' + detalle.join(' | ') + '</div>' : '');
