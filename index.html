@@ -226,10 +226,24 @@
       <label>¿Quién eres?</label>
     </div>
     <div id="lista-usuarios">
-      <p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px 0;">Cargando usuarios...</p>
+      <div class="usuario-item" onclick="seleccionarUsuario('Ariel Espinoza', 'Técnico', 'A')">
+        <div class="usuario-avatar">A</div>
+        <div class="usuario-info"><div class="nombre">Ariel Espinoza</div><div class="cargo">Tecnico en terreno</div></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="usuario-item" onclick="seleccionarUsuario('Pedro Arce', 'Técnico', 'P')">
+        <div class="usuario-avatar" style="background:#2D5AA0;">P</div>
+        <div class="usuario-info"><div class="nombre">Pedro Arce</div><div class="cargo">Tecnico en terreno</div></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="usuario-item" onclick="seleccionarUsuario('Carlos Mendez', 'Técnico', 'C')">
+        <div class="usuario-avatar" style="background:#1D6B5A;">C</div>
+        <div class="usuario-info"><div class="nombre">Carlos Mendez</div><div class="cargo">Tecnico en terreno</div></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8D0E0" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
     </div>
   </div>
-
 </div>
 
 <!-- ============ SCREEN: PIN ============ -->
@@ -594,7 +608,7 @@
     <div class="ot-card">
       <div class="ot-icon" style="background:#E6F4EA;">🔧</div>
       <div class="ot-info">
-        <div class="ot-titulo">S10 Concepcion — Pedro A.</div>
+        <div class="ot-titulo">S10 Concepción — Pedro A.</div>
         <div class="ot-sub">22/08/2025 · <span class="badge badge-prev">Preventivo</span></div>
       </div>
     </div>
@@ -647,9 +661,9 @@
 
     <!-- PANEL CADENAS -->
     <div id="panel-cadenas" style="display:none;">
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="flex:2;">+ Agregar cadena</button>
-        <button onclick="resetearCadenas()" style="flex:1;background:none;border:1px solid var(--gris3);border-radius:6px;padding:8px;font-size:11px;cursor:pointer;color:var(--texto3);">Resetear</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="flex:1;margin-right:8px;">+ Agregar cadena</button>
+        <button onclick="resetearCadenas()" style="background:none;border:1px solid var(--gris3);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer;color:var(--texto3);white-space:nowrap;">Resetear</button>
       </div>
       <div id="form-cadena" style="display:none;" class="card">
         <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
@@ -1241,43 +1255,6 @@ function guardarGrabacion() {
 }
 
 // =========== ADMIN CADENAS ===========
-async function cargarDatosRealesExcel() {
-  if (!confirm('Esto reemplazara las sucursales de Unimarc, Alvi y S10 con los datos reales del Excel. Continuar?')) return;
-  toast('Cargando datos reales...');
-  try {
-    const db = window.firebase.firestore();
-    const DATOS = {"Unimarc": [{"nombre": "UNIMARC CHILLAN 1", "direccion": "UNIMARC CHILLAN 1", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC CHILLAN 2", "direccion": "UNIMARC CHILLAN 2", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC SAN CARLOS 2", "direccion": "UNIMARC SAN CARLOS 2", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC BULNES", "direccion": "UNIMARC BULNES", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC QUILLON", "direccion": "UNIMARC QUILLON", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC COIHUECO", "direccion": "UNIMARC COIHUECO", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC YUNGAY", "direccion": "UNIMARC YUNGAY", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC CHILLAN VIEJO", "direccion": "UNIMARC CHILLAN VIEJO", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC COELEMU", "direccion": "UNIMARC COELEMU", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC HUEPIL", "direccion": "UNIMARC HUEPIL", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC EL CARMEN", "direccion": "UNIMARC EL CARMEN", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC CHILLAN 4", "direccion": "UNIMARC CHILLAN 4", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC PENCO", "direccion": "UNIMARC PENCO", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC NACIMIENTO", "direccion": "UNIMARC NACIMIENTO", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC MULCHEN", "direccion": "UNIMARC MULCHEN", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC LAJA", "direccion": "UNIMARC LAJA", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC CARACOL", "direccion": "UNIMARC CARACOL", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC YUMBEL", "direccion": "UNIMARC YUMBEL", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMAR CABRERO", "direccion": "UNIMAR CABRERO", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC CARRERA", "direccion": "UNIMARC CARRERA", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC PORTAL", "direccion": "UNIMARC PORTAL", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC COLON", "direccion": "UNIMARC COLON", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC MARCONI", "direccion": "UNIMARC MARCONI", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC CORONEL", "direccion": "UNIMARC CORONEL", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LOTA 2", "direccion": "UNIMARC LOTA 2", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC BELLAVISTA", "direccion": "UNIMARC BELLAVISTA", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMAC LOMAS SAN ANDRES", "direccion": "UNIMAC LOMAS SAN ANDRES", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CORONEL 2", "direccion": "UNIMARC CORONEL 2", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC GOMEZ CARRENO", "direccion": "UNIMARC GOMEZ CARRENO", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC ARAUCO 2", "direccion": "UNIMARC ARAUCO 2", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LAS VIOLETAS", "direccion": "UNIMARC LAS VIOLETAS", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CURANILAHUE", "direccion": "UNIMARC CURANILAHUE", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LEBU", "direccion": "UNIMARC LEBU", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC EL VOLCAN", "direccion": "UNIMARC EL VOLCAN", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LOS LLEUQUES", "direccion": "UNIMARC LOS LLEUQUES", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CANETE CENTRO", "direccion": "UNIMARC CANETE CENTRO", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CORONEL 3", "direccion": "UNIMARC CORONEL 3", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC HIGUERAS", "direccion": "UNIMARC HIGUERAS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC TUCAPEL", "direccion": "UNIMARC TUCAPEL", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC LOMAS COLORADAS", "direccion": "UNIMARC LOMAS COLORADAS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC CHACABUCO", "direccion": "UNIMARC CHACABUCO", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC CHIGUAYANTE 2", "direccion": "UNIMARC CHIGUAYANTE 2", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC MANQUIMAVIDA", "direccion": "UNIMARC MANQUIMAVIDA", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC LOS HUERTOS", "direccion": "UNIMARC LOS HUERTOS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC HUALQUI", "direccion": "UNIMARC HUALQUI", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC HUALPEN", "direccion": "UNIMARC HUALPEN", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC LOS PIONEROS", "direccion": "UNIMARC LOS PIONEROS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC PENUELAS", "direccion": "UNIMARC PENUELAS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC TALCAHUANO 2", "direccion": "UNIMARC TALCAHUANO 2", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC ANDALUE", "direccion": "UNIMARC ANDALUE", "supervisor": "R. Abedrapo", "email": ""}], "Alvi": [{"nombre": "ALVI CHILLAN", "direccion": "ALVI CHILLAN", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "ALVI Concepcion", "direccion": "ALVI Concepcion", "supervisor": "C. Zapata", "email": ""}, {"nombre": "ALVI LOS ANGELES", "direccion": "ALVI LOS ANGELES", "supervisor": "C. Zapata", "email": ""}, {"nombre": "ALVI Camino a Coronel", "direccion": "ALVI Camino a Coronel", "supervisor": "P. Blake", "email": ""}, {"nombre": "ALVI CANETE", "direccion": "ALVI CANETE", "supervisor": "P. Blake", "email": ""}, {"nombre": "ALVI COLON HUALPEN", "direccion": "ALVI COLON HUALPEN", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "ALVI NUEVA IMPERIAL HUALPEN", "direccion": "ALVI NUEVA IMPERIAL HUALPEN", "supervisor": "R. Abedrapo", "email": ""}], "S10": [{"nombre": "S10 ISABEL RIQUELME CHILLAN", "direccion": "S10 ISABEL RIQUELME CHILLAN", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "M10 LOS ANGELES", "direccion": "M10 LOS ANGELES", "supervisor": "C. Zapata", "email": ""}, {"nombre": "S10 IGNACIO SERRANO TOME", "direccion": "S10 IGNACIO SERRANO TOME", "supervisor": "C. Zapata", "email": ""}, {"nombre": "M10 CONCEPCION", "direccion": "M10 CONCEPCION", "supervisor": "R. Abedrapo", "email": ""}]};
-    const logos = {
-      'Unimarc': 'https://res.cloudinary.com/dcrf29tna/image/upload/v1779394283/Unimarc_logo_urbzpv.svg',
-      'Alvi': 'https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394855/alvi_e62oh3.jpg',
-      'S10': 'https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394998/super_10_nxuqye.png'
-    };
-    const colores = { 'Unimarc': '#E31837', 'Alvi': '#0055A4', 'S10': '#F7941D' };
-    // Buscar y actualizar cada cadena
-    const snap = await db.collection('cadenas').get();
-    for (const cadena of Object.keys(DATOS)) {
-      const docExist = snap.docs.find(function(d){ return d.data().nombre === cadena; });
-      if (docExist) {
-        await db.collection('cadenas').doc(docExist.id).update({ sucursales: DATOS[cadena] });
-        toast('Actualizado: ' + cadena);
-      } else {
-        await db.collection('cadenas').add({
-          nombre: cadena, color: colores[cadena]||'#1B3A6B',
-          logo: logos[cadena]||'', letra: cadena.charAt(0),
-          sucursales: DATOS[cadena], orden: snap.size
-        });
-        toast('Creado: ' + cadena);
-      }
-    }
-    toast('Datos reales cargados correctamente');
-    await cargarCadenasAdmin();
-    await cargarCadenasApp();
-  } catch(e) {
-    console.error(e);
-    toast('Error: ' + e.message);
-  }
-}
-
 async function cargarCadenasAdmin() {
   try {
     const db = window.firebase.firestore();
@@ -1288,117 +1265,63 @@ async function cargarCadenasAdmin() {
     if (snap.empty) { lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay cadenas. Agrega una.</p>'; return; }
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const subs = d.sucursales || [];
-
       const div = document.createElement('div');
       div.className = 'card';
-      div.style.cssText = 'margin-bottom:10px;overflow:hidden;cursor:pointer;';
-
-      // Header clickeable con logo
+      div.style.marginBottom = '8px';
+      // Header
       const header = document.createElement('div');
-      header.style.cssText = 'display:flex;align-items:center;gap:12px;';
-
-      const logoDiv = document.createElement('div');
-      logoDiv.style.cssText = 'width:44px;height:44px;border-radius:10px;background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;';
-      if (d.logo) {
-        const img = document.createElement('img');
-        img.src = d.logo;
-        img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-        img.onerror = function(){ logoDiv.removeChild(img); logoDiv.textContent = d.letra||d.nombre.charAt(0); logoDiv.style.color='white'; logoDiv.style.fontWeight='700'; };
-        logoDiv.appendChild(img);
-      } else {
-        logoDiv.textContent = d.letra||d.nombre.charAt(0);
-        logoDiv.style.color = 'white';
-        logoDiv.style.fontWeight = '700';
-      }
-
-      const info = document.createElement('div');
-      info.style.flex = '1';
-      const nomDiv = document.createElement('div');
-      nomDiv.style.cssText = 'font-size:15px;font-weight:600;';
-      nomDiv.textContent = d.nombre;
-      const subCount = document.createElement('div');
-      subCount.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      subCount.textContent = subs.length + ' sucursal' + (subs.length !== 1 ? 'es' : '');
-      info.appendChild(nomDiv); info.appendChild(subCount);
-
-      const chevron = document.createElement('div');
-      chevron.style.cssText = 'font-size:18px;color:var(--texto3);transition:transform 0.2s;';
-      chevron.textContent = '>';
-
+      header.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:10px;';
+      const dot = document.createElement('div');
+      dot.style.cssText = 'width:28px;height:28px;border-radius:8px;background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:13px;flex-shrink:0;';
+      dot.textContent = (d.letra || d.nombre.charAt(0));
+      const tit = document.createElement('div');
+      tit.style.cssText = 'font-size:14px;font-weight:500;flex:1;';
+      tit.textContent = d.nombre;
       const btnDel = document.createElement('button');
       btnDel.textContent = 'Eliminar';
-      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;';
-      btnDel.onclick = (function(id){ return function(e){ e.stopPropagation(); eliminarCadena(id); }; })(doc.id);
-
-      header.appendChild(logoDiv); header.appendChild(info); header.appendChild(btnDel); header.appendChild(chevron);
+      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;';
+      btnDel.onclick = (function(id){ return function(){ eliminarCadena(id); }; })(doc.id);
+      header.appendChild(dot); header.appendChild(tit); header.appendChild(btnDel);
       div.appendChild(header);
-
-      // Contenido colapsable
-      const contenido = document.createElement('div');
-      contenido.style.cssText = 'display:none;margin-top:12px;';
-
-      // Lista sucursales
+      // Sucursales list
+      const subs = d.sucursales || [];
       subs.forEach(function(s, i) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--gris2);font-size:13px;';
         const sNombre = typeof s === 'object' ? s.nombre : s;
         const sEmail = typeof s === 'object' ? (s.email || '') : '';
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--gris2);';
         const rowInfo = document.createElement('div');
         rowInfo.style.flex = '1';
-        const rNom = document.createElement('div');
-        rNom.style.cssText = 'font-size:13px;font-weight:500;';
-        rNom.textContent = sNombre;
-        const sDir = typeof s === 'object' ? (s.direccion || '') : '';
-        const sSup = typeof s === 'object' ? (s.supervisor || '') : '';
-        const rDir = document.createElement('div');
-        rDir.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:1px;';
-        rDir.textContent = sDir || 'Sin direccion';
-        const rSup = document.createElement('div');
-        rSup.style.cssText = 'font-size:11px;color:var(--azul-claro);margin-top:1px;';
-        rSup.textContent = sSup ? 'Supervisor: ' + sSup : '';
-        rowInfo.appendChild(rNom); rowInfo.appendChild(rDir); if(sSup) rowInfo.appendChild(rSup);
-        const btnX = document.createElement('button');
-        btnX.textContent = 'Eliminar';
-        btnX.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;';
-        btnX.onclick = (function(docId, idx){ return function(){ eliminarSucursal(docId, idx); }; })(doc.id, i);
-        row.appendChild(rowInfo); row.appendChild(btnX);
-        contenido.appendChild(row);
+        const rowNombre = document.createElement('div');
+        rowNombre.style.fontWeight = '500';
+        rowNombre.textContent = sNombre;
+        const rowEmail = document.createElement('div');
+        rowEmail.style.cssText = 'font-size:11px;color:var(--texto3);';
+        rowEmail.textContent = sEmail || 'Sin email configurado';
+        rowInfo.appendChild(rowNombre); rowInfo.appendChild(rowEmail);
+        row.appendChild(rowInfo);
+        const btnDels = document.createElement('button');
+        btnDels.textContent = 'x';
+        btnDels.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;';
+        btnDels.onclick = (function(docId, idx){ return function(){ eliminarSucursal(docId, idx); }; })(doc.id, i);
+        row.appendChild(btnDels);
+        div.appendChild(row);
       });
-
-      // Form agregar sucursal
-      const addSection = document.createElement('div');
-      addSection.style.cssText = 'margin-top:10px;padding-top:10px;border-top:2px solid var(--gris2);';
-      const addTitle = document.createElement('div');
-      addTitle.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
-      addTitle.textContent = '+ Agregar sucursal';
+      // Add sucursal input
+      const addRow = document.createElement('div');
+      addRow.style.cssText = 'margin-top:10px;display:flex;flex-direction:column;gap:6px;';
       const inpNombre = document.createElement('input');
-      inpNombre.type = 'text'; inpNombre.placeholder = 'Nombre (Ej: Unimarc Chillan)';
-      inpNombre.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;box-sizing:border-box;';
-      const inpDir = document.createElement('input');
-      inpDir.type = 'text'; inpDir.placeholder = 'Direccion';
-      inpDir.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;box-sizing:border-box;';
-      const inpSup = document.createElement('input');
-      inpSup.type = 'text'; inpSup.placeholder = 'Supervisor';
-      inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;box-sizing:border-box;';
+      inpNombre.type = 'text'; inpNombre.placeholder = 'Nombre sucursal (Ej: Unimarc Chillan)';
+      inpNombre.style.cssText = 'padding:7px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;';
       const inpEmail = document.createElement('input');
       inpEmail.type = 'email'; inpEmail.placeholder = 'Email admin (opcional)';
-      inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:8px;box-sizing:border-box;';
+      inpEmail.style.cssText = 'padding:7px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;';
       const btnAdd = document.createElement('button');
       btnAdd.textContent = '+ Agregar sucursal';
-      btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnAdd.onclick = (function(docId, iN, iD, iS, iE){ return function(){ agregarSucursal(docId, iN, iD, iS, iE); }; })(doc.id, inpNombre, inpDir, inpSup, inpEmail);
-      addSection.appendChild(addTitle); addSection.appendChild(inpNombre); addSection.appendChild(inpDir); addSection.appendChild(inpSup); addSection.appendChild(inpEmail); addSection.appendChild(btnAdd);
-      contenido.appendChild(addSection);
-      div.appendChild(contenido);
-
-      // Toggle
-      header.onclick = (function(cont, chev) { return function() {
-        const open = cont.style.display !== 'none';
-        cont.style.display = open ? 'none' : 'block';
-        chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
-      }; })(contenido, chevron);
-
+      btnAdd.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnAdd.onclick = (function(docId, iNombre, iEmail){ return function(){ agregarSucursal(docId, iNombre, iEmail); }; })(doc.id, inpNombre, inpEmail);
+      addRow.appendChild(inpNombre); addRow.appendChild(inpEmail); addRow.appendChild(btnAdd);
+      div.appendChild(addRow);
       lista.appendChild(div);
     });
   } catch(e) { console.error(e); }
@@ -1431,21 +1354,18 @@ async function eliminarCadena(id) {
   } catch(e) { toast('Error eliminando'); }
 }
 
-async function agregarSucursal(docId, inputNombre, inputDir, inputSup, inputEmail) {
+async function agregarSucursal(docId, inputNombre, inputEmail) {
   const nombre = inputNombre.value.trim();
-  const direccion = inputDir ? inputDir.value.trim() : '';
-  const supervisor = inputSup ? inputSup.value.trim() : '';
   const email = inputEmail ? inputEmail.value.trim() : '';
   if (!nombre) { toast('Escribe el nombre de la sucursal'); return; }
   try {
     const db = window.firebase.firestore();
     const doc = await db.collection('cadenas').doc(docId).get();
     const subs = doc.data().sucursales || [];
-    subs.push({ nombre: nombre, direccion: direccion, supervisor: supervisor, email: email });
+    // Support both string and object format
+    subs.push({ nombre: nombre, email: email });
     await db.collection('cadenas').doc(docId).update({ sucursales: subs });
     inputNombre.value = '';
-    if (inputDir) inputDir.value = '';
-    if (inputSup) inputSup.value = '';
     if (inputEmail) inputEmail.value = '';
     toast('Sucursal agregada');
     await cargarCadenasAdmin();
@@ -1477,66 +1397,7 @@ async function resetearCadenas() {
     const snap = await db.collection('cadenas').get();
     for (const doc of snap.docs) { await db.collection('cadenas').doc(doc.id).delete(); }
     toast('Cadenas borradas. Recargando...');
-
-const USUARIOS_DEFAULT = [
-  { nombre: 'Ariel Espinoza', cargo: 'Tecnico en terreno', letra: 'A', pin: '1234', color: '#1B3A6B' },
-  { nombre: 'Pedro Arce',     cargo: 'Tecnico en terreno', letra: 'P', pin: '1234', color: '#2D5AA0' },
-  { nombre: 'Carlos Mendez',  cargo: 'Tecnico en terreno', letra: 'C', pin: '1234', color: '#1D6B5A' },
-  { nombre: 'Supervisor',     cargo: 'Panel de supervision', letra: 'S', pin: '0000', color: '#6B3A1B' }
-];
-
-function renderUsuarios(usuarios) {
-  const lista = document.getElementById('lista-usuarios');
-  if (!lista) return;
-  lista.innerHTML = '';
-  const colorRol = { 'Administrador': '#6B1B1B', 'Supervisor': '#1B4D6B', 'Tecnico en terreno': '#1B3A6B' };
-  const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
-  usuarios.forEach(function(d, i) {
-    PINS[d.nombre] = d.pin || '1234';
-    const div = document.createElement('div');
-    div.className = 'usuario-item';
-    const letra = d.letra || d.nombre.charAt(0).toUpperCase();
-    const cargo = d.cargo || 'Tecnico en terreno';
-    div.onclick = (function(n, c, l){ return function(){ seleccionarUsuario(n, c, l); }; })(d.nombre, cargo, letra);
-    const avatar = document.createElement('div');
-    avatar.className = 'usuario-avatar';
-    avatar.style.background = d.color || colorRol[cargo] || colores[i % colores.length];
-    avatar.textContent = letra;
-    const info = document.createElement('div');
-    info.className = 'usuario-info';
-    info.innerHTML = '<div class="nombre">' + d.nombre + '</div><div class="cargo">' + cargo + '</div>';
-    const arrow = document.createElementNS('http://www.w3.org/2000/svg','svg');
-    arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
-    arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
-    arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
-    arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
-    div.appendChild(avatar); div.appendChild(info); div.appendChild(arrow);
-    lista.appendChild(div);
-  });
-}
-
-async function cargarUsuariosApp() {
-  renderUsuarios(USUARIOS_DEFAULT);
-  _cargarUsuariosFirebase();
-}
-
-async function _cargarUsuariosFirebase() {
-  if (!window._firebaseReady) { setTimeout(_cargarUsuariosFirebase, 800); return; }
-  try {
-    const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
-    if (snap.empty) return;
-    const usuarios = snap.docs.map(function(doc) { return doc.data(); });
-    const tieneSupervisor = usuarios.some(function(u){ return u.nombre === 'Supervisor'; });
-    if (!tieneSupervisor) {
-      usuarios.push({ nombre: 'Supervisor', cargo: 'Panel de supervision', letra: 'S', pin: '0000', color: '#6B3A1B' });
-    }
-    renderUsuarios(usuarios);
-  } catch(e) {
-    console.error('Error cargando usuarios Firebase:', e);
-  }
-}
-
+    setTimeout(function(){ cargarCadenasApp(); cargarCadenasAdmin(); }, 1000);
   } catch(e) { toast('Error: ' + e.message); }
 }
 
@@ -1976,17 +1837,19 @@ async function cargarOTsHome() {
 
 // =========== CADENAS Y SUCURSALES ===========
 const CADENAS_DEFAULT = [
-  { nombre: "Unimarc", color: "#E31837", letra: "U",
-    logo: "https://res.cloudinary.com/dcrf29tna/image/upload/v1779394283/Unimarc_logo_urbzpv.svg",
-    sucursales: [{"nombre": "UNIMARC CHILLAN 1", "direccion": "UNIMARC CHILLAN 1", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC CHILLAN 2", "direccion": "UNIMARC CHILLAN 2", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC SAN CARLOS 2", "direccion": "UNIMARC SAN CARLOS 2", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC BULNES", "direccion": "UNIMARC BULNES", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC QUILLON", "direccion": "UNIMARC QUILLON", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC COIHUECO", "direccion": "UNIMARC COIHUECO", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC YUNGAY", "direccion": "UNIMARC YUNGAY", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC CHILLAN VIEJO", "direccion": "UNIMARC CHILLAN VIEJO", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC COELEMU", "direccion": "UNIMARC COELEMU", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC HUEPIL", "direccion": "UNIMARC HUEPIL", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC EL CARMEN", "direccion": "UNIMARC EL CARMEN", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC CHILLAN 4", "direccion": "UNIMARC CHILLAN 4", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "UNIMARC PENCO", "direccion": "UNIMARC PENCO", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC NACIMIENTO", "direccion": "UNIMARC NACIMIENTO", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC MULCHEN", "direccion": "UNIMARC MULCHEN", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC LAJA", "direccion": "UNIMARC LAJA", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC CARACOL", "direccion": "UNIMARC CARACOL", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC YUMBEL", "direccion": "UNIMARC YUMBEL", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMAR CABRERO", "direccion": "UNIMAR CABRERO", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC CARRERA", "direccion": "UNIMARC CARRERA", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC PORTAL", "direccion": "UNIMARC PORTAL", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC COLON", "direccion": "UNIMARC COLON", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC MARCONI", "direccion": "UNIMARC MARCONI", "supervisor": "C. Zapata", "email": ""}, {"nombre": "UNIMARC CORONEL", "direccion": "UNIMARC CORONEL", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LOTA 2", "direccion": "UNIMARC LOTA 2", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC BELLAVISTA", "direccion": "UNIMARC BELLAVISTA", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMAC LOMAS SAN ANDRES", "direccion": "UNIMAC LOMAS SAN ANDRES", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CORONEL 2", "direccion": "UNIMARC CORONEL 2", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC GOMEZ CARRENO", "direccion": "UNIMARC GOMEZ CARRENO", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC ARAUCO 2", "direccion": "UNIMARC ARAUCO 2", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LAS VIOLETAS", "direccion": "UNIMARC LAS VIOLETAS", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CURANILAHUE", "direccion": "UNIMARC CURANILAHUE", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LEBU", "direccion": "UNIMARC LEBU", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC EL VOLCAN", "direccion": "UNIMARC EL VOLCAN", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC LOS LLEUQUES", "direccion": "UNIMARC LOS LLEUQUES", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CANETE CENTRO", "direccion": "UNIMARC CANETE CENTRO", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC CORONEL 3", "direccion": "UNIMARC CORONEL 3", "supervisor": "P. Blake", "email": ""}, {"nombre": "UNIMARC HIGUERAS", "direccion": "UNIMARC HIGUERAS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC TUCAPEL", "direccion": "UNIMARC TUCAPEL", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC LOMAS COLORADAS", "direccion": "UNIMARC LOMAS COLORADAS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC CHACABUCO", "direccion": "UNIMARC CHACABUCO", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC CHIGUAYANTE 2", "direccion": "UNIMARC CHIGUAYANTE 2", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC MANQUIMAVIDA", "direccion": "UNIMARC MANQUIMAVIDA", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC LOS HUERTOS", "direccion": "UNIMARC LOS HUERTOS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC HUALQUI", "direccion": "UNIMARC HUALQUI", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC HUALPEN", "direccion": "UNIMARC HUALPEN", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC LOS PIONEROS", "direccion": "UNIMARC LOS PIONEROS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC PENUELAS", "direccion": "UNIMARC PENUELAS", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC TALCAHUANO 2", "direccion": "UNIMARC TALCAHUANO 2", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "UNIMARC ANDALUE", "direccion": "UNIMARC ANDALUE", "supervisor": "R. Abedrapo", "email": ""}] },
-  { nombre: "Alvi", color: "#0055A4", letra: "A",
-    logo: "https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394855/alvi_e62oh3.jpg",
-    sucursales: [{"nombre": "ALVI CHILLAN", "direccion": "ALVI CHILLAN", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "ALVI Concepcion", "direccion": "ALVI Concepcion", "supervisor": "C. Zapata", "email": ""}, {"nombre": "ALVI LOS ANGELES", "direccion": "ALVI LOS ANGELES", "supervisor": "C. Zapata", "email": ""}, {"nombre": "ALVI Camino a Coronel", "direccion": "ALVI Camino a Coronel", "supervisor": "P. Blake", "email": ""}, {"nombre": "ALVI CANETE", "direccion": "ALVI CANETE", "supervisor": "P. Blake", "email": ""}, {"nombre": "ALVI COLON HUALPEN", "direccion": "ALVI COLON HUALPEN", "supervisor": "R. Abedrapo", "email": ""}, {"nombre": "ALVI NUEVA IMPERIAL HUALPEN", "direccion": "ALVI NUEVA IMPERIAL HUALPEN", "supervisor": "R. Abedrapo", "email": ""}] },
-  { nombre: "S10", color: "#F7941D", letra: "S",
-    logo: "https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394998/super_10_nxuqye.png",
-    sucursales: [{"nombre": "S10 ISABEL RIQUELME CHILLAN", "direccion": "S10 ISABEL RIQUELME CHILLAN", "supervisor": "A. Espinoza", "email": ""}, {"nombre": "M10 LOS ANGELES", "direccion": "M10 LOS ANGELES", "supervisor": "C. Zapata", "email": ""}, {"nombre": "S10 IGNACIO SERRANO TOME", "direccion": "S10 IGNACIO SERRANO TOME", "supervisor": "C. Zapata", "email": ""}, {"nombre": "M10 CONCEPCION", "direccion": "M10 CONCEPCION", "supervisor": "R. Abedrapo", "email": ""}] }
+  { nombre: 'Unimarc', color: '#E31837', letra: 'U',
+    logo: 'https://res.cloudinary.com/dcrf29tna/image/upload/v1779394283/Unimarc_logo_urbzpv.svg',
+    sucursales: [{nombre:'Unimarc Coelemu',email:''},{nombre:'Unimarc Concepcion',email:''},{nombre:'Unimarc Chillan',email:''},{nombre:'Unimarc Los Angeles',email:''}] },
+  { nombre: 'Alvi', color: '#0055A4', letra: 'A',
+    logo: 'https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394855/alvi_e62oh3.jpg',
+    sucursales: [{nombre:'Alvi Chillan',email:''},{nombre:'Alvi Coelemu',email:''},{nombre:'Alvi Concepcion',email:''}] },
+  { nombre: 'S10', color: '#F7941D', letra: 'S',
+    logo: 'https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394998/super_10_nxuqye.png',
+    sucursales: [{nombre:'S10 Concepcion',email:''},{nombre:'S10 Chillan',email:''},{nombre:'S10 Los Angeles',email:''}] },
+  { nombre: 'Papa Johns', color: '#006633', letra: 'P',
+    logo: 'https://res.cloudinary.com/dcrf29tna/image/upload/q_auto/f_auto/v1779394997/papa_z0netq.png',
+    sucursales: [{nombre:'Papa Johns Concepcion',email:''},{nombre:'Papa Johns Chillan',email:''}] }
 ];
-
 
 let cadenaSeleccionada = null;
 
@@ -2002,11 +1865,11 @@ async function cargarCadenasApp() {
       snap.docs.forEach(function(doc) { cadenas.push({ id: doc.id, ...doc.data() }); });
     } else {
       cadenas = CADENAS_DEFAULT;
+      // Save defaults to Firebase
       for (let i = 0; i < cadenas.length; i++) {
         await db.collection('cadenas').add({ ...cadenas[i], orden: i });
       }
     }
-    lista.innerHTML = '';
     cadenas.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
@@ -2031,11 +1894,11 @@ async function cargarCadenasApp() {
       nsuc.className = 'cadena-nsuc';
       const n = (c.sucursales || []).length;
       nsuc.textContent = n + ' sucursal' + (n !== 1 ? 'es' : '');
-      info.appendChild(nombre); info.appendChild(nsuc);
+      info.appendChild(nombre);
+      info.appendChild(nsuc);
       const arrow = document.createElement('svg');
-      arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
-      arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
-      arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+      arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
+      arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
       arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
       card.appendChild(logoDiv); card.appendChild(info); card.appendChild(arrow);
       card.onclick = (function(cad){ return function(){ seleccionarCadena(cad); }; })(c);
@@ -2043,6 +1906,7 @@ async function cargarCadenasApp() {
     });
   } catch(e) {
     console.error('Error cargando cadenas:', e);
+    // Fallback to defaults
     CADENAS_DEFAULT.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
@@ -2090,20 +1954,2004 @@ function seleccionarCadena(cadena) {
     }
     const info = document.createElement('div');
     info.className = 'local-info';
-    const sDir = typeof suc_item === 'object' ? (suc_item.direccion || '') : '';
-    info.innerHTML = '<div class="local-name">' + nombre + '</div>' + (sDir ? '<div class="local-addr">' + sDir + '</div>' : '');
+    info.innerHTML = '<div class="local-name">' + nombre + '</div>';
     const arrow = document.createElement('svg');
-    arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
-    arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
-    arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+    arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
+    arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
     arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
     item.appendChild(iconEl); item.appendChild(info); item.appendChild(arrow);
     wrapper.appendChild(item);
     lista.appendChild(wrapper);
   });
+  // Update OT badge
   const badge = document.getElementById('ot-num-local');
   if (badge) badge.textContent = document.getElementById('ot-num-cadena').textContent;
   go('s-local');
+}
+
+// =========== PANEL ADMIN ===========
+let editandoTecnicoId = null;
+let editandoLocalId = null;
+
+function adminTab(tab) {
+  document.getElementById('panel-personal').style.display = tab === 'personal' ? 'block' : 'none';
+  document.getElementById('panel-cadenas').style.display = tab === 'cadenas' ? 'block' : 'none';
+  document.getElementById('tab-personal').style.background = tab === 'personal' ? 'var(--azul)' : 'transparent';
+  document.getElementById('tab-personal').style.color = tab === 'personal' ? 'white' : 'var(--texto2)';
+  document.getElementById('tab-cadenas').style.background = tab === 'cadenas' ? 'var(--azul)' : 'transparent';
+  document.getElementById('tab-cadenas').style.color = tab === 'cadenas' ? 'white' : 'var(--texto2)';
+  if (tab === 'cadenas') cargarCadenasAdmin();
+  else cargarTecnicosAdmin();
+}
+
+async function cargarAdmin() {
+  if (!window._firebaseReady) { setTimeout(cargarAdmin, 800); return; }
+  await cargarTecnicosAdmin();
+  await cargarCadenasAdmin();
+}
+
+async function cargarTecnicosAdmin() {
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    const lista = document.getElementById('lista-tecnicos-admin');
+    lista.innerHTML = '';
+    if (snap.empty) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay personal registrado aun</p>';
+      return;
+    }
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      const nombre = document.createElement('div');
+      nombre.style.cssText = 'font-size:14px;font-weight:500;';
+      nombre.textContent = d.nombre;
+      const detalle = document.createElement('div');
+      detalle.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      detalle.textContent = (d.cargo || 'Tecnico') + ' | PIN: ' + (d.pin || '----');
+      info.appendChild(nombre);
+      info.appendChild(detalle);
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = 'Editar';
+      btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnEdit.onclick = (function(id, data){ return function(){ editarTecnico(id, data); }; })(doc.id, d);
+      const btnDel = document.createElement('button');
+      btnDel.textContent = 'Eliminar';
+      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnDel.onclick = (function(id){ return function(){ eliminarTecnico(id); }; })(doc.id);
+      btns.appendChild(btnEdit);
+      btns.appendChild(btnDel);
+      div.appendChild(info);
+      div.appendChild(btns);
+      lista.appendChild(div);
+    });
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function cargarLocalesAdmin() {
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('locales').orderBy('nombre').get();
+    const lista = document.getElementById('lista-locales-admin');
+    lista.innerHTML = '';
+    if (snap.empty) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay locales registrados aun</p>';
+      return;
+    }
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      const nombre = document.createElement('div');
+      nombre.style.cssText = 'font-size:14px;font-weight:500;';
+      nombre.textContent = d.nombre;
+      const detalle = document.createElement('div');
+      detalle.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      detalle.textContent = (d.tipo || '') + ' | ' + (d.direccion || '');
+      info.appendChild(nombre);
+      info.appendChild(detalle);
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = 'Editar';
+      btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnEdit.onclick = (function(id, data){ return function(){ editarLocal(id, data); }; })(doc.id, d);
+      const btnDel = document.createElement('button');
+      btnDel.textContent = 'Eliminar';
+      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnDel.onclick = (function(id){ return function(){ eliminarLocal(id); }; })(doc.id);
+      btns.appendChild(btnEdit);
+      btns.appendChild(btnDel);
+      div.appendChild(info);
+      div.appendChild(btns);
+      lista.appendChild(div);
+    });
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function mostrarFormTecnico() {
+  editandoTecnicoId = null;
+  document.getElementById('tec-nombre').value = '';
+  document.getElementById('tec-cargo').value = 'Tecnico en terreno';
+  document.getElementById('tec-pin').value = '';
+  document.getElementById('form-tecnico-titulo').textContent = 'Nuevo tecnico';
+  document.getElementById('form-tecnico').style.display = 'block';
+}
+function cancelarFormTecnico() { document.getElementById('form-tecnico').style.display = 'none'; editandoTecnicoId = null; }
+
+function editarTecnico(id, d) {
+  editandoTecnicoId = id;
+  document.getElementById('tec-nombre').value = d.nombre || '';
+  document.getElementById('tec-cargo').value = d.cargo || 'Tecnico en terreno';
+  document.getElementById('tec-pin').value = d.pin || '';
+  document.getElementById('form-tecnico-titulo').textContent = 'Editar tecnico';
+  document.getElementById('form-tecnico').style.display = 'block';
+}
+
+async function guardarTecnico() {
+  const nombre = document.getElementById('tec-nombre').value.trim();
+  const cargo = document.getElementById('tec-cargo').value.trim();
+  const pin = document.getElementById('tec-pin').value.trim();
+  if (!nombre) { toast('Ingresa el nombre'); return; }
+  if (!pin || pin.length < 4) { toast('El PIN debe tener 4 numeros'); return; }
+  try {
+    const db = window.firebase.firestore();
+    const data = { nombre, cargo, pin, letra: nombre.charAt(0).toUpperCase() };
+    if (editandoTecnicoId) {
+      await db.collection('tecnicos').doc(editandoTecnicoId).update(data);
+      toast('Tecnico actualizado');
+    } else {
+      await db.collection('tecnicos').add(data);
+      toast('Tecnico agregado');
+    }
+    cancelarFormTecnico();
+    await cargarTecnicosAdmin();
+    await cargarUsuariosApp();
+  } catch(e) { console.error(e); toast('Error guardando tecnico'); }
+}
+
+async function eliminarTecnico(id) {
+  if (!confirm('Seguro que quieres eliminar este tecnico?')) return;
+  try {
+    await window.firebase.firestore().collection('tecnicos').doc(id).delete();
+    toast('Tecnico eliminado');
+    await cargarTecnicosAdmin();
+    await cargarUsuariosApp();
+  } catch(e) { toast('Error eliminando'); }
+}
+
+function mostrarFormLocal() {
+  editandoLocalId = null;
+  document.getElementById('loc-nombre').value = '';
+  document.getElementById('loc-dir').value = '';
+  document.getElementById('loc-tipo').value = 'Unimarc';
+  document.getElementById('form-local-titulo').textContent = 'Nuevo local';
+  document.getElementById('form-local').style.display = 'block';
+}
+function cancelarFormLocal() { document.getElementById('form-local').style.display = 'none'; editandoLocalId = null; }
+
+function editarLocal(id, d) {
+  editandoLocalId = id;
+  document.getElementById('loc-nombre').value = d.nombre || '';
+  document.getElementById('loc-dir').value = d.direccion || '';
+  document.getElementById('loc-tipo').value = d.tipo || 'Unimarc';
+  document.getElementById('form-local-titulo').textContent = 'Editar local';
+  document.getElementById('form-local').style.display = 'block';
+}
+
+async function guardarLocal() {
+  const nombre = document.getElementById('loc-nombre').value.trim();
+  const direccion = document.getElementById('loc-dir').value.trim();
+  const tipo = document.getElementById('loc-tipo').value;
+  if (!nombre) { toast('Ingresa el nombre del local'); return; }
+  try {
+    const db = window.firebase.firestore();
+    const data = { nombre, direccion, tipo };
+    if (editandoLocalId) {
+      await db.collection('locales').doc(editandoLocalId).update(data);
+      toast('Local actualizado');
+    } else {
+      await db.collection('locales').add(data);
+      toast('Local agregado');
+    }
+    cancelarFormLocal();
+    await cargarLocalesAdmin();
+    await cargarLocalesApp();
+  } catch(e) { console.error(e); toast('Error guardando local'); }
+}
+
+async function eliminarLocal(id) {
+  if (!confirm('Seguro que quieres eliminar este local?')) return;
+  try {
+    await window.firebase.firestore().collection('locales').doc(id).delete();
+    toast('Local eliminado');
+    await cargarLocalesAdmin();
+    await cargarLocalesApp();
+  } catch(e) { toast('Error eliminando'); }
+}
+
+// Cargar imagen desde URL externa como base64 (evita CORS tainted canvas)
+async function cargarImagenComoBase64(url, maxWidth, quality) {
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const base64 = await new Promise(function(resolve) {
+      const reader = new FileReader();
+      reader.onloadend = function() { resolve(reader.result); };
+      reader.onerror = function() { resolve(null); };
+      reader.readAsDataURL(blob);
+    });
+    if (!base64) return null;
+    // Comprimir si se especifican dimensiones
+    if (maxWidth && base64.startsWith('data:')) {
+      return new Promise(function(resolve) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality || 0.4));
+        };
+        img.onerror = function() { resolve(base64); };
+        img.src = base64;
+      });
+    }
+    return base64;
+  } catch(e) {
+    console.warn('Error cargando imagen:', url, e);
+    return null;
+  }
+}
+
+// Cargar tecnicos dinamicos en pantalla de seleccion
+async function cargarUsuariosApp() {
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    if (snap.empty) return;
+    const lista = document.getElementById('lista-usuarios');
+    lista.innerHTML = '';
+    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B','#1B5A6B'];
+    snap.docs.forEach(function(doc, i) {
+      const d = doc.data();
+      const div = document.createElement('div');
+      div.className = 'usuario-item';
+      div.onclick = (function(nombre, cargo, letra){ return function(){ seleccionarUsuario(nombre, cargo, letra); }; })(d.nombre, d.cargo || 'Tecnico en terreno', d.letra || d.nombre.charAt(0).toUpperCase());
+      const avatar = document.createElement('div');
+      avatar.className = 'usuario-avatar';
+      avatar.style.background = colores[i % colores.length];
+      avatar.textContent = d.letra || d.nombre.charAt(0).toUpperCase();
+      const info = document.createElement('div');
+      info.className = 'usuario-info';
+      const cargoLabel = d.cargo === 'Administrador' ? 'Administrador' : d.cargo === 'Supervisor' ? 'Supervisor' : 'Tecnico en terreno';
+      info.innerHTML = '<div class="nombre">' + d.nombre + '</div><div class="cargo">' + cargoLabel + '</div>';
+      const arrow = document.createElement('svg');
+      arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
+      arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+      div.appendChild(avatar); div.appendChild(info); div.appendChild(arrow);
+      lista.appendChild(div);
+    });
+    // Update PINS dynamically
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      PINS[d.nombre] = d.pin;
+    });
+  } catch(e) { console.error('Error cargando usuarios:', e); }
+}
+
+// Cargar locales dinamicos en pantalla de seleccion de local
+async function cargarLocalesApp() {
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('locales').orderBy('nombre').get();
+    if (snap.empty) return;
+    const contenedor = document.querySelector('#s-local .content');
+    // Remove existing local items
+    contenedor.querySelectorAll('.local-item').forEach(function(el) { el.parentElement.removeChild(el); });
+    const coloresTipo = { 'Unimarc':'#EEF2FA', 'S10':'#FEF0E6', 'Alvi':'#E6F4EA', 'Otro':'#F5F5F5' };
+    const iconosTipo = { 'Unimarc':'store', 'S10':'shopping-cart', 'Alvi':'building-store', 'Otro':'map-pin' };
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const wrapper = document.createElement('div');
+      wrapper.onclick = (function(nombre, dir){ return function(){ seleccionarLocal(nombre, dir); }; })(d.nombre, d.direccion || '');
+      const item = document.createElement('div');
+      item.className = 'local-item';
+      const iconEl = document.createElement('div');
+      iconEl.className = 'local-icon';
+      iconEl.style.background = coloresTipo[d.tipo] || '#EEF2FA';
+      iconEl.innerHTML = '<i class="ti ti-' + (iconosTipo[d.tipo]||'map-pin') + '" style="font-size:18px;color:var(--azul-claro);"></i>';
+      const info = document.createElement('div');
+      info.className = 'local-info';
+      info.innerHTML = '<div class="local-name">' + d.nombre + '</div><div class="local-addr">' + (d.direccion || '') + '</div>';
+      const arrow = document.createElement('svg');
+      arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
+      arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+      item.appendChild(iconEl); item.appendChild(info); item.appendChild(arrow);
+      wrapper.appendChild(item);
+      contenedor.insertBefore(wrapper, contenedor.lastElementChild);
+    });
+  } catch(e) { console.error('Error cargando locales:', e); }
+}
+
+// =========== COMPARACION FOTOS ===========
+function renderComparacion() {
+  const antes = estado.fotosAntes.filter(function(f){ return f; });
+  const despues = estado.fotosDespues.filter(function(f){ return f; });
+  if (antes.length === 0 && despues.length === 0) return;
+
+  const seccion = document.getElementById('comparacion-fotos');
+  const grid = document.getElementById('grid-comparacion');
+  if (!seccion || !grid) return;
+  grid.innerHTML = '';
+  seccion.style.display = 'block';
+
+  const maxPairs = Math.max(antes.length, despues.length);
+  for (let i = 0; i < maxPairs; i++) {
+    const pair = document.createElement('div');
+    pair.style.cssText = 'margin-bottom:12px;';
+
+    // Label
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:12px;color:var(--texto3);margin-bottom:6px;text-align:center;';
+    label.textContent = 'Punto ' + (i+1);
+    pair.appendChild(label);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+
+    // Antes
+    const boxA = document.createElement('div');
+    boxA.style.cssText = 'position:relative;border-radius:10px;overflow:hidden;background:var(--gris2);aspect-ratio:1;';
+    if (antes[i]) {
+      const imgA = document.createElement('img');
+      imgA.src = antes[i];
+      imgA.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      boxA.appendChild(imgA);
+    }
+    const labelA = document.createElement('div');
+    labelA.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(27,58,107,0.75);color:white;font-size:11px;font-weight:500;text-align:center;padding:4px;';
+    labelA.textContent = 'ANTES';
+    boxA.appendChild(labelA);
+
+    // Despues
+    const boxD = document.createElement('div');
+    boxD.style.cssText = 'position:relative;border-radius:10px;overflow:hidden;background:var(--gris2);aspect-ratio:1;';
+    if (despues[i]) {
+      const imgD = document.createElement('img');
+      imgD.src = despues[i];
+      imgD.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      boxD.appendChild(imgD);
+    }
+    const labelD = document.createElement('div');
+    labelD.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(39,160,107,0.75);color:white;font-size:11px;font-weight:500;text-align:center;padding:4px;';
+    labelD.textContent = 'DESPUES';
+    boxD.appendChild(labelD);
+
+    row.appendChild(boxA);
+    row.appendChild(boxD);
+    pair.appendChild(row);
+    grid.appendChild(pair);
+  }
+}
+
+// =========== GENERACION PDF RECEPCION OBRA ===========
+async function generarPDFRecepcionObra() {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210, H = 297;
+    const margin = 15;
+    const fecha = new Date().toLocaleDateString('es-CL');
+
+    // ---- LOGO EMVAL ----
+    try {
+      const logoUrl = 'https://res.cloudinary.com/dcrf29tna/image/upload/v1779394283/Unimarc_logo_urbzpv.svg';
+      // Use text logo as fallback since SVG may not load in jsPDF
+    } catch(e) {}
+
+    // ---- TITULO ----
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RECEPCI' + String.fromCharCode(211) + 'N OBRA', W/2, 15, { align: 'center' });
+
+    // ---- DATOS EMPRESA ----
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Servicios Emval ltda', margin, 25);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Servicio Pedro Arce Merino E.I.R.L.', margin, 29);
+    doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', margin, 33);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', margin, 37);
+    doc.text('Fono: 995720003 - RUT.: 76.166.407-7', margin, 41);
+    doc.text('E-mail: Servicios.emval@gmail.com', margin, 45);
+
+    // ---- CAJA N OT ----
+    doc.setDrawColor(0);
+    doc.rect(140, 18, 55, 20);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text('N  ' + (estado.otNumero || '----'), 167, 28, { align: 'center' });
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, { align: 'center' });
+
+    // ---- CAJA FECHA/LOCAL/DIRECCION ----
+    doc.rect(140, 44, 55, 24);
+    doc.line(140, 52, 195, 52);
+    doc.line(140, 60, 195, 60);
+    doc.line(158, 44, 158, 68);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Fecha', 142, 50);
+    doc.text('Local', 142, 58);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n', 142, 66);
+    doc.setFont('helvetica', 'normal');
+    doc.text(fecha, 160, 50);
+    doc.text((estado.local || '').substring(0, 16), 160, 58);
+    doc.text((estado.local || '').substring(0, 16), 160, 66);
+
+    // ---- TIPO TRABAJO ----
+    const tipoY = 72;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TRABAJOS EJECUTADOS', margin, tipoY);
+    // Preventivo
+    doc.rect(80, tipoY - 4, 5, 5);
+    if (estado.tipo === 'preventivo') {
+      doc.setLineWidth(0.8);
+      doc.line(81, tipoY - 3, 84, tipoY);
+      doc.line(84, tipoY - 3, 81, tipoY);
+      doc.setLineWidth(0.2);
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('PREVENTIVO', 86, tipoY);
+    // Correctivo
+    doc.rect(115, tipoY - 4, 5, 5);
+    if (estado.tipo === 'correctivo') {
+      doc.setLineWidth(0.8);
+      doc.line(116, tipoY - 3, 119, tipoY);
+      doc.line(119, tipoY - 3, 116, tipoY);
+      doc.setLineWidth(0.2);
+    }
+    doc.text('CORRECTIVO', 121, tipoY);
+
+    // ---- TABLA DETALLE ----
+    const tableY = 78;
+    const col1 = 20, col2 = 130, col3 = 30;
+    const rowH = 7;
+    const rows = 14;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.rect(margin, tableY, col1+col2+col3, rowH);
+    doc.rect(margin, tableY, col1, rowH);
+    doc.rect(margin+col1, tableY, col2, rowH);
+    doc.rect(margin+col1+col2, tableY, col3, rowH);
+    doc.text('ITEM', margin+col1/2, tableY+5, { align:'center' });
+    doc.text('DETALLE', margin+col1+col2/2, tableY+5, { align:'center' });
+    doc.text('EJECUCION', margin+col1+col2+col3/2, tableY+5, { align:'center' });
+
+    // Texto real del trabajo escrito por el tecnico
+    const descTrabajo = document.getElementById('desc-trabajo') ?
+      document.getElementById('desc-trabajo').value.trim() : '';
+    const descLines = doc.splitTextToSize(descTrabajo, col2 - 4);
+    const rowsNeeded = Math.max(descLines.length + 1, rows);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    for (let i = 0; i < rowsNeeded; i++) {
+      const y = tableY + rowH + (i * rowH);
+      doc.rect(margin, y, col1, rowH);
+      doc.rect(margin+col1, y, col2, rowH);
+      doc.rect(margin+col1+col2, y, col3, rowH);
+      if (descLines[i]) {
+        doc.text(descLines[i], margin+col1+2, y + rowH - 2);
+      }
+    }
+
+    const afterY = tableY + rowH + (rowsNeeded * rowH) + 8;
+
+    // ---- FIRMA IZQUIERDA (sin fondo oscuro, solo firma negra) ----
+    const firmaW = 85;
+    const firmaH = 30;
+    if (firmaConfirmada) {
+      try {
+        const firmaCanvas = document.getElementById('firma-canvas');
+        // Crear canvas temporal con fondo blanco para evitar fondo oscuro
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = firmaCanvas.width;
+        tempCanvas.height = firmaCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        // Fondo blanco
+        tempCtx.fillStyle = '#FFFFFF';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        // Dibujar firma encima
+        tempCtx.drawImage(firmaCanvas, 0, 0);
+        const firmaData = await comprimirImagen(tempCanvas.toDataURL('image/jpeg', 1.0), 600, 0.95);
+        doc.addImage(firmaData, 'JPEG', margin, afterY, firmaW, firmaH);
+      } catch(e) { console.error('Firma error:', e); }
+    } else {
+      // Recuadro vacio si no hay firma
+      doc.setDrawColor(180, 180, 180);
+      doc.rect(margin, afterY, firmaW, firmaH);
+    }
+    // Texto debajo de la firma
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Firma del Receptor', margin + firmaW/2, afterY + firmaH + 5, { align: 'center' });
+
+    // ---- TIMBRE DERECHA (solo foto + texto, sin nota) ----
+    const timbreX = 115;
+    const timbreW = 80;
+    const timbreH = 42;
+    doc.setDrawColor(180, 180, 180);
+    doc.rect(timbreX, afterY - 2, timbreW, timbreH);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    if (estado.fotoTimbre) {
+      try {
+        const timbreComp = await comprimirImagen(estado.fotoTimbre, 300, 0.5);
+        doc.addImage(timbreComp, 'JPEG', timbreX + 5, afterY, timbreW - 10, timbreH - 12);
+      } catch(e) {
+        doc.setDrawColor(200, 200, 200);
+        doc.rect(timbreX + 5, afterY, timbreW - 10, timbreH - 12);
+      }
+    } else {
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(timbreX + 5, afterY, timbreW - 10, timbreH - 12);
+    }
+    doc.text('Timbre del Receptor:', timbreX + timbreW/2, afterY + timbreH - 2, { align: 'center' });
+
+    return doc;
+  } catch(e) {
+    console.error('Error generando PDF:', e);
+    return null;
+  }
+}
+
+async function verPDFById(pdfId) {
+  try {
+    if (!window._firebaseReady) { setTimeout(function(){ verPDFById(pdfId); }, 1000); return; }
+    const db = window.firebase.firestore();
+    const doc = await db.collection('pdfs').doc(pdfId).get();
+    if (!doc.exists) { alert('PDF no encontrado'); return; }
+    const data = doc.data();
+    // Si tiene URL de Cloudinary usar esa, sino usar pdfData base64
+    if (data.pdfUrl && data.pdfUrl.includes('cloudinary')) {
+      window.open(data.pdfUrl, '_blank');
+      return;
+    }
+    const win = window.open('', '_blank');
+    if (!win) { alert('Permite ventanas emergentes para ver el PDF'); return; }
+    win.document.write('<html><head><title>OT #' + data.otNumero + ' - ' + data.local + '</title></head><body style="margin:0">');
+    win.document.write('<embed src="' + data.pdfData + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;width:100%;height:100%"/>');
+    win.document.write('</body></html>');
+  } catch(e) {
+    console.error('Error:', e);
+  }
+}
+
+function verPDF() {
+  if (estado.pdfUrl) {
+    window.open(estado.pdfUrl, '_blank');
+  } else {
+    generarPDFRecepcionObra().then(function(doc){
+      if(doc) doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
+    });
+  }
+}
+
+// Compress image - si es URL externa devuelve base64 via fetch (evita CORS)
+async function comprimirImagen(dataUrl, maxWidth, quality) {
+  // Si es URL http (Cloudinary), ya fue convertida a base64 por cargarImagenComoBase64
+  // Solo comprimir si es data URL local
+  if (typeof dataUrl === 'string' && dataUrl.startsWith('http')) {
+    // URL externa - devolver tal cual (debio convertirse antes con cargarImagenComoBase64)
+    return dataUrl;
+  }
+  return new Promise(function(resolve) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality || 0.5));
+    };
+    img.onerror = function() { resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+
+async function agregarFotosAlPDF(doc) {
+  const W = 210;
+  const margin = 15;
+  const fotosA = (estado.fotosAntes || []).filter(function(f){ return f; });
+  const fotosD = (estado.fotosDespues || []).filter(function(f){ return f; });
+  if (fotosA.length === 0 && fotosD.length === 0) return;
+
+  doc.addPage();
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W/2, 15, { align: 'center' });
+  doc.setFontSize(9);
+  doc.text('OT #' + (estado.otNumero || '') + ' - ' + (estado.local || ''), W/2, 22, { align: 'center' });
+
+  let currentY = 30;
+  const imgW = 85;
+  const imgH = 65;
+  const maxPairs = Math.max(fotosA.length, fotosD.length);
+
+  for (let i = 0; i < maxPairs; i++) {
+    if (currentY + imgH + 15 > 285) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    // Label par
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Punto ' + (i+1), margin, currentY);
+    currentY += 5;
+
+    // Foto ANTES
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setFillColor(27, 58, 107);
+    doc.rect(margin, currentY, imgW, 6, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text('ANTES', margin + imgW/2, currentY + 4, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+
+    if (fotosA[i]) {
+      try {
+        const imgAComp = await comprimirImagen(fotosA[i], 400, 0.25);
+        doc.addImage(imgAComp, 'JPEG', margin, currentY + 6, imgW, imgH);
+      } catch(e) {
+        doc.setDrawColor(200);
+        doc.rect(margin, currentY + 6, imgW, imgH);
+      }
+    } else {
+      doc.setDrawColor(200);
+      doc.rect(margin, currentY + 6, imgW, imgH);
+    }
+
+    // Foto DESPUES
+    const despX = margin + imgW + 10;
+    doc.setFillColor(39, 160, 107);
+    doc.rect(despX, currentY, imgW, 6, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text('DESPU' + String.fromCharCode(201) + 'S', despX + imgW/2, currentY + 4, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+
+    if (fotosD[i]) {
+      try {
+        const imgDComp = await comprimirImagen(fotosD[i], 400, 0.25);
+        doc.addImage(imgDComp, 'JPEG', despX, currentY + 6, imgW, imgH);
+      } catch(e) {
+        doc.setDrawColor(200);
+        doc.rect(despX, currentY + 6, imgW, imgH);
+      }
+    } else {
+      doc.setDrawColor(200);
+      doc.rect(despX, currentY + 6, imgW, imgH);
+    }
+
+    currentY += imgH + 16;
+  }
+}
+
+async function guardarYEnviarPDF() {
+  toast('Generando PDF...');
+  const doc = await generarPDFRecepcionObra();
+  if (!doc) { toast('Error generando PDF'); return; }
+
+  // Agregar pagina de fotos al PDF
+  await agregarFotosAlPDF(doc);
+
+  // Obtener PDF como base64 string (sin prefijo data:)
+  const pdfBase64 = doc.output('datauristring');
+  const pdfBase64Solo = pdfBase64.split(',')[1]; // solo la parte base64
+  const pdfBlob = doc.output('blob');
+  console.log('PDF completo size:', pdfBlob.size, 'bytes');
+
+  // --- Subir PDF a Cloudinary como base64 (mas confiable que blob) ---
+  let pdfUrlCloudinary = null;
+  try {
+    toast('Subiendo PDF a la nube...');
+    const formData = new FormData();
+    // Subir como data URI base64 - mas confiable que blob
+    formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
+    formData.append('upload_preset', 'emval_pdf');
+    formData.append('folder', 'emval/pdfs');
+    formData.append('public_id', 'OT_' + estado.otNumero + '_' + (estado.local||'').replace(/\s+/g,'_'));
+    const resp = await fetch(
+      'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
+      { method: 'POST', body: formData }
+    );
+    const data = await resp.json();
+    if (data.secure_url) {
+      pdfUrlCloudinary = data.secure_url;
+      console.log('PDF subido a Cloudinary:', pdfUrlCloudinary);
+    } else {
+      console.error('Cloudinary PDF error:', data);
+    }
+  } catch(e) {
+    console.error('Error subiendo PDF a Cloudinary:', e);
+  }
+
+  // --- Guardar en Firestore para el supervisor ---
+  let pdfUrlFirestore = null;
+  try {
+    toast('Guardando PDF...');
+    if (window._firebaseReady) {
+      const db = window.firebase.firestore();
+      // Guardar PDF completo (con fotos) en Firestore
+      const pdfDoc = await db.collection('pdfs').add({
+        otNumero: estado.otNumero,
+        local: estado.local,
+        tecnico: estado.usuario,
+        fecha: new Date().toLocaleDateString('es-CL'),
+        pdfData: pdfBase64,
+        pdfUrl: '',
+        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+      });
+      pdfUrlFirestore = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
+      // Guardar ambas URLs: Firestore para ver en app, Cloudinary para email
+      estado.pdfUrl = pdfUrlFirestore;
+      estado.pdfUrlCloudinary = pdfUrlCloudinary || '';
+      console.log('PDF guardado en Firestore:', pdfDoc.id);
+    }
+  } catch(e) {
+    console.error('Error guardando PDF en Firestore:', e);
+  }
+
+  // --- Enviar email al admin del local con PDF adjunto (base64) ---
+  const email = estado.emailSucursal || estado.emailAdmin;
+  if (email) {
+    try {
+      toast('Enviando email con PDF...');
+      const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
+      const nombreArchivo = 'Recepcion_Obra_OT' + estado.otNumero + '.pdf';
+
+      // EmailJS soporta adjuntos via content (base64) hasta ~50KB
+      // Si el PDF es grande, enviamos link de Cloudinary como descarga directa
+      const pdfSize = pdfBlob.size;
+      console.log('Tamano PDF para email:', pdfSize, 'bytes');
+
+      // Email: usar Firestore para ver PDF en la app
+      const linkDescarga = pdfUrlFirestore || '';
+      await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+        email_admin: email,
+        ot_numero: String(estado.otNumero),
+        local: String(estado.local || ''),
+        fecha: new Date().toLocaleDateString('es-CL'),
+        tecnico: String(estado.usuario || ''),
+        tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+        trabajo: String(trabajo),
+        pdf_url: linkDescarga
+      });
+      toast('Email enviado con link al PDF');
+    } catch(e) {
+      console.error('Error email:', e);
+      toast('PDF listo (error al enviar email)');
+    }
+  }
+
+  // --- Actualizar orden en Firestore con URL del PDF ---
+  if (window._firebaseReady && (pdfUrlCloudinary || pdfUrlFirestore)) {
+    try {
+      const db = window.firebase.firestore();
+      const snap = await db.collection('ordenes')
+        .where('numero', '==', estado.otNumero).get();
+      if (!snap.empty) {
+        await db.collection('ordenes').doc(snap.docs[0].id).update({
+          pdfUrl: pdfUrlFirestore || '',
+          pdfUrlCloudinary: pdfUrlCloudinary || ''
+        });
+      }
+    } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
+  }
+
+  // Descargar localmente en el dispositivo del tecnico
+  doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
+
+  var btnPdf = document.getElementById('btn-ver-pdf');
+  if (btnPdf) btnPdf.style.display = 'block';
+
+  return pdfUrlCloudinary || pdfUrlFirestore;
+}
+
+// =========== PDF COTIZACION ===========
+async function generarPDFCotizacionGuardada(cotData) {
+  toast('Generando PDF...');
+  try {
+    // Cargar datos completos de la OT desde Firestore
+    let otData = null;
+    console.log('Cargando OT para PDF, otId:', cotData.otId);
+    if (window._firebaseReady && cotData.otId) {
+      const db = window.firebase.firestore();
+      const otDoc = await db.collection('ordenes').doc(cotData.otId).get();
+      if (otDoc.exists) {
+        otData = otDoc.data();
+        console.log('OT cargada:', otData.numero, 'fotos antes:', (otData.fotosAntes||[]).length, 'fotos despues:', (otData.fotosDespues||[]).length);
+      } else {
+        console.warn('OT no encontrada en Firestore para id:', cotData.otId);
+      }
+    } else {
+      console.warn('Sin otId o Firebase no listo. otId:', cotData.otId, '_firebaseReady:', window._firebaseReady);
+    }
+
+    // Preparar cotizacionActual temporalmente con datos guardados
+    const cotBackup = cotizacionActual;
+    const itemsBackup = itemsCot.slice();
+    cotizacionActual = {
+      id: cotData.otId || '',
+      otId: cotData.otId || '',
+      numero: cotData.otNumero,
+      local: cotData.local,
+      tecnico: cotData.tecnico,
+      fecha: cotData.fecha,
+      descripcionTrabajo: cotData.descripcionTrabajo || ''
+    };
+    itemsCot = cotData.items || [];
+
+    // Poner detalle en el campo (aunque no sea visible)
+    const detalleEl = document.getElementById('cot-detalle-trabajo');
+    const detalleBackup = detalleEl ? detalleEl.value : '';
+    if (detalleEl) detalleEl.value = cotData.descripcionTrabajo || '';
+
+    // Generar PDF pagina 1 cotizacion
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210, margin = 15;
+    const fecha = new Date().toLocaleDateString('es-CL');
+    const VERDE = [100, 180, 150];
+
+    // Numero cotizacion
+    const hoy = new Date();
+    const diaCot = String(hoy.getDate());
+    const mesCot = String(hoy.getMonth() + 1).padStart(2, '0');
+    const anioCot = String(hoy.getFullYear()).slice(2);
+    const numCot = diaCot + mesCot + anioCot + '01';
+
+    // ---- TITULO ----
+    doc.setFontSize(22); doc.setFont('helvetica', 'bold'); doc.setTextColor(0,0,0);
+    doc.text('Cotizaci' + String.fromCharCode(243) + 'n', W/2, 20, { align: 'center' });
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text('N' + String.fromCharCode(186), 160, 18);
+    doc.setDrawColor(0); doc.setLineWidth(0.5);
+    doc.rect(168, 14, 25, 8);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.text(String(numCot), 180, 20, { align: 'center' });
+
+    // ---- CAJA EMPRESA ----
+    doc.setDrawColor(100, 180, 150);
+    doc.rect(margin, 25, 90, 35);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
+    doc.text('Nombre : SERVICIOS EMVAL LTDA.', margin + 28, 31);
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
+    doc.text('"SERVICIOS EMVAL"', margin + 28, 36);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text('Rut', margin + 28, 42); doc.text(': 76.166.407-7', margin + 42, 42);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
+    doc.text(': A. Pinto 372 of 53, Concepci' + String.fromCharCode(243) + 'n', margin + 42, 47);
+    doc.text('Fono', margin + 28, 52); doc.text(': 995720003', margin + 42, 52);
+    doc.text('Email', margin + 28, 57); doc.text(': servicios.emval@gmail.com', margin + 42, 57);
+
+    // ---- CAJA OT ----
+    doc.setDrawColor(100, 180, 150);
+    doc.rect(115, 25, 80, 35);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text('Fecha', 120, 32); doc.text(': ' + fecha, 142, 32);
+    doc.text('Fecha ejecuci' + String.fromCharCode(243) + 'n', 120, 38); doc.text(': ' + (cotData.fecha||''), 142, 38);
+    doc.text('Local', 120, 44); doc.text(': ' + (cotData.local||''), 142, 44);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n', 120, 50); doc.text(':', 142, 50);
+    doc.text('Supervisor', 120, 56); doc.text(': ' + (cotData.tecnico||''), 142, 56);
+
+    // ---- DETALLE TRABAJOS ----
+    const secY = 68;
+    doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+    doc.rect(margin, secY, W - margin*2, 8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
+    doc.text('DETALLE DE TRABAJOS', W/2, secY + 5.5, { align: 'center' });
+    doc.setTextColor(0,0,0); doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const descT = cotData.descripcionTrabajo || '';
+    const descLines = doc.splitTextToSize(descT, W - margin*2 - 4);
+    const descBoxH = Math.max(16, descLines.length * 5 + 6);
+    doc.setDrawColor(180,180,180);
+    doc.rect(margin, secY + 8, W - margin*2, descBoxH);
+    descLines.forEach(function(line, i) { doc.text(line, margin + 2, secY + 14 + (i * 5)); });
+
+    // ---- TABLA ITEMS ----
+    const tabY = secY + 8 + descBoxH + 6;
+    const colAncho = [12, 80, 20, 30, 30];
+    const colX = [margin];
+    for (var ci = 0; ci < colAncho.length - 1; ci++) colX.push(colX[ci] + colAncho[ci]);
+    const rowH = 7;
+    doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+    doc.rect(margin, tabY, W - margin*2, rowH, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+    ['Cantidad','Detalle','Real','$ unitario','Total'].forEach(function(h,i){ doc.text(h, colX[i]+colAncho[i]/2, tabY+5, {align:'center'}); });
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(0,0,0);
+    var maxFilas = 14;
+    var items = cotData.items || [];
+    for (var fi = 0; fi < maxFilas; fi++) {
+      var rowY = tabY + rowH + (fi * rowH);
+      doc.setDrawColor(200,200,200);
+      doc.rect(margin, rowY, W - margin*2, rowH);
+      var xAcc = margin;
+      for (var ci2 = 0; ci2 < colAncho.length - 1; ci2++) { xAcc += colAncho[ci2]; doc.line(xAcc, rowY, xAcc, rowY + rowH); }
+      var item = items[fi];
+      if (item) {
+        doc.setFontSize(8);
+        doc.text(String(item.qty||1), colX[0]+colAncho[0]/2, rowY+5, {align:'center'});
+        var descI = doc.splitTextToSize(item.desc||'', colAncho[1]-2);
+        doc.text(descI[0]||'', colX[1]+2, rowY+5);
+        doc.text('cu', colX[2]+colAncho[2]/2, rowY+5, {align:'center'});
+        doc.text('$ '+(item.precio||0).toLocaleString('es-CL'), colX[3]+colAncho[3]-2, rowY+5, {align:'right'});
+        var totI = (item.qty||1)*(item.precio||0);
+        doc.text('$ '+totI.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, rowY+5, {align:'right'});
+      } else {
+        doc.setTextColor(180,180,180);
+        doc.text('-', colX[3]+colAncho[3]-2, rowY+5, {align:'right'});
+        doc.text('-', colX[4]+colAncho[4]-2, rowY+5, {align:'right'});
+        doc.setTextColor(0,0,0);
+      }
+    }
+    var afterTabY = tabY + rowH + (maxFilas * rowH);
+    var subtotal = items.reduce(function(s,i){ return s+(i.qty||1)*(i.precio||0); }, 0);
+    var descPct = cotData.descuento || 0;
+    var descMonto = Math.round(subtotal * descPct / 100);
+    var total = subtotal - descMonto;
+    doc.setFillColor(240,240,240);
+    doc.rect(margin, afterTabY, W - margin*2, rowH, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('Total', colX[3]+colAncho[3]-2, afterTabY+5, {align:'right'});
+    doc.text('$ '+subtotal.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, afterTabY+5, {align:'right'});
+
+    var cosY = afterTabY + rowH + 4;
+    doc.setFillColor(220,220,220);
+    doc.rect(margin+40, cosY, 80, 7, 'F');
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text('Costos Operacionales + traslados', W/2, cosY+5, {align:'center'});
+    doc.text('Total', 155, cosY+5);
+    doc.setDrawColor(180,180,180); doc.rect(165, cosY, 25, 7);
+    doc.text('$ -', 188, cosY+5, {align:'right'});
+
+    var totY = cosY + 14;
+    doc.setFont('helvetica','italic');
+    doc.text('Cotizacion valida por 10 Dias', margin, totY);
+    [['Sub Total Neto', subtotal],['Descuentos', descMonto],['TOTAL NETO', total]].forEach(function(r,i){
+      var ry = totY + (i*8);
+      doc.setFont('helvetica', i===2?'bold':'normal');
+      doc.text(r[0], 130, ry);
+      doc.setDrawColor(180,180,180); doc.rect(165, ry-5, 30, 7);
+      doc.text('$ '+r[1].toLocaleString('es-CL'), 194, ry, {align:'right'});
+    });
+
+    var firmY = totY + 30;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text('Cotizacion valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
+
+    // ---- PAGINA 2: RECEPCION DE OBRA ----
+    if (otData) {
+      doc.addPage();
+      const m2 = 15, W2 = 210;
+      doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+      doc.text('RECEPCI' + String.fromCharCode(211) + 'N OBRA', W2/2, 15, {align:'center'});
+      doc.setFontSize(8); doc.setFont('helvetica','bold');
+      doc.text('Servicios Emval ltda', m2, 25);
+      doc.setFont('helvetica','normal');
+      doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', m2, 29);
+      doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', m2, 33);
+      doc.text('Fono: 995720003 - RUT.: 76.166.407-7', m2, 37);
+      doc.text('E-mail: Servicios.emval@gmail.com', m2, 41);
+      doc.setDrawColor(0); doc.rect(140, 18, 55, 20);
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.text('N  ' + (otData.numero||''), 167, 28, {align:'center'});
+      doc.setFontSize(7); doc.setFont('helvetica','normal');
+      doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, {align:'center'});
+      doc.rect(140,44,55,24); doc.line(140,52,195,52); doc.line(140,60,195,60); doc.line(158,44,158,68);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      doc.text('Fecha',142,50); doc.text('Local',142,58); doc.text('Direcci' + String.fromCharCode(243) + 'n',142,66);
+      doc.setFont('helvetica','normal');
+      doc.text(otData.fecha||'',160,50);
+      doc.text((otData.local||'').substring(0,16),160,58);
+      doc.text((otData.local||'').substring(0,16),160,66);
+      const tipoY2 = 72;
+      doc.setFontSize(9); doc.setFont('helvetica','bold');
+      doc.text('TRABAJOS EJECUTADOS', m2, tipoY2);
+      doc.rect(80,tipoY2-4,5,5);
+      if (otData.tipo==='preventivo'){doc.setLineWidth(0.8);doc.line(81,tipoY2-3,84,tipoY2);doc.line(84,tipoY2-3,81,tipoY2);doc.setLineWidth(0.2);}
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text('PREVENTIVO',86,tipoY2);
+      doc.rect(115,tipoY2-4,5,5);
+      if (otData.tipo==='correctivo'){doc.setLineWidth(0.8);doc.line(116,tipoY2-3,119,tipoY2);doc.line(119,tipoY2-3,116,tipoY2);doc.setLineWidth(0.2);}
+      doc.text('CORRECTIVO',121,tipoY2);
+      const tabY2=78, col1=20, col2=130, col3=30, rowH2=7;
+      const descT2 = otData.descripcionTrabajo||'';
+      const descL2 = doc.splitTextToSize(descT2, col2-4);
+      const rowsN = Math.max(descL2.length+1, 10);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      doc.rect(m2,tabY2,col1+col2+col3,rowH2); doc.rect(m2,tabY2,col1,rowH2);
+      doc.rect(m2+col1,tabY2,col2,rowH2); doc.rect(m2+col1+col2,tabY2,col3,rowH2);
+      doc.text('ITEM',m2+col1/2,tabY2+5,{align:'center'});
+      doc.text('DETALLE',m2+col1+col2/2,tabY2+5,{align:'center'});
+      doc.text('EJECUCION',m2+col1+col2+col3/2,tabY2+5,{align:'center'});
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      for(var ri=0;ri<rowsN;ri++){
+        var ry2=tabY2+rowH2+(ri*rowH2);
+        doc.rect(m2,ry2,col1,rowH2); doc.rect(m2+col1,ry2,col2,rowH2); doc.rect(m2+col1+col2,ry2,col3,rowH2);
+        if(descL2[ri]) doc.text(descL2[ri],m2+col1+2,ry2+rowH2-2);
+      }
+      var afterY2 = tabY2+rowH2+(rowsN*rowH2)+8;
+      // Firma - usar base64 guardada en Firestore
+      var firmaW2=85, firmaH2=30;
+      if (otData.firmaImagen) {
+        try { doc.addImage(otData.firmaImagen, 'JPEG', m2, afterY2, firmaW2, firmaH2); }
+        catch(ef) { doc.setDrawColor(180,180,180); doc.rect(m2,afterY2,firmaW2,firmaH2); }
+      } else {
+        doc.setDrawColor(180,180,180); doc.rect(m2,afterY2,firmaW2,firmaH2);
+      }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+      doc.text('Firma del Receptor', m2+firmaW2/2, afterY2+firmaH2+5, {align:'center'});
+      // Timbre - cargar desde Cloudinary
+      var tX=115, tW=80, tH=42;
+      doc.setDrawColor(180,180,180); doc.rect(tX,afterY2-2,tW,tH);
+      if (otData.fotoTimbre) {
+        try {
+          const timbreB64 = await cargarImagenComoBase64(otData.fotoTimbre, 300, 0.5);
+          if (timbreB64) {
+            doc.addImage(timbreB64,'JPEG',tX+5,afterY2,tW-10,tH-12);
+          }
+        } catch(et){ console.warn('Error timbre:', et); }
+      }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text('Timbre del Receptor:', tX+tW/2, afterY2+tH-2, {align:'center'});
+
+      // ---- PAGINAS FOTOS desde Cloudinary ----
+      const fotosA = otData.fotosAntes || [];
+      const fotosD = otData.fotosDespues || [];
+      if (fotosA.length > 0 || fotosD.length > 0) {
+        toast('Agregando fotos...');
+        doc.addPage();
+        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
+        doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W2/2, 15, {align:'center'});
+        doc.setFontSize(9);
+        doc.text('OT #'+(otData.numero||'')+' - '+(otData.local||''), W2/2, 22, {align:'center'});
+        var curY=30;
+        const imgW=85, imgH=65;
+        for (var pi=0; pi<Math.max(fotosA.length,fotosD.length); pi++){
+          if(curY+imgH+15>285){doc.addPage();curY=20;}
+          doc.setFont('helvetica','bold'); doc.setFontSize(8);
+          doc.text('Punto '+(pi+1), m2, curY); curY+=5;
+          doc.setFillColor(27,58,107); doc.rect(m2,curY,imgW,6,'F');
+          doc.setTextColor(255,255,255); doc.setFontSize(7);
+          doc.text('ANTES',m2+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
+          if(fotosA[pi]){
+            try{
+              const b64A = await cargarImagenComoBase64(fotosA[pi], 400, 0.4);
+              if(b64A){ doc.addImage(b64A,'JPEG',m2,curY+6,imgW,imgH); }
+              else { doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
+            }catch(e){ doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
+          } else { doc.setDrawColor(200); doc.rect(m2,curY+6,imgW,imgH); }
+          var dX=m2+imgW+10;
+          doc.setFillColor(39,160,107); doc.rect(dX,curY,imgW,6,'F');
+          doc.setTextColor(255,255,255);
+          doc.text('DESPU' + String.fromCharCode(201) + 'S',dX+imgW/2,curY+4,{align:'center'}); doc.setTextColor(0,0,0);
+          if(fotosD[pi]){
+            try{
+              const b64D = await cargarImagenComoBase64(fotosD[pi], 400, 0.4);
+              if(b64D){ doc.addImage(b64D,'JPEG',dX,curY+6,imgW,imgH); }
+              else { doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
+            }catch(e){ doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
+          } else { doc.setDrawColor(200); doc.rect(dX,curY+6,imgW,imgH); }
+          curY+=imgH+16;
+        }
+      }
+    }
+
+    // Restaurar estado
+    cotizacionActual = cotBackup;
+    itemsCot = itemsBackup;
+    if (detalleEl) detalleEl.value = detalleBackup;
+
+    const nombrePDF = 'EMVAL_Cotizacion_' + (cotData.local||'').replace(/\s+/g,'_') + '.pdf';
+    doc.save(nombrePDF);
+    toast('PDF descargado');
+  } catch(e) {
+    console.error('Error PDF cotizacion guardada:', e);
+    toast('Error generando PDF');
+  }
+}
+
+async function generarPDFCotizacion() {
+  if (!cotizacionActual) { toast('No hay cotizacion activa'); return; }
+  toast('Generando PDF cotizacion...');
+  const totales = calcTotalCot();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, margin = 15;
+  const fecha = new Date().toLocaleDateString('es-CL');
+  // Numero correlativo: dia + mes + anio(2) + correlativo(2)
+  // Ej: 29-05-2026, cotizacion 3 -> 2905263
+  const hoy = new Date();
+  const diaCot = String(hoy.getDate());
+  const mesCot = String(hoy.getMonth() + 1).padStart(2, '0');
+  const anioCot = String(hoy.getFullYear()).slice(2);
+  // Obtener correlativo del dia desde Firestore
+  let correlativo = 1;
+  try {
+    const db2 = window.firebase.firestore();
+    const hoyStr = diaCot + mesCot + anioCot;
+    const cotSnap = await db2.collection('cotizaciones')
+      .where('fechaCodigo', '==', hoyStr).get();
+    correlativo = cotSnap.size + 1;
+  } catch(ecorr) { correlativo = 1; }
+  const numCot = diaCot + mesCot + anioCot + String(correlativo).padStart(2, '0');
+
+  // Colores
+  const VERDE = [100, 180, 150];
+  const AZUL_OSC = [27, 58, 107];
+  const GRIS = [180, 180, 180];
+
+  // ---- TITULO ----
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('Cotizaci' + String.fromCharCode(243) + 'n', W/2, 20, { align: 'center' });
+
+  // N cotizacion
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('N' + String.fromCharCode(186), 160, 18);
+  doc.setDrawColor(0); doc.setLineWidth(0.5);
+  doc.rect(168, 14, 25, 8);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(String(numCot), 180, 20, { align: 'center' });
+
+  // ---- CAJA INFO EMPRESA ----
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(100, 180, 150);
+  doc.rect(margin, 25, 90, 35);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(0,0,0);
+  doc.text('Nombre : SERVICIOS EMVAL LTDA.', margin + 28, 31);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(9);
+  doc.text('"SERVICIOS EMVAL"', margin + 28, 36);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Rut', margin + 28, 42);
+  doc.text(': 76.166.407-7', margin + 42, 42);
+  doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
+  doc.text(': A. Pinto 372 of 53, Concepci' + String.fromCharCode(243) + 'n', margin + 42, 47);
+  doc.text('Fono', margin + 28, 52);
+  doc.text(': 995720003', margin + 42, 52);
+  doc.text('Email', margin + 28, 57);
+  doc.text(': servicios.emval@gmail.com', margin + 42, 57);
+
+  // ---- CAJA INFO OT ----
+  doc.setDrawColor(100, 180, 150);
+  doc.rect(115, 25, 80, 35);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Fecha', 120, 32);
+  doc.text(': ' + fecha, 142, 32);
+  doc.text('Fecha ejecuci' + String.fromCharCode(243) + 'n', 120, 38);
+  doc.text(': ' + (cotizacionActual.fecha || fecha), 142, 38);
+  doc.text('Local', 120, 44);
+  doc.text(': ' + (cotizacionActual.local || ''), 142, 44);
+  doc.text('Direcci' + String.fromCharCode(243) + 'n', 120, 50);
+  doc.text(':', 142, 50);
+  doc.text('Supervisor', 120, 56);
+  doc.text(': ' + (cotizacionActual.tecnico || ''), 142, 56);
+
+  // ---- DETALLE TRABAJOS ----
+  const secY = 68;
+  doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+  doc.rect(margin, secY, W - margin*2, 8, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(255,255,255);
+  doc.text('DETALLE DE TRABAJOS', W/2, secY + 5.5, { align: 'center' });
+
+  doc.setTextColor(0,0,0);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const detalleEl = document.getElementById('cot-detalle-trabajo');
+  const descTrabajo = (detalleEl ? detalleEl.value.trim() : '') || cotizacionActual.descripcionTrabajo || '';
+  const descLines = doc.splitTextToSize(descTrabajo, W - margin*2 - 4);
+  const descBoxH = Math.max(16, descLines.length * 5 + 6);
+  doc.setDrawColor(180,180,180);
+  doc.rect(margin, secY + 8, W - margin*2, descBoxH);
+  descLines.forEach(function(line, i) {
+    doc.text(line, margin + 2, secY + 14 + (i * 5));
+  });
+
+  // ---- TABLA ITEMS ----
+  const tabY = secY + 8 + descBoxH + 6;
+  const colAncho = [12, 80, 20, 30, 30];
+  const colX = [margin];
+  for (var ci = 0; ci < colAncho.length - 1; ci++) colX.push(colX[ci] + colAncho[ci]);
+  const rowH = 7;
+
+  // Header tabla
+  doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+  doc.rect(margin, tabY, W - margin*2, rowH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255,255,255);
+  var headers = ['Cantidad', 'Detalle', 'Real', '$ unitario', 'Total'];
+  headers.forEach(function(h, i) {
+    doc.text(h, colX[i] + colAncho[i]/2, tabY + 5, { align: 'center' });
+  });
+
+  // Filas items
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0,0,0);
+  var maxFilas = 14;
+  for (var fi = 0; fi < maxFilas; fi++) {
+    var rowY = tabY + rowH + (fi * rowH);
+    doc.setDrawColor(200,200,200);
+    doc.rect(margin, rowY, W - margin*2, rowH);
+    // Separadores de columna
+    var xAcc = margin;
+    for (var ci2 = 0; ci2 < colAncho.length - 1; ci2++) {
+      xAcc += colAncho[ci2];
+      doc.line(xAcc, rowY, xAcc, rowY + rowH);
+    }
+    var item = itemsCot[fi];
+    if (item) {
+      doc.setFontSize(8);
+      // Numero fila
+      doc.text(String(fi+1), colX[0] + colAncho[0]/2, rowY + 5, { align: 'center' });
+      // Cantidad
+      doc.text(String(item.qty || 1), colX[0] + colAncho[0]/2, rowY + 5, { align: 'center' });
+      // Descripcion
+      var descItem = doc.splitTextToSize(item.desc || '', colAncho[1] - 2);
+      doc.text(descItem[0] || '', colX[1] + 2, rowY + 5);
+      // Unidad
+      doc.text('cu', colX[2] + colAncho[2]/2, rowY + 5, { align: 'center' });
+      // Precio unitario
+      doc.text('$ ' + (item.precio||0).toLocaleString('es-CL'), colX[3] + colAncho[3] - 2, rowY + 5, { align: 'right' });
+      // Total item
+      var totalItem = (item.qty||1) * (item.precio||0);
+      doc.text('$ ' + totalItem.toLocaleString('es-CL'), colX[4] + colAncho[4] - 2, rowY + 5, { align: 'right' });
+    } else {
+      // Filas vacias con guiones
+      doc.setTextColor(180,180,180);
+      doc.text('-', colX[3] + colAncho[3] - 2, rowY + 5, { align: 'right' });
+      doc.text('-', colX[4] + colAncho[4] - 2, rowY + 5, { align: 'right' });
+      doc.setTextColor(0,0,0);
+    }
+  }
+
+  var afterTabY = tabY + rowH + (maxFilas * rowH);
+
+  // Fila TOTAL tabla
+  doc.setFillColor(240,240,240);
+  doc.rect(margin, afterTabY, W - margin*2, rowH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(0,0,0);
+  doc.text('Total', colX[3] + colAncho[3] - 2, afterTabY + 5, { align: 'right' });
+  doc.text('$ ' + totales.subtotal.toLocaleString('es-CL'), colX[4] + colAncho[4] - 2, afterTabY + 5, { align: 'right' });
+
+  // ---- COSTOS OPERACIONALES ----
+  var cosY = afterTabY + rowH + 4;
+  doc.setFillColor(220,220,220);
+  doc.rect(margin + 40, cosY, 80, 7, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(0,0,0);
+  doc.text('Costos Operacionales + traslados', W/2, cosY + 5, { align: 'center' });
+  doc.text('Total', 155, cosY + 5);
+  doc.setDrawColor(180,180,180);
+  doc.rect(165, cosY, 25, 7);
+  doc.text('$ -', 188, cosY + 5, { align: 'right' });
+
+  // ---- VALIDA / TOTALES ----
+  var totY = cosY + 14;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Cotizacion valida por 10 Dias', margin, totY);
+
+  doc.setFont('helvetica', 'normal');
+  var rows2 = [
+    ['Sub Total Neto', totales.subtotal],
+    ['Descuentos', totales.descMonto],
+    ['TOTAL NETO', totales.total]
+  ];
+  rows2.forEach(function(r, i) {
+    var ry = totY + (i * 8);
+    doc.setFont('helvetica', i === 2 ? 'bold' : 'normal');
+    doc.text(r[0], 130, ry);
+    doc.setDrawColor(180,180,180);
+    doc.rect(165, ry - 5, 30, 7);
+    doc.text('$ ' + r[1].toLocaleString('es-CL'), 194, ry, { align: 'right' });
+  });
+
+  // ---- VALIDEZ ----
+  var firmY = totY + 30;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Cotizacion valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
+
+  // ---- AGREGAR RECEPCION DE OBRA + FOTOS ----
+  toast('Cargando datos de la OT...');
+  try {
+    // Cargar datos completos de la OT desde Firestore
+    if (window._firebaseReady && cotizacionActual.otId) {
+      const db = window.firebase.firestore();
+      const otDoc = await db.collection('ordenes').doc(cotizacionActual.otId).get();
+      if (otDoc.exists) {
+        const otData = otDoc.data();
+
+        // Pagina 2: Recepcion de Obra
+        toast('Generando recepcion de obra...');
+        doc.addPage();
+        const W2 = 210, m2 = 15;
+
+        // Titulo
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0,0,0);
+        doc.text('RECEPCI' + String.fromCharCode(211) + 'N OBRA', W2/2, 15, { align: 'center' });
+
+        // Datos empresa
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Servicios Emval ltda', m2, 25);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', m2, 29);
+        doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', m2, 33);
+        doc.text('Fono: 995720003 - RUT.: 76.166.407-7', m2, 37);
+        doc.text('E-mail: Servicios.emval@gmail.com', m2, 41);
+
+        // Caja OT numero
+        doc.setDrawColor(0);
+        doc.rect(140, 18, 55, 20);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('N  ' + (otData.numero || ''), 167, 28, { align: 'center' });
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, { align: 'center' });
+
+        // Caja fecha/local
+        doc.rect(140, 44, 55, 24);
+        doc.line(140, 52, 195, 52);
+        doc.line(140, 60, 195, 60);
+        doc.line(158, 44, 158, 68);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text('Fecha', 142, 50);
+        doc.text('Local', 142, 58);
+        doc.text('Direcci' + String.fromCharCode(243) + 'n', 142, 66);
+        doc.setFont('helvetica', 'normal');
+        doc.text(otData.fecha || '', 160, 50);
+        doc.text((otData.local || '').substring(0,16), 160, 58);
+        doc.text((otData.local || '').substring(0,16), 160, 66);
+
+        // Tipo trabajo
+        const tipoY2 = 72;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('TRABAJOS EJECUTADOS', m2, tipoY2);
+        doc.rect(80, tipoY2 - 4, 5, 5);
+        if (otData.tipo === 'preventivo') {
+          doc.setLineWidth(0.8);
+          doc.line(81, tipoY2 - 3, 84, tipoY2); doc.line(84, tipoY2 - 3, 81, tipoY2);
+          doc.setLineWidth(0.2);
+        }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        doc.text('PREVENTIVO', 86, tipoY2);
+        doc.rect(115, tipoY2 - 4, 5, 5);
+        if (otData.tipo === 'correctivo') {
+          doc.setLineWidth(0.8);
+          doc.line(116, tipoY2 - 3, 119, tipoY2); doc.line(119, tipoY2 - 3, 116, tipoY2);
+          doc.setLineWidth(0.2);
+        }
+        doc.text('CORRECTIVO', 121, tipoY2);
+
+        // Tabla detalle trabajo
+        const tabY2 = 78;
+        const col1 = 20, col2 = 130, col3 = 30;
+        const rowH2 = 7;
+        const descT = otData.descripcionTrabajo || '';
+        const descLines2 = doc.splitTextToSize(descT, col2 - 4);
+        const rowsN = Math.max(descLines2.length + 1, 10);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.rect(m2, tabY2, col1+col2+col3, rowH2);
+        doc.rect(m2, tabY2, col1, rowH2);
+        doc.rect(m2+col1, tabY2, col2, rowH2);
+        doc.rect(m2+col1+col2, tabY2, col3, rowH2);
+        doc.text('ITEM', m2+col1/2, tabY2+5, {align:'center'});
+        doc.text('DETALLE', m2+col1+col2/2, tabY2+5, {align:'center'});
+        doc.text('EJECUCION', m2+col1+col2+col3/2, tabY2+5, {align:'center'});
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        for (var ri = 0; ri < rowsN; ri++) {
+          var ry2 = tabY2 + rowH2 + (ri * rowH2);
+          doc.rect(m2, ry2, col1, rowH2);
+          doc.rect(m2+col1, ry2, col2, rowH2);
+          doc.rect(m2+col1+col2, ry2, col3, rowH2);
+          if (descLines2[ri]) doc.text(descLines2[ri], m2+col1+2, ry2+rowH2-2);
+        }
+
+        var afterY2 = tabY2 + rowH2 + (rowsN * rowH2) + 8;
+
+        // Firma - usar base64 guardada en Firestore
+        var firmaW2 = 85, firmaH2 = 30;
+        if (otData.firmaImagen) {
+          try { doc.addImage(otData.firmaImagen, 'JPEG', m2, afterY2, firmaW2, firmaH2); }
+          catch(ef) { doc.setDrawColor(180,180,180); doc.rect(m2, afterY2, firmaW2, firmaH2); }
+        } else {
+          doc.setDrawColor(180,180,180);
+          doc.rect(m2, afterY2, firmaW2, firmaH2);
+        }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+        doc.text('Firma del Receptor', m2 + firmaW2/2, afterY2 + firmaH2 + 5, { align: 'center' });
+
+        // Timbre derecha
+        var timbreX2 = 115, timbreW2 = 80, timbreH2 = 42;
+        doc.setDrawColor(180,180,180);
+        doc.rect(timbreX2, afterY2 - 2, timbreW2, timbreH2);
+        if (otData.fotoTimbre) {
+          try {
+            const timbreC2 = await comprimirImagen(otData.fotoTimbre, 300, 0.5);
+            doc.addImage(timbreC2, 'JPEG', timbreX2 + 5, afterY2, timbreW2 - 10, timbreH2 - 12);
+          } catch(et) {}
+        }
+        doc.setFont('helvetica','normal'); doc.setFontSize(8);
+        doc.text('Timbre del Receptor:', timbreX2 + timbreW2/2, afterY2 + timbreH2 - 2, { align: 'center' });
+
+        // Paginas de fotos
+        const fotosA2 = otData.fotosAntes || [];
+        const fotosD2 = otData.fotosDespues || [];
+        if (fotosA2.length > 0 || fotosD2.length > 0) {
+          toast('Agregando fotos...');
+          doc.addPage();
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
+          doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W2/2, 15, { align: 'center' });
+          doc.setFontSize(9);
+          doc.text('OT #' + (otData.numero||'') + ' - ' + (otData.local||''), W2/2, 22, { align: 'center' });
+
+          var curY2 = 30;
+          const imgW2 = 85, imgH2 = 65;
+          const maxP = Math.max(fotosA2.length, fotosD2.length);
+          for (var pi = 0; pi < maxP; pi++) {
+            if (curY2 + imgH2 + 15 > 285) { doc.addPage(); curY2 = 20; }
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+            doc.text('Punto ' + (pi+1), m2, curY2);
+            curY2 += 5;
+            // ANTES
+            doc.setFillColor(27,58,107);
+            doc.rect(m2, curY2, imgW2, 6, 'F');
+            doc.setTextColor(255,255,255); doc.setFontSize(7);
+            doc.text('ANTES', m2+imgW2/2, curY2+4, {align:'center'});
+            doc.setTextColor(0,0,0);
+            if (fotosA2[pi]) {
+              try {
+                const imgAc = await comprimirImagen(fotosA2[pi], 400, 0.25);
+                doc.addImage(imgAc, 'JPEG', m2, curY2+6, imgW2, imgH2);
+              } catch(e2) { doc.setDrawColor(200); doc.rect(m2, curY2+6, imgW2, imgH2); }
+            } else { doc.setDrawColor(200); doc.rect(m2, curY2+6, imgW2, imgH2); }
+            // DESPUES
+            var despX2 = m2 + imgW2 + 10;
+            doc.setFillColor(39,160,107);
+            doc.rect(despX2, curY2, imgW2, 6, 'F');
+            doc.setTextColor(255,255,255);
+            doc.text('DESPU' + String.fromCharCode(201) + 'S', despX2+imgW2/2, curY2+4, {align:'center'});
+            doc.setTextColor(0,0,0);
+            if (fotosD2[pi]) {
+              try {
+                const imgDc = await comprimirImagen(fotosD2[pi], 400, 0.25);
+                doc.addImage(imgDc, 'JPEG', despX2, curY2+6, imgW2, imgH2);
+              } catch(e3) { doc.setDrawColor(200); doc.rect(despX2, curY2+6, imgW2, imgH2); }
+            } else { doc.setDrawColor(200); doc.rect(despX2, curY2+6, imgW2, imgH2); }
+            curY2 += imgH2 + 16;
+          }
+        }
+      }
+    }
+  } catch(eOT) {
+    console.error('Error cargando OT para PDF:', eOT);
+    toast('Cotizacion lista (sin datos de OT)');
+  }
+
+  const nombreArchivo = 'EMVAL_Cotizacion_OT' + (cotizacionActual.otNumero||'') + '_' + (cotizacionActual.local||'').replace(/\s+/g,'_') + '.pdf';
+  doc.save(nombreArchivo);
+  toast('PDF completo descargado');
+}
+
+// =========== OTs POR TECNICO ===========
+async function cargarOTsTecnicos() {
+  try {
+    if (!window._firebaseReady) { setTimeout(cargarOTsTecnicos, 800); return; }
+    const db = window.firebase.firestore();
+    const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
+    const tecnicos = {};
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const t = d.tecnico || 'Sin asignar';
+      if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
+      tecnicos[t].ots.push({ id: doc.id, ...d });
+    });
+    const lista = document.getElementById('lista-tecnicos-ots');
+    lista.innerHTML = '';
+    if (Object.keys(tecnicos).length === 0) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay OTs registradas</p>';
+      return;
+    }
+    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
+    Object.keys(tecnicos).forEach(function(nombre, i) {
+      const grupo = tecnicos[nombre];
+      const color = colores[i % colores.length];
+      const correctivos = grupo.ots.filter(function(o){ return o.tipo === 'correctivo'; }).length;
+      const preventivos = grupo.ots.filter(function(o){ return o.tipo === 'preventivo'; }).length;
+      const card = document.createElement('div');
+      card.className = 'usuario-item';
+      card.style.marginBottom = '10px';
+      card.onclick = (function(n){ return function(){ verOTsTecnico(n, tecnicos[n]); }; })(nombre);
+      const avatar = document.createElement('div');
+      avatar.className = 'usuario-avatar';
+      avatar.style.background = color;
+      avatar.style.cssText += ';width:48px;height:48px;font-size:20px;border-radius:12px;flex-shrink:0;';
+      avatar.textContent = nombre.charAt(0).toUpperCase();
+      const info = document.createElement('div');
+      info.className = 'usuario-info';
+      info.style.flex = '1';
+      const nombreDiv = document.createElement('div');
+      nombreDiv.className = 'nombre';
+      nombreDiv.textContent = nombre;
+      const statsDiv = document.createElement('div');
+      statsDiv.className = 'cargo';
+      statsDiv.textContent = grupo.ots.length + ' OTs | ' + correctivos + ' correctivas / ' + preventivos + ' preventivas';
+      info.appendChild(nombreDiv);
+      info.appendChild(statsDiv);
+      const arrow = document.createElement('svg');
+      arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
+      arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
+      arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+      card.appendChild(avatar); card.appendChild(info); card.appendChild(arrow);
+      lista.appendChild(card);
+    });
+  } catch(e) {
+    console.error('Error cargando tecnicos:', e);
+    toast('Error cargando OTs');
+  }
+}
+
+async function verOTsTecnico(nombre, grupo) {
+  document.getElementById('detalle-tecnico-nombre').textContent = nombre;
+  const lista = document.getElementById('lista-ots-tecnico-detalle');
+  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);">Cargando...</p>';
+  go('s-ots-tecnico-detalle');
+
+  // Cargar cadenas para logos
+  const db = window.firebase.firestore();
+  const cadenasSnap = await db.collection('cadenas').get();
+  const cadenaMap = {};
+  cadenasSnap.docs.forEach(function(cd) {
+    const cdata = cd.data();
+    cadenaMap[cdata.nombre] = cdata;
+    if (cdata.sucursales) {
+      cdata.sucursales.forEach(function(s) {
+        var sNombre = typeof s === 'object' ? s.nombre : s;
+        cadenaMap[sNombre] = cdata;
+      });
+    }
+  });
+
+  // Cargar cotizaciones existentes - buscar por otId Y por otNumero como fallback
+  const cotSnapT = await db.collection('cotizaciones').get();
+  const otsCotizadasT = {};
+  const otsCotizadasPorNumero = {};
+  cotSnapT.docs.forEach(function(cd) {
+    const cdata = cd.data();
+    if (cdata.otId) otsCotizadasT[cdata.otId] = cd.id;
+    if (cdata.otNumero) otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
+  });
+  console.log('Cotizaciones encontradas:', Object.keys(otsCotizadasT).length, 'por id,', Object.keys(otsCotizadasPorNumero).length, 'por numero');
+
+  lista.innerHTML = '';
+  const ots = grupo.ots;
+  if (ots.length === 0) {
+    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin OTs registradas</p>';
+    return;
+  }
+
+  ots.forEach(function(ot) {
+    const cadena = cadenaMap[ot.local] || null;
+    const badge = ot.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
+    const label = ot.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
+    const bg = ot.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '12px';
+
+    // Header con logo + info
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+
+    const iconEl = document.createElement('div');
+    iconEl.style.cssText = 'width:48px;height:48px;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : bg) + ';';
+    if (cadena && cadena.logo) {
+      const logoImg = document.createElement('img');
+      logoImg.src = cadena.logo;
+      logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+      logoImg.onerror = function(){ iconEl.removeChild(logoImg); iconEl.textContent = (ot.local||'?').charAt(0); iconEl.style.cssText += ';color:white;font-weight:700;font-size:16px;'; };
+      iconEl.appendChild(logoImg);
+    } else {
+      iconEl.textContent = (ot.local||'?').charAt(0);
+      iconEl.style.cssText += ';color:white;font-weight:700;font-size:16px;';
+    }
+
+    const headerInfo = document.createElement('div');
+    headerInfo.style.flex = '1';
+    const localDiv = document.createElement('div');
+    localDiv.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
+    localDiv.textContent = ot.local || 'Sin local';
+    const subDiv = document.createElement('div');
+    subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
+    subDiv.innerHTML = (ot.fecha||'') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
+    headerInfo.appendChild(localDiv);
+    headerInfo.appendChild(subDiv);
+    header.appendChild(iconEl);
+    header.appendChild(headerInfo);
+    card.appendChild(header);
+
+    // Descripcion
+    if (ot.descripcionTrabajo) {
+      const descDiv = document.createElement('div');
+      descDiv.style.cssText = 'font-size:13px;color:var(--texto2);padding:8px 0;border-top:1px solid var(--gris2);line-height:1.5;';
+      descDiv.textContent = ot.descripcionTrabajo;
+      card.appendChild(descDiv);
+    }
+
+    // Stats fotos
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = 'display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto3);';
+    const fa = (ot.fotosAntes && ot.fotosAntes.length) ? ot.fotosAntes.length : 0;
+    const fd = (ot.fotosDespues && ot.fotosDespues.length) ? ot.fotosDespues.length : 0;
+    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
+    card.appendChild(statsDiv);
+
+    // Audios del tecnico
+    if (ot.audios && ot.audios.length > 0) {
+      const audioSection = document.createElement('div');
+      audioSection.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
+      const audioTitulo = document.createElement('div');
+      audioTitulo.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
+      audioTitulo.textContent = 'Notas de voz (' + ot.audios.length + ')';
+      audioSection.appendChild(audioTitulo);
+      ot.audios.forEach(function(audioUrl, ai) {
+        const audioItem = document.createElement('div');
+        audioItem.style.cssText = 'background:var(--gris1);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;';
+        const audioIcon = document.createElement('div');
+        audioIcon.style.cssText = 'width:32px;height:32px;background:var(--azul);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0;';
+        audioIcon.textContent = String.fromCharCode(9654);
+        const audioInfo = document.createElement('div');
+        audioInfo.style.flex = '1';
+        const audioNombre = document.createElement('div');
+        audioNombre.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto);';
+        audioNombre.textContent = 'Nota de voz ' + (ai + 1);
+        const audioPlayer = document.createElement('audio');
+        audioPlayer.controls = true;
+        audioPlayer.src = audioUrl;
+        audioPlayer.style.cssText = 'width:100%;height:32px;margin-top:4px;';
+        audioInfo.appendChild(audioNombre);
+        audioInfo.appendChild(audioPlayer);
+        audioItem.appendChild(audioIcon);
+        audioItem.appendChild(audioInfo);
+        audioSection.appendChild(audioItem);
+      });
+      card.appendChild(audioSection);
+    }
+
+    // Botones PDF y Cotizacion
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+
+    // Boton Ver PDF: usar URL de Firestore si existe, sino usar embed con base64
+    const urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
+    if (urlParaVer) {
+      const btnPdf = document.createElement('button');
+      btnPdf.textContent = 'Ver PDF';
+      btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnPdf.onclick = (function(url){ return function(){
+        // Si es URL de la app (Firestore), abrir directamente
+        // Si es URL de Cloudinary, forzar descarga con nombre correcto
+        if (url.includes('github.io') || url.includes('?pdf=')) {
+          window.open(url, '_blank');
+        } else {
+          // Cloudinary raw - descargar con nombre PDF
+          var a = document.createElement('a');
+          a.href = url.endsWith('.pdf') ? url : url + '.pdf';
+          a.target = '_blank';
+          a.click();
+        }
+      }; })(urlParaVer);
+      btns.appendChild(btnPdf);
+    }
+
+    // Boton segun si ya tiene cotizacion
+    const yaCotizadaT = otsCotizadasT[ot.id] || otsCotizadasPorNumero[String(ot.numero || ot.otNumero || '')];
+    console.log('OT', ot.id, 'numero:', ot.numero, 'cotizada:', !!yaCotizadaT);
+    if (yaCotizadaT) {
+      const badgeCotT = document.createElement('div');
+      badgeCotT.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
+      const badgeV = document.createElement('span');
+      badgeV.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;';
+      badgeV.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
+      const btnVerCotT = document.createElement('button');
+      btnVerCotT.textContent = 'Ver cotizacion';
+      btnVerCotT.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnVerCotT.onclick = function(){ go('s-carpetas'); cargarCarpetas(); };
+      badgeCotT.appendChild(badgeV);
+      badgeCotT.appendChild(btnVerCotT);
+      btns.appendChild(badgeCotT);
+    } else {
+      const btnCot = document.createElement('button');
+      btnCot.textContent = '+ Cotizacion';
+      btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
+      btns.appendChild(btnCot);
+    }
+    card.appendChild(btns);
+    lista.appendChild(card);
+  });
+}
+
+// =========== SELECCION MULTIPLE COTIZACIONES ===========
+function actualizarBarraAcciones() {
+  const checkboxes = document.querySelectorAll('#lista-carpetas input[type=checkbox]');
+  const seleccionadas = Array.from(checkboxes).filter(function(c){ return c.checked; });
+  const bar = document.getElementById('cot-acciones-bar');
+  const count = document.getElementById('cot-seleccionadas-count');
+  if (seleccionadas.length > 0) {
+    bar.style.display = 'flex';
+    count.textContent = seleccionadas.length + ' seleccionada' + (seleccionadas.length !== 1 ? 's' : '');
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function toggleSeleccionarTodas() {
+  const checkboxes = document.querySelectorAll('#lista-carpetas input[type=checkbox]');
+  const todasMarcadas = Array.from(checkboxes).every(function(c){ return c.checked; });
+  checkboxes.forEach(function(c){ c.checked = !todasMarcadas; });
+  const btn = document.getElementById('btn-sel-todas');
+  if (btn) btn.textContent = todasMarcadas ? 'Seleccionar todas' : 'Deseleccionar';
+  actualizarBarraAcciones();
+}
+
+function obtenerCotizacionesSeleccionadas() {
+  const checkboxes = document.querySelectorAll('#lista-carpetas input[type=checkbox]:checked');
+  return Array.from(checkboxes).map(function(c) {
+    return window._todasCotizaciones[c.dataset.cotId];
+  }).filter(Boolean);
+}
+
+async function enviarCotizacionesSeleccionadas() {
+  const seleccionadas = obtenerCotizacionesSeleccionadas();
+  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
+  const email = prompt('Email del cliente:');
+  if (!email) return;
+
+  toast('Enviando ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '...');
+
+  // Construir resumen de todas las cotizaciones
+  let resumenTotal = 0;
+  let detalles = '';
+  seleccionadas.forEach(function(it, i) {
+    resumenTotal += (it.total || 0);
+    detalles += (i+1) + '. ' + (it.local||'') + ' - ' + (it.fecha||'') + '\n';
+    detalles += '   Trabajo: ' + (it.descripcionTrabajo||'').substring(0,80) + '\n';
+    const itemsTexto = (it.items||[]).filter(function(item){ return item.precio > 0; })
+      .map(function(item){ return '   - ' + item.desc + ' x' + item.qty + ': $' + ((item.qty||1)*(item.precio||0)).toLocaleString('es-CL'); })
+      .join('\n');
+    if (itemsTexto) detalles += itemsTexto + '\n';
+    detalles += '   TOTAL: $' + (it.total||0).toLocaleString('es-CL') + '\n\n';
+  });
+
+  try {
+    await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+      email_admin: email,
+      ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
+      local: seleccionadas.map(function(it){ return it.local; }).join(', '),
+      fecha: new Date().toLocaleDateString('es-CL'),
+      tecnico: seleccionadas[0].tecnico || '',
+      tipo: 'Cotizacion',
+      trabajo: detalles,
+      pdf_url: 'Total general: $' + resumenTotal.toLocaleString('es-CL') + ' (' + seleccionadas.length + ' cotizaciones)'
+    });
+    toast('Email enviado con ' + seleccionadas.length + ' cotizaciones');
+    // Desmarcar checkboxes
+    document.querySelectorAll('#lista-carpetas input[type=checkbox]').forEach(function(c){ c.checked = false; });
+    actualizarBarraAcciones();
+  } catch(e) {
+    console.error('Error enviando email:', e);
+    toast('Error al enviar email: ' + (e.text || e.message || 'desconocido'));
+  }
+}
+
+async function eliminarCotizacionesSeleccionadas() {
+  const seleccionadas = obtenerCotizacionesSeleccionadas();
+  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
+  if (!confirm('Eliminar ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '? Esta accion no se puede deshacer.')) return;
+  try {
+    const db = window.firebase.firestore();
+    for (var i = 0; i < seleccionadas.length; i++) {
+      await db.collection('cotizaciones').doc(seleccionadas[i].id).delete();
+    }
+    toast(seleccionadas.length + ' cotizaciones eliminadas');
+    document.getElementById('cot-acciones-bar').style.display = 'none';
+    await cargarCarpetas();
+  } catch(e) {
+    console.error(e);
+    toast('Error eliminando cotizaciones');
+  }
+}
+
+// =========== TOAST ===========
+// =========== SUPERVISOR FIREBASE ===========
+async function cargarOTsSupervisor() {
+  try {
+    if (!window._firebaseReady) { setTimeout(cargarOTsSupervisor, 800); return; }
+    const db = window.firebase.firestore();
+    const snap = await db.collection('ordenes').orderBy('creadoEn', 'desc').get();
+    const lista = document.querySelector('#s-supervisor .content');
+    const titulo = lista.querySelector('[style*="font-weight: 600"]');
+    // Limpiar OTs demo
+    document.querySelectorAll('#s-supervisor .ot-card').forEach(c => c.remove());
+    if (snap.empty) { 
+      const p = document.createElement('p');
+      p.style = 'font-size:13px;color:var(--texto3);text-align:center;padding:20px';
+      p.textContent = 'Aun no hay OTs registradas';
+      lista.appendChild(p);
+      return;
+    }
+    // Actualizar stats
+    const total = snap.size;
+    const correctivos = snap.docs.filter(d => d.data().tipo === 'correctivo').length;
+    const preventivos = snap.docs.filter(d => d.data().tipo === 'preventivo').length;
+    const statNums = document.querySelectorAll('#s-supervisor .stat-num');
+    if (statNums[0]) statNums[0].textContent = total;
+    if (statNums[2]) statNums[2].textContent = correctivos;
+    if (statNums[3]) statNums[3].textContent = preventivos;
+
+    // Cargar cadenas para logos en el panel supervisor
+    const cadenasSnap2 = await db.collection('cadenas').get();
+    const cadenaMapSup = {};
+    cadenasSnap2.docs.forEach(function(cd) {
+      const cdata = cd.data();
+      cadenaMapSup[cdata.nombre] = cdata;
+      if (cdata.sucursales) {
+        cdata.sucursales.forEach(function(s) {
+          var sNombre = typeof s === 'object' ? s.nombre : s;
+          cadenaMapSup[sNombre] = cdata;
+        });
+      }
+    });
+
+    // Cargar cotizaciones existentes para saber que OTs ya tienen cotizacion
+    const cotSnap = await db.collection('cotizaciones').get();
+    const otsCotizadas = {};
+    cotSnap.docs.forEach(function(cd) {
+      const cdata = cd.data();
+      if (cdata.otId) otsCotizadas[cdata.otId] = cd.id;
+    });
+
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      const card = document.createElement('div');
+      card.className = 'ot-card';
+      const bg = d.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
+      const badge = d.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
+      const label = d.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
+      const docId = doc.id;
+      const cadena = cadenaMapSup[d.local] || null;
+      const iconEl = document.createElement('div');
+      iconEl.className = 'ot-icon';
+      iconEl.style.overflow = 'hidden';
+      if (cadena && cadena.logo) {
+        iconEl.style.background = cadena.color || bg;
+        const logoImg = document.createElement('img');
+        logoImg.src = cadena.logo;
+        logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        logoImg.onerror = function() {
+          iconEl.removeChild(logoImg);
+          iconEl.style.background = bg;
+          iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
+          iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
+          iconEl.style.fontWeight = '700';
+          iconEl.style.fontSize = '14px';
+        };
+        iconEl.appendChild(logoImg);
+      } else {
+        iconEl.style.background = bg;
+        iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
+        iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
+        iconEl.style.fontWeight = '700';
+        iconEl.style.fontSize = '14px';
+      }
+      const infoEl = document.createElement('div');
+      infoEl.className = 'ot-info';
+      const tituloEl = document.createElement('div');
+      tituloEl.className = 'ot-titulo';
+      tituloEl.textContent = (d.local||'') + ' - ' + (d.tecnico||'');
+      const subEl = document.createElement('div');
+      subEl.className = 'ot-sub';
+      subEl.innerHTML = (d.fecha||'') + ' | <span class="badge ' + badge + '">' + label + '</span>';
+      const descEl = document.createElement('div');
+      descEl.className = 'ot-sub';
+      descEl.style.cssText = 'margin-top:4px;color:var(--texto2)';
+      descEl.textContent = d.descripcionTrabajo ? d.descripcionTrabajo.substring(0,60)+'...' : '';
+      // Badge y boton segun si ya tiene cotizacion
+      const yaTieneCot = otsCotizadas[docId];
+      if (yaTieneCot) {
+        const badgeCot = document.createElement('div');
+        badgeCot.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;';
+        const badgeVerde = document.createElement('span');
+        badgeVerde.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;';
+        badgeVerde.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
+        const btnVerCot = document.createElement('button');
+        btnVerCot.textContent = 'Ver cotizacion';
+        btnVerCot.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnVerCot.onclick = (function(id){ return function(){ go('s-carpetas'); cargarCarpetas(); }; })(yaTieneCot);
+        badgeCot.appendChild(badgeVerde);
+        badgeCot.appendChild(btnVerCot);
+        infoEl.appendChild(tituloEl);
+        infoEl.appendChild(subEl);
+        infoEl.appendChild(descEl);
+        infoEl.appendChild(badgeCot);
+      } else {
+        const btnCot = document.createElement('button');
+        btnCot.textContent = '+ Generar cotizacion';
+        btnCot.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(docId);
+        infoEl.appendChild(tituloEl);
+        infoEl.appendChild(subEl);
+        infoEl.appendChild(descEl);
+        infoEl.appendChild(btnCot);
+      }
+      card.appendChild(iconEl);
+      card.appendChild(infoEl);
+      lista.appendChild(card);
+    });
+  } catch(e) {
+    console.error('Error cargando OTs:', e);
+  }
 }
 
 function toast(msg) {
@@ -2113,31 +3961,12 @@ function toast(msg) {
   t._timer = setTimeout(() => t.style.display = 'none', 2500);
 }
 
-// Mostrar usuarios por defecto al instante, antes de Firebase
-renderUsuarios(USUARIOS_DEFAULT);
-
-function iniciarApp() {
-  if (!window._firebaseReady) { setTimeout(iniciarApp, 200); return; }
-  cargarUsuariosApp();
-  cargarCadenasApp();
-}
-setTimeout(iniciarApp, 500);
-
-// Fallback: si en 6 segundos aun dice "Cargando usuarios...", mostrar boton reintentar
-setTimeout(function() {
-  var lista = document.getElementById('lista-usuarios');
-  if (lista && lista.innerHTML.indexOf('Cargando') !== -1) {
-    console.log('Timeout - reintentando cargar usuarios');
-    cargarUsuariosApp();
-  }
-}, 6000);
-
+setTimeout(function(){ cargarUsuariosApp(); cargarLocalesApp(); cargarCadenasApp(); }, 1000);
 setTimeout(function(){
   var urlParams = new URLSearchParams(window.location.search);
   var pdfId = urlParams.get('pdf');
   if (pdfId) { verPDFById(pdfId); }
-}, 2000);
+}, 1500);
 </script>
-<div id="toast"></div>
 </body>
 </html>
