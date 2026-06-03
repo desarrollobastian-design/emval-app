@@ -1481,8 +1481,10 @@ async function resetearCadenas() {
 async function cargarUsuariosApp() {
   if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 800); return; }
   try {
+    console.log('Cargando usuarios desde Firebase...');
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    console.log('Usuarios encontrados:', snap.size);
     const lista = document.getElementById('lista-usuarios');
     if (!lista) return;
     lista.innerHTML = '';
@@ -2104,6 +2106,15 @@ function iniciarApp() {
   cargarCadenasApp();
 }
 setTimeout(iniciarApp, 500);
+
+// Fallback: si en 6 segundos aun dice "Cargando usuarios...", mostrar boton reintentar
+setTimeout(function() {
+  var lista = document.getElementById('lista-usuarios');
+  if (lista && lista.innerHTML.indexOf('Cargando') !== -1) {
+    console.log('Timeout - reintentando cargar usuarios');
+    cargarUsuariosApp();
+  }
+}, 6000);
 
 setTimeout(function(){
   var urlParams = new URLSearchParams(window.location.search);
