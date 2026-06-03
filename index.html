@@ -661,12 +661,11 @@
 
     <!-- PANEL CADENAS -->
     <div id="panel-cadenas" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="flex:1;margin-right:8px;">+ Agregar cadena</button>
-        <button onclick="resetearCadenas()" style="background:none;border:1px solid var(--gris3);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer;color:var(--texto3);white-space:nowrap;">Resetear</button>
+      <div style="margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()">+ Agregar cadena</button>
       </div>
       <div id="form-cadena" style="display:none;" class="card">
-        <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
+        <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
         <div class="field"><label>Color (hex)</label><input type="text" id="cad-color" placeholder="#E31837" value="#1B3A6B" /></div>
         <div class="field"><label>URL del logo</label><input type="text" id="cad-logo" placeholder="https://..." /></div>
@@ -1265,83 +1264,147 @@ async function cargarCadenasAdmin() {
     if (snap.empty) { lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay cadenas. Agrega una.</p>'; return; }
     snap.docs.forEach(function(doc) {
       const d = doc.data();
+      const docId = doc.id;
       const div = document.createElement('div');
       div.className = 'card';
-      div.style.marginBottom = '8px';
-      // Header
+      div.style.marginBottom = '10px';
+
+      // ---- HEADER COLAPSABLE ----
       const header = document.createElement('div');
-      header.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:10px;';
+      header.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;';
       const dot = document.createElement('div');
-      dot.style.cssText = 'width:28px;height:28px;border-radius:8px;background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:13px;flex-shrink:0;';
-      dot.textContent = (d.letra || d.nombre.charAt(0));
+      dot.style.cssText = 'width:32px;height:32px;border-radius:10px;background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0;overflow:hidden;';
+      if (d.logo) {
+        const limg = document.createElement('img');
+        limg.src = d.logo;
+        limg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        limg.onerror = function(){ dot.removeChild(limg); dot.textContent = d.letra||d.nombre.charAt(0); };
+        dot.appendChild(limg);
+      } else {
+        dot.textContent = d.letra || d.nombre.charAt(0);
+      }
       const tit = document.createElement('div');
-      tit.style.cssText = 'font-size:14px;font-weight:500;flex:1;';
+      tit.style.cssText = 'font-size:15px;font-weight:600;flex:1;';
       tit.textContent = d.nombre;
-      const btnDel = document.createElement('button');
-      btnDel.textContent = 'Eliminar';
-      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;';
-      btnDel.onclick = (function(id){ return function(){ eliminarCadena(id); }; })(doc.id);
-      header.appendChild(dot); header.appendChild(tit); header.appendChild(btnDel);
+      const nsuc = document.createElement('div');
+      nsuc.style.cssText = 'font-size:11px;color:var(--texto3);margin-right:4px;';
+      nsuc.textContent = (d.sucursales||[]).length + ' suc.';
+      const chevron = document.createElement('span');
+      chevron.style.cssText = 'font-size:16px;color:var(--texto3);transition:transform 0.2s;display:inline-block;';
+      chevron.textContent = '+';
+      header.appendChild(dot); header.appendChild(tit); header.appendChild(nsuc); header.appendChild(chevron);
       div.appendChild(header);
-      // Sucursales list
+
+      // ---- CUERPO COLAPSADO POR DEFECTO ----
+      const body = document.createElement('div');
+      body.style.cssText = 'display:none;margin-top:10px;';
+
+      // Toggle al hacer click en header
+      header.onclick = function() {
+        const open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : 'block';
+        chevron.textContent = open ? '+' : '-';
+      };
+
+      // Botones editar cadena y eliminar cadena
+      const cadBtns = document.createElement('div');
+      cadBtns.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;';
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = 'Editar cadena';
+      btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEdit.onclick = (function(id, data){ return function(){ editarCadena(id, data); }; })(docId, d);
+      const btnDel = document.createElement('button');
+      btnDel.textContent = 'Eliminar cadena';
+      btnDel.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+      btnDel.onclick = (function(id){ return function(){ eliminarCadena(id); }; })(docId);
+      cadBtns.appendChild(btnEdit); cadBtns.appendChild(btnDel);
+      body.appendChild(cadBtns);
+
+      // Lista de sucursales
       const subs = d.sucursales || [];
+      if (subs.length === 0) {
+        const noSuc = document.createElement('p');
+        noSuc.style.cssText = 'font-size:12px;color:var(--texto3);text-align:center;padding:8px 0;';
+        noSuc.textContent = 'Sin sucursales aun';
+        body.appendChild(noSuc);
+      }
       subs.forEach(function(s, i) {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--gris2);font-size:13px;';
         const sNombre = typeof s === 'object' ? s.nombre : s;
         const sEmail = typeof s === 'object' ? (s.email || '') : '';
+        const sSup = typeof s === 'object' ? (s.supervisor || '') : '';
+        const sDir = typeof s === 'object' ? (s.direccion || '') : '';
+
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
+
+        const rowTop = document.createElement('div');
+        rowTop.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+
         const rowInfo = document.createElement('div');
         rowInfo.style.flex = '1';
-        const rowNombre = document.createElement('div');
-        rowNombre.style.fontWeight = '500';
-        rowNombre.textContent = sNombre;
-        const rowEmail = document.createElement('div');
-        rowEmail.style.cssText = 'font-size:11px;color:var(--texto3);';
-        rowEmail.textContent = sEmail || 'Sin email configurado';
-        rowInfo.appendChild(rowNombre); rowInfo.appendChild(rowEmail);
-        row.appendChild(rowInfo);
-        const btnDels = document.createElement('button');
-        btnDels.textContent = 'x';
-        btnDels.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;';
-        btnDels.onclick = (function(docId, idx){ return function(){ eliminarSucursal(docId, idx); }; })(doc.id, i);
-        row.appendChild(btnDels);
-        div.appendChild(row);
+        const rNom = document.createElement('div');
+        rNom.style.cssText = 'font-size:13px;font-weight:600;';
+        rNom.textContent = sNombre;
+        const rDet = document.createElement('div');
+        rDet.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
+        const parts = [];
+        if (sDir) parts.push(sDir);
+        if (sSup) parts.push('Sup: ' + sSup);
+        if (sEmail) parts.push(sEmail);
+        rDet.textContent = parts.length ? parts.join(' | ') : 'Sin datos configurados';
+        rowInfo.appendChild(rNom); rowInfo.appendChild(rDet);
+
+        const rowBtns = document.createElement('div');
+        rowBtns.style.cssText = 'display:flex;gap:5px;flex-shrink:0;';
+        const btnES = document.createElement('button');
+        btnES.textContent = 'Editar';
+        btnES.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;';
+        btnES.onclick = (function(dId, idx, sb){ return function(){ editarSucursal(dId, idx, sb); }; })(docId, i, s);
+        const btnDS = document.createElement('button');
+        btnDS.textContent = 'x';
+        btnDS.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;';
+        btnDS.onclick = (function(dId, idx){ return function(){ eliminarSucursal(dId, idx); }; })(docId, i);
+        rowBtns.appendChild(btnES); rowBtns.appendChild(btnDS);
+
+        rowTop.appendChild(rowInfo); rowTop.appendChild(rowBtns);
+        row.appendChild(rowTop);
+        body.appendChild(row);
       });
-      // Add sucursal input
-      const addRow = document.createElement('div');
-      addRow.style.cssText = 'margin-top:10px;display:flex;flex-direction:column;gap:6px;';
-      const inpNombre = document.createElement('input');
-      inpNombre.type = 'text'; inpNombre.placeholder = 'Nombre sucursal (Ej: Unimarc Chillan)';
-      inpNombre.style.cssText = 'padding:7px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;';
+
+      // ---- FORMULARIO AGREGAR SUCURSAL ----
+      const sep = document.createElement('div');
+      sep.style.cssText = 'margin-top:12px;padding-top:12px;border-top:2px dashed var(--gris2);';
+      const addTit = document.createElement('div');
+      addTit.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;';
+      addTit.textContent = 'Agregar sucursal';
+      const inpNom = document.createElement('input');
+      inpNom.type = 'text'; inpNom.placeholder = 'Nombre (Ej: Unimarc Chillan)';
+      inpNom.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      const inpDir = document.createElement('input');
+      inpDir.type = 'text'; inpDir.placeholder = 'Direccion (Ej: Av. El Roble 123)';
+      inpDir.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      const inpSup = document.createElement('input');
+      inpSup.type = 'text'; inpSup.placeholder = 'Supervisor responsable (opcional)';
+      inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpEmail = document.createElement('input');
       inpEmail.type = 'email'; inpEmail.placeholder = 'Email admin (opcional)';
-      inpEmail.style.cssText = 'padding:7px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;';
+      inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:8px;';
       const btnAdd = document.createElement('button');
       btnAdd.textContent = '+ Agregar sucursal';
-      btnAdd.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnAdd.onclick = (function(docId, iNombre, iEmail){ return function(){ agregarSucursal(docId, iNombre, iEmail); }; })(doc.id, inpNombre, inpEmail);
-      addRow.appendChild(inpNombre); addRow.appendChild(inpEmail); addRow.appendChild(btnAdd);
-      div.appendChild(addRow);
+      btnAdd.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnAdd.onclick = (function(dId, iNom, iDir, iSup, iEmail){ return function(){ agregarSucursal(dId, iNom, iDir, iSup, iEmail); }; })(docId, inpNom, inpDir, inpSup, inpEmail);
+      sep.appendChild(addTit); sep.appendChild(inpNom); sep.appendChild(inpDir);
+      sep.appendChild(inpSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd);
+      body.appendChild(sep);
+
+      div.appendChild(body);
       lista.appendChild(div);
     });
   } catch(e) { console.error(e); }
 }
 
 async function guardarCadena() {
-  const nombre = document.getElementById('cad-nombre').value.trim();
-  const color = document.getElementById('cad-color').value.trim() || '#1B3A6B';
-  const logo = document.getElementById('cad-logo').value.trim();
-  if (!nombre) { toast('Ingresa el nombre'); return; }
-  try {
-    const db = window.firebase.firestore();
-    const snap = await db.collection('cadenas').get();
-    await db.collection('cadenas').add({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase(), sucursales: [], orden: snap.size });
-    toast('Cadena agregada');
-    document.getElementById('form-cadena').style.display = 'none';
-    document.getElementById('cad-nombre').value = '';
-    await cargarCadenasAdmin();
-    await cargarCadenasApp();
-  } catch(e) { console.error(e); toast('Error guardando'); }
+  await guardarCadenaEdicion();
 }
 
 async function eliminarCadena(id) {
@@ -1354,18 +1417,21 @@ async function eliminarCadena(id) {
   } catch(e) { toast('Error eliminando'); }
 }
 
-async function agregarSucursal(docId, inputNombre, inputEmail) {
+async function agregarSucursal(docId, inputNombre, inputDir, inputSup, inputEmail) {
   const nombre = inputNombre.value.trim();
+  const direccion = inputDir ? inputDir.value.trim() : '';
+  const supervisor = inputSup ? inputSup.value.trim() : '';
   const email = inputEmail ? inputEmail.value.trim() : '';
   if (!nombre) { toast('Escribe el nombre de la sucursal'); return; }
   try {
     const db = window.firebase.firestore();
     const doc = await db.collection('cadenas').doc(docId).get();
     const subs = doc.data().sucursales || [];
-    // Support both string and object format
-    subs.push({ nombre: nombre, email: email });
+    subs.push({ nombre: nombre, direccion: direccion, supervisor: supervisor, email: email });
     await db.collection('cadenas').doc(docId).update({ sucursales: subs });
     inputNombre.value = '';
+    if (inputDir) inputDir.value = '';
+    if (inputSup) inputSup.value = '';
     if (inputEmail) inputEmail.value = '';
     toast('Sucursal agregada');
     await cargarCadenasAdmin();
@@ -1387,18 +1453,117 @@ async function eliminarSucursal(docId, idx) {
 }
 
 function mostrarFormCadena() {
+  window._editandoCadenaId = null;
+  document.getElementById('cad-nombre').value = '';
+  document.getElementById('cad-color').value = '#1B3A6B';
+  document.getElementById('cad-logo').value = '';
+  document.getElementById('form-cadena-titulo').textContent = 'Nueva cadena';
   document.getElementById('form-cadena').style.display = 'block';
 }
 
-async function resetearCadenas() {
-  if (!confirm('Esto borrara todas las cadenas y las recargara con los datos por defecto. Continuar?')) return;
+function editarCadena(id, data) {
+  document.getElementById('cad-nombre').value = data.nombre || '';
+  document.getElementById('cad-color').value = data.color || '#1B3A6B';
+  document.getElementById('cad-logo').value = data.logo || '';
+  document.getElementById('form-cadena').style.display = 'block';
+  document.getElementById('form-cadena-titulo').textContent = 'Editar cadena';
+  window._editandoCadenaId = id;
+  window.scrollTo(0, document.getElementById('form-cadena').offsetTop - 20);
+}
+
+async function guardarCadenaEdicion() {
+  const nombre = document.getElementById('cad-nombre').value.trim();
+  const color = document.getElementById('cad-color').value.trim() || '#1B3A6B';
+  const logo = document.getElementById('cad-logo').value.trim();
+  if (!nombre) { toast('Ingresa el nombre'); return; }
   try {
     const db = window.firebase.firestore();
-    const snap = await db.collection('cadenas').get();
-    for (const doc of snap.docs) { await db.collection('cadenas').doc(doc.id).delete(); }
-    toast('Cadenas borradas. Recargando...');
-    setTimeout(function(){ cargarCadenasApp(); cargarCadenasAdmin(); }, 1000);
-  } catch(e) { toast('Error: ' + e.message); }
+    if (window._editandoCadenaId) {
+      await db.collection('cadenas').doc(window._editandoCadenaId).update({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase() });
+      toast('Cadena actualizada');
+    } else {
+      const snap = await db.collection('cadenas').get();
+      await db.collection('cadenas').add({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase(), sucursales: [], orden: snap.size });
+      toast('Cadena agregada');
+    }
+    window._editandoCadenaId = null;
+    document.getElementById('form-cadena').style.display = 'none';
+    document.getElementById('cad-nombre').value = '';
+    document.getElementById('form-cadena-titulo').textContent = 'Nueva cadena';
+    await cargarCadenasAdmin();
+    await cargarCadenasApp();
+  } catch(e) { console.error(e); toast('Error guardando'); }
+}
+
+// Modal para editar sucursal
+function editarSucursal(docId, idx, s) {
+  const sNombre = typeof s === 'object' ? s.nombre : s;
+  const sDir = typeof s === 'object' ? (s.direccion || '') : '';
+  const sSup = typeof s === 'object' ? (s.supervisor || '') : '';
+  const sEmail = typeof s === 'object' ? (s.email || '') : '';
+
+  // Crear modal simple
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:white;border-radius:16px;padding:20px;width:100%;max-width:380px;';
+  modal.innerHTML = '<div style="font-size:15px;font-weight:600;margin-bottom:16px;">Editar sucursal</div>';
+
+  function mkInput(lbl, val, ph) {
+    const w = document.createElement('div');
+    w.style.cssText = 'margin-bottom:10px;';
+    const l = document.createElement('div');
+    l.style.cssText = 'font-size:11px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
+    l.textContent = lbl;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.value = val; inp.placeholder = ph;
+    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px;outline:none;';
+    inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
+    inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
+    w.appendChild(l); w.appendChild(inp);
+    return { wrap: w, inp: inp };
+  }
+
+  const fNom = mkInput('Nombre', sNombre, 'Ej: Unimarc Chillan');
+  const fDir = mkInput('Direccion', sDir, 'Ej: Av. El Roble 123');
+  const fSup = mkInput('Supervisor', sSup, 'Nombre del supervisor');
+  const fEmail = mkInput('Email admin', sEmail, 'correo@ejemplo.com');
+  fEmail.inp.type = 'email';
+
+  modal.appendChild(fNom.wrap);
+  modal.appendChild(fDir.wrap);
+  modal.appendChild(fSup.wrap);
+  modal.appendChild(fEmail.wrap);
+
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:10px;margin-top:8px;';
+  const btnCan = document.createElement('button');
+  btnCan.textContent = 'Cancelar';
+  btnCan.style.cssText = 'flex:1;padding:11px;border:none;background:var(--gris2);border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnCan.onclick = function(){ document.body.removeChild(overlay); };
+  const btnSave = document.createElement('button');
+  btnSave.textContent = 'Guardar';
+  btnSave.style.cssText = 'flex:1;padding:11px;border:none;background:var(--azul);color:white;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnSave.onclick = async function() {
+    const nuevoNombre = fNom.inp.value.trim();
+    if (!nuevoNombre) { toast('El nombre es obligatorio'); return; }
+    try {
+      const db = window.firebase.firestore();
+      const ref = db.collection('cadenas').doc(docId);
+      const docSnap = await ref.get();
+      const subs = docSnap.data().sucursales || [];
+      subs[idx] = { nombre: nuevoNombre, direccion: fDir.inp.value.trim(), supervisor: fSup.inp.value.trim(), email: fEmail.inp.value.trim() };
+      await ref.update({ sucursales: subs });
+      toast('Sucursal actualizada');
+      document.body.removeChild(overlay);
+      await cargarCadenasAdmin();
+      await cargarCadenasApp();
+    } catch(e) { toast('Error: ' + e.message); }
+  };
+  btns.appendChild(btnCan); btns.appendChild(btnSave);
+  modal.appendChild(btns);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }
 
 // =========== EMAIL ADMIN ===========
@@ -1937,6 +2102,8 @@ function seleccionarCadena(cadena) {
   suc.forEach(function(suc_item) {
     const nombre = typeof suc_item === 'object' ? suc_item.nombre : suc_item;
     const emailSuc = typeof suc_item === 'object' ? (suc_item.email || '') : '';
+    const dirSuc = typeof suc_item === 'object' ? (suc_item.direccion || '') : '';
+    const supSuc = typeof suc_item === 'object' ? (suc_item.supervisor || '') : '';
     const wrapper = document.createElement('div');
     wrapper.onclick = (function(n, em){ return function(){ seleccionarLocal(n, cadena.nombre, em); }; })(nombre, emailSuc);
     const item = document.createElement('div');
@@ -1954,7 +2121,10 @@ function seleccionarCadena(cadena) {
     }
     const info = document.createElement('div');
     info.className = 'local-info';
-    info.innerHTML = '<div class="local-name">' + nombre + '</div>';
+    const detalle = [];
+    if (dirSuc) detalle.push(dirSuc);
+    if (supSuc) detalle.push('Sup: ' + supSuc);
+    info.innerHTML = '<div class="local-name">' + nombre + '</div>' + (detalle.length ? '<div class="local-addr">' + detalle.join(' | ') + '</div>' : '');
     const arrow = document.createElement('svg');
     arrow.setAttribute('width','16'); arrow.setAttribute('height','16'); arrow.setAttribute('viewBox','0 0 24 24');
     arrow.setAttribute('fill','none'); arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
