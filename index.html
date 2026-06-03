@@ -2398,43 +2398,6 @@ async function cargarImagenComoBase64(url, maxWidth, quality) {
 }
 
 // Cargar tecnicos dinamicos en pantalla de seleccion
-async function cargarUsuariosApp() {
-  try {
-    if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 300); return; }
-    const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
-    const lista = document.getElementById('lista-usuarios');
-    lista.innerHTML = '';
-    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B','#1B5A6B'];
-    // Siempre agregar Supervisor al inicio
-    const supervisorItem = _crearUsuarioItem('Supervisor', 'Supervisor', 'S', '#6B3A1B');
-    lista.appendChild(supervisorItem);
-    if (!snap.empty) {
-      snap.docs.forEach(function(doc, i) {
-        const d = doc.data();
-        if (d.nombre === 'Supervisor') return; // ya esta arriba
-        PINS[d.nombre] = d.pin;
-        const item = _crearUsuarioItem(d.nombre, d.cargo || 'Tecnico en terreno', d.letra || d.nombre.charAt(0).toUpperCase(), colores[i % colores.length]);
-        lista.appendChild(item);
-      });
-    } else {
-      // Fallback si no hay tecnicos en Firebase
-      [
-        { nombre: 'Ariel Espinoza', cargo: 'Tecnico en terreno', letra: 'A', color: '#1B3A6B' },
-        { nombre: 'Pedro Arce',    cargo: 'Tecnico en terreno', letra: 'P', color: '#2D5AA0' },
-        { nombre: 'Carlos Mendez', cargo: 'Tecnico en terreno', letra: 'C', color: '#1D6B5A' }
-      ].forEach(function(u) {
-        lista.appendChild(_crearUsuarioItem(u.nombre, u.cargo, u.letra, u.color));
-      });
-    }
-  } catch(e) {
-    console.error('Error cargando usuarios:', e);
-    // Fallback de emergencia
-    const lista = document.getElementById('lista-usuarios');
-    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
-  }
-}
-
 function _crearUsuarioItem(nombre, cargo, letra, color) {
   const div = document.createElement('div');
   div.className = 'usuario-item';
@@ -2452,6 +2415,39 @@ function _crearUsuarioItem(nombre, cargo, letra, color) {
   arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
   div.appendChild(avatar); div.appendChild(info); div.appendChild(arrow);
   return div;
+}
+
+function _renderListaUsuarios(docs) {
+  const lista = document.getElementById('lista-usuarios');
+  if (!lista) return;
+  lista.innerHTML = '';
+  const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#5A1B6B','#1B5A6B','#6B4E1B'];
+  let colorIdx = 0;
+  docs.forEach(function(d) {
+    if (d.nombre === 'Supervisor') return;
+    PINS[d.nombre] = d.pin || '1234';
+    lista.appendChild(_crearUsuarioItem(d.nombre, d.cargo || 'Tecnico en terreno', d.letra || d.nombre.charAt(0).toUpperCase(), colores[colorIdx++ % colores.length]));
+  });
+  // Supervisor siempre al final
+  lista.appendChild(_crearUsuarioItem('Supervisor', 'Supervisor', 'S', '#6B3A1B'));
+}
+
+async function cargarUsuariosApp() {
+  try {
+    if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 200); return; }
+    const db = window.firebase.firestore();
+    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    if (snap.empty) {
+      // Sin tecnicos en Firebase: mostrar solo Supervisor
+      _renderListaUsuarios([]);
+      return;
+    }
+    _renderListaUsuarios(snap.docs.map(function(d){ return d.data(); }));
+  } catch(e) {
+    console.error('Error cargando usuarios:', e);
+    const lista = document.getElementById('lista-usuarios');
+    if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
+  }
 }
 
 // Cargar locales dinamicos en pantalla de seleccion de local
@@ -4159,7 +4155,15 @@ function toast(msg) {
   t._timer = setTimeout(() => t.style.display = 'none', 2500);
 }
 
-setTimeout(function(){ cargarUsuariosApp(); cargarLocalesApp(); cargarCadenasApp(); }, 1000);
+// Iniciar carga cuando Firebase este listo
+(function iniciarCarga() {
+  if (window._firebaseReady) {
+    cargarUsuariosApp();
+    cargarCadenasApp();
+  } else {
+    setTimeout(iniciarCarga, 100);
+  }
+})();
 setTimeout(function(){
   var urlParams = new URLSearchParams(window.location.search);
   var pdfId = urlParams.get('pdf');
