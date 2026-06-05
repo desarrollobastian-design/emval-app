@@ -819,7 +819,23 @@ function nuevaOT() {
     if(el) el.textContent = '#' + estado.otNumero;
   });
   go('s-cadena');
-  cargarCadenasApp();
+  // Esperar Firebase antes de cargar cadenas
+  if (window._firebaseReady) {
+    cargarCadenasApp();
+  } else {
+    document.getElementById('lista-cadenas').innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
+    var _intentos = 0;
+    var _esperar = setInterval(function() {
+      _intentos++;
+      if (window._firebaseReady) {
+        clearInterval(_esperar);
+        cargarCadenasApp();
+      } else if (_intentos > 30) {
+        clearInterval(_esperar);
+        document.getElementById('lista-cadenas').innerHTML = '<p style="font-size:13px;color:var(--rojo);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
+      }
+    }, 200);
+  }
 }
 
 // =========== LOCAL ===========
@@ -1725,6 +1741,7 @@ async function guardarCotizacion() {
       total: totales.total,
       carpeta: carpeta,
       fechaCodigo: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2); })(),
+      numeroCotizacion: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2)+'01'; })(),
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     });
     toast('Cotizacion guardada');
@@ -3313,7 +3330,7 @@ async function generarPDFCotizacionGuardada(cotData) {
 
     const _servPDF = (cotData.nombreServicio||'').trim();
     const _localPDF = (cotData.local||'').replace(/\s+/g,' ').trim();
-    const _cotNPDF = cotData.numeroCotizacion || cotData.otNumero || '';
+    const _cotNPDF = cotData.numeroCotizacion || numCot || '';
     const _otNPDF = cotData.otNumero || '';
     const nombrePDF = (_cotNPDF ? _cotNPDF + ' ' : '') + 'OT ' + _otNPDF + (_servPDF ? ' ' + _servPDF : '') + ' ' + _localPDF + '.pdf';
     doc.save(nombrePDF);
@@ -3723,9 +3740,12 @@ async function generarPDFCotizacion() {
 
   const _servPDF2 = (document.getElementById('cot-nombre-servicio') ? document.getElementById('cot-nombre-servicio').value.trim() : '') || (cotizacionActual.nombreServicio||'');
   const _localPDF2 = (cotizacionActual.local||'').replace(/\s+/g,' ').trim();
-  const _cotN2 = cotizacionActual.numeroCotizacion || cotizacionActual.otNumero || '';
+  // Generar numero cotizacion igual que en el PDF
+  const _hoy2 = new Date();
+  const _numCot2 = String(_hoy2.getDate()) + String(_hoy2.getMonth()+1).padStart(2,'0') + String(_hoy2.getFullYear()).slice(2) + '01';
+  const _cotN2 = cotizacionActual.numeroCotizacion || _numCot2;
   const _otN2 = cotizacionActual.otNumero || '';
-  const nombreArchivo = (_cotN2 ? _cotN2 + ' ' : '') + 'OT ' + _otN2 + (_servPDF2 ? ' ' + _servPDF2 : '') + ' ' + _localPDF2 + '.pdf';
+  const nombreArchivo = _cotN2 + ' OT ' + _otN2 + (_servPDF2 ? ' ' + _servPDF2 : '') + ' ' + _localPDF2 + '.pdf';
   doc.save(nombreArchivo);
   toast('PDF completo descargado');
 }
