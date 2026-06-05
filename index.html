@@ -773,10 +773,8 @@ function validarPin() {
       var btnAdmin = document.getElementById('btn-administrar');
       if (btnAdmin) btnAdmin.style.display = estado.cargo === 'Administrador' ? 'block' : 'none';
     } else {
-      document.getElementById('home-saludo').textContent = 'Hola, ' + estado.usuario.split(' ')[0] + ' :)';
-      setTimeout(cargarOTsHome, 500);
-      document.getElementById('home-cargo').textContent = estado.cargo;
-      go('s-home');
+      // Tecnico va directo a nueva OT
+      nuevaOT();
     }
     toast('Bienvenido, ' + estado.usuario.split(' ')[0] + '!');
   } else {
