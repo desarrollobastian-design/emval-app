@@ -597,7 +597,7 @@
     <div class="ot-card">
       <div class="ot-icon" style="background:#FEF0E6;">⚠️</div>
       <div class="ot-info">
-        <div class="ot-titulo">Unimarc Coelemu — Ariel E.</div>
+        <div class="ot-titulo">Unimarc Coelemu — Nelson H.</div>
         <div class="ot-sub">26/08/2025 · <span class="badge badge-corr">Correctivo</span></div>
       </div>
     </div>
@@ -2440,15 +2440,27 @@ function _renderListaUsuarios(docs) {
   const lista = document.getElementById('lista-usuarios');
   if (!lista) return;
   lista.innerHTML = '';
-  const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#5A1B6B','#1B5A6B','#6B4E1B'];
+  // Colores por cargo
+  const colorPorCargo = {
+    'Administrador':      '#2D5AA0',
+    'Supervisor':         '#1B3A6B',
+    'Tecnico en terreno': '#1D6B5A'
+  };
+  const coloresFallback = ['#1D6B5A','#5A1B6B','#1B5A6B','#6B4E1B'];
   let colorIdx = 0;
-  docs.forEach(function(d) {
-    if (d.nombre === 'Supervisor') return;
-    PINS[d.nombre] = d.pin || '1234';
-    lista.appendChild(_crearUsuarioItem(d.nombre, d.cargo || 'Tecnico en terreno', d.letra || d.nombre.charAt(0).toUpperCase(), colores[colorIdx++ % colores.length]));
+  // Ordenar: Administrador primero, luego Supervisor, luego Tecnicos
+  const orden = { 'Administrador': 0, 'Supervisor': 1, 'Tecnico en terreno': 2 };
+  const sorted = docs.slice().sort(function(a, b) {
+    return (orden[a.cargo] || 9) - (orden[b.cargo] || 9);
   });
-  // Supervisor siempre al final
-  lista.appendChild(_crearUsuarioItem('Supervisor', 'Supervisor', 'S', '#6B3A1B'));
+  sorted.forEach(function(d) {
+    if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
+    PINS[d.nombre] = d.pin || '1234';
+    const cargo = d.cargo || 'Tecnico en terreno';
+    const color = colorPorCargo[cargo] || coloresFallback[colorIdx++ % coloresFallback.length];
+    lista.appendChild(_crearUsuarioItem(d.nombre, cargo, d.letra || d.nombre.charAt(0).toUpperCase(), color));
+  });
+  // Sin boton Supervisor separado - Pedro Arce (Administrador) tiene acceso al panel
 }
 
 async function cargarUsuariosApp() {
