@@ -489,6 +489,11 @@
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
+      <label>Nombre del servicio</label>
+      <input type="text" id="cot-nombre-servicio" placeholder="Ej: Servicio gasfiteria, Reparacion electrica..." />
+      <div style="font-size:11px;color:var(--texto3);margin-top:3px;">Se usa en el nombre del archivo PDF descargado</div>
+    </div>
+    <div class="field">
       <label>Supervisor del local</label>
       <input type="text" id="cot-carpeta" placeholder="Ej: A. Espinoza, C. Zapata..." />
     </div>
@@ -1645,6 +1650,7 @@ async function abrirCotizacion(docId) {
     document.getElementById('cot-carpeta').value = await _obtenerSupervisorSucursal(cotizacionActual.local) || cotizacionActual.local || '';
     document.getElementById('cot-detalle-trabajo').value = cotizacionActual.descripcionTrabajo || '';
     document.getElementById('cot-descuento').value = '0';
+    document.getElementById('cot-nombre-servicio').value = '';
     renderItemsCot();
     go('s-cotizacion');
   } catch(e) {
@@ -1699,7 +1705,8 @@ function calcTotalCot() {
 async function guardarCotizacion() {
   if (!cotizacionActual) return;
   const carpeta = document.getElementById('cot-carpeta').value.trim() || cotizacionActual.local;
-  const supervisorCarpeta = carpeta; // la carpeta ya es el nombre del supervisor
+  const supervisorCarpeta = carpeta;
+  const nombreServicio = document.getElementById('cot-nombre-servicio').value.trim();
   const totales = calcTotalCot();
   try {
     const db = window.firebase.firestore();
@@ -1710,6 +1717,7 @@ async function guardarCotizacion() {
       tecnico: cotizacionActual.tecnico,
       fecha: cotizacionActual.fecha,
       descripcionTrabajo: document.getElementById('cot-detalle-trabajo').value.trim() || cotizacionActual.descripcionTrabajo || '',
+      nombreServicio: nombreServicio,
       items: itemsCot,
       subtotal: totales.subtotal,
       descuento: totales.desc,
@@ -2044,6 +2052,7 @@ let cadenaSeleccionada = null;
 async function cargarCadenasApp() {
   const lista = document.getElementById('lista-cadenas');
   if (!lista) return;
+  if (!window._firebaseReady) { setTimeout(cargarCadenasApp, 200); return; }
   lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
   try {
     const db = window.firebase.firestore();
@@ -2600,8 +2609,7 @@ async function generarPDFRecepcionObra() {
     doc.setFont('helvetica', 'bold');
     doc.text('Servicios Emval ltda', margin, 25);
     doc.setFont('helvetica', 'normal');
-    doc.text('Servicio Pedro Arce Merino E.I.R.L.', margin, 29);
-    doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', margin, 33);
+    doc.text('Giro: Obras Menores', margin, 29);
     doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', margin, 37);
     doc.text('Fono: 995720003 - RUT.: 76.166.407-7', margin, 41);
     doc.text('E-mail: Servicios.emval@gmail.com', margin, 45);
@@ -3081,7 +3089,7 @@ async function generarPDFCotizacionGuardada(cotData) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
     doc.text('Rut', margin + 28, 42); doc.text(': 76.166.407-7', margin + 42, 42);
     doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
-    doc.text(': A. Pinto 372 of 53, Concepci' + String.fromCharCode(243) + 'n', margin + 42, 47);
+    doc.text(': Uribe 636, Antofagasta', margin + 42, 47);
     doc.text('Fono', margin + 28, 52); doc.text(': 995720003', margin + 42, 52);
     doc.text('Email', margin + 28, 57); doc.text(': servicios.emval@gmail.com', margin + 42, 57);
 
@@ -3092,8 +3100,8 @@ async function generarPDFCotizacionGuardada(cotData) {
     doc.text('Fecha', 120, 32); doc.text(': ' + fecha, 142, 32);
     doc.text('Fecha ejecuci' + String.fromCharCode(243) + 'n', 120, 38); doc.text(': ' + (cotData.fecha||''), 142, 38);
     doc.text('Local', 120, 44); doc.text(': ' + (cotData.local||''), 142, 44);
-    doc.text('Direcci' + String.fromCharCode(243) + 'n', 120, 50); doc.text(':', 142, 50);
-    doc.text('Supervisor', 120, 56); doc.text(': ' + (cotData.tecnico||''), 142, 56);
+    doc.text('N OT', 120, 50); doc.text(': ' + (cotData.otNumero||''), 142, 50);
+    doc.text('Supervisor', 120, 56); doc.text(': ' + (cotData.supervisor || cotData.carpeta || cotData.tecnico||''), 142, 56);
 
     // ---- DETALLE TRABAJOS ----
     const secY = 68;
@@ -3303,7 +3311,11 @@ async function generarPDFCotizacionGuardada(cotData) {
     itemsCot = itemsBackup;
     if (detalleEl) detalleEl.value = detalleBackup;
 
-    const nombrePDF = 'EMVAL_Cotizacion_' + (cotData.local||'').replace(/\s+/g,'_') + '.pdf';
+    const _servPDF = (cotData.nombreServicio||'').trim();
+    const _localPDF = (cotData.local||'').replace(/\s+/g,' ').trim();
+    const _cotNPDF = cotData.numeroCotizacion || cotData.otNumero || '';
+    const _otNPDF = cotData.otNumero || '';
+    const nombrePDF = (_cotNPDF ? _cotNPDF + ' ' : '') + 'OT ' + _otNPDF + (_servPDF ? ' ' + _servPDF : '') + ' ' + _localPDF + '.pdf';
     doc.save(nombrePDF);
     toast('PDF descargado');
   } catch(e) {
@@ -3374,7 +3386,7 @@ async function generarPDFCotizacion() {
   doc.text('Rut', margin + 28, 42);
   doc.text(': 76.166.407-7', margin + 42, 42);
   doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
-  doc.text(': A. Pinto 372 of 53, Concepci' + String.fromCharCode(243) + 'n', margin + 42, 47);
+  doc.text(': Uribe 636, Antofagasta', margin + 42, 47);
   doc.text('Fono', margin + 28, 52);
   doc.text(': 995720003', margin + 42, 52);
   doc.text('Email', margin + 28, 57);
@@ -3709,7 +3721,11 @@ async function generarPDFCotizacion() {
     toast('Cotizacion lista (sin datos de OT)');
   }
 
-  const nombreArchivo = 'EMVAL_Cotizacion_OT' + (cotizacionActual.otNumero||'') + '_' + (cotizacionActual.local||'').replace(/\s+/g,'_') + '.pdf';
+  const _servPDF2 = (document.getElementById('cot-nombre-servicio') ? document.getElementById('cot-nombre-servicio').value.trim() : '') || (cotizacionActual.nombreServicio||'');
+  const _localPDF2 = (cotizacionActual.local||'').replace(/\s+/g,' ').trim();
+  const _cotN2 = cotizacionActual.numeroCotizacion || cotizacionActual.otNumero || '';
+  const _otN2 = cotizacionActual.otNumero || '';
+  const nombreArchivo = (_cotN2 ? _cotN2 + ' ' : '') + 'OT ' + _otN2 + (_servPDF2 ? ' ' + _servPDF2 : '') + ' ' + _localPDF2 + '.pdf';
   doc.save(nombreArchivo);
   toast('PDF completo descargado');
 }
