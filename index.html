@@ -489,8 +489,8 @@
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
-      <label>Carpeta (tecnico)</label>
-      <input type="text" id="cot-carpeta" placeholder="Ej: Ariel Espinoza, Pedro Arce..." />
+      <label>Supervisor del local</label>
+      <input type="text" id="cot-carpeta" placeholder="Ej: A. Espinoza, C. Zapata..." />
     </div>
     <div style="display:flex;gap:10px;margin-top:auto;">
       <button class="btn btn-secondary" onclick="guardarCotizacion()" style="flex:1;">Guardar</button>
@@ -1603,6 +1603,24 @@ async function enviarEmailAdmin() {
 let cotizacionActual = null;
 let itemsCot = [];
 
+async function _obtenerSupervisorSucursal(nombreLocal) {
+  if (!nombreLocal) return '';
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('cadenas').get();
+    for (const doc of snap.docs) {
+      const subs = doc.data().sucursales || [];
+      for (const s of subs) {
+        const sNombre = typeof s === 'object' ? s.nombre : s;
+        if (sNombre && sNombre.toUpperCase() === nombreLocal.toUpperCase()) {
+          return typeof s === 'object' ? (s.supervisor || '') : '';
+        }
+      }
+    }
+  } catch(e) { console.error('Error buscando supervisor:', e); }
+  return '';
+}
+
 async function abrirCotizacion(docId) {
   try {
     window._cotizacionOrigen = document.querySelector('.screen.active') ? document.querySelector('.screen.active').id : 's-supervisor';
@@ -1625,8 +1643,8 @@ async function abrirCotizacion(docId) {
       '<div class="summary-row"><span class="sum-label">Tecnico</span><span class="sum-val">' + cotizacionActual.tecnico + '</span></div>' +
       '<div class="summary-row"><span class="sum-label">Fecha</span><span class="sum-val">' + cotizacionActual.fecha + '</span></div>' +
       '<div class="summary-row" style="border:none"><span class="sum-label">Trabajo</span><span class="sum-val" style="font-size:11px;text-align:right;max-width:60%">' + (cotizacionActual.descripcionTrabajo || '') + '</span></div>';
-    // Pre-fill carpeta con nombre del tecnico
-    document.getElementById('cot-carpeta').value = cotizacionActual.tecnico || cotizacionActual.local || '';
+    // Pre-fill carpeta con supervisor de la sucursal
+    document.getElementById('cot-carpeta').value = await _obtenerSupervisorSucursal(cotizacionActual.local) || cotizacionActual.local || '';
     document.getElementById('cot-detalle-trabajo').value = cotizacionActual.descripcionTrabajo || '';
     document.getElementById('cot-descuento').value = '0';
     renderItemsCot();
@@ -1683,6 +1701,7 @@ function calcTotalCot() {
 async function guardarCotizacion() {
   if (!cotizacionActual) return;
   const carpeta = document.getElementById('cot-carpeta').value.trim() || cotizacionActual.local;
+  const supervisorCarpeta = carpeta; // la carpeta ya es el nombre del supervisor
   const totales = calcTotalCot();
   try {
     const db = window.firebase.firestore();
@@ -1749,8 +1768,8 @@ async function cargarCarpetas() {
     const carpetas = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const c = d.tecnico || d.carpeta || 'Sin asignar';
-      if (!carpetas[c]) carpetas[c] = { tecnico: d.tecnico || c, items: [] };
+      const c = d.carpeta || d.supervisor || d.tecnico || 'Sin asignar';
+      if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico, descuento: d.descuento || 0 };
       carpetas[c].items.push(cotItem);
@@ -1769,7 +1788,7 @@ async function cargarCarpetas() {
       const grupo = carpetas[carpeta];
       const items = grupo.items;
       const totalGeneral = items.reduce(function(s,i){ return s + (i.total||0); }, 0);
-      const letra = (grupo.tecnico || carpeta).charAt(0).toUpperCase();
+      const letra = (grupo.supervisor || carpeta).charAt(0).toUpperCase();
       const color = colores[ci % colores.length];
 
       // Carpeta colapsable
@@ -1788,7 +1807,7 @@ async function cargarCarpetas() {
       headerInfo.style.flex = '1';
       const nombreTec = document.createElement('div');
       nombreTec.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
-      nombreTec.textContent = grupo.tecnico || carpeta;
+      nombreTec.textContent = grupo.supervisor || carpeta;
       const resumen = document.createElement('div');
       resumen.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
       resumen.textContent = items.length + ' cotizacion' + (items.length !== 1 ? 'es' : '') + ' | $' + totalGeneral.toLocaleString('es-CL');
