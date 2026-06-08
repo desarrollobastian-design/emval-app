@@ -1798,7 +1798,10 @@ async function cargarCarpetas() {
       const c = d.carpeta || d.supervisor || d.tecnico || 'Sin asignar';
       if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
-        descripcionTrabajo: d.descripcionTrabajo, items: d.items, tecnico: d.tecnico, descuento: d.descuento || 0 };
+        descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
+        descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '',
+        centro: d.centro || '',
+        solped: d.solped || '', oc: d.oc || '', hes: d.hes || '', factura: d.factura || '' };
       carpetas[c].items.push(cotItem);
       window._todasCotizaciones[doc.id] = cotItem;
     });
@@ -1910,9 +1913,52 @@ async function cargarCarpetas() {
         btnEmail.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
         btnsRow.appendChild(btnPdf);
         btnsRow.appendChild(btnEmail);
+        // Campos editables OC, HES, SolPed, Factura
+        const camposDiv = document.createElement('div');
+        camposDiv.style.cssText = 'margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;';
+        function mkCampo(lbl, val, key, cotId) {
+          const wrap = document.createElement('div');
+          const lb = document.createElement('div');
+          lb.style.cssText = 'font-size:10px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;';
+          lb.textContent = lbl;
+          const inp = document.createElement('input');
+          inp.type = 'text'; inp.value = val || '';
+          inp.placeholder = lbl;
+          inp.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:6px;font-size:12px;font-family:inherit;outline:none;';
+          inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
+          inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
+          inp.dataset.field = key;
+          inp.dataset.cotId = cotId;
+          wrap.appendChild(lb); wrap.appendChild(inp);
+          return wrap;
+        }
+        var fSolped  = mkCampo('SolPed', it.solped,  'solped',  it.id);
+        var fOc      = mkCampo('OC',     it.oc,      'oc',      it.id);
+        var fHes     = mkCampo('HES',    it.hes,     'hes',     it.id);
+        var fFactura = mkCampo('Factura',it.factura, 'factura', it.id);
+        camposDiv.appendChild(fSolped); camposDiv.appendChild(fOc);
+        camposDiv.appendChild(fHes);   camposDiv.appendChild(fFactura);
+        // Boton guardar campos
+        const btnGuardar = document.createElement('button');
+        btnGuardar.textContent = 'Guardar datos';
+        btnGuardar.style.cssText = 'width:100%;margin-top:6px;background:var(--azul);color:white;border:none;border-radius:6px;padding:7px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+        btnGuardar.onclick = (function(cId, fS, fO, fH, fF) { return async function() {
+          try {
+            const db = window.firebase.firestore();
+            await db.collection('cotizaciones').doc(cId).update({
+              solped:  fS.querySelector('input').value.trim(),
+              oc:      fO.querySelector('input').value.trim(),
+              hes:     fH.querySelector('input').value.trim(),
+              factura: fF.querySelector('input').value.trim()
+            });
+            toast('Datos guardados');
+          } catch(e) { toast('Error: ' + e.message); }
+        }; })(it.id, fSolped, fOc, fHes, fFactura);
         rowContent.appendChild(rowHeader);
         rowContent.appendChild(totalDiv);
         rowContent.appendChild(descDiv);
+        rowContent.appendChild(camposDiv);
+        rowContent.appendChild(btnGuardar);
         rowContent.appendChild(btnsRow);
         checkRow.appendChild(chk);
         checkRow.appendChild(rowContent);
@@ -4278,10 +4324,10 @@ async function descargarExcelCotizaciones() {
           d.otNumero || '',
           monto,
           d.fecha || '',
-          '', // SolPed - manual
-          '', // OC - manual
-          '', // HES - manual
-          ''  // Factura - manual
+          d.solped || '',
+          d.oc || '',
+          d.hes || '',
+          d.factura || ''
         ]);
       });
 
