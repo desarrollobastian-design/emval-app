@@ -599,7 +599,10 @@
       <button class="btn btn-secondary btn-sm" onclick="go('s-carpetas');cargarCarpetas();" style="flex:1;font-size:12px;">Cotizaciones</button>
       <button id="btn-administrar" class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="flex:1;font-size:12px;display:none;">Administrar</button>
     </div>
-    <button id="btn-excel" class="btn btn-verde btn-sm" onclick="descargarExcelCotizaciones()" style="display:none;font-size:13px;margin-bottom:4px;">Descargar Excel cotizaciones</button>
+    <div style="display:flex;gap:8px;margin-bottom:4px;">
+      <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
+      <button id="btn-excel" class="btn btn-verde btn-sm" onclick="descargarExcelCotizaciones()" style="flex:1;font-size:12px;display:none;">Descargar Excel</button>
+    </div>
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
     <div class="ot-card">
       <div class="ot-icon" style="background:#FEF0E6;">⚠️</div>
@@ -686,6 +689,29 @@
       <div id="lista-locales-admin"></div>
     </div>
 
+  </div>
+</div>
+
+<!-- ============ SCREEN: FACTURAR ============ -->
+<div class="screen" id="s-facturar">
+  <div class="topbar">
+    <button class="back" onclick="go('s-supervisor')">←</button>
+    <h2>Facturacion</h2>
+  </div>
+  <div class="content">
+    <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un supervisor para ver sus cotizaciones</div>
+    <div id="lista-supervisores-fact"></div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: COTIZACIONES SUPERVISOR (FACTURAR) ============ -->
+<div class="screen" id="s-fact-detalle">
+  <div class="topbar">
+    <button class="back" onclick="go('s-facturar')">←</button>
+    <h2 id="fact-sup-titulo">Cotizaciones</h2>
+  </div>
+  <div class="content">
+    <div id="lista-cots-fact"></div>
   </div>
 </div>
 
@@ -776,11 +802,14 @@ function validarPin() {
     if (estado.cargo === 'Supervisor' || estado.cargo === 'Administrador') {
       go('s-supervisor');
       cargarOTsSupervisor();
-      // Mostrar boton Administrar y Excel solo para Administrador
+      // Mostrar botones solo para Administrador
+      var esAdmin = estado.cargo === 'Administrador';
       var btnAdmin = document.getElementById('btn-administrar');
-      if (btnAdmin) btnAdmin.style.display = estado.cargo === 'Administrador' ? 'block' : 'none';
+      if (btnAdmin) btnAdmin.style.display = esAdmin ? 'block' : 'none';
       var btnXls = document.getElementById('btn-excel');
-      if (btnXls) btnXls.style.display = estado.cargo === 'Administrador' ? 'block' : 'none';
+      if (btnXls) btnXls.style.display = esAdmin ? 'flex' : 'none';
+      var btnFact = document.getElementById('btn-facturar');
+      if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
     } else {
       // Tecnico va directo a nueva OT
       nuevaOT();
@@ -1799,9 +1828,7 @@ async function cargarCarpetas() {
       if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
-        descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '',
-        centro: d.centro || '',
-        solped: d.solped || '', oc: d.oc || '', hes: d.hes || '', factura: d.factura || '' };
+        descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '' };
       carpetas[c].items.push(cotItem);
       window._todasCotizaciones[doc.id] = cotItem;
     });
@@ -1913,52 +1940,9 @@ async function cargarCarpetas() {
         btnEmail.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
         btnsRow.appendChild(btnPdf);
         btnsRow.appendChild(btnEmail);
-        // Campos editables OC, HES, SolPed, Factura
-        const camposDiv = document.createElement('div');
-        camposDiv.style.cssText = 'margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;';
-        function mkCampo(lbl, val, key, cotId) {
-          const wrap = document.createElement('div');
-          const lb = document.createElement('div');
-          lb.style.cssText = 'font-size:10px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;';
-          lb.textContent = lbl;
-          const inp = document.createElement('input');
-          inp.type = 'text'; inp.value = val || '';
-          inp.placeholder = lbl;
-          inp.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:6px;font-size:12px;font-family:inherit;outline:none;';
-          inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
-          inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
-          inp.dataset.field = key;
-          inp.dataset.cotId = cotId;
-          wrap.appendChild(lb); wrap.appendChild(inp);
-          return wrap;
-        }
-        var fSolped  = mkCampo('SolPed', it.solped,  'solped',  it.id);
-        var fOc      = mkCampo('OC',     it.oc,      'oc',      it.id);
-        var fHes     = mkCampo('HES',    it.hes,     'hes',     it.id);
-        var fFactura = mkCampo('Factura',it.factura, 'factura', it.id);
-        camposDiv.appendChild(fSolped); camposDiv.appendChild(fOc);
-        camposDiv.appendChild(fHes);   camposDiv.appendChild(fFactura);
-        // Boton guardar campos
-        const btnGuardar = document.createElement('button');
-        btnGuardar.textContent = 'Guardar datos';
-        btnGuardar.style.cssText = 'width:100%;margin-top:6px;background:var(--azul);color:white;border:none;border-radius:6px;padding:7px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
-        btnGuardar.onclick = (function(cId, fS, fO, fH, fF) { return async function() {
-          try {
-            const db = window.firebase.firestore();
-            await db.collection('cotizaciones').doc(cId).update({
-              solped:  fS.querySelector('input').value.trim(),
-              oc:      fO.querySelector('input').value.trim(),
-              hes:     fH.querySelector('input').value.trim(),
-              factura: fF.querySelector('input').value.trim()
-            });
-            toast('Datos guardados');
-          } catch(e) { toast('Error: ' + e.message); }
-        }; })(it.id, fSolped, fOc, fHes, fFactura);
         rowContent.appendChild(rowHeader);
         rowContent.appendChild(totalDiv);
         rowContent.appendChild(descDiv);
-        rowContent.appendChild(camposDiv);
-        rowContent.appendChild(btnGuardar);
         rowContent.appendChild(btnsRow);
         checkRow.appendChild(chk);
         checkRow.appendChild(rowContent);
@@ -4328,7 +4312,7 @@ async function descargarExcelCotizaciones() {
           d.oc || '',
           d.hes || '',
           d.factura || ''
-        ]);
+        ]); // campos facturacion desde Firebase
       });
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -4375,6 +4359,149 @@ async function descargarExcelCotizaciones() {
     console.error(e);
     toast('Error generando Excel: ' + e.message);
   }
+}
+
+// =========== FACTURACION ===========
+async function cargarFacturacion() {
+  const lista = document.getElementById('lista-supervisores-fact');
+  if (!lista) return;
+  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
+    lista.innerHTML = '';
+    if (snap.empty) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones guardadas</p>';
+      return;
+    }
+    // Agrupar por supervisor
+    const grupos = {};
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const sup = d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor';
+      if (!grupos[sup]) grupos[sup] = { nombre: sup, items: [], total: 0, pendientes: 0 };
+      grupos[sup].items.push({ id: doc.id, ...d });
+      grupos[sup].total += d.total || 0;
+      if (!d.factura) grupos[sup].pendientes++;
+    });
+    const colores = ['#1B3A6B','#2D5AA0','#1D6B5A','#6B3A1B','#5A1B6B'];
+    Object.keys(grupos).sort().forEach(function(sup, i) {
+      const g = grupos[sup];
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;';
+      card.onclick = (function(grp){ return function(){ abrirFactSupervisor(grp); }; })(g);
+      const av = document.createElement('div');
+      av.style.cssText = 'width:48px;height:48px;border-radius:14px;background:' + colores[i%colores.length] + ';display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:700;flex-shrink:0;';
+      av.textContent = sup.charAt(0).toUpperCase();
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      const nom = document.createElement('div');
+      nom.style.cssText = 'font-size:15px;font-weight:600;';
+      nom.textContent = sup;
+      const det = document.createElement('div');
+      det.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      det.textContent = g.items.length + ' cotizaciones | $' + g.total.toLocaleString('es-CL');
+      const pend = document.createElement('div');
+      pend.style.cssText = 'font-size:11px;margin-top:2px;font-weight:600;color:' + (g.pendientes > 0 ? 'var(--naranja)' : 'var(--verde)') + ';';
+      pend.textContent = g.pendientes > 0 ? g.pendientes + ' sin factura' : 'Al dia';
+      info.appendChild(nom); info.appendChild(det); info.appendChild(pend);
+      const arr = document.createElement('svg');
+      arr.setAttribute('width','16'); arr.setAttribute('height','16'); arr.setAttribute('viewBox','0 0 24 24');
+      arr.setAttribute('fill','none'); arr.setAttribute('stroke','#C8D0E0'); arr.setAttribute('stroke-width','2');
+      arr.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+      card.appendChild(av); card.appendChild(info); card.appendChild(arr);
+      lista.appendChild(card);
+    });
+  } catch(e) { console.error(e); toast('Error cargando facturacion'); }
+}
+
+function abrirFactSupervisor(grupo) {
+  document.getElementById('fact-sup-titulo').textContent = grupo.nombre;
+  const lista = document.getElementById('lista-cots-fact');
+  lista.innerHTML = '';
+  go('s-fact-detalle');
+  grupo.items.forEach(function(d) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'margin-bottom:10px;';
+    // Header
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;';
+    const hInfo = document.createElement('div');
+    const hLocal = document.createElement('div');
+    hLocal.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
+    hLocal.textContent = d.local || '';
+    const hDet = document.createElement('div');
+    hDet.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
+    hDet.textContent = (d.fecha||'') + (d.otNumero ? ' | OT #' + d.otNumero : '');
+    hInfo.appendChild(hLocal); hInfo.appendChild(hDet);
+    const hMonto = document.createElement('div');
+    hMonto.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde);';
+    hMonto.textContent = '$' + (d.total||0).toLocaleString('es-CL');
+    hdr.appendChild(hInfo); hdr.appendChild(hMonto);
+    card.appendChild(hdr);
+    // Desc trabajo
+    if (d.descripcionTrabajo || d.nombreServicio) {
+      const desc = document.createElement('div');
+      desc.style.cssText = 'font-size:12px;color:var(--texto2);margin-bottom:10px;padding:8px;background:var(--gris1);border-radius:6px;';
+      desc.textContent = d.nombreServicio || d.descripcionTrabajo || '';
+      card.appendChild(desc);
+    }
+    // Estado facturacion
+    const estadoBadge = document.createElement('div');
+    const yaFacturado = d.factura && d.factura.trim() !== '';
+    estadoBadge.style.cssText = 'display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;margin-bottom:10px;background:' +
+      (yaFacturado ? '#E6F4EA' : '#FEF0E6') + ';color:' + (yaFacturado ? '#1A7A3C' : '#B45309') + ';';
+    estadoBadge.textContent = yaFacturado ? 'Facturado' : 'Pendiente';
+    card.appendChild(estadoBadge);
+    // Campos 2x2
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;';
+    function mkF(lbl, val) {
+      const w = document.createElement('div');
+      const l = document.createElement('div');
+      l.style.cssText = 'font-size:10px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
+      l.textContent = lbl;
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = val || ''; inp.placeholder = lbl;
+      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;outline:none;';
+      inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
+      inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
+      w.appendChild(l); w.appendChild(inp);
+      return { wrap: w, inp: inp };
+    }
+    const fSolped  = mkF('SolPed',  d.solped  || '');
+    const fOc      = mkF('OC',      d.oc      || '');
+    const fHes     = mkF('HES',     d.hes     || '');
+    const fFactura = mkF('Factura', d.factura || '');
+    grid.appendChild(fSolped.wrap); grid.appendChild(fOc.wrap);
+    grid.appendChild(fHes.wrap);    grid.appendChild(fFactura.wrap);
+    card.appendChild(grid);
+    // Boton guardar
+    const btnG = document.createElement('button');
+    btnG.textContent = 'Guardar';
+    btnG.style.cssText = 'width:100%;padding:11px;border:none;background:var(--azul);color:white;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+    btnG.onclick = (function(docId, fS, fO, fH, fF, badge) { return async function() {
+      try {
+        const db = window.firebase.firestore();
+        const vals = {
+          solped:  fS.value.trim(),
+          oc:      fO.value.trim(),
+          hes:     fH.value.trim(),
+          factura: fF.value.trim()
+        };
+        await db.collection('cotizaciones').doc(docId).update(vals);
+        const ok = vals.factura !== '';
+        badge.style.background = ok ? '#E6F4EA' : '#FEF0E6';
+        badge.style.color = ok ? '#1A7A3C' : '#B45309';
+        badge.textContent = ok ? 'Facturado' : 'Pendiente';
+        toast('Guardado');
+      } catch(e) { toast('Error: ' + e.message); }
+    }; })(d.id, fSolped.inp, fOc.inp, fHes.inp, fFactura.inp, estadoBadge);
+    card.appendChild(btnG);
+    lista.appendChild(card);
+  });
 }
 
 function toast(msg) {
