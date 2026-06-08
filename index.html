@@ -601,7 +601,7 @@
     </div>
     <div style="display:flex;gap:8px;margin-bottom:4px;">
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
-      <button id="btn-ventas" class="btn btn-verde btn-sm" onclick="descargarExcelVentas()" style="flex:1;font-size:12px;display:none;">Ventas</button>
+      <button id="btn-ventas" class="btn btn-verde btn-sm" onclick="go('s-ventas');cargarVentas();" style="flex:1;font-size:12px;display:none;">Ventas</button>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
     <div class="ot-card">
@@ -713,6 +713,18 @@
   </div>
   <div class="content">
     <div id="lista-cots-fact"></div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: VENTAS ============ -->
+<div class="screen" id="s-ventas">
+  <div class="topbar">
+    <button class="back" onclick="go('s-supervisor')">←</button>
+    <h2>Ventas</h2>
+    <button onclick="descargarExcelVentas()" style="background:var(--verde);border:none;color:white;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Descargar Excel</button>
+  </div>
+  <div class="content" id="ventas-content">
+    <p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>
   </div>
 </div>
 
@@ -4622,6 +4634,203 @@ function descargarExcelSupervisor() {
     URL.revokeObjectURL(url);
     toast('Excel descargado!');
   } catch(e) { console.error(e); toast('Error: ' + e.message); }
+}
+
+async function cargarVentas() {
+  const cont = document.getElementById('ventas-content');
+  cont.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('cotizaciones').orderBy('creadoEn','asc').get();
+    if (snap.empty) {
+      cont.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones aun</p>';
+      return;
+    }
+    const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+    const MESES_FULL = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const COLORES_SUP = ['#1B3A6B','#2D5AA0','#27A06B','#EF9F27','#E53E3E','#6B3A1B'];
+
+    // Agrupar por supervisor y mes
+    const porSup = {};
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const sup = d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor';
+      if (!porSup[sup]) { porSup[sup] = new Array(12).fill(0); }
+      var mesIdx = -1;
+      if (d.fecha) {
+        var p = d.fecha.replace(/\//g,'-').split('-');
+        if (p.length === 3) mesIdx = parseInt(p[1]) - 1;
+      }
+      if (mesIdx >= 0 && mesIdx < 12) porSup[sup][mesIdx] += (d.total || 0);
+    });
+
+    const supervisores = Object.keys(porSup).sort();
+    const totalesMes = new Array(12).fill(0);
+    var granTotal = 0;
+    supervisores.forEach(function(sup) {
+      porSup[sup].forEach(function(v, i){ totalesMes[i] += v; granTotal += v; });
+    });
+
+    cont.innerHTML = '';
+
+    // ---- RESUMEN STATS ----
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;';
+    var totalAnioActual = granTotal;
+    var mesActual = new Date().getMonth();
+    var totalMesActual = totalesMes[mesActual] || 0;
+    function mkStat(label, valor) {
+      var d = document.createElement('div');
+      d.className = 'stat-card';
+      d.innerHTML = '<div class="stat-num" style="font-size:18px;">$ ' + valor.toLocaleString('es-CL') + '</div><div class="stat-label">' + label + '</div>';
+      return d;
+    }
+    statsDiv.appendChild(mkStat('Total ' + new Date().getFullYear(), totalAnioActual));
+    statsDiv.appendChild(mkStat('Mes actual', totalMesActual));
+    cont.appendChild(statsDiv);
+
+    // ---- GRAFICO BARRAS: total por mes ----
+    const tituloBar = document.createElement('div');
+    tituloBar.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;';
+    tituloBar.textContent = 'TOTAL POR MES';
+    cont.appendChild(tituloBar);
+    const canvasBar = document.createElement('canvas');
+    canvasBar.id = 'chart-bar-ventas';
+    canvasBar.style.cssText = 'width:100%;max-height:220px;';
+    const wrapBar = document.createElement('div');
+    wrapBar.className = 'card';
+    wrapBar.style.padding = '12px';
+    wrapBar.appendChild(canvasBar);
+    cont.appendChild(wrapBar);
+
+    // ---- GRAFICO DONA: por supervisor ----
+    const tituloDona = document.createElement('div');
+    tituloDona.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
+    tituloDona.textContent = 'DISTRIBUCION POR SUPERVISOR';
+    cont.appendChild(tituloDona);
+    const canvasDona = document.createElement('canvas');
+    canvasDona.id = 'chart-dona-ventas';
+    canvasDona.style.cssText = 'width:100%;max-height:220px;';
+    const wrapDona = document.createElement('div');
+    wrapDona.className = 'card';
+    wrapDona.style.padding = '12px';
+    wrapDona.appendChild(canvasDona);
+    cont.appendChild(wrapDona);
+
+    // ---- TABLA RESUMEN ----
+    const tituloTabla = document.createElement('div');
+    tituloTabla.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
+    tituloTabla.textContent = 'RESUMEN POR SUPERVISOR';
+    cont.appendChild(tituloTabla);
+    const tablaCard = document.createElement('div');
+    tablaCard.className = 'card';
+    tablaCard.style.padding = '0';
+    tablaCard.style.overflow = 'hidden';
+    supervisores.forEach(function(sup, i) {
+      var totalSup = porSup[sup].reduce(function(a,b){ return a+b; }, 0);
+      var pct = granTotal > 0 ? Math.round(totalSup / granTotal * 100) : 0;
+      var row = document.createElement('div');
+      row.style.cssText = 'padding:12px 14px;border-bottom:1px solid var(--gris2);';
+      var top = document.createElement('div');
+      top.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
+      var nombre = document.createElement('div');
+      nombre.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
+      nombre.textContent = sup;
+      var monto = document.createElement('div');
+      monto.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);';
+      monto.textContent = '$ ' + totalSup.toLocaleString('es-CL');
+      top.appendChild(nombre); top.appendChild(monto);
+      var bar = document.createElement('div');
+      bar.style.cssText = 'height:6px;background:var(--gris2);border-radius:3px;overflow:hidden;';
+      var fill = document.createElement('div');
+      fill.style.cssText = 'height:100%;background:' + COLORES_SUP[i % COLORES_SUP.length] + ';border-radius:3px;width:' + pct + '%;transition:width 0.8s ease;';
+      bar.appendChild(fill);
+      var pctLabel = document.createElement('div');
+      pctLabel.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:3px;';
+      pctLabel.textContent = pct + '% del total';
+      row.appendChild(top); row.appendChild(bar); row.appendChild(pctLabel);
+      tablaCard.appendChild(row);
+    });
+    cont.appendChild(tablaCard);
+
+    // ---- RENDERIZAR GRAFICOS con Chart.js ----
+    if (typeof Chart === 'undefined') {
+      var script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+      script.onload = function() { _renderCharts(canvasBar, canvasDona, MESES, supervisores, porSup, totalesMes, COLORES_SUP); };
+      document.head.appendChild(script);
+    } else {
+      _renderCharts(canvasBar, canvasDona, MESES, supervisores, porSup, totalesMes, COLORES_SUP);
+    }
+
+  } catch(e) { console.error(e); cont.innerHTML = '<p style="color:var(--rojo);text-align:center;padding:20px;">Error cargando ventas</p>'; }
+}
+
+function _renderCharts(canvasBar, canvasDona, MESES, supervisores, porSup, totalesMes, COLORES_SUP) {
+  // Destruir charts existentes si los hay
+  if (window._chartBar) { window._chartBar.destroy(); }
+  if (window._chartDona) { window._chartDona.destroy(); }
+
+  // Grafico barras - total por mes
+  window._chartBar = new Chart(canvasBar.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: MESES,
+      datasets: [{
+        label: 'Total mensual',
+        data: totalesMes,
+        backgroundColor: '#2D5AA0',
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return '$ ' + ctx.raw.toLocaleString('es-CL'); }
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: function(v) { return '$ ' + (v/1000000).toFixed(1) + 'M'; }
+          },
+          grid: { color: '#EEF2FA' }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Grafico dona - por supervisor
+  var totalesSup = supervisores.map(function(sup){ return porSup[sup].reduce(function(a,b){return a+b;},0); });
+  window._chartDona = new Chart(canvasDona.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: supervisores,
+      datasets: [{
+        data: totalesSup,
+        backgroundColor: COLORES_SUP.slice(0, supervisores.length),
+        borderWidth: 2,
+        borderColor: '#FFFFFF'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ctx.label + ': $ ' + ctx.raw.toLocaleString('es-CL'); }
+          }
+        }
+      }
+    }
+  });
 }
 
 async function descargarExcelVentas() {
