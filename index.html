@@ -601,7 +601,6 @@
     </div>
     <div style="display:flex;gap:8px;margin-bottom:4px;">
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
-      <button id="btn-excel" class="btn btn-verde btn-sm" onclick="descargarExcelCotizaciones()" style="flex:1;font-size:12px;display:none;">Descargar Excel</button>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
     <div class="ot-card">
@@ -709,6 +708,7 @@
   <div class="topbar">
     <button class="back" onclick="go('s-facturar')">←</button>
     <h2 id="fact-sup-titulo">Cotizaciones</h2>
+    <button onclick="descargarExcelSupervisor()" style="background:var(--verde);border:none;color:white;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Descargar Excel</button>
   </div>
   <div class="content">
     <div id="lista-cots-fact"></div>
@@ -806,8 +806,6 @@ function validarPin() {
       var esAdmin = estado.cargo === 'Administrador';
       var btnAdmin = document.getElementById('btn-administrar');
       if (btnAdmin) btnAdmin.style.display = esAdmin ? 'block' : 'none';
-      var btnXls = document.getElementById('btn-excel');
-      if (btnXls) btnXls.style.display = esAdmin ? 'flex' : 'none';
       var btnFact = document.getElementById('btn-facturar');
       if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
     } else {
@@ -4418,6 +4416,7 @@ async function cargarFacturacion() {
 
 function abrirFactSupervisor(grupo) {
   document.getElementById('fact-sup-titulo').textContent = grupo.nombre;
+  window._factSupActual = grupo; // guardar para Excel
   const lista = document.getElementById('lista-cots-fact');
   lista.innerHTML = '';
   go('s-fact-detalle');
@@ -4531,6 +4530,61 @@ function abrirFactSupervisor(grupo) {
     card.appendChild(cuerpo);
     lista.appendChild(card);
   });
+}
+
+function descargarExcelSupervisor() {
+  const grupo = window._factSupActual;
+  if (!grupo || !grupo.items || grupo.items.length === 0) { toast('No hay cotizaciones'); return; }
+  toast('Generando Excel...');
+  try {
+    const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const wb = XLSX.utils.book_new();
+    // Hoja del supervisor
+    const wsData = [['LOCAL','CeCo','TRABAJO','N cotizacion','HS','Monto','Fecha','SolPed','OC','HES','Factura']];
+    const totalesMes = {};
+    MESES.forEach(function(m){ totalesMes[m] = 0; });
+    grupo.items.forEach(function(d) {
+      var mesIdx = -1;
+      if (d.fecha) {
+        var p = d.fecha.replace(/\//g,'-').split('-');
+        if (p.length === 3) mesIdx = parseInt(p[1]) - 1;
+      }
+      var monto = d.total || 0;
+      if (mesIdx >= 0 && mesIdx < 12) totalesMes[MESES[mesIdx]] += monto;
+      wsData.push([
+        d.local || '',
+        d.centro || '',
+        d.descripcionTrabajo || d.nombreServicio || '',
+        d.numeroCotizacion || d.otNumero || '',
+        d.otNumero || '',
+        monto,
+        d.fecha || '',
+        d.solped || '',
+        d.oc || '',
+        d.hes || '',
+        d.factura || ''
+      ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{wch:20},{wch:8},{wch:45},{wch:14},{wch:10},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:10}];
+    const nombreHoja = grupo.nombre.replace(/[:\/?*\[\]]/g,'').substring(0,31);
+    XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+    // Hoja resumen mensual
+    var anoActual = new Date().getFullYear();
+    var ventasData = [[''].concat(MESES)];
+    var filaT = [grupo.nombre];
+    MESES.forEach(function(m){ filaT.push(totalesMes[m]||0); });
+    ventasData.push(filaT);
+    ventasData.push([]);
+    var totFila = ['TOTAL'];
+    MESES.forEach(function(m){ totFila.push(totalesMes[m]||0); });
+    ventasData.push(totFila);
+    const wsV = XLSX.utils.aoa_to_sheet(ventasData);
+    wsV['!cols'] = [{wch:22}].concat(MESES.map(function(){ return {wch:14}; }));
+    XLSX.utils.book_append_sheet(wb, wsV, 'Ventas ' + anoActual);
+    XLSX.writeFile(wb, 'EMVAL_' + grupo.nombre.replace(/\s+/g,'_') + '_' + anoActual + '.xlsx');
+    toast('Excel descargado!');
+  } catch(e) { console.error(e); toast('Error: ' + e.message); }
 }
 
 function toast(msg) {
