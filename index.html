@@ -219,7 +219,7 @@
   .voz-item-dur { font-size: 11px; color: var(--texto3); margin-top: 2px; }
   .voz-item audio { width: 100%; height: 32px; margin-top: 6px; }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
 
@@ -4554,6 +4554,20 @@ function abrirFactSupervisor(grupo) {
   });
 }
 
+function _estiloCell(bold, bgRgb, textRgb, center) {
+  return {
+    font: { bold: bold||false, color: { rgb: textRgb||'000000' }, name: 'Calibri', sz: 11 },
+    fill: bgRgb ? { patternType: 'solid', fgColor: { rgb: bgRgb } } : { patternType: 'none' },
+    border: {
+      top:    { style: 'thin', color: { rgb: 'C8D0E0' } },
+      bottom: { style: 'thin', color: { rgb: 'C8D0E0' } },
+      left:   { style: 'thin', color: { rgb: 'C8D0E0' } },
+      right:  { style: 'thin', color: { rgb: 'C8D0E0' } }
+    },
+    alignment: { horizontal: center ? 'center' : 'left', vertical: 'center', wrapText: false }
+  };
+}
+
 function descargarExcelSupervisor() {
   const grupo = window._factSupActual;
   if (!grupo || !grupo.items || grupo.items.length === 0) { toast('No hay cotizaciones'); return; }
@@ -4562,117 +4576,78 @@ function descargarExcelSupervisor() {
     const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
     const wb = XLSX.utils.book_new();
     const anoActual = new Date().getFullYear();
-
-    // ---- HOJA SUPERVISOR ----
-    const wsData = [['LOCAL','CeCo','TRABAJO','N cotizacion','HS','Monto','Fecha','SolPed','OC','HES','Factura']];
     const totalesMes = {};
     MESES.forEach(function(m){ totalesMes[m] = 0; });
 
-    grupo.items.forEach(function(d) {
-      // Calcular mes para totales
+    // ---- HOJA SUPERVISOR ----
+    var COLS = ['LOCAL','CeCo','TRABAJO','N cotizacion','HS','Monto','Fecha','SolPed','OC','HES','Factura'];
+    var ws = {};
+    var rowIdx = 0;
+
+    // Cabecera
+    COLS.forEach(function(h, c) {
+      var ref = XLSX.utils.encode_cell({r:0, c:c});
+      ws[ref] = { v: h, t: 's', s: _estiloCell(true, '1B3A6B', 'FFFFFF', true) };
+    });
+    rowIdx = 1;
+
+    grupo.items.forEach(function(d, ri) {
       var mesIdx = -1;
       if (d.fecha) {
         var p = d.fecha.replace(/\//g,'-').split('-');
-        if (p.length === 3) { mesIdx = parseInt(p[1]) - 1; }
+        if (p.length === 3) mesIdx = parseInt(p[1]) - 1;
       }
       var monto = d.total || 0;
       if (mesIdx >= 0 && mesIdx < 12) totalesMes[MESES[mesIdx]] += monto;
 
-      // CeCo: viene del campo centro guardado en la cotizacion
-      var ceco = d.centro || '';
-
-      // N cotizacion: el numero generado en el PDF (distinto al N de OT)
-      var nCot = d.numeroCotizacion || '';
-
-      // Monto formateado en pesos chilenos
-      var montoFmt = monto > 0 ? ('$ ' + monto.toLocaleString('es-CL')) : '$ 0';
-
-      wsData.push([
+      var bgFila = (ri % 2 === 0) ? 'FFFFFF' : 'EEF2FA';
+      var fila = [
         d.local || '',
-        ceco,
+        d.centro || '',
         d.nombreServicio || d.descripcionTrabajo || '',
-        nCot,
+        d.numeroCotizacion || '',
         d.otNumero || '',
-        montoFmt,
+        monto > 0 ? ('$ ' + monto.toLocaleString('es-CL')) : '$ 0',
         d.fecha || '',
         d.solped || '',
         d.oc || '',
         d.hes || '',
         d.factura || ''
-      ]);
+      ];
+      fila.forEach(function(val, c) {
+        var ref = XLSX.utils.encode_cell({r: rowIdx, c: c});
+        ws[ref] = { v: val, t: 's', s: _estiloCell(false, bgFila, '1A2035', c===5||c===1) };
+      });
+      rowIdx++;
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    // Anchos de columna
-    ws['!cols'] = [
-      {wch:22},{wch:7},{wch:45},{wch:14},{wch:10},
-      {wch:14},{wch:13},{wch:10},{wch:12},{wch:12},{wch:10}
-    ];
-
-    // Estilo cabecera: negrita + fondo azul oscuro + texto blanco
-    var cabecera = ['A1','B1','C1','D1','E1','F1','G1','H1','I1','J1','K1'];
-    cabecera.forEach(function(ref) {
-      if (!ws[ref]) return;
-      ws[ref].s = {
-        font: { bold: true, color: { rgb: 'FFFFFF' } },
-        fill: { fgColor: { rgb: '1B3A6B' } },
-        alignment: { horizontal: 'center', vertical: 'center' }
-      };
-    });
-
-    // Borde en todas las celdas de datos
-    var range = XLSX.utils.decode_range(ws['!ref']);
-    for (var R = 0; R <= range.e.r; R++) {
-      for (var C = 0; C <= range.e.c; C++) {
-        var cellRef = XLSX.utils.encode_cell({r: R, c: C});
-        if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' };
-        ws[cellRef].s = ws[cellRef].s || {};
-        ws[cellRef].s.border = {
-          top:    { style: 'thin', color: { rgb: 'C8D0E0' } },
-          bottom: { style: 'thin', color: { rgb: 'C8D0E0' } },
-          left:   { style: 'thin', color: { rgb: 'C8D0E0' } },
-          right:  { style: 'thin', color: { rgb: 'C8D0E0' } }
-        };
-        // Fila par: fondo gris muy claro
-        if (R > 0 && R % 2 === 0) {
-          ws[cellRef].s.fill = { fgColor: { rgb: 'F4F6FB' } };
-        }
-        // Re-aplicar estilo cabecera (puede haber sido sobreescrito)
-        if (R === 0) {
-          ws[cellRef].s.font = { bold: true, color: { rgb: 'FFFFFF' } };
-          ws[cellRef].s.fill = { fgColor: { rgb: '1B3A6B' } };
-          ws[cellRef].s.alignment = { horizontal: 'center' };
-        }
-      }
-    }
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rowIdx-1, c:COLS.length-1}});
+    ws['!cols'] = [{wch:22},{wch:7},{wch:42},{wch:14},{wch:9},{wch:14},{wch:12},{wch:10},{wch:12},{wch:12},{wch:10}];
+    ws['!rows'] = [{hpt:18}]; // altura cabecera
 
     var nombreHoja = grupo.nombre.replace(/[:\/?*[\]]/g,'').substring(0,31);
     XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
 
     // ---- HOJA VENTAS ----
-    var ventasData = [[''].concat(MESES)];
-    var filaT = [grupo.nombre];
-    MESES.forEach(function(m){ filaT.push(totalesMes[m] > 0 ? ('$ ' + totalesMes[m].toLocaleString('es-CL')) : '$ 0'); });
-    ventasData.push(filaT);
-    ventasData.push([]);
-    var totFila = ['TOTAL'];
+    var wsV = {};
+    // Fila titulo
+    wsV[XLSX.utils.encode_cell({r:0,c:0})] = { v: '', t:'s', s: _estiloCell(true,'27A06B','FFFFFF',true) };
+    MESES.forEach(function(m, i) {
+      wsV[XLSX.utils.encode_cell({r:0,c:i+1})] = { v: m, t:'s', s: _estiloCell(true,'27A06B','FFFFFF',true) };
+    });
+    // Fila datos supervisor
+    wsV[XLSX.utils.encode_cell({r:1,c:0})] = { v: grupo.nombre, t:'s', s: _estiloCell(true,'EEF2FA','1A2035',false) };
     var totalGral = 0;
-    MESES.forEach(function(m){ totalGral += totalesMes[m]||0; totFila.push(totalesMes[m] > 0 ? ('$ ' + totalesMes[m].toLocaleString('es-CL')) : '$ 0'); });
-    ventasData.push(totFila);
-    ventasData.push([]);
-    ventasData.push(['TOTAL GENERAL', '$ ' + totalGral.toLocaleString('es-CL')]);
-
-    const wsV = XLSX.utils.aoa_to_sheet(ventasData);
-    wsV['!cols'] = [{wch:22}].concat(MESES.map(function(){ return {wch:16}; }));
-
-    // Estilo cabecera ventas
-    for (var CV = 0; CV <= MESES.length; CV++) {
-      var refV = XLSX.utils.encode_cell({r:0, c:CV});
-      if (!wsV[refV]) wsV[refV] = { v: '', t: 's' };
-      wsV[refV].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '27A06B' } }, alignment: { horizontal: 'center' } };
-    }
-
+    MESES.forEach(function(m, i) {
+      var v = totalesMes[m]||0;
+      totalGral += v;
+      wsV[XLSX.utils.encode_cell({r:1,c:i+1})] = { v: v>0?('$ '+v.toLocaleString('es-CL')):'$ 0', t:'s', s: _estiloCell(false,'EEF2FA','1A2035',true) };
+    });
+    // Fila total
+    wsV[XLSX.utils.encode_cell({r:3,c:0})] = { v: 'TOTAL GENERAL', t:'s', s: _estiloCell(true,'1B3A6B','FFFFFF',false) };
+    wsV[XLSX.utils.encode_cell({r:3,c:1})] = { v: '$ '+totalGral.toLocaleString('es-CL'), t:'s', s: _estiloCell(true,'1B3A6B','FFFFFF',true) };
+    wsV['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:3,c:MESES.length}});
+    wsV['!cols'] = [{wch:24}].concat(MESES.map(function(){ return {wch:16}; }));
     XLSX.utils.book_append_sheet(wb, wsV, 'Ventas ' + anoActual);
 
     XLSX.writeFile(wb, 'EMVAL_' + grupo.nombre.replace(/\s+/g,'_') + '_' + anoActual + '.xlsx');
