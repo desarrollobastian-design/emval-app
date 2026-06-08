@@ -219,6 +219,7 @@
   .voz-item-dur { font-size: 11px; color: var(--texto3); margin-top: 2px; }
   .voz-item audio { width: 100%; height: 32px; margin-top: 6px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -598,6 +599,7 @@
       <button class="btn btn-secondary btn-sm" onclick="go('s-carpetas');cargarCarpetas();" style="flex:1;font-size:12px;">Cotizaciones</button>
       <button id="btn-administrar" class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="flex:1;font-size:12px;display:none;">Administrar</button>
     </div>
+    <button id="btn-excel" class="btn btn-verde btn-sm" onclick="descargarExcelCotizaciones()" style="display:none;font-size:13px;margin-bottom:4px;">Descargar Excel cotizaciones</button>
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
     <div class="ot-card">
       <div class="ot-icon" style="background:#FEF0E6;">⚠️</div>
@@ -774,9 +776,11 @@ function validarPin() {
     if (estado.cargo === 'Supervisor' || estado.cargo === 'Administrador') {
       go('s-supervisor');
       cargarOTsSupervisor();
-      // Mostrar boton Administrar solo para Administrador
+      // Mostrar boton Administrar y Excel solo para Administrador
       var btnAdmin = document.getElementById('btn-administrar');
       if (btnAdmin) btnAdmin.style.display = estado.cargo === 'Administrador' ? 'block' : 'none';
+      var btnXls = document.getElementById('btn-excel');
+      if (btnXls) btnXls.style.display = estado.cargo === 'Administrador' ? 'block' : 'none';
     } else {
       // Tecnico va directo a nueva OT
       nuevaOT();
@@ -2084,6 +2088,8 @@ async function cargarCadenasApp() {
         await db.collection('cadenas').add({ ...cadenas[i], orden: i });
       }
     }
+    lista.innerHTML = ''; // Limpiar "Cargando..." antes de agregar cadenas
+    cadenas.sort(function(a,b){ return (a.orden||99)-(b.orden||99); }); // Ordenar por campo orden
     cadenas.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
@@ -4210,6 +4216,118 @@ async function cargarOTsSupervisor() {
     });
   } catch(e) {
     console.error('Error cargando OTs:', e);
+  }
+}
+
+// =========== EXCEL COTIZACIONES ===========
+async function descargarExcelCotizaciones() {
+  toast('Generando Excel...');
+  try {
+    const db = window.firebase.firestore();
+    // Cargar cotizaciones y supervisores
+    const snap = await db.collection('cotizaciones').orderBy('creadoEn','asc').get();
+    if (snap.empty) { toast('No hay cotizaciones guardadas'); return; }
+
+    // Obtener ano actual
+    const anoActual = new Date().getFullYear();
+
+    // Agrupar por supervisor (carpeta)
+    const porSupervisor = {};
+    snap.docs.forEach(function(doc) {
+      const d = doc.data();
+      const sup = d.carpeta || d.tecnico || 'Sin supervisor';
+      if (!porSupervisor[sup]) porSupervisor[sup] = [];
+      porSupervisor[sup].push(d);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const supervisores = Object.keys(porSupervisor).sort();
+
+    // Hoja por cada supervisor
+    const totalesPorSupMes = {}; // { supervisor: { mes: total } }
+    supervisores.forEach(function(sup) {
+      const rows = porSupervisor[sup];
+      totalesPorSupMes[sup] = {};
+      MESES.forEach(function(m){ totalesPorSupMes[sup][m] = 0; });
+
+      // Cabecera
+      const wsData = [];
+      wsData.push(['LOCAL','CeCo','TRABAJO','N cotizacion','HS','Monto','Fecha','SolPed','OC','HES','Factura']);
+
+      rows.forEach(function(d) {
+        // Parsear fecha para sumar por mes
+        var mesIdx = -1;
+        if (d.fecha) {
+          var partes = d.fecha.split('-');
+          if (partes.length === 3) mesIdx = parseInt(partes[1]) - 1;
+          // formato DD-MM-YYYY o DD/MM/YYYY
+          var partes2 = d.fecha.replace(/\//g,'-').split('-');
+          if (partes2.length === 3) mesIdx = parseInt(partes2[1]) - 1;
+        }
+        var monto = d.total || 0;
+        if (mesIdx >= 0 && mesIdx < 12) {
+          totalesPorSupMes[sup][MESES[mesIdx]] += monto;
+        }
+
+        wsData.push([
+          d.local || '',
+          d.centro || '',
+          d.descripcionTrabajo || d.nombreServicio || '',
+          d.numeroCotizacion || d.otNumero || '',
+          d.otNumero || '',
+          monto,
+          d.fecha || '',
+          '', // SolPed - manual
+          '', // OC - manual
+          '', // HES - manual
+          ''  // Factura - manual
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Ancho de columnas
+      ws['!cols'] = [
+        {wch:20},{wch:8},{wch:45},{wch:14},{wch:10},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:10}
+      ];
+
+      // Nombre de hoja: apellido del supervisor
+      var nombreHoja = sup.replace(/[:\/?*\[\]]/g,'').substring(0,31);
+      XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+    });
+
+    // Hoja VENTAS ANO
+    var ventasData = [];
+    ventasData.push(['', anoActual.toString()].concat(MESES));
+    supervisores.forEach(function(sup) {
+      var fila = [sup];
+      fila.push(''); // columna anio vacia
+      MESES.forEach(function(m) {
+        fila.push(totalesPorSupMes[sup][m] || 0);
+      });
+      ventasData.push(fila);
+    });
+    // Fila de totales
+    var totFila = ['TOTAL', ''];
+    MESES.forEach(function(m) {
+      var t = 0;
+      supervisores.forEach(function(sup){ t += (totalesPorSupMes[sup][m] || 0); });
+      totFila.push(t);
+    });
+    ventasData.push([]);
+    ventasData.push(totFila);
+
+    const wsVentas = XLSX.utils.aoa_to_sheet(ventasData);
+    wsVentas['!cols'] = [{wch:22},{wch:6}].concat(MESES.map(function(){ return {wch:14}; }));
+    XLSX.utils.book_append_sheet(wb, wsVentas, 'Ventas ' + anoActual);
+
+    // Descargar
+    XLSX.writeFile(wb, 'EMVAL_Cotizaciones_' + anoActual + '.xlsx');
+    toast('Excel descargado!');
+  } catch(e) {
+    console.error(e);
+    toast('Error generando Excel: ' + e.message);
   }
 }
 
