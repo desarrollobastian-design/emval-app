@@ -219,7 +219,7 @@
   .voz-item-dur { font-size: 11px; color: var(--texto3); margin-top: 2px; }
   .voz-item audio { width: 100%; height: 32px; margin-top: 6px; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -4554,44 +4554,37 @@ function abrirFactSupervisor(grupo) {
   });
 }
 
-function _estiloCell(bold, bgRgb, textRgb, center) {
-  return {
-    font: { bold: bold||false, color: { rgb: textRgb||'000000' }, name: 'Calibri', sz: 11 },
-    fill: bgRgb ? { patternType: 'solid', fgColor: { rgb: bgRgb } } : { patternType: 'none' },
-    border: {
-      top:    { style: 'thin', color: { rgb: 'C8D0E0' } },
-      bottom: { style: 'thin', color: { rgb: 'C8D0E0' } },
-      left:   { style: 'thin', color: { rgb: 'C8D0E0' } },
-      right:  { style: 'thin', color: { rgb: 'C8D0E0' } }
-    },
-    alignment: { horizontal: center ? 'center' : 'left', vertical: 'center', wrapText: false }
-  };
-}
-
 function descargarExcelSupervisor() {
   const grupo = window._factSupActual;
   if (!grupo || !grupo.items || grupo.items.length === 0) { toast('No hay cotizaciones'); return; }
   toast('Generando Excel...');
   try {
     const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-    const wb = XLSX.utils.book_new();
     const anoActual = new Date().getFullYear();
     const totalesMes = {};
     MESES.forEach(function(m){ totalesMes[m] = 0; });
 
-    // ---- HOJA SUPERVISOR ----
-    var COLS = ['LOCAL','CeCo','TRABAJO','N cotizacion','HS','Monto','Fecha','SolPed','OC','HES','Factura'];
-    var ws = {};
-    var rowIdx = 0;
+    // Generar HTML con estilos que Excel lee correctamente
+    var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
+    html += '<head><meta charset="UTF-8">';
+    html += '<style>';
+    html += 'body{font-family:Calibri,sans-serif;font-size:11pt;}';
+    html += '.cab{background:#1B3A6B;color:#FFFFFF;font-weight:bold;text-align:center;border:1px solid #C8D0E0;padding:5px 8px;}';
+    html += '.par{background:#FFFFFF;color:#1A2035;border:1px solid #C8D0E0;padding:4px 8px;}';
+    html += '.imp{background:#EEF2FA;color:#1A2035;border:1px solid #C8D0E0;padding:4px 8px;}';
+    html += '.cen{text-align:center;}';
+    html += '.cab2{background:#27A06B;color:#FFFFFF;font-weight:bold;text-align:center;border:1px solid #C8D0E0;padding:5px 8px;}';
+    html += '.tot{background:#1B3A6B;color:#FFFFFF;font-weight:bold;border:1px solid #C8D0E0;padding:4px 8px;}';
+    html += '</style></head><body>';
 
-    // Cabecera
-    COLS.forEach(function(h, c) {
-      var ref = XLSX.utils.encode_cell({r:0, c:c});
-      ws[ref] = { v: h, t: 's', s: _estiloCell(true, '1B3A6B', 'FFFFFF', true) };
-    });
-    rowIdx = 1;
+    // ---- HOJA 1: datos supervisor ----
+    html += '<table>';
+    html += '<tr><td class="cab">LOCAL</td><td class="cab">CeCo</td><td class="cab">TRABAJO</td>';
+    html += '<td class="cab">N cotizacion</td><td class="cab">HS</td><td class="cab">Monto</td>';
+    html += '<td class="cab">Fecha</td><td class="cab">SolPed</td><td class="cab">OC</td>';
+    html += '<td class="cab">HES</td><td class="cab">Factura</td></tr>';
 
-    grupo.items.forEach(function(d, ri) {
+    grupo.items.forEach(function(d, i) {
       var mesIdx = -1;
       if (d.fecha) {
         var p = d.fecha.replace(/\//g,'-').split('-');
@@ -4599,58 +4592,52 @@ function descargarExcelSupervisor() {
       }
       var monto = d.total || 0;
       if (mesIdx >= 0 && mesIdx < 12) totalesMes[MESES[mesIdx]] += monto;
-
-      var bgFila = (ri % 2 === 0) ? 'FFFFFF' : 'EEF2FA';
-      var fila = [
-        d.local || '',
-        d.centro || '',
-        d.nombreServicio || d.descripcionTrabajo || '',
-        d.numeroCotizacion || '',
-        d.otNumero || '',
-        monto > 0 ? ('$ ' + monto.toLocaleString('es-CL')) : '$ 0',
-        d.fecha || '',
-        d.solped || '',
-        d.oc || '',
-        d.hes || '',
-        d.factura || ''
-      ];
-      fila.forEach(function(val, c) {
-        var ref = XLSX.utils.encode_cell({r: rowIdx, c: c});
-        ws[ref] = { v: val, t: 's', s: _estiloCell(false, bgFila, '1A2035', c===5||c===1) };
-      });
-      rowIdx++;
+      var cls = (i % 2 === 0) ? 'par' : 'imp';
+      var montoStr = '$ ' + monto.toLocaleString('es-CL');
+      html += '<tr>';
+      html += '<td class="' + cls + '">' + (d.local||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.centro||'') + '</td>';
+      html += '<td class="' + cls + '">' + (d.nombreServicio||d.descripcionTrabajo||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.numeroCotizacion||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.otNumero||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + montoStr + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.fecha||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.solped||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.oc||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.hes||'') + '</td>';
+      html += '<td class="' + cls + ' cen">' + (d.factura||'') + '</td>';
+      html += '</tr>';
     });
+    html += '</table>';
 
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rowIdx-1, c:COLS.length-1}});
-    ws['!cols'] = [{wch:22},{wch:7},{wch:42},{wch:14},{wch:9},{wch:14},{wch:12},{wch:10},{wch:12},{wch:12},{wch:10}];
-    ws['!rows'] = [{hpt:18}]; // altura cabecera
-
-    var nombreHoja = grupo.nombre.replace(/[:\/?*[\]]/g,'').substring(0,31);
-    XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
-
-    // ---- HOJA VENTAS ----
-    var wsV = {};
-    // Fila titulo
-    wsV[XLSX.utils.encode_cell({r:0,c:0})] = { v: '', t:'s', s: _estiloCell(true,'27A06B','FFFFFF',true) };
-    MESES.forEach(function(m, i) {
-      wsV[XLSX.utils.encode_cell({r:0,c:i+1})] = { v: m, t:'s', s: _estiloCell(true,'27A06B','FFFFFF',true) };
-    });
-    // Fila datos supervisor
-    wsV[XLSX.utils.encode_cell({r:1,c:0})] = { v: grupo.nombre, t:'s', s: _estiloCell(true,'EEF2FA','1A2035',false) };
+    // Separador entre hojas no es posible en HTML simple, usar 2 tablas con titulo
+    html += '<br><br>';
+    html += '<table>';
+    html += '<tr><td class="cab2"></td>';
+    MESES.forEach(function(m){ html += '<td class="cab2">' + m + '</td>'; });
+    html += '</tr><tr>';
+    html += '<td class="imp"><b>' + grupo.nombre + '</b></td>';
     var totalGral = 0;
-    MESES.forEach(function(m, i) {
-      var v = totalesMes[m]||0;
-      totalGral += v;
-      wsV[XLSX.utils.encode_cell({r:1,c:i+1})] = { v: v>0?('$ '+v.toLocaleString('es-CL')):'$ 0', t:'s', s: _estiloCell(false,'EEF2FA','1A2035',true) };
+    MESES.forEach(function(m) {
+      var v = totalesMes[m]||0; totalGral += v;
+      html += '<td class="imp cen">$ ' + v.toLocaleString('es-CL') + '</td>';
     });
-    // Fila total
-    wsV[XLSX.utils.encode_cell({r:3,c:0})] = { v: 'TOTAL GENERAL', t:'s', s: _estiloCell(true,'1B3A6B','FFFFFF',false) };
-    wsV[XLSX.utils.encode_cell({r:3,c:1})] = { v: '$ '+totalGral.toLocaleString('es-CL'), t:'s', s: _estiloCell(true,'1B3A6B','FFFFFF',true) };
-    wsV['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:3,c:MESES.length}});
-    wsV['!cols'] = [{wch:24}].concat(MESES.map(function(){ return {wch:16}; }));
-    XLSX.utils.book_append_sheet(wb, wsV, 'Ventas ' + anoActual);
+    html += '</tr><tr>';
+    html += '<td class="tot"><b>TOTAL GENERAL</b></td>';
+    html += '<td class="tot cen" colspan="' + MESES.length + '"><b>$ ' + totalGral.toLocaleString('es-CL') + '</b></td>';
+    html += '</tr></table>';
+    html += '</body></html>';
 
-    XLSX.writeFile(wb, 'EMVAL_' + grupo.nombre.replace(/\s+/g,'_') + '_' + anoActual + '.xlsx');
+    // Descargar como .xls (Excel lo abre con estilos)
+    var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'EMVAL_' + grupo.nombre.replace(/\s+/g,'_') + '_' + anoActual + '.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     toast('Excel descargado!');
   } catch(e) { console.error(e); toast('Error: ' + e.message); }
 }
