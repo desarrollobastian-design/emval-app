@@ -4449,12 +4449,37 @@ function abrirFactSupervisor(grupo) {
       card.appendChild(desc);
     }
     // Estado facturacion
-    const estadoBadge = document.createElement('div');
     const yaFacturado = d.factura && d.factura.trim() !== '';
-    estadoBadge.style.cssText = 'display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;margin-bottom:10px;background:' +
+
+    // Badge estado (visible siempre en el header)
+    const estadoBadge = document.createElement('div');
+    estadoBadge.style.cssText = 'display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:' +
       (yaFacturado ? '#E6F4EA' : '#FEF0E6') + ';color:' + (yaFacturado ? '#1A7A3C' : '#B45309') + ';';
     estadoBadge.textContent = yaFacturado ? 'Facturado' : 'Pendiente';
-    card.appendChild(estadoBadge);
+
+    // Flecha toggle
+    const flechaDiv = document.createElement('div');
+    flechaDiv.style.cssText = 'display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-top:6px;';
+    const badgeWrap = document.createElement('div');
+    badgeWrap.appendChild(estadoBadge);
+    const chevFact = document.createElement('span');
+    chevFact.style.cssText = 'font-size:13px;color:var(--texto3);font-weight:600;transition:transform 0.2s;display:inline-block;';
+    chevFact.textContent = 'Editar >';
+    flechaDiv.appendChild(badgeWrap);
+    flechaDiv.appendChild(chevFact);
+    card.appendChild(flechaDiv);
+
+    // Cuerpo colapsable - oculto por defecto
+    const cuerpo = document.createElement('div');
+    cuerpo.style.cssText = 'display:none;margin-top:12px;';
+
+    // Toggle al hacer click
+    flechaDiv.onclick = function() {
+      const abierto = cuerpo.style.display !== 'none';
+      cuerpo.style.display = abierto ? 'none' : 'block';
+      chevFact.textContent = abierto ? 'Editar >' : 'Cerrar v';
+    };
+
     // Campos 2x2
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;';
@@ -4477,12 +4502,13 @@ function abrirFactSupervisor(grupo) {
     const fFactura = mkF('Factura', d.factura || '');
     grid.appendChild(fSolped.wrap); grid.appendChild(fOc.wrap);
     grid.appendChild(fHes.wrap);    grid.appendChild(fFactura.wrap);
-    card.appendChild(grid);
+    cuerpo.appendChild(grid);
+
     // Boton guardar
     const btnG = document.createElement('button');
     btnG.textContent = 'Guardar';
     btnG.style.cssText = 'width:100%;padding:11px;border:none;background:var(--azul);color:white;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
-    btnG.onclick = (function(docId, fS, fO, fH, fF, badge) { return async function() {
+    btnG.onclick = (function(docId, fS, fO, fH, fF, badge, chev, cuerpoEl) { return async function() {
       try {
         const db = window.firebase.firestore();
         const vals = {
@@ -4496,10 +4522,13 @@ function abrirFactSupervisor(grupo) {
         badge.style.background = ok ? '#E6F4EA' : '#FEF0E6';
         badge.style.color = ok ? '#1A7A3C' : '#B45309';
         badge.textContent = ok ? 'Facturado' : 'Pendiente';
+        cuerpoEl.style.display = 'none';
+        chev.textContent = 'Editar >';
         toast('Guardado');
       } catch(e) { toast('Error: ' + e.message); }
-    }; })(d.id, fSolped.inp, fOc.inp, fHes.inp, fFactura.inp, estadoBadge);
-    card.appendChild(btnG);
+    }; })(d.id, fSolped.inp, fOc.inp, fHes.inp, fFactura.inp, estadoBadge, chevFact, cuerpo);
+    cuerpo.appendChild(btnG);
+    card.appendChild(cuerpo);
     lista.appendChild(card);
   });
 }
