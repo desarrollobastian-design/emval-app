@@ -2901,7 +2901,9 @@ async function guardarYEnviarPDF() {
     );
     const data = await resp.json();
     if (data.secure_url) {
-      pdfUrlCloudinary = data.secure_url;
+      // fl_attachment fuerza Content-Disposition con nombre y extension .pdf
+      const nombrePdf = 'OT_' + estado.otNumero + '_' + (estado.local||'').replace(/\s+/g,'_') + '.pdf';
+      pdfUrlCloudinary = data.secure_url.replace('/upload/', '/upload/fl_attachment:' + nombrePdf + '/');
       console.log('PDF subido a Cloudinary:', pdfUrlCloudinary);
     } else {
       console.error('Cloudinary PDF error:', data);
