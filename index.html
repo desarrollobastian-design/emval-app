@@ -2944,14 +2944,18 @@ async function guardarYEnviarPDF() {
       const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
       const nombreArchivo = 'Recepcion_Obra_OT' + estado.otNumero + '.pdf';
 
-      // EmailJS soporta adjuntos via content (base64) hasta ~50KB
-      // Si el PDF es grande, enviamos link de Cloudinary como descarga directa
-      const pdfSize = pdfBlob.size;
-      console.log('Tamano PDF para email:', pdfSize, 'bytes');
+      // Crear adjunto PDF via DataTransfer para EmailJS
+      let pdfFiles = null;
+      try {
+        const pdfFile = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
+        const dt = new DataTransfer();
+        dt.items.add(pdfFile);
+        pdfFiles = dt.files;
+      } catch(e) {
+        console.warn('DataTransfer no disponible:', e);
+      }
 
-      // Email: usar Firestore para ver PDF en la app
-      const linkDescarga = pdfUrlFirestore || '';
-      await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+      const emailParams = {
         email_admin: email,
         ot_numero: String(estado.otNumero),
         local: String(estado.local || ''),
@@ -2959,9 +2963,11 @@ async function guardarYEnviarPDF() {
         tecnico: String(estado.usuario || ''),
         tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
         trabajo: String(trabajo),
-        pdf_url: linkDescarga
-      });
-      toast('Email enviado con link al PDF');
+      };
+      if (pdfFiles) emailParams.pdf_attachment = pdfFiles;
+
+      await emailjs.send('service_xm6dmxl', 'template_agzfcux', emailParams);
+      toast('Email enviado con PDF adjunto');
     } catch(e) {
       console.error('Error email:', e);
       toast('PDF listo (error al enviar email)');
