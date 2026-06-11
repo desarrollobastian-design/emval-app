@@ -2944,18 +2944,7 @@ async function guardarYEnviarPDF() {
       const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
       const nombreArchivo = 'Recepcion_Obra_OT' + estado.otNumero + '.pdf';
 
-      // Crear adjunto PDF via DataTransfer para EmailJS
-      let pdfFiles = null;
-      try {
-        const pdfFile = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
-        const dt = new DataTransfer();
-        dt.items.add(pdfFile);
-        pdfFiles = dt.files;
-      } catch(e) {
-        console.warn('DataTransfer no disponible:', e);
-      }
-
-      const emailParams = {
+      await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
         email_admin: email,
         ot_numero: String(estado.otNumero),
         local: String(estado.local || ''),
@@ -2963,11 +2952,9 @@ async function guardarYEnviarPDF() {
         tecnico: String(estado.usuario || ''),
         tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
         trabajo: String(trabajo),
-      };
-      if (pdfFiles) emailParams.pdf_attachment = pdfFiles;
-
-      await emailjs.send('service_xm6dmxl', 'template_agzfcux', emailParams);
-      toast('Email enviado con PDF adjunto');
+        pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
+      });
+      toast('Email enviado con PDF');
     } catch(e) {
       console.error('Error email:', e);
       toast('PDF listo (error al enviar email)');
