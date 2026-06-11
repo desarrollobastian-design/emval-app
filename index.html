@@ -2986,9 +2986,6 @@ async function guardarYEnviarPDF() {
   // Descargar localmente en el dispositivo del tecnico
   doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
 
-  var btnPdf = document.getElementById('btn-ver-pdf');
-  if (btnPdf) btnPdf.style.display = 'block';
-
   return pdfUrlCloudinary || pdfUrlFirestore;
 }
 
