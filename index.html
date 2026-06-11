@@ -729,6 +729,7 @@ let estado = {
   otNumero: null,
   local: null,
   direccion: null,
+  ceco: null,
   tipo: null,
   descripProblema: '',
   fotosAntes: [null,null,null,null],
@@ -817,6 +818,7 @@ function nuevaOT() {
   estado.pdfUrl = null;
   estado.pdfUrlCloudinary = null;
   estado.direccion = null;
+  estado.ceco = null;
   estado.firmada = false;
   // fotos reset handled by inicializarFotos()
   vozGrabaciones = [];
@@ -858,9 +860,10 @@ function nuevaOT() {
 }
 
 // =========== LOCAL ===========
-function seleccionarLocal(nombre, direccion, emailAdmin) {
+function seleccionarLocal(nombre, direccion, emailAdmin, centro) {
   estado.local = nombre;
   estado.direccion = direccion || '';
+  estado.ceco = centro || '';
   estado.emailSucursal = emailAdmin || '';
   toast(nombre + ' seleccionado');
   setTimeout(() => {
@@ -2103,7 +2106,7 @@ function seleccionarCadena(cadena) {
     const supSuc = typeof suc_item === 'object' ? (suc_item.supervisor || '') : '';
     const centroSuc = typeof suc_item === 'object' ? (suc_item.centro || '') : '';
     const wrapper = document.createElement('div');
-    wrapper.onclick = (function(n, dir, em){ return function(){ seleccionarLocal(n, dir, em); }; })(nombre, dirSuc, emailSuc);
+    wrapper.onclick = (function(n, dir, em, cen){ return function(){ seleccionarLocal(n, dir, em, cen); }; })(nombre, dirSuc, emailSuc, centroSuc);
     const item = document.createElement('div');
     item.className = 'local-item';
     const iconEl = document.createElement('div');
@@ -2614,11 +2617,11 @@ async function generarPDFRecepcionObra() {
     doc.setFontSize(8);
     doc.text('Fecha', 142, 50);
     doc.text('Local', 142, 58);
-    doc.text('Direcci' + String.fromCharCode(243) + 'n', 142, 66);
+    doc.text('CeCo', 142, 66);
     doc.setFont('helvetica', 'normal');
     doc.text(fecha, 160, 50);
     doc.text((estado.local || '').substring(0, 16), 160, 58);
-    doc.text((estado.direccion || estado.local || '').substring(0, 20), 160, 66);
+    doc.text((estado.ceco || '').substring(0, 20), 160, 66);
 
     // ---- TIPO TRABAJO ----
     const tipoY = 72;
