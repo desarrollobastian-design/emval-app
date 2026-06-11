@@ -2983,9 +2983,6 @@ async function guardarYEnviarPDF() {
     } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
   }
 
-  // Descargar localmente en el dispositivo del tecnico
-  doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
-
   return pdfUrlCloudinary || pdfUrlFirestore;
 }
 
