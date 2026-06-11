@@ -424,18 +424,6 @@
       </div>
     </div>
 
-    <div class="field">
-      <label>[mic]️ Nota de voz — Materiales y gastos</label>
-      <div class="voz-container">
-        <div class="voz-timer" id="voz-timer">0:00</div>
-        <div class="voz-status" id="voz-status">Toca para grabar lo que gastaste y los materiales usados</div>
-        <div style="height:12px;"></div>
-        <button class="voz-btn-grabar" id="voz-btn" onclick="toggleGrabacion()">[mic]️</button>
-        <div style="height:12px;"></div>
-        <div class="voz-lista" id="voz-lista"></div>
-      </div>
-    </div>
-    
     <div class="mt-auto">
       <button class="btn btn-primary" onclick="cerrarOT()">Cerrar y generar OT →</button>
     </div>
@@ -546,13 +534,17 @@
       <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;">COMPARACION ANTES / DESPUES</div>
       <div id="grid-comparacion"></div>
     </div>
-    <button class="btn btn-secondary" id="btn-ver-pdf" onclick="verPDF()" style="display:none;">Ver PDF generado</button>
-    <button class="btn btn-whatsapp" onclick="notificarSupervisor()" style="background:#25D366;">
-      Notificar supervisor por WhatsApp
-    </button>
-    <button class="btn btn-whatsapp" onclick="enviarWhatsApp()" style="background:#128C7E;">
-      Enviar resumen por WhatsApp
-    </button>
+    <div class="field" style="margin-top:8px;">
+      <label>[mic]️ Nota de voz — Materiales y gastos</label>
+      <div class="voz-container">
+        <div class="voz-timer" id="voz-timer">0:00</div>
+        <div class="voz-status" id="voz-status">Toca para grabar lo que gastaste y los materiales usados</div>
+        <div style="height:12px;"></div>
+        <button class="voz-btn-grabar" id="voz-btn" onclick="toggleGrabacion()">[mic]️</button>
+        <div style="height:12px;"></div>
+        <div class="voz-lista" id="voz-lista"></div>
+      </div>
+    </div>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Volver al inicio</button>
     <p style="font-size: 11px; color: var(--texto3); text-align: center;">OT guardada · se sincroniza automáticamente con la nube</p>
   </div>
@@ -1000,11 +992,12 @@ function cerrarOT() {
   }
   const desc = document.getElementById('desc-trabajo').value.trim();
   if (!desc) { toast('Escribe el trabajo que realizaste'); return; }
+  const fotosDespues = estado.fotosDespues.filter(f => f).length;
+  if (fotosDespues === 0) { toast('Agrega al menos 1 foto del trabajo terminado'); return; }
   if (!estado.firmada) { toast('Necesitas confirmar la firma del administrador'); return; }
   if (!estado.fotoTimbre) { toast('Falta la foto del timbre del local'); return; }
-  
+
   const fotosAntes = estado.fotosAntes.filter(f => f).length;
-  const fotosDespues = estado.fotosDespues.filter(f => f).length;
   const fecha = new Date().toLocaleDateString('es-CL');
   
   document.getElementById('cierre-ot-info').textContent = 'OT #' + estado.otNumero + ' . ' + fecha;
@@ -1016,18 +1009,6 @@ function cerrarOT() {
   document.getElementById('sum-fotos-antes').textContent = fotosAntes + ' foto' + (fotosAntes !== 1 ? 's' : '');
   document.getElementById('sum-fotos-despues').textContent = fotosDespues + ' foto' + (fotosDespues !== 1 ? 's' : '');
   document.getElementById('sum-firma').textContent = '[ok] Firmado';
-
-  // Agregar nota de voz al resumen si hay
-  const numVoz = vozGrabaciones.length;
-  let sumFirmaRow = document.querySelector('#s-cierre .card');
-  let vozRow = document.getElementById('sum-voz-row');
-  if (!vozRow && numVoz > 0) {
-    const row = document.createElement('div');
-    row.className = 'summary-row';
-    row.id = 'sum-voz-row';
-    row.innerHTML = `<span class="sum-label">Notas de voz</span><span class="sum-val" style="color:var(--verde)">${numVoz} grabacion${numVoz>1?'es':''}</span>`;
-    sumFirmaRow.appendChild(row);
-  }
 
   // Guardar email admin
   estado.emailAdmin = document.getElementById('email-admin').value.trim();
@@ -1049,7 +1030,6 @@ function cerrarOT() {
 
   // Mostrar comparacion fotos
   renderComparacion();
-  setTimeout(function(){ var btn = document.getElementById('btn-ver-pdf'); if(btn) btn.style.display='block'; }, 1500);
 
   // Generar PDF y enviar email
   setTimeout(function(){ guardarYEnviarPDF(); }, 500);
