@@ -279,30 +279,6 @@
   </div>
 </div>
 
-<!-- ============ SCREEN: HOME TÉCNICO ============ -->
-<div class="screen" id="s-home">
-  <div class="topbar" style="justify-content: space-between; padding: 14px 16px;">
-    <div>
-      <div style="font-size: 16px; font-weight: 600;" id="home-saludo">Hola </div>
-      <div style="font-size: 11px; opacity: 0.7;" id="home-cargo">Tecnico en terreno</div>
-    </div>
-    <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);border:none;color:white;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Salir</button>
-  </div>
-  <div class="offline-bar">
-    <div class="offline-dot"></div>
-    <span>Modo offline activo · Los datos se sincronizan al conectarse</span>
-  </div>
-  <div class="content">
-    <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs RECIENTES</div>
-    <div id="lista-ots-home">
-      <p style="font-size:13px;color:var(--texto3);">Cargando OTs...</p>
-    </div>
-    <div class="mt-auto">
-      <button class="btn btn-primary" onclick="nuevaOT()">+ Nueva Orden de Trabajo</button>
-    </div>
-  </div>
-</div>
-
 <!-- ============ SCREEN: SELECCIÓN LOCAL ============ -->
 <div class="screen" id="s-cadena">
   <div class="topbar">
@@ -2030,91 +2006,6 @@ async function enviarCotGuardada(cotId) {
     window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + d.local + '&body=' + body);
   } catch(e) {
     toast('Error enviando cotizacion');
-  }
-}
-
-// =========== OTs HOME ===========
-async function cargarOTsHome() {
-  try {
-    if (!window._firebaseReady) { setTimeout(cargarOTsHome, 800); return; }
-    const db = window.firebase.firestore();
-    const snap = await db.collection('ordenes').orderBy('creadoEn','desc').limit(5).get();
-    const lista = document.getElementById('lista-ots-home');
-    if (!lista) return;
-    lista.innerHTML = '';
-    if (snap.empty) {
-      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);">No hay OTs recientes</p>';
-      return;
-    }
-    // Get cadenas for logos
-    const cadenasSnap = await db.collection('cadenas').get();
-    const cadenaMap = {};
-    cadenasSnap.docs.forEach(function(d) {
-      const data = d.data();
-      cadenaMap[data.nombre] = data;
-      // Map partial names too
-      if (data.sucursales) {
-        data.sucursales.forEach(function(s) { cadenaMap[s] = data; });
-      }
-    });
-
-    snap.docs.forEach(function(doc) {
-      const d = doc.data();
-      const card = document.createElement('div');
-      card.className = 'ot-card';
-      card.onclick = nuevaOT;
-
-      // Find cadena for this local
-      const cadena = cadenaMap[d.local] || null;
-      const iconEl = document.createElement('div');
-      iconEl.className = 'ot-icon';
-
-      if (cadena && cadena.logo) {
-        iconEl.style.background = cadena.color || '#EEF2FA';
-        iconEl.style.overflow = 'hidden';
-        const img = document.createElement('img');
-        img.src = cadena.logo;
-        img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-        img.onerror = function() {
-          iconEl.removeChild(img);
-          iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-          iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
-          iconEl.style.fontWeight = '700';
-        };
-        iconEl.appendChild(img);
-      } else {
-        iconEl.style.background = d.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
-        iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-        iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
-        iconEl.style.fontWeight = '700';
-        iconEl.style.fontSize = '14px';
-      }
-
-      const info = document.createElement('div');
-      info.className = 'ot-info';
-      const titulo = document.createElement('div');
-      titulo.className = 'ot-titulo';
-      titulo.textContent = d.local || 'Sin local';
-      const sub = document.createElement('div');
-      sub.className = 'ot-sub';
-      const badge = d.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
-      const label = d.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
-      sub.innerHTML = (d.fecha||'') + ' | <span class="badge ' + badge + '">' + label + '</span>';
-      info.appendChild(titulo); info.appendChild(sub);
-
-      const arrow = document.createElement('svg');
-      arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
-      arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
-      arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
-      arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
-
-      card.appendChild(iconEl); card.appendChild(info); card.appendChild(arrow);
-      lista.appendChild(card);
-    });
-  } catch(e) {
-    console.error('Error cargando OTs home:', e);
-    const lista = document.getElementById('lista-ots-home');
-    if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);">No hay OTs recientes</p>';
   }
 }
 
