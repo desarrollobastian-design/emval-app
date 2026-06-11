@@ -786,8 +786,8 @@ function seleccionarUsuario(nombre, cargo, letra) {
   document.getElementById('pin-nombre-display').textContent = nombre;
   const av = document.getElementById('pin-avatar');
   av.textContent = letra;
-  const colors = {'A':'#1B3A6B','P':'#2D5AA0','C':'#1D6B5A','S':'#6B3A1B'};
-  av.style.background = colors[letra] || '#1B3A6B';
+  const colorFijoPorCargo = { 'Administrador': '#2D5AA0', 'Supervisor': '#1B3A6B' };
+  av.style.background = colorFijoPorCargo[cargo] || _colorPorNombre(nombre);
   pinActual = '';
   actualizarDots();
   go('s-pin');
@@ -2532,18 +2532,34 @@ function _crearUsuarioItem(nombre, cargo, letra, color) {
   return div;
 }
 
+function _colorPorNombre(nombre) {
+  const paleta = [
+    '#1D6B5A', // verde oscuro
+    '#2D5AA0', // azul
+    '#9B3B8E', // morado
+    '#C0392B', // rojo
+    '#D4681A', // naranja oscuro
+    '#1A7A8A', // turquesa
+    '#6B3A1B', // café
+    '#4A7A2A', // verde oliva
+    '#5A1B6B', // violeta
+    '#1B5A6B', // azul petróleo
+    '#7A3A5A', // vino
+    '#2A6B3A', // verde bosque
+  ];
+  let hash = 0;
+  for (let i = 0; i < nombre.length; i++) hash = (hash * 31 + nombre.charCodeAt(i)) >>> 0;
+  return paleta[hash % paleta.length];
+}
+
 function _renderListaUsuarios(docs) {
   const lista = document.getElementById('lista-usuarios');
   if (!lista) return;
   lista.innerHTML = '';
-  // Colores por cargo
-  const colorPorCargo = {
-    'Administrador':      '#2D5AA0',
-    'Supervisor':         '#1B3A6B',
-    'Tecnico en terreno': '#1D6B5A'
+  const colorFijoPorCargo = {
+    'Administrador': '#2D5AA0',
+    'Supervisor':    '#1B3A6B',
   };
-  const coloresFallback = ['#1D6B5A','#5A1B6B','#1B5A6B','#6B4E1B'];
-  let colorIdx = 0;
   // Ordenar: Administrador primero, luego Supervisor, luego Tecnicos
   const orden = { 'Administrador': 0, 'Supervisor': 1, 'Tecnico en terreno': 2 };
   const sorted = docs.slice().sort(function(a, b) {
@@ -2553,7 +2569,7 @@ function _renderListaUsuarios(docs) {
     if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
     PINS[d.nombre] = d.pin || '1234';
     const cargo = d.cargo || 'Tecnico en terreno';
-    const color = colorPorCargo[cargo] || coloresFallback[colorIdx++ % coloresFallback.length];
+    const color = colorFijoPorCargo[cargo] || _colorPorNombre(d.nombre);
     lista.appendChild(_crearUsuarioItem(d.nombre, cargo, d.letra || d.nombre.charAt(0).toUpperCase(), color));
   });
   // Sin boton Supervisor separado - Pedro Arce (Administrador) tiene acceso al panel
