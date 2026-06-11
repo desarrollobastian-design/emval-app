@@ -387,11 +387,12 @@
   <div class="content">
     <div style="font-size: 13px; color: var(--texto2);">Paso 4 de 4 — Documenta el trabajo realizado</div>
     
+    <div id="ejecucion-prev-content" style="display:none;"></div>
     <div class="field">
-      <label>Trabajo realizado</label>
+      <label id="ejecucion-trabajo-label">Trabajo realizado</label>
       <textarea id="desc-trabajo" placeholder="Describe detalladamente lo que se hizo..."></textarea>
     </div>
-    
+
     <div class="field">
       <label>Fotos — Trabajo terminado</label>
       <div class="foto-grid" id="grid-despues"></div>
@@ -730,6 +731,8 @@ let estado = {
   local: null,
   direccion: null,
   ceco: null,
+  numEquipos: '',
+  serviciosPreventivo: [],
   tipo: null,
   descripProblema: '',
   fotosAntes: [null,null,null,null],
@@ -819,6 +822,8 @@ function nuevaOT() {
   estado.pdfUrlCloudinary = null;
   estado.direccion = null;
   estado.ceco = null;
+  estado.numEquipos = '';
+  estado.serviciosPreventivo = [];
   estado.firmada = false;
   // fotos reset handled by inicializarFotos()
   vozGrabaciones = [];
@@ -956,6 +961,7 @@ function irEjecucion() {
   const conFotos = estado.fotosAntes.filter(function(f){ return f !== null; }).length;
   if (conFotos === 0) { toast('Toma al menos 1 foto del estado inicial'); return; }
   go('s-ejecucion');
+  cargarEjecucionScreen();
 }
 
 // =========== FIRMA ===========
@@ -992,14 +998,90 @@ function confirmarFirma() {
   toast('Firma guardada');
 }
 
+// =========== PANTALLA EJECUCION ===========
+const SERVICIOS_PREVENTIVO = [
+  'Inspección Visual (verifica estado de la estructura, deformaciones y fijaciones)',
+  'Inspección de cilindro hidráulico, verificar desgaste y grietas',
+  'Realizar inspección al sistema hidráulico, verificar nivel de aceite, ruidos anormales, etc.',
+  'Inspección al sistema de ruedas de carga, ver estado y sus fijaciones',
+  'Inspección a ruedas motrices, ver estado y fijaciones',
+  'Cambio de ruedas de carga (de ser necesario)',
+  'Cambio de ruedas motrices (de ser necesario)',
+  'Inspección de todos los sellos (cambiar de ser necesario)',
+  'Inspección de todos los rodamientos (Cambiar si es necesario)',
+  'Realizar lubricación a sistema y partes móviles',
+  'Realizar pruebas de operatividad'
+];
+
+function cargarEjecucionScreen() {
+  const prevCont = document.getElementById('ejecucion-prev-content');
+  const trabajoLabel = document.getElementById('ejecucion-trabajo-label');
+  const descTA = document.getElementById('desc-trabajo');
+  if (!prevCont) return;
+
+  if (estado.tipo === 'preventivo') {
+    if (!estado.serviciosPreventivo || estado.serviciosPreventivo.length === 0) {
+      estado.serviciosPreventivo = SERVICIOS_PREVENTIVO.map(function(n){ return { nombre: n, respuesta: null }; });
+    }
+    let html = '<div class="field">';
+    html += '<label>Nº Equipos Suscritos</label>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value"/>';
+    html += '</div>';
+    html += '<div class="field"><label>Servicios a realizar</label>';
+    html += '<div style="border:1.5px solid var(--gris2);border-radius:10px;overflow:hidden;">';
+    html += '<div style="display:flex;background:var(--azul);padding:8px 12px;align-items:center;">';
+    html += '<span style="flex:1;font-size:12px;font-weight:600;color:white;text-transform:uppercase;">Servicio</span>';
+    html += '<span style="font-size:12px;font-weight:600;color:white;text-transform:uppercase;min-width:90px;text-align:center;">Estado</span>';
+    html += '</div>';
+    estado.serviciosPreventivo.forEach(function(svc, idx) {
+      const bg = idx % 2 === 0 ? 'white' : '#F8F9FB';
+      const siSt = svc.respuesta === 'si' ? 'background:#27A06B;color:white;' : 'background:#E8ECF5;color:#6B7280;';
+      const noSt = svc.respuesta === 'no' ? 'background:#E74C3C;color:white;' : 'background:#E8ECF5;color:#6B7280;';
+      html += '<div style="display:flex;padding:8px 12px;gap:8px;align-items:center;background:' + bg + ';border-bottom:1px solid #E5E7EB;">';
+      html += '<span style="flex:1;font-size:13px;color:var(--texto1);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
+      html += '<div style="display:flex;gap:4px;min-width:90px;justify-content:center;">';
+      html += '<button id="svc-si-' + idx + '" onclick="responderServicio(' + idx + ',\'si\')" style="' + siSt + 'border:none;border-radius:6px;padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Sí</button>';
+      html += '<button id="svc-no-' + idx + '" onclick="responderServicio(' + idx + ',\'no\')" style="' + noSt + 'border:none;border-radius:6px;padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">No</button>';
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+    prevCont.innerHTML = html;
+    prevCont.style.display = 'block';
+    if (trabajoLabel) trabajoLabel.textContent = 'Observaciones';
+    if (descTA) descTA.placeholder = 'Observaciones del servicio realizado...';
+  } else {
+    prevCont.style.display = 'none';
+    prevCont.innerHTML = '';
+    if (trabajoLabel) trabajoLabel.textContent = 'Trabajo realizado';
+    if (descTA) descTA.placeholder = 'Describe detalladamente lo que se hizo...';
+  }
+}
+
+function responderServicio(idx, respuesta) {
+  if (!estado.serviciosPreventivo || !estado.serviciosPreventivo[idx]) return;
+  estado.serviciosPreventivo[idx].respuesta = respuesta;
+  const siBtn = document.getElementById('svc-si-' + idx);
+  const noBtn = document.getElementById('svc-no-' + idx);
+  if (siBtn) { siBtn.style.background = respuesta === 'si' ? '#27A06B' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
+  if (noBtn) { noBtn.style.background = respuesta === 'no' ? '#E74C3C' : '#E8ECF5'; noBtn.style.color = respuesta === 'no' ? 'white' : '#6B7280'; }
+}
+
 // =========== CERRAR OT ===========
 function cerrarOT() {
   // Asegurar que haya numero de OT
   if (!estado.otNumero) {
     estado.otNumero = Math.floor(9000 + Math.random() * 1000);
   }
-  const desc = document.getElementById('desc-trabajo').value.trim();
-  if (!desc) { toast('Escribe el trabajo que realizaste'); return; }
+  const descEl = document.getElementById('desc-trabajo');
+  const desc = descEl ? descEl.value.trim() : '';
+  if (estado.tipo === 'preventivo') {
+    const sinResponder = (estado.serviciosPreventivo || []).filter(function(s){ return s.respuesta === null; }).length;
+    if (sinResponder > 0) { toast('Responde todos los servicios (Sí / No)'); return; }
+    const numEqEl = document.getElementById('num-equipos');
+    if (numEqEl) estado.numEquipos = numEqEl.value.trim();
+  } else {
+    if (!desc) { toast('Escribe el trabajo que realizaste'); return; }
+  }
   const fotosDespues = estado.fotosDespues.filter(f => f).length;
   if (fotosDespues === 0) { toast('Agrega al menos 1 foto del trabajo terminado'); return; }
   if (!estado.firmada) { toast('Necesitas confirmar la firma del administrador'); return; }
@@ -1147,6 +1229,8 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       fecha: fecha,
       descripcionProblema: document.getElementById('desc-problema').value || '',
       descripcionTrabajo: desc,
+      numEquipos: estado.numEquipos || '',
+      serviciosPreventivo: estado.serviciosPreventivo || [],
       fotosAntes: urlsAntes,
       fotosDespues: urlsDespues,
       fotoTimbre: urlTimbre,
@@ -2568,8 +2652,147 @@ function renderComparacion() {
   }
 }
 
+// =========== GENERACION PDF PREVENTIVO ===========
+async function generarPDFPreventivo() {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210;
+    const margin = 15;
+    const fecha = new Date().toLocaleDateString('es-CL');
+
+    // ---- TITULO ----
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('MANTENIMIENTO PREVENTIVO', W/2, 15, { align: 'center' });
+
+    // ---- DATOS EMPRESA ----
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Servicios Emval ltda', margin, 25);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Giro: Obras Menores', margin, 29);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', margin, 33);
+    doc.text('Fono: +56995720003 - RUT.: 76.166.407-7', margin, 37);
+    doc.text('E-mail: Servicios.emval@gmail.com', margin, 41);
+
+    // ---- CAJA FOLIO / FECHA (top right) ----
+    doc.setDrawColor(0);
+    doc.rect(140, 18, 55, 26);
+    doc.line(140, 28, 195, 28);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('FOLIO: N' + String.fromCharCode(186) + (estado.otNumero || '----'), 167, 25, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('FECHA: ' + fecha, 167, 35, { align: 'center' });
+
+    // ---- FILA CECO / LOCAL / N EQUIPOS ----
+    const infoY = 48;
+    const infoH = 10;
+    const cecoW = 40, localW = 80, equipW = 60;
+    doc.rect(margin, infoY, cecoW, infoH);
+    doc.rect(margin + cecoW, infoY, localW, infoH);
+    doc.rect(margin + cecoW + localW, infoY, equipW, infoH);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('CECO: ' + (estado.ceco || ''), margin + 2, infoY + 7);
+    doc.text('LOCAL: ' + (estado.local || '').substring(0, 16), margin + cecoW + 2, infoY + 7);
+    doc.text('N' + String.fromCharCode(186) + ' EQ. SUSCRITOS: ' + (estado.numEquipos || ''), margin + cecoW + localW + 2, infoY + 7);
+
+    // ---- TABLA SERVICIOS ----
+    const tableY = infoY + infoH + 4;
+    const numW = 10, svcW = 150, estW = 20;
+    const hdrH = 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.rect(margin, tableY, numW, hdrH);
+    doc.rect(margin + numW, tableY, svcW, hdrH);
+    doc.rect(margin + numW + svcW, tableY, estW, hdrH);
+    doc.text('N' + String.fromCharCode(186), margin + numW/2, tableY + 5, { align: 'center' });
+    doc.text('SERVICIOS A REALIZAR', margin + numW + svcW/2, tableY + 5, { align: 'center' });
+    doc.text('ESTADO', margin + numW + svcW + estW/2, tableY + 5, { align: 'center' });
+
+    let rowY = tableY + hdrH;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const servicios = estado.serviciosPreventivo || [];
+    servicios.forEach(function(svc, idx) {
+      const lineas = doc.splitTextToSize(svc.nombre, svcW - 4);
+      const rh = Math.max(7, lineas.length * 4.8 + 3);
+      doc.rect(margin, rowY, numW, rh);
+      doc.rect(margin + numW, rowY, svcW, rh);
+      doc.rect(margin + numW + svcW, rowY, estW, rh);
+      doc.text(String(idx + 1), margin + numW/2, rowY + rh/2 + 1.5, { align: 'center' });
+      doc.text(lineas, margin + numW + 2, rowY + 4.5);
+      const resp = svc.respuesta === 'si' ? 'SI' : svc.respuesta === 'no' ? 'NO' : '';
+      doc.setFont('helvetica', 'bold');
+      doc.text(resp, margin + numW + svcW + estW/2, rowY + rh/2 + 1.5, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      rowY += rh;
+    });
+
+    // ---- OBSERVACIONES ----
+    const obsY = rowY + 5;
+    const descEl = document.getElementById('desc-trabajo');
+    const obs = descEl ? descEl.value.trim() : '';
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('OBSERVACIONES:', margin, obsY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const obsLines = doc.splitTextToSize(obs || ' ', W - 2*margin - 4);
+    const obsH = Math.max(18, obsLines.length * 5 + 8);
+    doc.rect(margin, obsY + 3, W - 2*margin, obsH);
+    if (obs) doc.text(obsLines, margin + 2, obsY + 9);
+
+    // ---- FIRMA + TIMBRE ----
+    const afterY = obsY + 3 + obsH + 8;
+    const firmaW = 85, firmaH = 30;
+    if (firmaConfirmada) {
+      try {
+        const firmaCanvas = document.getElementById('firma-canvas');
+        const tempC = document.createElement('canvas');
+        tempC.width = firmaCanvas.width; tempC.height = firmaCanvas.height;
+        const tc = tempC.getContext('2d');
+        tc.fillStyle = '#FFFFFF'; tc.fillRect(0, 0, tempC.width, tempC.height);
+        tc.drawImage(firmaCanvas, 0, 0);
+        const fd = await comprimirImagen(tempC.toDataURL('image/jpeg', 1.0), 600, 0.95);
+        doc.addImage(fd, 'JPEG', margin, afterY, firmaW, firmaH);
+      } catch(e) {
+        doc.setDrawColor(180, 180, 180); doc.rect(margin, afterY, firmaW, firmaH);
+      }
+    } else {
+      doc.setDrawColor(180, 180, 180); doc.rect(margin, afterY, firmaW, firmaH);
+    }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('Firma del Receptor', margin + firmaW/2, afterY + firmaH + 5, { align: 'center' });
+
+    const timbreX = 115, timbreW = 80, timbreH = 42;
+    doc.setDrawColor(180, 180, 180);
+    doc.rect(timbreX, afterY - 2, timbreW, timbreH);
+    if (estado.fotoTimbre) {
+      try {
+        const tc = await comprimirImagen(estado.fotoTimbre, 300, 0.5);
+        doc.addImage(tc, 'JPEG', timbreX + 5, afterY, timbreW - 10, timbreH - 12);
+      } catch(e) {
+        doc.setDrawColor(200,200,200); doc.rect(timbreX+5, afterY, timbreW-10, timbreH-12);
+      }
+    } else {
+      doc.setDrawColor(200,200,200); doc.rect(timbreX+5, afterY, timbreW-10, timbreH-12);
+    }
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('Timbre/Credencial del Receptor:', timbreX + timbreW/2, afterY + timbreH - 2, { align: 'center' });
+
+    return doc;
+  } catch(e) {
+    console.error('Error generando PDF preventivo:', e);
+    return null;
+  }
+}
+
 // =========== GENERACION PDF RECEPCION OBRA ===========
 async function generarPDFRecepcionObra() {
+  if (estado.tipo === 'preventivo') return generarPDFPreventivo();
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
