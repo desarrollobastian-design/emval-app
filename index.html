@@ -728,6 +728,7 @@ let estado = {
   usuario: null, cargo: null, avatar: null, emailSucursal: '',
   otNumero: null,
   local: null,
+  direccion: null,
   tipo: null,
   descripProblema: '',
   fotosAntes: [null,null,null,null],
@@ -815,6 +816,7 @@ function nuevaOT() {
   estado.fotoTimbre = null;
   estado.pdfUrl = null;
   estado.pdfUrlCloudinary = null;
+  estado.direccion = null;
   estado.firmada = false;
   // fotos reset handled by inicializarFotos()
   vozGrabaciones = [];
@@ -856,8 +858,9 @@ function nuevaOT() {
 }
 
 // =========== LOCAL ===========
-function seleccionarLocal(nombre, ciudad, emailAdmin) {
+function seleccionarLocal(nombre, direccion, emailAdmin) {
   estado.local = nombre;
+  estado.direccion = direccion || '';
   estado.emailSucursal = emailAdmin || '';
   toast(nombre + ' seleccionado');
   setTimeout(() => {
@@ -2100,7 +2103,7 @@ function seleccionarCadena(cadena) {
     const supSuc = typeof suc_item === 'object' ? (suc_item.supervisor || '') : '';
     const centroSuc = typeof suc_item === 'object' ? (suc_item.centro || '') : '';
     const wrapper = document.createElement('div');
-    wrapper.onclick = (function(n, em){ return function(){ seleccionarLocal(n, cadena.nombre, em); }; })(nombre, emailSuc);
+    wrapper.onclick = (function(n, dir, em){ return function(){ seleccionarLocal(n, dir, em); }; })(nombre, dirSuc, emailSuc);
     const item = document.createElement('div');
     item.className = 'local-item';
     const iconEl = document.createElement('div');
@@ -2580,7 +2583,7 @@ async function generarPDFRecepcionObra() {
     // ---- TITULO ----
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('RECEPCI' + String.fromCharCode(211) + 'N OBRA', W/2, 15, { align: 'center' });
+    doc.text('ORDEN DE TRABAJO', W/2, 15, { align: 'center' });
 
     // ---- DATOS EMPRESA ----
     doc.setFontSize(8);
@@ -2588,9 +2591,9 @@ async function generarPDFRecepcionObra() {
     doc.text('Servicios Emval ltda', margin, 25);
     doc.setFont('helvetica', 'normal');
     doc.text('Giro: Obras Menores', margin, 29);
-    doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', margin, 37);
-    doc.text('Fono: 995720003 - RUT.: 76.166.407-7', margin, 41);
-    doc.text('E-mail: Servicios.emval@gmail.com', margin, 45);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', margin, 33);
+    doc.text('Fono: +56995720003 - RUT.: 76.166.407-7', margin, 37);
+    doc.text('E-mail: Servicios.emval@gmail.com', margin, 41);
 
     // ---- CAJA N OT ----
     doc.setDrawColor(0);
@@ -2615,7 +2618,7 @@ async function generarPDFRecepcionObra() {
     doc.setFont('helvetica', 'normal');
     doc.text(fecha, 160, 50);
     doc.text((estado.local || '').substring(0, 16), 160, 58);
-    doc.text((estado.local || '').substring(0, 16), 160, 66);
+    doc.text((estado.direccion || estado.local || '').substring(0, 20), 160, 66);
 
     // ---- TIPO TRABAJO ----
     const tipoY = 72;
@@ -2730,7 +2733,7 @@ async function generarPDFRecepcionObra() {
       doc.setDrawColor(200, 200, 200);
       doc.rect(timbreX + 5, afterY, timbreW - 10, timbreH - 12);
     }
-    doc.text('Timbre del Receptor:', timbreX + timbreW/2, afterY + timbreH - 2, { align: 'center' });
+    doc.text('Timbre/Credencial del Receptor:', timbreX + timbreW/2, afterY + timbreH - 2, { align: 'center' });
 
     return doc;
   } catch(e) {
