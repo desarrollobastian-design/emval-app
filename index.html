@@ -4045,10 +4045,14 @@ async function cargarPreventivos() {
 
     // Index: cadenas y sucursales por nombre
     const cadenaMap = {};
+    const cecoMapPrev = {};
     cadenasSnap.docs.forEach(function(cd) {
       const c = cd.data();
       cadenaMap[c.nombre] = c;
-      (c.sucursales || []).forEach(function(s) { cadenaMap[typeof s === 'object' ? s.nombre : s] = c; });
+      (c.sucursales || []).forEach(function(s) {
+        cadenaMap[typeof s === 'object' ? s.nombre : s] = c;
+        if (typeof s === 'object' && s.nombre && s.centro) cecoMapPrev[s.nombre] = s.centro;
+      });
     });
 
     // Index: cotizaciones por otId y otNumero
@@ -4094,7 +4098,8 @@ async function cargarPreventivos() {
       } else { ico.textContent = (ot.local||'?').charAt(0); }
       const hdrInfo = document.createElement('div');
       hdrInfo.style.flex = '1';
-      const cecoTag = ot.ceco ? ' · <b>CeCo:' + ot.ceco + '</b>' : '';
+      const cecoValPrev = ot.ceco || cecoMapPrev[ot.local] || '';
+      const cecoTag = cecoValPrev ? ' · <b>CeCo:' + cecoValPrev + '</b>' : '';
       hdrInfo.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
         + '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + cecoTag + ' · ' + (ot.tecnico||'-') + '</div>';
       const numBadge = document.createElement('span');
