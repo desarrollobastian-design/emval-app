@@ -4447,6 +4447,7 @@ async function cargarOTsSupervisor() {
     // Cargar cadenas para logos en el panel supervisor
     const cadenasSnap2 = await db.collection('cadenas').get();
     const cadenaMapSup = {};
+    const cecoMapSup = {};
     cadenasSnap2.docs.forEach(function(cd) {
       const cdata = cd.data();
       cadenaMapSup[cdata.nombre] = cdata;
@@ -4454,6 +4455,9 @@ async function cargarOTsSupervisor() {
         cdata.sucursales.forEach(function(s) {
           var sNombre = typeof s === 'object' ? s.nombre : s;
           cadenaMapSup[sNombre] = cdata;
+          if (typeof s === 'object' && s.nombre && s.centro) {
+            cecoMapSup[s.nombre] = s.centro;
+          }
         });
       }
     });
@@ -4519,7 +4523,8 @@ async function cargarOTsSupervisor() {
       tituloEl.textContent = (d.local||'') + ' - ' + (d.tecnico||'');
       const subEl = document.createElement('div');
       subEl.className = 'ot-sub';
-      subEl.innerHTML = (d.fecha||'') + (d.ceco ? ' · C.' + d.ceco : '') + ' | <span class="badge ' + badge + '">' + label + '</span>';
+      const cecoVal = d.ceco || cecoMapSup[d.local] || '';
+      subEl.innerHTML = (d.fecha||'') + (cecoVal ? ' · C.' + cecoVal : '') + ' | <span class="badge ' + badge + '">' + label + '</span>';
       const descEl = document.createElement('div');
       descEl.className = 'ot-sub';
       descEl.style.cssText = 'margin-top:4px;color:var(--texto2)';
