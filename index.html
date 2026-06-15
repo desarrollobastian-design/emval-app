@@ -592,7 +592,7 @@
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
       <button id="btn-ventas" class="btn btn-verde btn-sm" onclick="go('s-ventas');cargarVentas();" style="flex:1;font-size:12px;display:none;">Ventas</button>
     </div>
-    <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">ÚLTIMAS OTs</div>
+    <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs DE HOY</div>
     <div class="ot-card">
       <div class="ot-icon" style="background:#FEF0E6;">⚠️</div>
       <div class="ot-info">
@@ -4466,7 +4466,20 @@ async function cargarOTsSupervisor() {
       if (cdata.otId) otsCotizadas[cdata.otId] = cd.id;
     });
 
-    snap.docs.forEach(doc => {
+    // Filtrar solo OTs de hoy
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2,'0');
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    const yyyy = now.getFullYear();
+    const todayStr = dd + '-' + mm + '-' + yyyy;
+    const docsHoy = snap.docs.filter(doc => (doc.data().fecha || '') === todayStr);
+    if (docsHoy.length === 0) {
+      const p = document.createElement('p');
+      p.style = 'font-size:13px;color:var(--texto3);text-align:center;padding:20px';
+      p.textContent = 'No hay OTs registradas hoy';
+      lista.appendChild(p);
+    }
+    docsHoy.forEach(doc => {
       const d = doc.data();
       const card = document.createElement('div');
       card.className = 'ot-card';
