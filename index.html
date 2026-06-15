@@ -1247,6 +1247,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       tecnico: estado.usuario,
       fecha: fecha,
       descripcionProblema: document.getElementById('desc-problema').value || '',
+      ceco: estado.ceco || '',
       descripcionTrabajo: desc,
       numEquipos: estado.numEquipos || '',
       serviciosPreventivo: estado.serviciosPreventivo || [],
@@ -3188,6 +3189,7 @@ async function guardarYEnviarPDF() {
         fecha: new Date().toLocaleDateString('es-CL'),
         pdfData: pdfBase64,
         pdfUrl: '',
+        pdfUrlCloudinary: pdfUrlCloudinary || '',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       });
       pdfUrlFirestore = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
@@ -4034,11 +4036,11 @@ async function cargarPreventivos() {
       db.collection('cotizaciones').get()
     ]);
 
-    // Index: pdfs por otNumero → docId
-    const pdfIdMap = {};
+    // Index: pdfs por otNumero → {docId, pdfUrlCloudinary}
+    const pdfMap = {};
     pdfSnap.docs.forEach(function(pd) {
-      const n = pd.data().otNumero;
-      if (n) pdfIdMap[String(n)] = pd.id;
+      const d = pd.data();
+      if (d.otNumero) pdfMap[String(d.otNumero)] = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
     });
 
     // Index: cadenas y sucursales por nombre
@@ -4070,19 +4072,20 @@ async function cargarPreventivos() {
     prevOTs.forEach(function(ot) {
       const cadena = cadenaMap[ot.local] || null;
       const otNum = String(ot.numero || ot.otNumero || '');
-      const pdfDocId = pdfIdMap[otNum] || null;
-      const pdfUrl = pdfDocId ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDocId) : '';
+      const pdfInfo = pdfMap[otNum] || null;
+      const pdfCloudUrl = pdfInfo ? pdfInfo.cloudUrl : '';
+      const pdfFirestoreUrl = pdfInfo ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfInfo.id) : '';
       const yaCotizada = cotMap[ot.id] || cotMap['n_' + otNum] || null;
 
       const card = document.createElement('div');
       card.className = 'card';
-      card.style.marginBottom = '14px';
+      card.style.marginBottom = '12px';
 
       // ---- Header ----
       const hdr = document.createElement('div');
-      hdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+      hdr.style.cssText = 'display:flex;align-items:center;gap:12px;';
       const ico = document.createElement('div');
-      ico.style.cssText = 'width:46px;height:46px;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : '#1D6B5A') + ';color:white;font-weight:700;font-size:16px;';
+      ico.style.cssText = 'width:42px;height:42px;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : '#1D6B5A') + ';color:white;font-weight:700;font-size:15px;';
       if (cadena && cadena.logo) {
         const img = document.createElement('img');
         img.src = cadena.logo; img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
@@ -4091,75 +4094,30 @@ async function cargarPreventivos() {
       } else { ico.textContent = (ot.local||'?').charAt(0); }
       const hdrInfo = document.createElement('div');
       hdrInfo.style.flex = '1';
-      hdrInfo.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
-        + '<div style="font-size:12px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + ' &nbsp;·&nbsp; ' + (ot.tecnico||'-') + '</div>';
+      const cecoTag = ot.ceco ? ' · <b>C.' + ot.ceco + '</b>' : '';
+      hdrInfo.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
+        + '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + cecoTag + ' · ' + (ot.tecnico||'-') + '</div>';
       const numBadge = document.createElement('span');
       numBadge.className = 'badge badge-prev';
       numBadge.textContent = '#' + otNum;
       hdr.appendChild(ico); hdr.appendChild(hdrInfo); hdr.appendChild(numBadge);
       card.appendChild(hdr);
 
-      // ---- CeCo + Equipos ----
-      const infoRow = document.createElement('div');
-      infoRow.style.cssText = 'display:flex;gap:16px;padding:7px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto2);';
-      infoRow.innerHTML = '<span><b>CeCo:</b> ' + (ot.ceco || '-') + '</span><span><b>N° Equipos:</b> ' + (ot.numEquipos || '-') + '</span>';
-      card.appendChild(infoRow);
-
-      // ---- Servicios ----
-      const svcs = ot.serviciosPreventivo || [];
-      if (svcs.length > 0) {
-        const svcSec = document.createElement('div');
-        svcSec.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
-        const svcLabel = document.createElement('div');
-        svcLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
-        svcLabel.textContent = 'Servicios realizados';
-        svcSec.appendChild(svcLabel);
-        const tbl = document.createElement('div');
-        tbl.style.cssText = 'border:1px solid var(--gris2);border-radius:8px;overflow:hidden;';
-        svcs.forEach(function(svc, idx) {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;padding:5px 10px;gap:8px;background:' + (idx%2===0?'white':'var(--gris1)') + ';border-bottom:1px solid var(--gris2);';
-          const n = document.createElement('span');
-          n.style.cssText = 'font-size:11px;color:var(--texto3);min-width:18px;';
-          n.textContent = (idx+1) + '.';
-          const nm = document.createElement('span');
-          nm.style.cssText = 'flex:1;font-size:12px;color:var(--texto1);line-height:1.4;';
-          nm.textContent = svc.nombre;
-          const rb = document.createElement('span');
-          const rr = svc.respuesta === 'si' ? 'SI' : svc.respuesta === 'no' ? 'NO' : '-';
-          rb.style.cssText = 'font-size:11px;font-weight:700;min-width:24px;text-align:right;color:' + (svc.respuesta==='si'?'#27A06B':svc.respuesta==='no'?'#E74C3C':'#9CA3AF') + ';';
-          rb.textContent = rr;
-          row.appendChild(n); row.appendChild(nm); row.appendChild(rb);
-          tbl.appendChild(row);
-        });
-        svcSec.appendChild(tbl);
-        card.appendChild(svcSec);
-      }
-
-      // ---- Observaciones ----
-      if (ot.descripcionTrabajo) {
-        const obsSec = document.createElement('div');
-        obsSec.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
-        obsSec.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--texto3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Observaciones</div>'
-          + '<div style="font-size:13px;color:var(--texto2);line-height:1.5;">' + ot.descripcionTrabajo + '</div>';
-        card.appendChild(obsSec);
-      }
-
       // ---- Botones ----
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
 
-      if (pdfUrl) {
-        const btnPdf = document.createElement('button');
-        btnPdf.textContent = 'Ver PDF';
-        btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnPdf.onclick = (function(url){ return function(){ window.open(url,'_blank'); }; })(pdfUrl);
-        btns.appendChild(btnPdf);
-
+      // Descargar: usa Cloudinary URL si existe, si no, abre Firestore PDF
+      if (pdfCloudUrl || pdfFirestoreUrl) {
         const btnDesc = document.createElement('button');
-        btnDesc.textContent = 'Descargar';
-        btnDesc.style.cssText = 'flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnDesc.onclick = (function(id){ return function(){ verPDFById(id); }; })(pdfDocId);
+        btnDesc.textContent = 'Descargar PDF';
+        btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnDesc.onclick = (function(cUrl, fUrl){ return function(){
+          var a = document.createElement('a');
+          a.href = cUrl || fUrl;
+          a.target = '_blank';
+          a.click();
+        }; })(pdfCloudUrl, pdfFirestoreUrl);
         btns.appendChild(btnDesc);
       }
 
@@ -4172,7 +4130,7 @@ async function cargarPreventivos() {
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Cotizacion';
-        btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
         btns.appendChild(btnCot);
       }
@@ -4259,7 +4217,7 @@ async function verOTsTecnico(nombre, grupo) {
     localDiv.textContent = ot.local || 'Sin local';
     const subDiv = document.createElement('div');
     subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
-    subDiv.innerHTML = (ot.fecha||'') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
+    subDiv.innerHTML = (ot.fecha||'') + (ot.ceco ? ' · C.' + ot.ceco : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
     headerInfo.appendChild(subDiv);
     header.appendChild(iconEl);
@@ -4548,7 +4506,7 @@ async function cargarOTsSupervisor() {
       tituloEl.textContent = (d.local||'') + ' - ' + (d.tecnico||'');
       const subEl = document.createElement('div');
       subEl.className = 'ot-sub';
-      subEl.innerHTML = (d.fecha||'') + ' | <span class="badge ' + badge + '">' + label + '</span>';
+      subEl.innerHTML = (d.fecha||'') + (d.ceco ? ' · C.' + d.ceco : '') + ' | <span class="badge ' + badge + '">' + label + '</span>';
       const descEl = document.createElement('div');
       descEl.className = 'ot-sub';
       descEl.style.cssText = 'margin-top:4px;color:var(--texto2)';
