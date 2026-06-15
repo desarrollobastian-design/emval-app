@@ -4589,20 +4589,23 @@ async function enviarCotizacionesSeleccionadas() {
     }
   });
 
+  const _cotParams = {
+    email_admin: email,
+    email: email,
+    name: 'EMVAL E.I.R.L.',
+    ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
+    local: seleccionadas.map(function(it){ return it.local; }).join(', '),
+    fecha: new Date().toLocaleDateString('es-CL'),
+    tecnico: seleccionadas[0].tecnico || '',
+    tipo: 'Cotizacion',
+    cantidad: String(seleccionadas.length),
+    trabajo: detalles,
+    pdf_url: linksTexto + 'Total general: $' + resumenTotal.toLocaleString('es-CL')
+  };
+  console.log('EmailJS cotizacion → service:', window.EMAILJS_COT_SERVICE, 'template:', window.EMAILJS_COT_TEMPLATE, 'to:', email);
   try {
-    await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, {
-      email_admin: email,
-      email: email,
-      name: 'EMVAL E.I.R.L.',
-      ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
-      local: seleccionadas.map(function(it){ return it.local; }).join(', '),
-      fecha: new Date().toLocaleDateString('es-CL'),
-      tecnico: seleccionadas[0].tecnico || '',
-      tipo: 'Cotizacion',
-      cantidad: String(seleccionadas.length),
-      trabajo: detalles,
-      pdf_url: linksTexto + 'Total general: $' + resumenTotal.toLocaleString('es-CL')
-    });
+    const result = await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _cotParams);
+    console.log('EmailJS cotizacion OK:', result.status, result.text);
     // Marcar como enviado en Firestore
     const db = window.firebase.firestore();
     for (var ei = 0; ei < seleccionadas.length; ei++) {
@@ -4613,8 +4616,8 @@ async function enviarCotizacionesSeleccionadas() {
     actualizarBarraAcciones();
     await cargarCarpetas();
   } catch(e) {
-    console.error('Error enviando email:', e);
-    toast('Error al enviar email: ' + (e.text || e.message || 'desconocido'));
+    console.error('EmailJS cotizacion ERROR completo:', JSON.stringify(e));
+    toast('Error al enviar: ' + (e.text || e.message || JSON.stringify(e)));
   }
 }
 
