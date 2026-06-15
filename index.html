@@ -1902,7 +1902,7 @@ async function guardarCotizacion() {
   const totales = calcTotalCot();
   try {
     const db = window.firebase.firestore();
-    await db.collection('cotizaciones').add({
+    const cotData = {
       otId: cotizacionActual.id,
       otNumero: cotizacionActual.numero,
       local: cotizacionActual.local,
@@ -1920,7 +1920,14 @@ async function guardarCotizacion() {
       fechaCodigo: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2); })(),
       numeroCotizacion: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2)+'01'; })(),
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    const editId = window._editandoCotizacionId;
+    if (editId) {
+      await db.collection('cotizaciones').doc(editId).update(cotData);
+      window._editandoCotizacionId = null;
+    } else {
+      await db.collection('cotizaciones').add(cotData);
+    }
     toast('Cotizacion guardada');
     // Volver segun el origen
     const origen = window._cotizacionOrigen || 's-supervisor';
@@ -1952,6 +1959,27 @@ async function guardarCotizacion() {
   }
 }
 
+async function editarCotizacion(cotData) {
+  window._editandoCotizacionId = cotData.id;
+  window._cotizacionOrigen = 's-carpetas';
+  cotizacionActual = {
+    id: cotData.otId || '',
+    otId: cotData.otId || '',
+    numero: cotData.otNumero,
+    local: cotData.local,
+    tecnico: cotData.tecnico || '',
+    fecha: cotData.fecha,
+    descripcionTrabajo: cotData.descripcionTrabajo || '',
+    centroSucursal: cotData.centro || ''
+  };
+  itemsCot = (cotData.items || []).map(function(i){ return { desc: i.desc||'', qty: i.qty||1, precio: i.precio||0 }; });
+  document.getElementById('cot-detalle-trabajo').value = cotData.descripcionTrabajo || '';
+  document.getElementById('cot-nombre-servicio').value = cotData.nombreServicio || '';
+  document.getElementById('cot-carpeta').value = cotData.supervisor || cotData.carpeta || '';
+  renderItemsCot();
+  go('s-cotizacion');
+}
+
 async function enviarCotizacion() {
   await guardarCotizacion();
   const email = prompt('Email del cliente:');
@@ -1976,7 +2004,8 @@ async function cargarCarpetas() {
       if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
-        descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '' };
+        descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '',
+        carpeta: d.carpeta || '', supervisor: d.supervisor || '' };
       carpetas[c].items.push(cotItem);
       window._todasCotizaciones[doc.id] = cotItem;
     });
@@ -2082,7 +2111,12 @@ async function cargarCarpetas() {
         btnPdf.textContent = 'Ver PDF';
         btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnPdf.onclick = (function(data){ return function(){ generarPDFCotizacionGuardada(data); }; })(it);
+        const btnEdit = document.createElement('button');
+        btnEdit.textContent = 'Editar';
+        btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnEdit.onclick = (function(data){ return function(){ editarCotizacion(data); }; })(it);
         btnsRow.appendChild(btnPdf);
+        btnsRow.appendChild(btnEdit);
         rowContent.appendChild(rowHeader);
         rowContent.appendChild(totalDiv);
         rowContent.appendChild(descDiv);
@@ -3360,16 +3394,16 @@ async function generarPDFCotizacionGuardada(cotData) {
     // ---- CAJA EMPRESA ----
     doc.setDrawColor(100, 180, 150);
     doc.rect(margin, 25, 90, 35);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
-    doc.text('Nombre : SERVICIOS EMVAL LTDA.', margin + 28, 31);
-    doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
-    doc.text('"SERVICIOS EMVAL"', margin + 28, 36);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('SERVICIOS EMVAL LTDA.', margin + 2, 31);
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
+    doc.text('"SERVICIOS EMVAL"', margin + 2, 36);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-    doc.text('Rut', margin + 28, 42); doc.text(': 76.166.407-7', margin + 42, 42);
-    doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
-    doc.text(': Uribe 636, Antofagasta', margin + 42, 47);
-    doc.text('Fono', margin + 28, 52); doc.text(': 995720003', margin + 42, 52);
-    doc.text('Email', margin + 28, 57); doc.text(': servicios.emval@gmail.com', margin + 42, 57);
+    doc.text('Rut', margin + 2, 42); doc.text(': 76.166.407-7', margin + 20, 42);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 2, 47);
+    doc.text(': Uribe 636, Antofagasta', margin + 20, 47);
+    doc.text('Fono', margin + 2, 52); doc.text(': +56995720003', margin + 20, 52);
+    doc.text('Email', margin + 2, 57); doc.text(': servicios.emval@gmail.com', margin + 20, 57);
 
     // ---- CAJA OT ----
     doc.setDrawColor(100, 180, 150);
@@ -3471,7 +3505,7 @@ async function generarPDFCotizacionGuardada(cotData) {
       doc.setFont('helvetica','normal');
       doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', m2, 29);
       doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', m2, 33);
-      doc.text('Fono: 995720003 - RUT.: 76.166.407-7', m2, 37);
+      doc.text('Fono: +56995720003 - RUT.: 76.166.407-7', m2, 37);
       doc.text('E-mail: Servicios.emval@gmail.com', m2, 41);
       doc.setDrawColor(0); doc.rect(140, 18, 55, 20);
       doc.setFont('helvetica','bold'); doc.setFontSize(13);
@@ -3647,22 +3681,22 @@ async function generarPDFCotizacion() {
   doc.setDrawColor(100, 180, 150);
   doc.rect(margin, 25, 90, 35);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(0,0,0);
-  doc.text('Nombre : SERVICIOS EMVAL LTDA.', margin + 28, 31);
-  doc.setFont('helvetica', 'italic');
   doc.setFontSize(9);
-  doc.text('"SERVICIOS EMVAL"', margin + 28, 36);
+  doc.setTextColor(0,0,0);
+  doc.text('SERVICIOS EMVAL LTDA.', margin + 2, 31);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.text('"SERVICIOS EMVAL"', margin + 2, 36);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text('Rut', margin + 28, 42);
-  doc.text(': 76.166.407-7', margin + 42, 42);
-  doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 28, 47);
-  doc.text(': Uribe 636, Antofagasta', margin + 42, 47);
-  doc.text('Fono', margin + 28, 52);
-  doc.text(': 995720003', margin + 42, 52);
-  doc.text('Email', margin + 28, 57);
-  doc.text(': servicios.emval@gmail.com', margin + 42, 57);
+  doc.text('Rut', margin + 2, 42);
+  doc.text(': 76.166.407-7', margin + 20, 42);
+  doc.text('Direcci' + String.fromCharCode(243) + 'n', margin + 2, 47);
+  doc.text(': Uribe 636, Antofagasta', margin + 20, 47);
+  doc.text('Fono', margin + 2, 52);
+  doc.text(': +56995720003', margin + 20, 52);
+  doc.text('Email', margin + 2, 57);
+  doc.text(': servicios.emval@gmail.com', margin + 20, 57);
 
   // ---- CAJA INFO OT ----
   doc.setDrawColor(100, 180, 150);
@@ -3831,7 +3865,7 @@ async function generarPDFCotizacion() {
         doc.setFont('helvetica', 'normal');
         doc.text('Giro: Obras Menores Servicio T' + String.fromCharCode(233) + 'cnico, Equipos El' + String.fromCharCode(233) + 'ctricos.', m2, 29);
         doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', m2, 33);
-        doc.text('Fono: 995720003 - RUT.: 76.166.407-7', m2, 37);
+        doc.text('Fono: +56995720003 - RUT.: 76.166.407-7', m2, 37);
         doc.text('E-mail: Servicios.emval@gmail.com', m2, 41);
 
         // Caja OT numero
