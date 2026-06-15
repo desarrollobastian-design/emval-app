@@ -450,7 +450,7 @@
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
-      <label>Nombre del servicio</label>
+      <label>Descripcion del trabajo</label>
       <input type="text" id="cot-nombre-servicio" placeholder="Ej: Servicio gasfiteria, Reparacion electrica..." />
       <div style="font-size:11px;color:var(--texto3);margin-top:3px;">Se usa en el nombre del archivo PDF descargado</div>
     </div>
@@ -459,8 +459,19 @@
       <input type="text" id="cot-carpeta" placeholder="Ej: A. Espinoza, C. Zapata..." />
     </div>
     <div style="display:flex;gap:10px;margin-top:auto;">
-      <button class="btn btn-secondary" onclick="guardarCotizacion()" style="flex:1;">Guardar</button>
-      <button class="btn btn-verde" onclick="generarPDFCotizacion()" style="flex:1;">Ver PDF</button>
+      <button class="btn btn-verde" onclick="mostrarVistaPreviaCotizacion()" style="flex:1;">Validar y visualizar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: VISTA PREVIA COTIZACION ============ -->
+<div id="modal-preview-cot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;">
+  <div style="background:white;margin:20px auto;border-radius:16px;max-width:520px;padding:20px;position:relative;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px;color:var(--texto);">Vista previa de cotización</div>
+    <div id="preview-cot-contenido"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button onclick="cerrarVistaPreviaCotizacion()" class="btn btn-secondary" style="flex:1;">Corregir</button>
+      <button onclick="guardarCotizacion();cerrarVistaPreviaCotizacion();" class="btn btn-verde" style="flex:1;">Guardar</button>
     </div>
   </div>
 </div>
@@ -1833,6 +1844,52 @@ function agregarItemCot() {
 function eliminarItemCot(i) {
   itemsCot.splice(i, 1);
   renderItemsCot();
+}
+
+function mostrarVistaPreviaCotizacion() {
+  const detalle = document.getElementById('cot-detalle-trabajo').value.trim();
+  const nombreSvc = document.getElementById('cot-nombre-servicio').value.trim();
+  const supervisor = document.getElementById('cot-carpeta').value.trim();
+  const total = itemsCot.reduce(function(s,i){ return s + (i.qty||1)*(i.precio||0); }, 0);
+  const local = cotizacionActual ? (cotizacionActual.local || '') : '';
+  const fecha = cotizacionActual ? (cotizacionActual.fecha || '') : '';
+
+  let html = '<div style="font-size:13px;color:var(--texto3);margin-bottom:10px;">';
+  html += '<b style="color:var(--texto);">' + local + '</b> &nbsp;·&nbsp; ' + fecha;
+  if (supervisor) html += ' &nbsp;·&nbsp; Sup: ' + supervisor;
+  html += '</div>';
+
+  if (detalle) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:4px;">DETALLE DEL TRABAJO</div>';
+    html += '<div style="font-size:13px;color:var(--texto);background:var(--gris1);border-radius:8px;padding:10px;margin-bottom:12px;line-height:1.5;">' + detalle.replace(/\n/g,'<br>') + '</div>';
+  }
+
+  html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:6px;">ITEMS</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">';
+  html += '<tr style="background:var(--gris2);"><th style="text-align:left;padding:6px 8px;">Descripción</th><th style="padding:6px 4px;text-align:center;">Cant.</th><th style="padding:6px 8px;text-align:right;">Precio unit.</th><th style="padding:6px 8px;text-align:right;">Total</th></tr>';
+  itemsCot.forEach(function(item, i) {
+    var tot = (item.qty||1)*(item.precio||0);
+    html += '<tr style="border-bottom:1px solid var(--gris2);">';
+    html += '<td style="padding:6px 8px;">' + (item.desc||'-') + '</td>';
+    html += '<td style="padding:6px 4px;text-align:center;">' + (item.qty||1) + '</td>';
+    html += '<td style="padding:6px 8px;text-align:right;">$' + (item.precio||0).toLocaleString('es-CL') + '</td>';
+    html += '<td style="padding:6px 8px;text-align:right;">$' + tot.toLocaleString('es-CL') + '</td>';
+    html += '</tr>';
+  });
+  html += '</table>';
+  html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;padding:8px 0;border-top:2px solid var(--gris3);">';
+  html += '<span>TOTAL</span><span style="color:var(--azul);">$' + total.toLocaleString('es-CL') + '</span></div>';
+
+  if (nombreSvc) {
+    html += '<div style="font-size:12px;color:var(--texto3);margin-top:10px;">Descripcion del trabajo: <b>' + nombreSvc + '</b></div>';
+  }
+
+  document.getElementById('preview-cot-contenido').innerHTML = html;
+  document.getElementById('modal-preview-cot').style.display = 'block';
+}
+
+function cerrarVistaPreviaCotizacion() {
+  document.getElementById('modal-preview-cot').style.display = 'none';
 }
 
 function calcTotalCot() {
