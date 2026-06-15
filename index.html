@@ -530,10 +530,6 @@
     <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
   </div>
   <div class="content">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-      <div style="font-size:13px;color:var(--texto2);">Selecciona cotizaciones para acciones</div>
-      <button onclick="toggleSeleccionarTodas()" id="btn-sel-todas" style="background:var(--gris2);border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">Seleccionar todas</button>
-    </div>
     <div id="lista-carpetas"></div>
   </div>
 </div>
@@ -2086,12 +2082,7 @@ async function cargarCarpetas() {
         btnPdf.textContent = 'Ver PDF';
         btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnPdf.onclick = (function(data){ return function(){ generarPDFCotizacionGuardada(data); }; })(it);
-        const btnEmail = document.createElement('button');
-        btnEmail.textContent = 'Enviar email';
-        btnEmail.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
-        btnEmail.onclick = (function(data){ return function(){ enviarCotGuardadaData(data); }; })(it);
         btnsRow.appendChild(btnPdf);
-        btnsRow.appendChild(btnEmail);
         rowContent.appendChild(rowHeader);
         rowContent.appendChild(totalDiv);
         rowContent.appendChild(descDiv);
