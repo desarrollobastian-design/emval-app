@@ -2592,6 +2592,8 @@ async function guardarTecnico() {
 
 async function eliminarTecnico(id) {
   if (!confirm('Seguro que quieres eliminar este tecnico?')) return;
+  const ok = await verificarPasswordAdmin();
+  if (!ok) return;
   try {
     await window.firebase.firestore().collection('tecnicos').doc(id).delete();
     toast('Tecnico eliminado');
