@@ -3596,9 +3596,9 @@ async function generarPDFCotizacionGuardada(cotData) {
     const _localPDF = (cotData.local||'').replace(/\s+/g,' ').trim();
     const _cotNPDF = cotData.numeroCotizacion || numCot || '';
     const _otNPDF = cotData.otNumero || '';
-    const nombrePDF = (_cotNPDF ? _cotNPDF + ' ' : '') + 'OT ' + _otNPDF + (_servPDF ? ' ' + _servPDF : '') + ' ' + _localPDF + '.pdf';
-    doc.save(nombrePDF);
-    toast('PDF descargado');
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+    toast('Abriendo PDF...');
   } catch(e) {
     console.error('Error PDF cotizacion guardada:', e);
     toast('Error generando PDF');
