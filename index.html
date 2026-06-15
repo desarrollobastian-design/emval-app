@@ -3232,6 +3232,20 @@ async function guardarYEnviarPDF() {
   return pdfUrlCloudinary || pdfUrlFirestore;
 }
 
+async function verCotizacionDirecta(cotId) {
+  if (!cotId) { toast('No se encontró la cotización'); return; }
+  toast('Cargando cotización...');
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('cotizaciones').doc(cotId).get();
+    if (!snap.exists) { toast('Cotización no encontrada'); return; }
+    await generarPDFCotizacionGuardada(snap.data());
+  } catch(e) {
+    console.error(e);
+    toast('Error al cargar cotización');
+  }
+}
+
 // =========== PDF COTIZACION ===========
 async function generarPDFCotizacionGuardada(cotData) {
   toast('Generando PDF...');
@@ -4293,7 +4307,7 @@ async function verOTsTecnico(nombre, grupo) {
       const btnVerCotT = document.createElement('button');
       btnVerCotT.textContent = 'Ver cotizacion';
       btnVerCotT.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnVerCotT.onclick = function(){ go('s-carpetas'); cargarCarpetas(); };
+      btnVerCotT.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizadaT);
       badgeCotT.appendChild(badgeV);
       badgeCotT.appendChild(btnVerCotT);
       btns.appendChild(badgeCotT);
@@ -4523,7 +4537,7 @@ async function cargarOTsSupervisor() {
         const btnVerCot = document.createElement('button');
         btnVerCot.textContent = 'Ver cotizacion';
         btnVerCot.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnVerCot.onclick = (function(id){ return function(){ go('s-carpetas'); cargarCarpetas(); }; })(yaTieneCot);
+        btnVerCot.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaTieneCot);
         badgeCot.appendChild(badgeVerde);
         badgeCot.appendChild(btnVerCot);
         infoEl.appendChild(tituloEl);
