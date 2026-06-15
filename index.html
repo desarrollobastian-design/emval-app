@@ -1921,14 +1921,25 @@ async function guardarCotizacion() {
       numeroCotizacion: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2)+'01'; })(),
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     };
+    let savedDocId;
     const editId = window._editandoCotizacionId;
     if (editId) {
       await db.collection('cotizaciones').doc(editId).update(cotData);
       window._editandoCotizacionId = null;
+      savedDocId = editId;
     } else {
-      await db.collection('cotizaciones').add(cotData);
+      const docRef = await db.collection('cotizaciones').add(cotData);
+      savedDocId = docRef.id;
     }
     toast('Cotizacion guardada');
+    // Subir PDF a Cloudinary en segundo plano
+    const _cotDataPDF = Object.assign({}, cotData, { id: savedDocId });
+    generarPDFCotizacionGuardada(_cotDataPDF, { modoSubir: true }).then(function(pdfUrl) {
+      if (pdfUrl && savedDocId) {
+        window.firebase.firestore().collection('cotizaciones').doc(savedDocId).update({ pdfUrl: pdfUrl })
+          .catch(function(e){ console.warn('Error guardando pdfUrl:', e); });
+      }
+    }).catch(function(e){ console.warn('Error generando PDF para subir:', e); });
     // Volver segun el origen
     const origen = window._cotizacionOrigen || 's-supervisor';
     if (origen === 's-ots-tecnico-detalle' && window._cotizacionTecnicoActivo) {
@@ -2005,7 +2016,8 @@ async function cargarCarpetas() {
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
         descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '',
-        carpeta: d.carpeta || '', supervisor: d.supervisor || '' };
+        carpeta: d.carpeta || '', supervisor: d.supervisor || '',
+        pdfUrl: d.pdfUrl || '', enviado: d.enviado || false };
       carpetas[c].items.push(cotItem);
       window._todasCotizaciones[doc.id] = cotItem;
     });
@@ -2110,7 +2122,10 @@ async function cargarCarpetas() {
         const btnPdf = document.createElement('button');
         btnPdf.textContent = 'Ver PDF';
         btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnPdf.onclick = (function(data){ return function(){ generarPDFCotizacionGuardada(data); }; })(it);
+        btnPdf.onclick = (function(data){ return function(){
+          if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
+          else { generarPDFCotizacionGuardada(data); }
+        }; })(it);
         const btnEdit = document.createElement('button');
         btnEdit.textContent = 'Editar';
         btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
@@ -2120,6 +2135,15 @@ async function cargarCarpetas() {
         rowContent.appendChild(rowHeader);
         rowContent.appendChild(totalDiv);
         rowContent.appendChild(descDiv);
+        if (it.enviado) {
+          const envDiv = document.createElement('div');
+          envDiv.style.cssText = 'margin-top:4px;';
+          const envTag = document.createElement('span');
+          envTag.style.cssText = 'display:inline-block;background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;';
+          envTag.textContent = '✓ Enviado';
+          envDiv.appendChild(envTag);
+          rowContent.appendChild(envDiv);
+        }
         rowContent.appendChild(btnsRow);
         checkRow.appendChild(chk);
         checkRow.appendChild(rowContent);
@@ -3329,7 +3353,7 @@ async function verCotizacionDirecta(cotId) {
 }
 
 // =========== PDF COTIZACION ===========
-async function generarPDFCotizacionGuardada(cotData) {
+async function generarPDFCotizacionGuardada(cotData, options) {
   toast('Generando PDF...');
   try {
     // Cargar datos completos de la OT desde Firestore
@@ -3617,10 +3641,22 @@ async function generarPDFCotizacionGuardada(cotData) {
     itemsCot = itemsBackup;
     if (detalleEl) detalleEl.value = detalleBackup;
 
-    const _servPDF = (cotData.nombreServicio||'').trim();
-    const _localPDF = (cotData.local||'').replace(/\s+/g,' ').trim();
-    const _cotNPDF = cotData.numeroCotizacion || numCot || '';
     const _otNPDF = cotData.otNumero || '';
+
+    if (options && options.modoSubir) {
+      try {
+        const pdfBase64 = doc.output('datauristring');
+        const fd = new FormData();
+        fd.append('file', pdfBase64);
+        fd.append('upload_preset', CLOUDINARY.uploadPreset);
+        fd.append('public_id', 'cot_' + (_otNPDF||'x') + '_' + Date.now());
+        fd.append('resource_type', 'raw');
+        const res = await fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.secure_url) return data.secure_url;
+      } catch(eu) { console.warn('Error subiendo PDF cot a Cloudinary:', eu); }
+      return null;
+    }
     const blobUrl = doc.output('bloburl');
     window.open(blobUrl, '_blank');
     toast('Abriendo PDF...');
@@ -4448,20 +4484,36 @@ async function enviarCotizacionesSeleccionadas() {
   const email = prompt('Email del cliente:');
   if (!email) return;
 
-  toast('Enviando ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '...');
+  // Si alguna cot no tiene pdfUrl, generarla y subirla ahora
+  const sinUrl = seleccionadas.filter(function(it){ return !it.pdfUrl; });
+  if (sinUrl.length > 0) {
+    toast('Preparando PDFs (' + sinUrl.length + ')...');
+    for (var si = 0; si < sinUrl.length; si++) {
+      try {
+        const url = await generarPDFCotizacionGuardada(sinUrl[si], { modoSubir: true });
+        if (url) {
+          sinUrl[si].pdfUrl = url;
+          window.firebase.firestore().collection('cotizaciones').doc(sinUrl[si].id).update({ pdfUrl: url })
+            .catch(function(e){ console.warn('pdfUrl update error:', e); });
+        }
+      } catch(e) { console.warn('Error generando PDF para', sinUrl[si].id, e); }
+    }
+  }
 
-  // Construir resumen de todas las cotizaciones
+  toast('Enviando email...');
+
+  // Construir contenido
   let resumenTotal = 0;
   let detalles = '';
+  let linksTexto = 'Links para ver cotizaciones:\n';
   seleccionadas.forEach(function(it, i) {
     resumenTotal += (it.total || 0);
     detalles += (i+1) + '. ' + (it.local||'') + ' - ' + (it.fecha||'') + '\n';
     detalles += '   Trabajo: ' + (it.descripcionTrabajo||'').substring(0,80) + '\n';
-    const itemsTexto = (it.items||[]).filter(function(item){ return item.precio > 0; })
-      .map(function(item){ return '   - ' + item.desc + ' x' + item.qty + ': $' + ((item.qty||1)*(item.precio||0)).toLocaleString('es-CL'); })
-      .join('\n');
-    if (itemsTexto) detalles += itemsTexto + '\n';
-    detalles += '   TOTAL: $' + (it.total||0).toLocaleString('es-CL') + '\n\n';
+    detalles += '   Total: $' + (it.total||0).toLocaleString('es-CL') + '\n\n';
+    if (it.pdfUrl) {
+      linksTexto += (i+1) + '. ' + (it.local||'') + ':\n' + it.pdfUrl + '\n\n';
+    }
   });
 
   try {
@@ -4473,12 +4525,17 @@ async function enviarCotizacionesSeleccionadas() {
       tecnico: seleccionadas[0].tecnico || '',
       tipo: 'Cotizacion',
       trabajo: detalles,
-      pdf_url: 'Total general: $' + resumenTotal.toLocaleString('es-CL') + ' (' + seleccionadas.length + ' cotizaciones)'
+      pdf_url: linksTexto + 'Total general: $' + resumenTotal.toLocaleString('es-CL')
     });
-    toast('Email enviado con ' + seleccionadas.length + ' cotizaciones');
-    // Desmarcar checkboxes
+    // Marcar como enviado en Firestore
+    const db = window.firebase.firestore();
+    for (var ei = 0; ei < seleccionadas.length; ei++) {
+      await db.collection('cotizaciones').doc(seleccionadas[ei].id).update({ enviado: true });
+    }
+    toast('Email enviado con ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : ''));
     document.querySelectorAll('#lista-carpetas input[type=checkbox]').forEach(function(c){ c.checked = false; });
     actualizarBarraAcciones();
+    await cargarCarpetas();
   } catch(e) {
     console.error('Error enviando email:', e);
     toast('Error al enviar email: ' + (e.text || e.message || 'desconocido'));
