@@ -789,6 +789,15 @@ async function sha256(text) {
   return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 }
 
+async function verificarPasswordAdmin() {
+  const pass = prompt('Ingresa la contraseña de administrador para confirmar:');
+  if (pass === null) return false;
+  const hash = await sha256(pass);
+  if (hash === ADMIN_HASHES[estado.usuario]) return true;
+  toast('Contraseña incorrecta');
+  return false;
+}
+
 // =========== NAVEGACION ===========
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -4612,6 +4621,22 @@ async function verOTsTecnico(nombre, grupo) {
       btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
       btns.appendChild(btnCot);
     }
+    if (estado.cargo === 'Administrador') {
+      const btnDelOT = document.createElement('button');
+      btnDelOT.textContent = 'Eliminar OT';
+      btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnDelOT.onclick = (function(id, cardRef){ return async function() {
+        if (!confirm('Eliminar esta OT? Esta accion no se puede deshacer.')) return;
+        const ok = await verificarPasswordAdmin();
+        if (!ok) return;
+        try {
+          await window.firebase.firestore().collection('ordenes').doc(id).delete();
+          toast('OT eliminada');
+          cardRef.remove();
+        } catch(e) { console.error(e); toast('Error eliminando OT'); }
+      }; })(ot.id, card);
+      btns.appendChild(btnDelOT);
+    }
     card.appendChild(btns);
     lista.appendChild(card);
   });
@@ -4721,6 +4746,10 @@ async function eliminarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
   if (!confirm('Eliminar ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '? Esta accion no se puede deshacer.')) return;
+  if (estado.cargo === 'Administrador') {
+    const ok = await verificarPasswordAdmin();
+    if (!ok) return;
+  }
   try {
     const db = window.firebase.firestore();
     for (var i = 0; i < seleccionadas.length; i++) {
@@ -4877,6 +4906,24 @@ async function cargarOTsSupervisor() {
       }
       card.appendChild(iconEl);
       card.appendChild(infoEl);
+      if (estado.cargo === 'Administrador') {
+        const btnDelSup = document.createElement('button');
+        btnDelSup.textContent = '🗑';
+        btnDelSup.title = 'Eliminar OT';
+        btnDelSup.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 10px;font-size:15px;cursor:pointer;flex-shrink:0;align-self:center;';
+        btnDelSup.onclick = (function(id, c){ return async function(e) {
+          e.stopPropagation();
+          if (!confirm('Eliminar esta OT? Esta accion no se puede deshacer.')) return;
+          const ok = await verificarPasswordAdmin();
+          if (!ok) return;
+          try {
+            await window.firebase.firestore().collection('ordenes').doc(id).delete();
+            toast('OT eliminada');
+            c.remove();
+          } catch(er) { console.error(er); toast('Error eliminando OT'); }
+        }; })(docId, card);
+        card.appendChild(btnDelSup);
+      }
       lista.appendChild(card);
     });
   } catch(e) {
