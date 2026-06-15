@@ -2995,7 +2995,7 @@ function verPDF() {
     window.open(estado.pdfUrl, '_blank');
   } else {
     generarPDFRecepcionObra().then(function(doc){
-      if(doc) doc.save('Recepcion_Obra_OT' + estado.otNumero + '.pdf');
+      if(doc) doc.save(_nombreArchivoPDF());
     });
   }
 }
@@ -3102,6 +3102,16 @@ async function agregarFotosAlPDF(doc) {
   }
 }
 
+function _nombreArchivoPDF() {
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const now = new Date();
+  if (estado.tipo === 'preventivo') {
+    const ceco = (estado.ceco || '').toString().trim();
+    return ceco + '-HS ' + (estado.otNumero || '') + '-MP Transpaletas ' + MESES[now.getMonth()] + ' ' + now.getFullYear() + '.pdf';
+  }
+  return 'Recepcion_Obra_OT' + (estado.otNumero || '') + '.pdf';
+}
+
 async function guardarYEnviarPDF() {
   toast('Generando PDF...');
   const doc = await generarPDFRecepcionObra();
@@ -3125,7 +3135,7 @@ async function guardarYEnviarPDF() {
     formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', 'OT_' + estado.otNumero + '_' + (estado.local||'').replace(/\s+/g,'_') + '.pdf');
+    formData.append('public_id', _nombreArchivoPDF().replace(/\.pdf$/i, '') + '.pdf');
     const resp = await fetch(
       'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
       { method: 'POST', body: formData }
@@ -3173,7 +3183,7 @@ async function guardarYEnviarPDF() {
     try {
       toast('Enviando email con PDF...');
       const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
-      const nombreArchivo = 'Recepcion_Obra_OT' + estado.otNumero + '.pdf';
+      const nombreArchivo = _nombreArchivoPDF();
 
       await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
         email_admin: email,
