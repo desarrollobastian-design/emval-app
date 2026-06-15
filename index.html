@@ -725,6 +725,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
   emailjs.init("E4wDaLmmuBovj2s8a");
+  // ---- EmailJS config cotizaciones (cambiar cuando esten creados) ----
+  window.EMAILJS_COT_SERVICE  = 'service_xm6dmxl';   // reemplazar por service de cotizaciones.emval@gmail.com
+  window.EMAILJS_COT_TEMPLATE = 'template_agzfcux';  // reemplazar por template especifico de cotizaciones
 </script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -3715,15 +3718,15 @@ async function generarPDFCotizacionGuardada(cotData, options) {
 
     if (options && options.modoSubir) {
       try {
-        const pdfBase64 = doc.output('datauristring');
+        const pdfBlob = doc.output('blob');
         const fd = new FormData();
-        fd.append('file', pdfBase64);
+        fd.append('file', pdfBlob, 'cot_' + (_otNPDF||'x') + '_' + Date.now() + '.pdf');
         fd.append('upload_preset', CLOUDINARY.uploadPreset);
-        fd.append('public_id', 'cot_' + (_otNPDF||'x') + '_' + Date.now());
-        fd.append('resource_type', 'raw');
+        fd.append('folder', 'emval/cotizaciones');
         const res = await fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: fd });
         const data = await res.json();
         if (data.secure_url) return data.secure_url;
+        console.warn('Cloudinary cot error:', data);
       } catch(eu) { console.warn('Error subiendo PDF cot a Cloudinary:', eu); }
       return null;
     }
@@ -4587,13 +4590,14 @@ async function enviarCotizacionesSeleccionadas() {
   });
 
   try {
-    await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+    await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, {
       email_admin: email,
       ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
       local: seleccionadas.map(function(it){ return it.local; }).join(', '),
       fecha: new Date().toLocaleDateString('es-CL'),
       tecnico: seleccionadas[0].tecnico || '',
       tipo: 'Cotizacion',
+      cantidad: String(seleccionadas.length),
       trabajo: detalles,
       pdf_url: linksTexto + 'Total general: $' + resumenTotal.toLocaleString('es-CL')
     });
