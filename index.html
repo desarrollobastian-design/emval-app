@@ -4114,11 +4114,18 @@ async function cargarPreventivos() {
       }
 
       if (yaCotizada) {
-        const badgeCot = document.createElement('div');
-        badgeCot.style.cssText = 'flex:1;background:var(--gris1);border-radius:8px;padding:9px;font-size:12px;color:var(--verde);font-weight:600;text-align:center;cursor:pointer;';
+        const wrapCot = document.createElement('div');
+        wrapCot.style.cssText = 'flex:1;display:flex;align-items:center;gap:6px;';
+        const badgeCot = document.createElement('span');
+        badgeCot.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;white-space:nowrap;';
         badgeCot.textContent = String.fromCharCode(10003) + ' Cotizada';
-        badgeCot.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizada);
-        btns.appendChild(badgeCot);
+        const btnVerCotP = document.createElement('button');
+        btnVerCotP.textContent = 'Ver cotizacion';
+        btnVerCotP.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;';
+        btnVerCotP.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizada);
+        wrapCot.appendChild(badgeCot);
+        wrapCot.appendChild(btnVerCotP);
+        btns.appendChild(wrapCot);
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Cotizacion';
