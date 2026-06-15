@@ -734,6 +734,12 @@
 </div>
 
 <div id="toast"></div>
+<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#E53E3E;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
+  Sin conexión — modo offline
+</div>
+<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
+  ⏳ <span id="pending-count">0</span> OT(s) pendiente(s) — Toca para subir
+</div>
 
 <!-- FIREBASE SDK v9 compat -->
 <!-- EmailJS -->
@@ -1253,87 +1259,120 @@ async function subirCloudinary(dataUrl, carpeta, nombre) {
 }
 
 async function guardarEnFirebase(otBase, desc, fecha) {
+  // Capturar firma (requiere DOM, debe ser antes de cualquier await)
+  let firmaBase64 = '';
   try {
-    if (!window._firebaseReady) { console.warn('Firebase no listo'); return; }
+    const firmaCanvas = document.getElementById('firma-canvas');
+    const tempC = document.createElement('canvas');
+    tempC.width = firmaCanvas.width; tempC.height = firmaCanvas.height;
+    const tempCtx = tempC.getContext('2d');
+    tempCtx.fillStyle = '#FFFFFF';
+    tempCtx.fillRect(0, 0, tempC.width, tempC.height);
+    tempCtx.drawImage(firmaCanvas, 0, 0);
+    firmaBase64 = tempC.toDataURL('image/jpeg', 0.7);
+  } catch(ef) { console.warn('Error capturando firma:', ef); }
+
+  // Convertir audios a base64 para almacenamiento offline
+  const audiosBase64 = [];
+  for (let i = 0; i < vozGrabaciones.length; i++) {
+    try {
+      const ext = vozGrabaciones[i].blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const b64 = await _blobToBase64(vozGrabaciones[i].blob);
+      audiosBase64.push({ data: b64, ext: ext });
+    } catch(ea) {}
+  }
+
+  const descripcionProblema = document.getElementById('desc-problema') ? document.getElementById('desc-problema').value || '' : '';
+  const fotosAntesCopy = estado.fotosAntes.filter(f => f);
+  const fotosDespuesCopy = estado.fotosDespues.filter(f => f);
+  const fotoTimbreCopy = estado.fotoTimbre;
+
+  // Si no hay internet, guardar en IndexedDB y salir
+  if (!navigator.onLine || !window._firebaseReady) {
+    try {
+      await _guardarOTPendiente({
+        numero: otBase.numero, local: estado.local, tipo: estado.tipo,
+        tecnico: estado.usuario, fecha: fecha,
+        descripcionProblema: descripcionProblema,
+        descripcionTrabajo: desc, ceco: estado.ceco || '',
+        numEquipos: estado.numEquipos || '',
+        serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
+        fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
+        fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
+        audiosBase64: audiosBase64, savedAt: new Date().toISOString()
+      });
+      toast('Sin internet — OT guardada para sincronizar cuando haya conexion');
+      actualizarIndicadorPendientes();
+    } catch(edb) {
+      console.error('Error guardando OT offline:', edb);
+      toast('Error guardando OT localmente');
+    }
+    return;
+  }
+
+  try {
     toast('Guardando en la nube...');
-    console.log('Iniciando guardado...');
     const db = window.firebase.firestore();
 
-    // Subir fotos antes a Cloudinary
     const urlsAntes = [];
-    for (let i = 0; i < estado.fotosAntes.length; i++) {
-      if (!estado.fotosAntes[i]) continue;
+    for (let i = 0; i < fotosAntesCopy.length; i++) {
       toast('Subiendo fotos antes ' + (i+1) + '...');
-      const url = await subirCloudinary(estado.fotosAntes[i], otBase.numero, 'antes_' + i + '.jpg');
+      const url = await subirCloudinary(fotosAntesCopy[i], otBase.numero, 'antes_' + i + '.jpg');
       if (url) urlsAntes.push(url);
     }
-
-    // Subir fotos despues a Cloudinary
     const urlsDespues = [];
-    for (let i = 0; i < estado.fotosDespues.length; i++) {
-      if (!estado.fotosDespues[i]) continue;
+    for (let i = 0; i < fotosDespuesCopy.length; i++) {
       toast('Subiendo fotos despues ' + (i+1) + '...');
-      const url = await subirCloudinary(estado.fotosDespues[i], otBase.numero, 'despues_' + i + '.jpg');
+      const url = await subirCloudinary(fotosDespuesCopy[i], otBase.numero, 'despues_' + i + '.jpg');
       if (url) urlsDespues.push(url);
     }
-
-    // Subir timbre a Cloudinary
     let urlTimbre = null;
-    if (estado.fotoTimbre) {
+    if (fotoTimbreCopy) {
       toast('Subiendo foto timbre...');
-      urlTimbre = await subirCloudinary(estado.fotoTimbre, otBase.numero, 'timbre.jpg');
+      urlTimbre = await subirCloudinary(fotoTimbreCopy, otBase.numero, 'timbre.jpg');
     }
-
-    // Subir audios a Cloudinary
     const urlsAudio = [];
-    for (let i = 0; i < vozGrabaciones.length; i++) {
+    for (let i = 0; i < audiosBase64.length; i++) {
       toast('Subiendo audio ' + (i+1) + '...');
-      const ext = vozGrabaciones[i].blob.type.includes('mp4') ? 'mp4' : 'webm';
-      const audioUrl = URL.createObjectURL(vozGrabaciones[i].blob);
-      const url = await subirCloudinary(audioUrl, otBase.numero, 'audio_' + i + '.' + ext);
+      const url = await subirCloudinary(audiosBase64[i].data, otBase.numero, 'audio_' + i + '.' + audiosBase64[i].ext);
       if (url) urlsAudio.push(url);
     }
 
-    // Capturar firma como base64 con fondo blanco
-    let firmaBase64 = '';
-    try {
-      const firmaCanvas = document.getElementById('firma-canvas');
-      const tempC = document.createElement('canvas');
-      tempC.width = firmaCanvas.width; tempC.height = firmaCanvas.height;
-      const tempCtx = tempC.getContext('2d');
-      tempCtx.fillStyle = '#FFFFFF';
-      tempCtx.fillRect(0, 0, tempC.width, tempC.height);
-      tempCtx.drawImage(firmaCanvas, 0, 0);
-      firmaBase64 = tempC.toDataURL('image/jpeg', 0.7);
-    } catch(ef) { console.warn('Error capturando firma:', ef); }
-
-    // Guardar todo en Firestore
     toast('Guardando datos...');
     await db.collection('ordenes').add({
-      numero: otBase.numero,
-      local: estado.local,
-      tipo: estado.tipo,
-      tecnico: estado.usuario,
-      fecha: fecha,
-      descripcionProblema: document.getElementById('desc-problema').value || '',
-      ceco: estado.ceco || '',
-      descripcionTrabajo: desc,
+      numero: otBase.numero, local: estado.local, tipo: estado.tipo,
+      tecnico: estado.usuario, fecha: fecha,
+      descripcionProblema: descripcionProblema,
+      ceco: estado.ceco || '', descripcionTrabajo: desc,
       numEquipos: estado.numEquipos || '',
       serviciosPreventivo: estado.serviciosPreventivo || [],
-      fotosAntes: urlsAntes,
-      fotosDespues: urlsDespues,
-      fotoTimbre: urlTimbre,
-      audios: urlsAudio,
-      firmada: true,
-      firmaImagen: firmaBase64,
+      fotosAntes: urlsAntes, fotosDespues: urlsDespues,
+      fotoTimbre: urlTimbre, audios: urlsAudio,
+      firmada: true, firmaImagen: firmaBase64,
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     });
 
     toast('OT guardada en la nube [ok]');
-    console.log('OT guardada exitosamente');
   } catch(e) {
     console.error('Error guardando OT:', e);
-    toast('OT guardada localmente (sin internet)');
+    // Red caída a mitad — guardar en IndexedDB
+    try {
+      await _guardarOTPendiente({
+        numero: otBase.numero, local: estado.local, tipo: estado.tipo,
+        tecnico: estado.usuario, fecha: fecha,
+        descripcionProblema: descripcionProblema,
+        descripcionTrabajo: desc, ceco: estado.ceco || '',
+        numEquipos: estado.numEquipos || '',
+        serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
+        fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
+        fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
+        audiosBase64: audiosBase64, savedAt: new Date().toISOString()
+      });
+      toast('OT guardada offline — se sincronizara cuando haya internet');
+      actualizarIndicadorPendientes();
+    } catch(edb2) {
+      toast('Error guardando OT. Contacta al supervisor.');
+    }
   }
 }
 
@@ -2355,12 +2394,51 @@ async function cargarCadenasApp() {
   if (!lista) return;
   if (!window._firebaseReady) { setTimeout(cargarCadenasApp, 200); return; }
   lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
+
+  // Offline: usar cache de localStorage
+  if (!navigator.onLine) {
+    const cached = _getCadenasCached();
+    if (cached && cached.length > 0) {
+      lista.innerHTML = '';
+      const _ORDEN_C2 = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
+      cached.sort(function(a, b) {
+        var ia = _ORDEN_C2.indexOf(a.nombre), ib = _ORDEN_C2.indexOf(b.nombre);
+        if (ia === -1 && ib === -1) return (a.orden||99)-(b.orden||99);
+        if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
+      });
+      cached.forEach(function(c) {
+        var card = document.createElement('div'); card.className = 'cadena-card';
+        var logoDiv = document.createElement('div'); logoDiv.className = 'cadena-logo fallback';
+        logoDiv.style.background = c.color || '#1B3A6B';
+        if (c.logo) {
+          var img = document.createElement('img'); img.src = c.logo;
+          img.onerror = function(){ logoDiv.innerHTML=''; logoDiv.textContent = c.letra || c.nombre.charAt(0); };
+          logoDiv.innerHTML = ''; logoDiv.appendChild(img); logoDiv.classList.remove('fallback');
+        } else { logoDiv.textContent = c.letra || c.nombre.charAt(0); }
+        var info = document.createElement('div'); info.className = 'cadena-info';
+        var n = (c.sucursales||[]).length;
+        info.innerHTML = '<div class="cadena-nombre">' + c.nombre + '</div><div class="cadena-nsuc">' + n + ' sucursal' + (n!==1?'es':'') + '</div>';
+        var arrow = document.createElement('svg'); arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
+        arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
+        arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+        arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+        card.appendChild(logoDiv); card.appendChild(info); card.appendChild(arrow);
+        card.onclick = (function(cad){ return function(){ seleccionarCadena(cad); }; })(c);
+        lista.appendChild(card);
+      });
+      return;
+    }
+    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin conexion. Abre la app con internet al menos una vez.</p>';
+    return;
+  }
+
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cadenas').get();
     let cadenas = [];
     if (!snap.empty) {
       snap.docs.forEach(function(doc) { cadenas.push({ id: doc.id, ...doc.data() }); });
+      _cacheCadenas(cadenas); // Guardar en cache para offline
     } else {
       cadenas = CADENAS_DEFAULT;
       // Save defaults to Firebase
@@ -2839,16 +2917,24 @@ function _renderListaUsuarios(docs) {
 }
 
 async function cargarUsuariosApp() {
+  // Offline: usar cache
+  if (!navigator.onLine) {
+    const cached = _getUsuariosCached();
+    if (cached) { _renderListaUsuarios(cached); return; }
+    _renderListaUsuarios([]);
+    return;
+  }
   try {
     if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 200); return; }
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
     if (snap.empty) {
-      // Sin tecnicos en Firebase: mostrar solo Supervisor
       _renderListaUsuarios([]);
       return;
     }
-    _renderListaUsuarios(snap.docs.map(function(d){ return Object.assign({ _id: d.id }, d.data()); }));
+    const docs = snap.docs.map(function(d){ return Object.assign({ _id: d.id }, d.data()); });
+    _cacheUsuarios(docs); // Guardar en cache para offline
+    _renderListaUsuarios(docs);
   } catch(e) {
     console.error('Error cargando usuarios:', e);
     const lista = document.getElementById('lista-usuarios');
@@ -5663,6 +5749,164 @@ function toast(msg) {
   t._timer = setTimeout(() => t.style.display = 'none', 2500);
 }
 
+// =========== OFFLINE / INDEXEDDB ===========
+
+function _abrirDBOffline() {
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('emval_offline', 1);
+    req.onupgradeneeded = function(e) {
+      var db = e.target.result;
+      if (!db.objectStoreNames.contains('ots_pendientes')) {
+        db.createObjectStore('ots_pendientes', { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = function(e) { resolve(e.target.result); };
+    req.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+async function _guardarOTPendiente(data) {
+  var db = await _abrirDBOffline();
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction('ots_pendientes', 'readwrite');
+    tx.objectStore('ots_pendientes').add(data);
+    tx.oncomplete = resolve;
+    tx.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+async function _obtenerOTsPendientes() {
+  var db = await _abrirDBOffline();
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction('ots_pendientes', 'readonly');
+    var req = tx.objectStore('ots_pendientes').getAll();
+    req.onsuccess = function(e) { resolve(e.target.result); };
+    req.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+async function _eliminarOTPendiente(id) {
+  var db = await _abrirDBOffline();
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction('ots_pendientes', 'readwrite');
+    tx.objectStore('ots_pendientes').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+function _blobToBase64(blob) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onloadend = function() { resolve(reader.result); };
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function actualizarIndicadorPendientes() {
+  try {
+    var pendientes = await _obtenerOTsPendientes();
+    var offlineBar = document.getElementById('offline-bar');
+    var pendingBar = document.getElementById('pending-bar');
+    var pendingCount = document.getElementById('pending-count');
+    if (!navigator.onLine) {
+      if (offlineBar) offlineBar.style.display = 'block';
+      if (pendingBar) pendingBar.style.display = 'none';
+    } else {
+      if (offlineBar) offlineBar.style.display = 'none';
+      if (pendientes.length > 0) {
+        if (pendingBar) { pendingBar.style.display = 'block'; pendingCount.textContent = pendientes.length; }
+      } else {
+        if (pendingBar) pendingBar.style.display = 'none';
+      }
+    }
+  } catch(e) {}
+}
+
+async function sincronizarOTsPendientes() {
+  if (!navigator.onLine || !window._firebaseReady) return;
+  var pendientes;
+  try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
+  if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
+
+  var pendingBar = document.getElementById('pending-bar');
+  if (pendingBar) pendingBar.textContent = 'Sincronizando ' + pendientes.length + ' OT(s)...';
+
+  for (var pi = 0; pi < pendientes.length; pi++) {
+    var ot = pendientes[pi];
+    try {
+      toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
+
+      var urlsAntes = [];
+      for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
+        if (!ot.fotosAntes[i]) continue;
+        var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
+        if (u) urlsAntes.push(u);
+      }
+      var urlsDespues = [];
+      for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
+        if (!ot.fotosDespues[i]) continue;
+        var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
+        if (u) urlsDespues.push(u);
+      }
+      var urlTimbre = null;
+      if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
+
+      var urlsAudio = [];
+      for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
+        var a = ot.audiosBase64[i];
+        var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
+        if (u) urlsAudio.push(u);
+      }
+
+      var db = window.firebase.firestore();
+      await db.collection('ordenes').add({
+        numero: ot.numero, local: ot.local, tipo: ot.tipo,
+        tecnico: ot.tecnico, fecha: ot.fecha,
+        descripcionProblema: ot.descripcionProblema || '',
+        ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
+        numEquipos: ot.numEquipos || '',
+        serviciosPreventivo: ot.serviciosPreventivo || [],
+        fotosAntes: urlsAntes, fotosDespues: urlsDespues,
+        fotoTimbre: urlTimbre, audios: urlsAudio,
+        firmada: true, firmaImagen: ot.firmaBase64,
+        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      await _eliminarOTPendiente(ot.id);
+      toast('OT #' + ot.numero + ' sincronizada [ok]');
+    } catch(err) {
+      console.error('Error sincronizando OT pendiente:', err);
+      toast('Error sincronizando OT #' + ot.numero + ', se reintentara');
+      break;
+    }
+  }
+  actualizarIndicadorPendientes();
+}
+
+window.addEventListener('online', function() {
+  actualizarIndicadorPendientes();
+  setTimeout(sincronizarOTsPendientes, 2000);
+});
+window.addEventListener('offline', function() {
+  actualizarIndicadorPendientes();
+});
+
+// =========== CACHE OFFLINE CADENAS/USUARIOS ===========
+
+function _cacheCadenas(cadenas) {
+  try { localStorage.setItem('emval_cadenas_cache', JSON.stringify(cadenas)); } catch(e) {}
+}
+function _getCadenasCached() {
+  try { var v = localStorage.getItem('emval_cadenas_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+}
+function _cacheUsuarios(docs) {
+  try { localStorage.setItem('emval_users_cache', JSON.stringify(docs)); } catch(e) {}
+}
+function _getUsuariosCached() {
+  try { var v = localStorage.getItem('emval_users_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+}
+
 // Iniciar carga cuando Firebase este listo
 (function iniciarCarga() {
   if (window._firebaseReady) {
@@ -5677,6 +5921,14 @@ setTimeout(function(){
   var pdfId = urlParams.get('pdf');
   if (pdfId) { verPDFById(pdfId); }
 }, 1500);
+
+// Registrar Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(function(e){ console.warn('SW error:', e); });
+}
+
+// Estado inicial de conexion
+actualizarIndicadorPendientes();
 </script>
 </body>
 </html>
