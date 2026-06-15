@@ -1,0 +1,24 @@
+{
+  "name": "EMVAL - Órdenes de Trabajo",
+  "short_name": "EMVAL",
+  "description": "Sistema de Órdenes de Trabajo EMVAL E.I.R.L.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2D5AA0",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
