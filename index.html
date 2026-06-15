@@ -2072,32 +2072,166 @@ async function enviarCotizacion() {
   window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + cotizacionActual.local + '&body=' + body);
 }
 
+function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
+  const selRow = document.createElement('div');
+  selRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
+  const btnSelTodas = document.createElement('button');
+  btnSelTodas.textContent = 'Seleccionar todas';
+  btnSelTodas.style.cssText = 'background:var(--gris2);border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+  btnSelTodas.onclick = (function(its) { return function() {
+    its.forEach(function(it) {
+      const chk = document.querySelector('input[data-cot-id="' + it.id + '"]');
+      if (chk) chk.checked = true;
+    });
+    actualizarBarraAcciones();
+  }; })(items);
+  selRow.appendChild(btnSelTodas);
+  contenido.appendChild(selRow);
+  items.forEach(function(it) {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
+    const checkRow = document.createElement('div');
+    checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.cotId = it.id;
+    chk.setAttribute('data-cot-id', it.id);
+    chk.style.cssText = 'width:18px;height:18px;margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--azul);';
+    chk.onchange = actualizarBarraAcciones;
+    const rowContent = document.createElement('div');
+    rowContent.style.flex = '1';
+    const rowHeader = document.createElement('div');
+    rowHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    const localDiv = document.createElement('div');
+    localDiv.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
+    localDiv.textContent = it.local || '';
+    const fechaDiv = document.createElement('div');
+    fechaDiv.style.cssText = 'font-size:11px;color:var(--texto3);';
+    fechaDiv.textContent = it.fecha || '';
+    rowHeader.appendChild(localDiv);
+    rowHeader.appendChild(fechaDiv);
+    const totalDiv = document.createElement('div');
+    totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
+    totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
+    const descDiv = document.createElement('div');
+    descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+    descDiv.textContent = (it.descripcionTrabajo||'').substring(0,60);
+    if (mostrarSupervisor && (it.supervisor || it.carpeta)) {
+      const supDiv = document.createElement('div');
+      supDiv.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:1px;';
+      supDiv.textContent = 'Supervisor: ' + (it.supervisor || it.carpeta);
+      rowContent.appendChild(rowHeader);
+      rowContent.appendChild(totalDiv);
+      rowContent.appendChild(supDiv);
+      rowContent.appendChild(descDiv);
+    } else {
+      rowContent.appendChild(rowHeader);
+      rowContent.appendChild(totalDiv);
+      rowContent.appendChild(descDiv);
+    }
+    if (it.enviado) {
+      const envDiv = document.createElement('div');
+      envDiv.style.cssText = 'margin-top:4px;';
+      const envTag = document.createElement('span');
+      envTag.style.cssText = 'display:inline-block;background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;';
+      envTag.textContent = '✓ Enviado';
+      envDiv.appendChild(envTag);
+      rowContent.appendChild(envDiv);
+    }
+    const btnsRow = document.createElement('div');
+    btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+    const btnPdf = document.createElement('button');
+    btnPdf.textContent = 'Ver PDF';
+    btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnPdf.onclick = (function(data){ return function(){
+      if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
+      else { generarPDFCotizacionGuardada(data); }
+    }; })(it);
+    const btnEdit = document.createElement('button');
+    btnEdit.textContent = 'Editar';
+    btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnEdit.onclick = (function(data){ return function(){ editarCotizacion(data); }; })(it);
+    btnsRow.appendChild(btnPdf);
+    btnsRow.appendChild(btnEdit);
+    rowContent.appendChild(btnsRow);
+    checkRow.appendChild(chk);
+    checkRow.appendChild(rowContent);
+    row.appendChild(checkRow);
+    contenido.appendChild(row);
+  });
+}
+
 async function cargarCarpetas() {
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
     window._todasCotizaciones = {};
     const carpetas = {};
+    const itemsEnviados = [];
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const c = d.carpeta || d.supervisor || d.tecnico || 'Sin asignar';
-      if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
         descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '',
         carpeta: d.carpeta || '', supervisor: d.supervisor || '',
         pdfUrl: d.pdfUrl || '', enviado: d.enviado || false };
-      carpetas[c].items.push(cotItem);
       window._todasCotizaciones[doc.id] = cotItem;
+      if (d.enviado) {
+        itemsEnviados.push(cotItem);
+      } else {
+        const c = d.carpeta || d.supervisor || d.tecnico || 'Sin asignar';
+        if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
+        carpetas[c].items.push(cotItem);
+      }
     });
     const lista = document.getElementById('lista-carpetas');
     lista.innerHTML = '';
     const keys = Object.keys(carpetas);
-    if (keys.length === 0) {
+    if (keys.length === 0 && itemsEnviados.length === 0) {
       lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones guardadas aun</p>';
       return;
     }
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
+
+    // --- Carpeta especial ENVIADAS ---
+    if (itemsEnviados.length > 0) {
+      const totalEnv = itemsEnviados.reduce(function(s,i){ return s + (i.total||0); }, 0);
+      const carpEnv = document.createElement('div');
+      carpEnv.className = 'card';
+      carpEnv.style.cssText = 'margin-bottom:10px;overflow:hidden;border:2px solid #1A7A3C;';
+      const headerEnv = document.createElement('div');
+      headerEnv.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
+      const avatarEnv = document.createElement('div');
+      avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:12px;background:#1A7A3C;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
+      avatarEnv.textContent = '📤';
+      const headerInfoEnv = document.createElement('div');
+      headerInfoEnv.style.flex = '1';
+      const nombreEnv = document.createElement('div');
+      nombreEnv.style.cssText = 'font-size:15px;font-weight:600;color:#1A7A3C;';
+      nombreEnv.textContent = 'Enviadas';
+      const resumenEnv = document.createElement('div');
+      resumenEnv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      resumenEnv.textContent = itemsEnviados.length + ' cotizacion' + (itemsEnviados.length !== 1 ? 'es' : '') + ' enviadas | $' + totalEnv.toLocaleString('es-CL');
+      headerInfoEnv.appendChild(nombreEnv);
+      headerInfoEnv.appendChild(resumenEnv);
+      const chevronEnv = document.createElement('div');
+      chevronEnv.style.cssText = 'font-size:18px;color:var(--texto3);transition:transform 0.2s;';
+      chevronEnv.textContent = '>';
+      headerEnv.appendChild(avatarEnv);
+      headerEnv.appendChild(headerInfoEnv);
+      headerEnv.appendChild(chevronEnv);
+      carpEnv.appendChild(headerEnv);
+      const contenidoEnv = document.createElement('div');
+      contenidoEnv.style.cssText = 'display:none;margin-top:10px;';
+      _renderItemsCotizacion(itemsEnviados, contenidoEnv, true);
+      carpEnv.appendChild(contenidoEnv);
+      headerEnv.onclick = (function(cont, chev) { return function() {
+        const abierto = cont.style.display !== 'none';
+        cont.style.display = abierto ? 'none' : 'block';
+        chev.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
+      }; })(contenidoEnv, chevronEnv);
+      lista.appendChild(carpEnv);
+    }
 
     keys.forEach(function(carpeta, ci) {
       const grupo = carpetas[carpeta];
@@ -2139,86 +2273,7 @@ async function cargarCarpetas() {
       // Contenido colapsable - inicialmente oculto
       const contenido = document.createElement('div');
       contenido.style.cssText = 'display:none;margin-top:10px;';
-
-      // Boton seleccionar todas de esta carpeta
-      const selRow = document.createElement('div');
-      selRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
-      const btnSelTodas = document.createElement('button');
-      btnSelTodas.textContent = 'Seleccionar todas';
-      btnSelTodas.style.cssText = 'background:var(--gris2);border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
-      btnSelTodas.onclick = (function(its) { return function() {
-        its.forEach(function(it) {
-          const chk = document.querySelector('input[data-cot-id="' + it.id + '"]');
-          if (chk) chk.checked = true;
-        });
-        actualizarBarraAcciones();
-      }; })(items);
-      selRow.appendChild(btnSelTodas);
-      contenido.appendChild(selRow);
-
-      // Lista cotizaciones
-      items.forEach(function(it) {
-        const row = document.createElement('div');
-        row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
-        const checkRow = document.createElement('div');
-        checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.dataset.cotId = it.id;
-        chk.setAttribute('data-cot-id', it.id);
-        chk.style.cssText = 'width:18px;height:18px;margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--azul);';
-        chk.onchange = actualizarBarraAcciones;
-        const rowContent = document.createElement('div');
-        rowContent.style.flex = '1';
-        const rowHeader = document.createElement('div');
-        rowHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
-        const localDiv = document.createElement('div');
-        localDiv.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
-        localDiv.textContent = it.local || '';
-        const fechaDiv = document.createElement('div');
-        fechaDiv.style.cssText = 'font-size:11px;color:var(--texto3);';
-        fechaDiv.textContent = it.fecha || '';
-        rowHeader.appendChild(localDiv);
-        rowHeader.appendChild(fechaDiv);
-        const totalDiv = document.createElement('div');
-        totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
-        totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
-        const descDiv = document.createElement('div');
-        descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-        descDiv.textContent = (it.descripcionTrabajo||'').substring(0,60);
-        const btnsRow = document.createElement('div');
-        btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
-        const btnPdf = document.createElement('button');
-        btnPdf.textContent = 'Ver PDF';
-        btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnPdf.onclick = (function(data){ return function(){
-          if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
-          else { generarPDFCotizacionGuardada(data); }
-        }; })(it);
-        const btnEdit = document.createElement('button');
-        btnEdit.textContent = 'Editar';
-        btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnEdit.onclick = (function(data){ return function(){ editarCotizacion(data); }; })(it);
-        btnsRow.appendChild(btnPdf);
-        btnsRow.appendChild(btnEdit);
-        rowContent.appendChild(rowHeader);
-        rowContent.appendChild(totalDiv);
-        rowContent.appendChild(descDiv);
-        if (it.enviado) {
-          const envDiv = document.createElement('div');
-          envDiv.style.cssText = 'margin-top:4px;';
-          const envTag = document.createElement('span');
-          envTag.style.cssText = 'display:inline-block;background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;';
-          envTag.textContent = '✓ Enviado';
-          envDiv.appendChild(envTag);
-          rowContent.appendChild(envDiv);
-        }
-        rowContent.appendChild(btnsRow);
-        checkRow.appendChild(chk);
-        checkRow.appendChild(rowContent);
-        row.appendChild(checkRow);
-        contenido.appendChild(row);
-      });
+      _renderItemsCotizacion(items, contenido, false);
 
       carpDiv.appendChild(contenido);
 
