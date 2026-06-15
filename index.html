@@ -1632,6 +1632,11 @@ async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputS
     const db = window.firebase.firestore();
     const doc = await db.collection('cadenas').doc(docId).get();
     const subs = doc.data().sucursales || [];
+    const yaExisteSuc = subs.some(function(s) {
+      const sNom = typeof s === 'object' ? s.nombre : s;
+      return sNom.trim().toLowerCase() === nombre.toLowerCase();
+    });
+    if (yaExisteSuc) { toast('Ya existe una sucursal llamada "' + nombre + '" en esta cadena'); return; }
     subs.push({ centro: centro, nombre: nombre, direccion: direccion, supervisor: supervisor, email: email });
     await db.collection('cadenas').doc(docId).update({ sucursales: subs });
     if (inputCentro) inputCentro.value = '';
@@ -1684,12 +1689,17 @@ async function guardarCadenaEdicion() {
   if (!nombre) { toast('Ingresa el nombre'); return; }
   try {
     const db = window.firebase.firestore();
-    if (window._editandoCadenaId) {
-      await db.collection('cadenas').doc(window._editandoCadenaId).update({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase() });
+    const snapAll = await db.collection('cadenas').get();
+    const editId = window._editandoCadenaId;
+    const yaExisteCadena = snapAll.docs.some(function(d) {
+      return d.data().nombre.trim().toLowerCase() === nombre.toLowerCase() && d.id !== editId;
+    });
+    if (yaExisteCadena) { toast('Ya existe una cadena llamada "' + nombre + '"'); return; }
+    if (editId) {
+      await db.collection('cadenas').doc(editId).update({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase() });
       toast('Cadena actualizada');
     } else {
-      const snap = await db.collection('cadenas').get();
-      await db.collection('cadenas').add({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase(), sucursales: [], orden: snap.size });
+      await db.collection('cadenas').add({ nombre, color, logo, letra: nombre.charAt(0).toUpperCase(), sucursales: [], orden: snapAll.size });
       toast('Cadena agregada');
     }
     window._editandoCadenaId = null;
@@ -2359,7 +2369,15 @@ async function cargarCadenasApp() {
       }
     }
     lista.innerHTML = ''; // Limpiar "Cargando..." antes de agregar cadenas
-    cadenas.sort(function(a,b){ return (a.orden||99)-(b.orden||99); }); // Ordenar por campo orden
+    const _ORDEN_CADENAS = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
+    cadenas.sort(function(a, b) {
+      const ia = _ORDEN_CADENAS.indexOf(a.nombre);
+      const ib = _ORDEN_CADENAS.indexOf(b.nombre);
+      if (ia === -1 && ib === -1) return (a.orden||99) - (b.orden||99);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
     cadenas.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
