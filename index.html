@@ -495,6 +495,17 @@
   </div>
 </div>
 
+<!-- ============ SCREEN: PREVENTIVOS ============ -->
+<div class="screen" id="s-preventivos">
+  <div class="topbar">
+    <button class="back" onclick="go('s-supervisor')">←</button>
+    <h2>Trabajos Preventivos</h2>
+  </div>
+  <div class="content">
+    <div id="lista-preventivos"></div>
+  </div>
+</div>
+
 <!-- ============ SCREEN: CARPETAS COTIZACIONES ============ -->
 <div class="screen" id="s-carpetas">
   <div class="topbar">
@@ -568,6 +579,9 @@
       <button class="btn btn-secondary btn-sm" onclick="go('s-ots-tecnicos');cargarOTsTecnicos();" style="flex:1;font-size:12px;">Ver OTs</button>
       <button class="btn btn-secondary btn-sm" onclick="go('s-carpetas');cargarCarpetas();" style="flex:1;font-size:12px;">Cotizaciones</button>
       <button id="btn-administrar" class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="flex:1;font-size:12px;display:none;">Administrar</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:4px;">
+      <button class="btn btn-secondary btn-sm" onclick="go('s-preventivos');cargarPreventivos();" style="flex:1;font-size:12px;background:var(--verde);color:white;border-color:var(--verde);">Preventivos</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:4px;">
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
@@ -1877,6 +1891,10 @@ async function guardarCotizacion() {
       });
       toast('Cotizacion guardada');
       await verOTsTecnico(nombreTec, grupo2);
+    } else if (origen === 's-preventivos') {
+      toast('Cotizacion guardada');
+      go('s-preventivos');
+      cargarPreventivos();
     } else {
       toast('Cotizacion guardada');
       go('s-supervisor');
@@ -3993,6 +4011,173 @@ async function cargarOTsTecnicos() {
   } catch(e) {
     console.error('Error cargando tecnicos:', e);
     toast('Error cargando OTs');
+  }
+}
+
+// =========== PREVENTIVOS (SUPERVISOR) ===========
+async function cargarPreventivos() {
+  try {
+    if (!window._firebaseReady) { setTimeout(cargarPreventivos, 800); return; }
+    const db = window.firebase.firestore();
+    const lista = document.getElementById('lista-preventivos');
+    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:30px;">Cargando...</p>';
+
+    const [ordenesSnap, pdfSnap, cadenasSnap, cotSnap] = await Promise.all([
+      db.collection('ordenes').orderBy('creadoEn', 'desc').get(),
+      db.collection('pdfs').get(),
+      db.collection('cadenas').get(),
+      db.collection('cotizaciones').get()
+    ]);
+
+    // Index: pdfs por otNumero → docId
+    const pdfIdMap = {};
+    pdfSnap.docs.forEach(function(pd) {
+      const n = pd.data().otNumero;
+      if (n) pdfIdMap[String(n)] = pd.id;
+    });
+
+    // Index: cadenas y sucursales por nombre
+    const cadenaMap = {};
+    cadenasSnap.docs.forEach(function(cd) {
+      const c = cd.data();
+      cadenaMap[c.nombre] = c;
+      (c.sucursales || []).forEach(function(s) { cadenaMap[typeof s === 'object' ? s.nombre : s] = c; });
+    });
+
+    // Index: cotizaciones por otId y otNumero
+    const cotMap = {};
+    cotSnap.docs.forEach(function(cd) {
+      const c = cd.data();
+      if (c.otId) cotMap[c.otId] = cd.id;
+      if (c.otNumero) cotMap['n_' + String(c.otNumero)] = cd.id;
+    });
+
+    const prevOTs = ordenesSnap.docs
+      .filter(function(d){ return d.data().tipo === 'preventivo'; })
+      .map(function(d){ return { id: d.id, ...d.data() }; });
+
+    lista.innerHTML = '';
+    if (prevOTs.length === 0) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:40px 20px;">No hay OTs preventivas registradas</p>';
+      return;
+    }
+
+    prevOTs.forEach(function(ot) {
+      const cadena = cadenaMap[ot.local] || null;
+      const otNum = String(ot.numero || ot.otNumero || '');
+      const pdfDocId = pdfIdMap[otNum] || null;
+      const pdfUrl = pdfDocId ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDocId) : '';
+      const yaCotizada = cotMap[ot.id] || cotMap['n_' + otNum] || null;
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.marginBottom = '14px';
+
+      // ---- Header ----
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+      const ico = document.createElement('div');
+      ico.style.cssText = 'width:46px;height:46px;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : '#1D6B5A') + ';color:white;font-weight:700;font-size:16px;';
+      if (cadena && cadena.logo) {
+        const img = document.createElement('img');
+        img.src = cadena.logo; img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        img.onerror = function(){ ico.removeChild(img); ico.textContent = (ot.local||'?').charAt(0); };
+        ico.appendChild(img);
+      } else { ico.textContent = (ot.local||'?').charAt(0); }
+      const hdrInfo = document.createElement('div');
+      hdrInfo.style.flex = '1';
+      hdrInfo.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
+        + '<div style="font-size:12px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + ' &nbsp;·&nbsp; ' + (ot.tecnico||'-') + '</div>';
+      const numBadge = document.createElement('span');
+      numBadge.className = 'badge badge-prev';
+      numBadge.textContent = '#' + otNum;
+      hdr.appendChild(ico); hdr.appendChild(hdrInfo); hdr.appendChild(numBadge);
+      card.appendChild(hdr);
+
+      // ---- CeCo + Equipos ----
+      const infoRow = document.createElement('div');
+      infoRow.style.cssText = 'display:flex;gap:16px;padding:7px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto2);';
+      infoRow.innerHTML = '<span><b>CeCo:</b> ' + (ot.ceco || '-') + '</span><span><b>N° Equipos:</b> ' + (ot.numEquipos || '-') + '</span>';
+      card.appendChild(infoRow);
+
+      // ---- Servicios ----
+      const svcs = ot.serviciosPreventivo || [];
+      if (svcs.length > 0) {
+        const svcSec = document.createElement('div');
+        svcSec.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
+        const svcLabel = document.createElement('div');
+        svcLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
+        svcLabel.textContent = 'Servicios realizados';
+        svcSec.appendChild(svcLabel);
+        const tbl = document.createElement('div');
+        tbl.style.cssText = 'border:1px solid var(--gris2);border-radius:8px;overflow:hidden;';
+        svcs.forEach(function(svc, idx) {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;padding:5px 10px;gap:8px;background:' + (idx%2===0?'white':'var(--gris1)') + ';border-bottom:1px solid var(--gris2);';
+          const n = document.createElement('span');
+          n.style.cssText = 'font-size:11px;color:var(--texto3);min-width:18px;';
+          n.textContent = (idx+1) + '.';
+          const nm = document.createElement('span');
+          nm.style.cssText = 'flex:1;font-size:12px;color:var(--texto1);line-height:1.4;';
+          nm.textContent = svc.nombre;
+          const rb = document.createElement('span');
+          const rr = svc.respuesta === 'si' ? 'SI' : svc.respuesta === 'no' ? 'NO' : '-';
+          rb.style.cssText = 'font-size:11px;font-weight:700;min-width:24px;text-align:right;color:' + (svc.respuesta==='si'?'#27A06B':svc.respuesta==='no'?'#E74C3C':'#9CA3AF') + ';';
+          rb.textContent = rr;
+          row.appendChild(n); row.appendChild(nm); row.appendChild(rb);
+          tbl.appendChild(row);
+        });
+        svcSec.appendChild(tbl);
+        card.appendChild(svcSec);
+      }
+
+      // ---- Observaciones ----
+      if (ot.descripcionTrabajo) {
+        const obsSec = document.createElement('div');
+        obsSec.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
+        obsSec.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--texto3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Observaciones</div>'
+          + '<div style="font-size:13px;color:var(--texto2);line-height:1.5;">' + ot.descripcionTrabajo + '</div>';
+        card.appendChild(obsSec);
+      }
+
+      // ---- Botones ----
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
+
+      if (pdfUrl) {
+        const btnPdf = document.createElement('button');
+        btnPdf.textContent = 'Ver PDF';
+        btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnPdf.onclick = (function(url){ return function(){ window.open(url,'_blank'); }; })(pdfUrl);
+        btns.appendChild(btnPdf);
+
+        const btnDesc = document.createElement('button');
+        btnDesc.textContent = 'Descargar';
+        btnDesc.style.cssText = 'flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnDesc.onclick = (function(id){ return function(){ verPDFById(id); }; })(pdfDocId);
+        btns.appendChild(btnDesc);
+      }
+
+      if (yaCotizada) {
+        const badgeCot = document.createElement('div');
+        badgeCot.style.cssText = 'flex:1;background:var(--gris1);border-radius:8px;padding:9px;font-size:12px;color:var(--verde);font-weight:600;text-align:center;cursor:pointer;';
+        badgeCot.textContent = String.fromCharCode(10003) + ' Cotizada';
+        badgeCot.onclick = function(){ go('s-carpetas'); cargarCarpetas(); };
+        btns.appendChild(badgeCot);
+      } else {
+        const btnCot = document.createElement('button');
+        btnCot.textContent = '+ Cotizacion';
+        btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
+        btns.appendChild(btnCot);
+      }
+
+      card.appendChild(btns);
+      lista.appendChild(card);
+    });
+  } catch(e) {
+    console.error('Error cargando preventivos:', e);
+    toast('Error cargando OTs preventivas');
   }
 }
 
