@@ -254,28 +254,44 @@
     <div style="height: 8px;"></div>
     <div id="pin-avatar" class="usuario-avatar" style="width:64px;height:64px;font-size:26px;border-radius:18px;margin:0 auto;"></div>
     <div style="font-size: 16px; font-weight: 600; margin-top: 10px;" id="pin-nombre-display"></div>
-    <div style="font-size: 13px; color: var(--texto3);">Ingresa tu PIN de 4 números</div>
-    <div class="pin-display">
-      <div class="pin-dot" id="dot0"></div>
-      <div class="pin-dot" id="dot1"></div>
-      <div class="pin-dot" id="dot2"></div>
-      <div class="pin-dot" id="dot3"></div>
+    <div id="pin-subtitulo" style="font-size: 13px; color: var(--texto3);">Ingresa tu PIN de 4 números</div>
+    <!-- Numpad PIN (técnicos y supervisores) -->
+    <div id="pin-numpad-section">
+      <div class="pin-display">
+        <div class="pin-dot" id="dot0"></div>
+        <div class="pin-dot" id="dot1"></div>
+        <div class="pin-dot" id="dot2"></div>
+        <div class="pin-dot" id="dot3"></div>
+      </div>
+      <div class="pin-grid" style="width: 100%; max-width: 280px;">
+        <button class="pin-btn" onclick="pinInput('1')">1</button>
+        <button class="pin-btn" onclick="pinInput('2')">2</button>
+        <button class="pin-btn" onclick="pinInput('3')">3</button>
+        <button class="pin-btn" onclick="pinInput('4')">4</button>
+        <button class="pin-btn" onclick="pinInput('5')">5</button>
+        <button class="pin-btn" onclick="pinInput('6')">6</button>
+        <button class="pin-btn" onclick="pinInput('7')">7</button>
+        <button class="pin-btn" onclick="pinInput('8')">8</button>
+        <button class="pin-btn" onclick="pinInput('9')">9</button>
+        <button class="pin-btn" style="visibility:hidden;"></button>
+        <button class="pin-btn" onclick="pinInput('0')">0</button>
+        <button class="pin-btn del" onclick="pinDelete()">⌫</button>
+      </div>
     </div>
-    <div class="pin-grid" style="width: 100%; max-width: 280px;">
-      <button class="pin-btn" onclick="pinInput('1')">1</button>
-      <button class="pin-btn" onclick="pinInput('2')">2</button>
-      <button class="pin-btn" onclick="pinInput('3')">3</button>
-      <button class="pin-btn" onclick="pinInput('4')">4</button>
-      <button class="pin-btn" onclick="pinInput('5')">5</button>
-      <button class="pin-btn" onclick="pinInput('6')">6</button>
-      <button class="pin-btn" onclick="pinInput('7')">7</button>
-      <button class="pin-btn" onclick="pinInput('8')">8</button>
-      <button class="pin-btn" onclick="pinInput('9')">9</button>
-      <button class="pin-btn" style="visibility:hidden;"></button>
-      <button class="pin-btn" onclick="pinInput('0')">0</button>
-      <button class="pin-btn del" onclick="pinDelete()">⌫</button>
+    <!-- Campo contraseña (solo Administrador) -->
+    <div id="admin-pass-section" style="display:none; width:100%; max-width:280px; margin-top:8px;">
+      <div style="position:relative;">
+        <input type="password" id="admin-pass-input" placeholder="Contraseña"
+          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:12px;font-size:16px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris2)'"
+          onkeydown="if(event.key==='Enter') validarPassword()" />
+        <button onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);font-size:20px;line-height:1;">👁</button>
+      </div>
+      <button onclick="validarPassword()" style="width:100%;margin-top:12px;padding:14px;background:var(--azul);color:white;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">
+        Ingresar
+      </button>
+      <div id="admin-pass-error" style="display:none;font-size:12px;color:var(--rojo);margin-top:8px;text-align:center;font-weight:500;"></div>
     </div>
-    <div style="font-size: 12px; color: var(--texto3); margin-top: 8px;">(Demo: PIN es 1234)</div>
   </div>
 </div>
 
@@ -765,7 +781,13 @@ let estado = {
 };
 
 const PINS = {}; // Cargado dinamicamente desde Firebase
+const ADMIN_HASHES = {}; // { nombre: sha256Hash } solo para Administradores
 let pinActual = '';
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
 
 // =========== NAVEGACION ===========
 function go(id) {
@@ -783,9 +805,25 @@ function seleccionarUsuario(nombre, cargo, letra) {
   av.textContent = letra;
   const colorFijoPorCargo = { 'Administrador': '#2D5AA0', 'Supervisor': '#1B3A6B' };
   av.style.background = colorFijoPorCargo[cargo] || _colorPorNombre(nombre);
-  pinActual = '';
-  actualizarDots();
+
+  const esAdmin = cargo === 'Administrador';
+  document.getElementById('pin-numpad-section').style.display = esAdmin ? 'none' : '';
+  document.getElementById('admin-pass-section').style.display = esAdmin ? 'block' : 'none';
+  document.getElementById('pin-subtitulo').textContent = esAdmin ? 'Ingresa tu contraseña' : 'Ingresa tu PIN de 4 números';
+  document.getElementById('admin-pass-error').style.display = 'none';
+  if (esAdmin) {
+    document.getElementById('admin-pass-input').value = '';
+    setTimeout(function(){ document.getElementById('admin-pass-input').focus(); }, 350);
+  } else {
+    pinActual = '';
+    actualizarDots();
+  }
   go('s-pin');
+}
+
+function togglePassVis() {
+  const inp = document.getElementById('admin-pass-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
 }
 
 function pinInput(d) {
@@ -806,28 +844,47 @@ function actualizarDots() {
   }
 }
 
+function loginExitoso() {
+  if (estado.cargo === 'Supervisor' || estado.cargo === 'Administrador') {
+    go('s-supervisor');
+    cargarOTsSupervisor();
+    var esAdmin = estado.cargo === 'Administrador';
+    var btnAdmin = document.getElementById('btn-administrar');
+    if (btnAdmin) btnAdmin.style.display = esAdmin ? 'block' : 'none';
+    var btnFact = document.getElementById('btn-facturar');
+    if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
+    var btnVentas = document.getElementById('btn-ventas');
+    if (btnVentas) btnVentas.style.display = esAdmin ? 'flex' : 'none';
+  } else {
+    nuevaOT();
+  }
+  toast('Bienvenido, ' + estado.usuario.split(' ')[0] + '!');
+}
+
 function validarPin() {
   if (pinActual === PINS[estado.usuario]) {
-    if (estado.cargo === 'Supervisor' || estado.cargo === 'Administrador') {
-      go('s-supervisor');
-      cargarOTsSupervisor();
-      // Mostrar botones solo para Administrador
-      var esAdmin = estado.cargo === 'Administrador';
-      var btnAdmin = document.getElementById('btn-administrar');
-      if (btnAdmin) btnAdmin.style.display = esAdmin ? 'block' : 'none';
-      var btnFact = document.getElementById('btn-facturar');
-      if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
-      var btnVentas = document.getElementById('btn-ventas');
-      if (btnVentas) btnVentas.style.display = esAdmin ? 'flex' : 'none';
-    } else {
-      // Tecnico va directo a nueva OT
-      nuevaOT();
-    }
-    toast('Bienvenido, ' + estado.usuario.split(' ')[0] + '!');
+    loginExitoso();
   } else {
     toast('PIN incorrecto, intenta de nuevo');
     pinActual = '';
     actualizarDots();
+  }
+}
+
+async function validarPassword() {
+  const inp = document.getElementById('admin-pass-input');
+  const errDiv = document.getElementById('admin-pass-error');
+  const pass = inp.value;
+  if (!pass) return;
+  const hash = await sha256(pass);
+  if (hash === ADMIN_HASHES[estado.usuario]) {
+    errDiv.style.display = 'none';
+    loginExitoso();
+  } else {
+    inp.value = '';
+    errDiv.textContent = 'Contraseña incorrecta, intenta de nuevo';
+    errDiv.style.display = 'block';
+    inp.focus();
   }
 }
 
@@ -2388,20 +2445,29 @@ async function cargarTecnicosAdmin() {
       nombre.textContent = d.nombre;
       const detalle = document.createElement('div');
       detalle.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      detalle.textContent = (d.cargo || 'Tecnico') + ' | PIN: ' + (d.pin || '----');
+      const esAdminCargo = (d.cargo || '') === 'Administrador';
+      detalle.textContent = (d.cargo || 'Tecnico') + (esAdminCargo ? ' | Contraseña: 🔒 protegida' : ' | PIN: ' + (d.pin || '----'));
       info.appendChild(nombre);
       info.appendChild(detalle);
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
-      const btnEdit = document.createElement('button');
-      btnEdit.textContent = 'Editar';
-      btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
-      btnEdit.onclick = (function(id, data){ return function(){ editarTecnico(id, data); }; })(doc.id, d);
+      if (esAdminCargo) {
+        const btnPass = document.createElement('button');
+        btnPass.textContent = 'Cambiar contraseña';
+        btnPass.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
+        btnPass.onclick = (function(id, nombre){ return function(){ cambiarPasswordAdmin(id, nombre); }; })(doc.id, d.nombre);
+        btns.appendChild(btnPass);
+      } else {
+        const btnEdit = document.createElement('button');
+        btnEdit.textContent = 'Editar';
+        btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
+        btnEdit.onclick = (function(id, data){ return function(){ editarTecnico(id, data); }; })(doc.id, d);
+        btns.appendChild(btnEdit);
+      }
       const btnDel = document.createElement('button');
       btnDel.textContent = 'Eliminar';
       btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;';
       btnDel.onclick = (function(id){ return function(){ eliminarTecnico(id); }; })(doc.id);
-      btns.appendChild(btnEdit);
       btns.appendChild(btnDel);
       div.appendChild(info);
       div.appendChild(btns);
@@ -2410,6 +2476,22 @@ async function cargarTecnicosAdmin() {
   } catch(e) {
     console.error(e);
   }
+}
+
+async function cambiarPasswordAdmin(docId, nombre) {
+  const nueva = prompt('Nueva contraseña para ' + nombre + ':');
+  if (!nueva || nueva.trim().length < 6) {
+    if (nueva !== null) toast('La contraseña debe tener al menos 6 caracteres');
+    return;
+  }
+  const confirmar = prompt('Confirma la nueva contraseña:');
+  if (nueva !== confirmar) { toast('Las contraseñas no coinciden'); return; }
+  try {
+    const h = await sha256(nueva.trim());
+    await window.firebase.firestore().collection('tecnicos').doc(docId).update({ passwordHash: h });
+    ADMIN_HASHES[nombre] = h;
+    toast('Contraseña actualizada correctamente');
+  } catch(e) { console.error(e); toast('Error al actualizar contraseña'); }
 }
 
 async function cargarLocalesAdmin() {
@@ -2652,6 +2734,20 @@ function _renderListaUsuarios(docs) {
     if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
     PINS[d.nombre] = d.pin || '1234';
     const cargo = d.cargo || 'Tecnico en terreno';
+    if (cargo === 'Administrador') {
+      if (d.passwordHash) {
+        ADMIN_HASHES[d.nombre] = d.passwordHash;
+      } else {
+        // Migración primera vez: guarda hash de contraseña temporal
+        sha256('Pedro123').then(function(h) {
+          ADMIN_HASHES[d.nombre] = h;
+          if (d._id) {
+            window.firebase.firestore().collection('tecnicos').doc(d._id).update({ passwordHash: h })
+              .catch(function(e) { console.warn('Error guardando passwordHash:', e); });
+          }
+        });
+      }
+    }
     const color = colorFijoPorCargo[cargo] || _colorPorNombre(d.nombre);
     lista.appendChild(_crearUsuarioItem(d.nombre, cargo, d.letra || d.nombre.charAt(0).toUpperCase(), color));
   });
@@ -2668,7 +2764,7 @@ async function cargarUsuariosApp() {
       _renderListaUsuarios([]);
       return;
     }
-    _renderListaUsuarios(snap.docs.map(function(d){ return d.data(); }));
+    _renderListaUsuarios(snap.docs.map(function(d){ return Object.assign({ _id: d.id }, d.data()); }));
   } catch(e) {
     console.error('Error cargando usuarios:', e);
     const lista = document.getElementById('lista-usuarios');
