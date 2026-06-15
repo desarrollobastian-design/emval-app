@@ -726,8 +726,8 @@
 <script>
   emailjs.init("E4wDaLmmuBovj2s8a");
   // ---- EmailJS config cotizaciones (cambiar cuando esten creados) ----
-  window.EMAILJS_COT_SERVICE  = 'service_xm6dmxl';   // reemplazar por service de cotizaciones.emval@gmail.com
-  window.EMAILJS_COT_TEMPLATE = 'template_agzfcux';  // reemplazar por template especifico de cotizaciones
+  window.EMAILJS_COT_SERVICE  = 'service_xm6dmxl';   // Gmail conectado a cotizaciones.emval@gmail.com
+  window.EMAILJS_COT_TEMPLATE = 'template_63rsw4i';  // Template "Contact Us" de cotizaciones
 </script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -4592,6 +4592,8 @@ async function enviarCotizacionesSeleccionadas() {
   try {
     await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, {
       email_admin: email,
+      email: email,
+      name: 'EMVAL E.I.R.L.',
       ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
       local: seleccionadas.map(function(it){ return it.local; }).join(', '),
       fecha: new Date().toLocaleDateString('es-CL'),
