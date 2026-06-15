@@ -4115,7 +4115,7 @@ async function cargarPreventivos() {
       // Descargar: usa Cloudinary URL si existe, si no, abre Firestore PDF
       if (pdfCloudUrl || pdfFirestoreUrl) {
         const btnDesc = document.createElement('button');
-        btnDesc.textContent = 'Descargar PDF';
+        btnDesc.textContent = 'Ver PDF';
         btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnDesc.onclick = (function(cUrl, fUrl){ return function(){
           var a = document.createElement('a');
