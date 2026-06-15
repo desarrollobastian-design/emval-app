@@ -4154,6 +4154,7 @@ async function verOTsTecnico(nombre, grupo) {
   const db = window.firebase.firestore();
   const cadenasSnap = await db.collection('cadenas').get();
   const cadenaMap = {};
+  const cecoMapTec = {};
   cadenasSnap.docs.forEach(function(cd) {
     const cdata = cd.data();
     cadenaMap[cdata.nombre] = cdata;
@@ -4161,6 +4162,9 @@ async function verOTsTecnico(nombre, grupo) {
       cdata.sucursales.forEach(function(s) {
         var sNombre = typeof s === 'object' ? s.nombre : s;
         cadenaMap[sNombre] = cdata;
+        if (typeof s === 'object' && s.nombre && s.centro) {
+          cecoMapTec[s.nombre] = s.centro;
+        }
       });
     }
   });
@@ -4217,7 +4221,8 @@ async function verOTsTecnico(nombre, grupo) {
     localDiv.textContent = ot.local || 'Sin local';
     const subDiv = document.createElement('div');
     subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
-    subDiv.innerHTML = (ot.fecha||'') + (ot.ceco ? ' · CeCo:' + ot.ceco : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
+    const cecoValTec = ot.ceco || cecoMapTec[ot.local] || '';
+    subDiv.innerHTML = (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
     headerInfo.appendChild(subDiv);
     header.appendChild(iconEl);
