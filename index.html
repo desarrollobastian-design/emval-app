@@ -446,13 +446,7 @@
     <div style="font-size:13px;font-weight:600;color:var(--texto2);">ITEMS A COTIZAR</div>
     <div id="cot-items"></div>
     <button class="btn btn-secondary" onclick="agregarItemCot()" style="margin-top:4px;">+ Agregar item</button>
-    <div class="field">
-      <label>Descuento (%)</label>
-      <input type="number" id="cot-descuento" value="0" min="0" max="100" placeholder="0" />
-    </div>
     <div class="card" id="cot-total-box">
-      <div class="summary-row"><span class="sum-label">Subtotal</span><span class="sum-val" id="cot-subtotal">$0</span></div>
-      <div class="summary-row"><span class="sum-label">Descuento</span><span class="sum-val" id="cot-desc-val" style="color:var(--rojo)">-$0</span></div>
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
@@ -467,7 +461,6 @@
     <div style="display:flex;gap:10px;margin-top:auto;">
       <button class="btn btn-secondary" onclick="guardarCotizacion()" style="flex:1;">Guardar</button>
       <button class="btn btn-verde" onclick="generarPDFCotizacion()" style="flex:1;">Ver PDF</button>
-      <button class="btn btn-primary" onclick="enviarCotizacion()" style="flex:1;">Enviar email</button>
     </div>
   </div>
 </div>
@@ -1801,7 +1794,6 @@ async function abrirCotizacion(docId) {
     cotizacionActual.centroSucursal = _centroSuc;
     document.getElementById('cot-carpeta').value = _supSuc || cotizacionActual.local || '';
     document.getElementById('cot-detalle-trabajo').value = cotizacionActual.descripcionTrabajo || '';
-    document.getElementById('cot-descuento').value = '0';
     document.getElementById('cot-nombre-servicio').value = '';
     renderItemsCot();
     go('s-cotizacion');
@@ -1844,14 +1836,9 @@ function eliminarItemCot(i) {
 }
 
 function calcTotalCot() {
-  const desc = Number(document.getElementById('cot-descuento').value) || 0;
-  const subtotal = itemsCot.reduce((s, item) => s + (item.qty * item.precio), 0);
-  const descMonto = Math.round(subtotal * desc / 100);
-  const total = subtotal - descMonto;
-  document.getElementById('cot-subtotal').textContent = '$' + subtotal.toLocaleString('es-CL');
-  document.getElementById('cot-desc-val').textContent = '-$' + descMonto.toLocaleString('es-CL');
+  const total = itemsCot.reduce((s, item) => s + (item.qty * item.precio), 0);
   document.getElementById('cot-total').textContent = '$' + total.toLocaleString('es-CL');
-  return { subtotal, descMonto, total, desc };
+  return { subtotal: total, descMonto: 0, total, desc: 0 };
 }
 
 async function guardarCotizacion() {
@@ -3383,15 +3370,12 @@ async function generarPDFCotizacionGuardada(cotData) {
       }
     }
     var afterTabY = tabY + rowH + (maxFilas * rowH);
-    var subtotal = items.reduce(function(s,i){ return s+(i.qty||1)*(i.precio||0); }, 0);
-    var descPct = cotData.descuento || 0;
-    var descMonto = Math.round(subtotal * descPct / 100);
-    var total = subtotal - descMonto;
+    var total = items.reduce(function(s,i){ return s+(i.qty||1)*(i.precio||0); }, 0);
     doc.setFillColor(240,240,240);
     doc.rect(margin, afterTabY, W - margin*2, rowH, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
     doc.text('Total', colX[3]+colAncho[3]-2, afterTabY+5, {align:'right'});
-    doc.text('$ '+subtotal.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, afterTabY+5, {align:'right'});
+    doc.text('$ '+total.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, afterTabY+5, {align:'right'});
 
     var cosY = afterTabY + rowH + 4;
     doc.setFillColor(220,220,220);
@@ -3405,13 +3389,10 @@ async function generarPDFCotizacionGuardada(cotData) {
     var totY = cosY + 14;
     doc.setFont('helvetica','italic');
     doc.text('Cotizacion valida por 10 Dias', margin, totY);
-    [['Sub Total Neto', subtotal],['Descuentos', descMonto],['TOTAL NETO', total]].forEach(function(r,i){
-      var ry = totY + (i*8);
-      doc.setFont('helvetica', i===2?'bold':'normal');
-      doc.text(r[0], 130, ry);
-      doc.setDrawColor(180,180,180); doc.rect(165, ry-5, 30, 7);
-      doc.text('$ '+r[1].toLocaleString('es-CL'), 194, ry, {align:'right'});
-    });
+    doc.setFont('helvetica','bold');
+    doc.text('TOTAL NETO', 130, totY);
+    doc.setDrawColor(180,180,180); doc.rect(165, totY-5, 30, 7);
+    doc.text('$ '+total.toLocaleString('es-CL'), 194, totY, {align:'right'});
 
     var firmY = totY + 30;
     doc.setFont('helvetica','normal'); doc.setFontSize(8);
@@ -3726,7 +3707,7 @@ async function generarPDFCotizacion() {
   doc.setFontSize(9);
   doc.setTextColor(0,0,0);
   doc.text('Total', colX[3] + colAncho[3] - 2, afterTabY + 5, { align: 'right' });
-  doc.text('$ ' + totales.subtotal.toLocaleString('es-CL'), colX[4] + colAncho[4] - 2, afterTabY + 5, { align: 'right' });
+  doc.text('$ ' + totales.total.toLocaleString('es-CL'), colX[4] + colAncho[4] - 2, afterTabY + 5, { align: 'right' });
 
   // ---- COSTOS OPERACIONALES ----
   var cosY = afterTabY + rowH + 4;
@@ -3748,19 +3729,11 @@ async function generarPDFCotizacion() {
   doc.text('Cotizacion valida por 10 Dias', margin, totY);
 
   doc.setFont('helvetica', 'normal');
-  var rows2 = [
-    ['Sub Total Neto', totales.subtotal],
-    ['Descuentos', totales.descMonto],
-    ['TOTAL NETO', totales.total]
-  ];
-  rows2.forEach(function(r, i) {
-    var ry = totY + (i * 8);
-    doc.setFont('helvetica', i === 2 ? 'bold' : 'normal');
-    doc.text(r[0], 130, ry);
-    doc.setDrawColor(180,180,180);
-    doc.rect(165, ry - 5, 30, 7);
-    doc.text('$ ' + r[1].toLocaleString('es-CL'), 194, ry, { align: 'right' });
-  });
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL NETO', 130, totY);
+  doc.setDrawColor(180,180,180);
+  doc.rect(165, totY - 5, 30, 7);
+  doc.text('$ ' + totales.total.toLocaleString('es-CL'), 194, totY, { align: 'right' });
 
   // ---- VALIDEZ ----
   var firmY = totY + 30;
