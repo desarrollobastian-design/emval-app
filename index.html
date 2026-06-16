@@ -1514,9 +1514,40 @@ function guardarGrabacion() {
 }
 
 // =========== ADMIN CADENAS ===========
+async function _fusionarDuplicadosCadenas(db) {
+  const snap = await db.collection('cadenas').get();
+  const grupos = {};
+  snap.docs.forEach(function(doc) {
+    const nombre = (doc.data().nombre || '').trim().toLowerCase();
+    if (!grupos[nombre]) grupos[nombre] = [];
+    grupos[nombre].push({ id: doc.id, data: doc.data() });
+  });
+  for (const nombre in grupos) {
+    const grupo = grupos[nombre];
+    if (grupo.length < 2) continue;
+    // Fusionar sucursales de todos los duplicados en el primero
+    const canonico = grupo[0];
+    const todasSucs = [];
+    const nombresVistos = new Set();
+    grupo.forEach(function(g) {
+      (g.data.sucursales || []).forEach(function(s) {
+        const nomS = (typeof s === 'object' ? s.nombre : s).trim().toLowerCase();
+        if (!nombresVistos.has(nomS)) { nombresVistos.add(nomS); todasSucs.push(s); }
+      });
+    });
+    await db.collection('cadenas').doc(canonico.id).update({ sucursales: todasSucs });
+    for (let i = 1; i < grupo.length; i++) {
+      await db.collection('cadenas').doc(grupo[i].id).delete();
+    }
+    console.log('Cadenas fusionadas:', nombre, '(' + grupo.length + ' → 1)');
+  }
+}
+
 async function cargarCadenasAdmin() {
   try {
     const db = window.firebase.firestore();
+    // Fusionar duplicados silenciosamente antes de mostrar
+    await _fusionarDuplicadosCadenas(db);
     const snap = await db.collection('cadenas').get();
     const lista = document.getElementById('lista-cadenas-admin');
     if (!lista) return;
