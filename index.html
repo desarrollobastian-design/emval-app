@@ -185,14 +185,14 @@
   .stat-label { font-size: 12px; color: var(--texto3); margin-top: 4px; }
 
   /* CADENA CARDS */
-  .cadena-card { background: white; border-radius: var(--radio); padding: 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s; margin-bottom: 12px; border: 2px solid transparent; }
+  .cadena-card { background: white; border-radius: var(--radio); padding: 22px 18px; display: flex; align-items: center; gap: 18px; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s; margin-bottom: 14px; border: 2px solid transparent; }
   .cadena-card:active { transform: scale(0.99); }
-  .cadena-logo { width: 56px; height: 56px; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .cadena-logo { width: 80px; height: 80px; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .cadena-logo img { width: 100%; height: 100%; object-fit: contain; }
-  .cadena-logo.fallback { font-size: 22px; font-weight: 700; color: white; }
+  .cadena-logo.fallback { font-size: 34px; font-weight: 700; color: white; }
   .cadena-info { flex: 1; }
-  .cadena-nombre { font-size: 16px; font-weight: 600; color: var(--texto); }
-  .cadena-nsuc { font-size: 12px; color: var(--texto3); margin-top: 3px; }
+  .cadena-nombre { font-size: 20px; font-weight: 700; color: var(--texto); }
+  .cadena-nsuc { font-size: 14px; color: var(--texto3); margin-top: 5px; }
 
   .spacer { flex: 1; }
   .mt-auto { margin-top: auto; }
@@ -2508,6 +2508,17 @@ async function cargarCadenasApp() {
         await db.collection('cadenas').add({ ...cadenas[i], orden: i });
       }
     }
+    // Deduplicar por nombre (queda el que tenga más sucursales)
+    const _vistosApp = {};
+    cadenas = cadenas.filter(function(c) {
+      const k = (c.nombre||'').trim().toLowerCase();
+      if (!_vistosApp[k] || (c.sucursales||[]).length > (_vistosApp[k].sucursales||[]).length) {
+        _vistosApp[k] = c; return false;
+      }
+      return false;
+    });
+    cadenas = Object.values(_vistosApp);
+
     lista.innerHTML = ''; // Limpiar "Cargando..." antes de agregar cadenas
     const _ORDEN_CADENAS = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
     cadenas.sort(function(a, b) {
