@@ -4930,19 +4930,29 @@ async function enviarCotizacionesSeleccionadas() {
 
   toast('Enviando email...');
 
-  // Construir contenido
+  // Construir contenido HTML
   let resumenTotal = 0;
-  let detalles = '';
-  let linksTexto = 'Links para ver cotizaciones:\n';
+  let itemsHtml = '';
   seleccionadas.forEach(function(it, i) {
     resumenTotal += (it.total || 0);
-    detalles += (i+1) + '. ' + (it.local||'') + ' - ' + (it.fecha||'') + '\n';
-    detalles += '   Trabajo: ' + (it.descripcionTrabajo||'').substring(0,80) + '\n';
-    detalles += '   Total: $' + (it.total||0).toLocaleString('es-CL') + '\n\n';
-    if (it.pdfUrl) {
-      linksTexto += (i+1) + '. ' + (it.local||'') + ':\n' + it.pdfUrl + '\n\n';
-    }
+    const trabajo = (it.descripcionTrabajo || '').substring(0, 120);
+    const total = '$' + (it.total || 0).toLocaleString('es-CL');
+    const verPdf = it.pdfUrl
+      ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600;">Ver / Descargar PDF</a>'
+      : '';
+    itemsHtml +=
+      '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
+        '<div style="font-weight:700;font-size:15px;color:#1B3A6B;">' + (i+1) + '. ' + (it.local||'') + ' &mdash; ' + (it.fecha||'') + '</div>' +
+        '<div style="margin-top:4px;font-size:13px;color:#444;">Trabajo: ' + trabajo + '</div>' +
+        '<div style="margin-top:2px;font-size:13px;color:#444;">Total: ' + total + '</div>' +
+        verPdf +
+      '</div>';
   });
+
+  const cuerpoHtml =
+    '<p style="font-size:14px;color:#222;">Estimado administrador,<br>Se adjuntan <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
+    itemsHtml +
+    '<p style="font-size:14px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
 
   const _cotParams = {
     email_admin: email,
@@ -4954,8 +4964,8 @@ async function enviarCotizacionesSeleccionadas() {
     tecnico: seleccionadas[0].tecnico || '',
     tipo: 'Cotizacion',
     cantidad: String(seleccionadas.length),
-    trabajo: detalles,
-    pdf_url: linksTexto + 'Total general: $' + resumenTotal.toLocaleString('es-CL')
+    trabajo: cuerpoHtml,
+    pdf_url: ''
   };
   console.log('EmailJS cotizacion → service:', window.EMAILJS_COT_SERVICE, 'template:', window.EMAILJS_COT_TEMPLATE, 'to:', email);
   try {
