@@ -1553,7 +1553,16 @@ async function cargarCadenasAdmin() {
     if (!lista) return;
     lista.innerHTML = '';
     if (snap.empty) { lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);padding:8px 0;">No hay cadenas. Agrega una.</p>'; return; }
-    snap.docs.forEach(function(doc) {
+    const _ORDEN_ADMIN = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
+    const docsOrdenados = snap.docs.slice().sort(function(a, b) {
+      const ia = _ORDEN_ADMIN.indexOf(a.data().nombre);
+      const ib = _ORDEN_ADMIN.indexOf(b.data().nombre);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    docsOrdenados.forEach(function(doc) {
       const d = doc.data();
       const docId = doc.id;
       const div = document.createElement('div');
