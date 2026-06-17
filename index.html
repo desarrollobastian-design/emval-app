@@ -2308,7 +2308,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   contenido.appendChild(selRow);
   items.forEach(function(it) {
     const row = document.createElement('div');
-    row.setAttribute('data-cot-row', (it.local || '') + ' ' + (it.fecha || '') + ' ' + (it.descripcionTrabajo || '') + ' ' + (it.supervisor || ''));
+    row.setAttribute('data-cot-row', (it.local || '') + ' ' + (it.fecha || '') + ' ' + (it.descripcionTrabajo || '') + ' ' + (it.supervisor || '') + ' ' + (it.numeroCotizacion || '') + ' ' + (it.centro || ''));
     row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
     const checkRow = document.createElement('div');
     checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
@@ -2320,15 +2320,48 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     chk.onchange = actualizarBarraAcciones;
     const rowContent = document.createElement('div');
     rowContent.style.flex = '1';
+
+    // Logo de la cadena
+    let cadenaLogo = null;
+    const localName = it.local || '';
+    if (window._cadenasMapaCot && window._cadenasMapaCot[localName]) {
+      cadenaLogo = window._cadenasMapaCot[localName].logo;
+    }
+
     const rowHeader = document.createElement('div');
-    rowHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    rowHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;';
+
+    // Contenedor logo + info
+    const logoInfo = document.createElement('div');
+    logoInfo.style.cssText = 'display:flex;gap:8px;align-items:flex-start;flex:1;';
+
+    if (cadenaLogo) {
+      const logoDiv = document.createElement('div');
+      logoDiv.style.cssText = 'width:32px;height:32px;border-radius:6px;background:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--gris2);overflow:hidden;';
+      const logoImg = document.createElement('img');
+      logoImg.src = cadenaLogo;
+      logoImg.style.cssText = 'width:28px;height:28px;object-fit:contain;';
+      logoImg.onerror = function() { logoDiv.textContent = (it.local || '').charAt(0).toUpperCase(); };
+      logoDiv.appendChild(logoImg);
+      logoInfo.appendChild(logoDiv);
+    }
+
+    const infoDiv = document.createElement('div');
+    infoDiv.style.cssText = 'flex:1;';
     const localDiv = document.createElement('div');
     localDiv.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
     localDiv.textContent = it.local || '';
+    const numDiv = document.createElement('div');
+    numDiv.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:1px;';
+    numDiv.textContent = (it.numeroCotizacion ? 'Cot: ' + it.numeroCotizacion : '') + (it.centro ? ' | CECO: ' + it.centro : '');
+    infoDiv.appendChild(localDiv);
+    if (numDiv.textContent) infoDiv.appendChild(numDiv);
+    logoInfo.appendChild(infoDiv);
+    rowHeader.appendChild(logoInfo);
+
     const fechaDiv = document.createElement('div');
-    fechaDiv.style.cssText = 'font-size:11px;color:var(--texto3);';
+    fechaDiv.style.cssText = 'font-size:11px;color:var(--texto3);text-align:right;';
     fechaDiv.textContent = it.fecha || '';
-    rowHeader.appendChild(localDiv);
     rowHeader.appendChild(fechaDiv);
     const totalDiv = document.createElement('div');
     totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
@@ -2385,6 +2418,21 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
 async function cargarCarpetas() {
   try {
     const db = window.firebase.firestore();
+
+    // Cargar cadenas para logos
+    const cadenasSnap = await db.collection('cadenas').get();
+    window._cadenasMapaCot = {};
+    cadenasSnap.docs.forEach(function(doc) {
+      const d = doc.data();
+      window._cadenasMapaCot[d.nombre] = d;
+      if (d.sucursales) {
+        d.sucursales.forEach(function(s) {
+          const sNombre = typeof s === 'object' ? s.nombre : s;
+          window._cadenasMapaCot[sNombre] = d;
+        });
+      }
+    });
+
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
     window._todasCotizaciones = {};
     const carpetas = {};
