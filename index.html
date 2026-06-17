@@ -606,6 +606,9 @@
     <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
   </div>
   <div class="content">
+    <div style="margin-bottom:12px;">
+      <input type="text" id="cot-buscar" placeholder="🔍 Buscar cotización..." style="width:100%;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:8px;" onkeyup="filtrarCotizaciones();">
+    </div>
     <div id="lista-carpetas"></div>
   </div>
 </div>
@@ -710,6 +713,7 @@
     <!-- PANEL PERSONAL -->
     <div id="panel-personal">
       <button class="btn btn-primary" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
+      <input type="text" id="personal-buscar" placeholder="🔍 Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
         <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo personal</div>
         <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
@@ -735,6 +739,7 @@
       <div style="margin-bottom:12px;">
         <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()">+ Agregar cadena</button>
       </div>
+      <input type="text" id="cadenas-buscar" placeholder="🔍 Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
       <div id="form-cadena" style="display:none;" class="card">
         <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
@@ -1623,6 +1628,7 @@ async function cargarCadenasAdmin() {
       const docId = doc.id;
       const div = document.createElement('div');
       div.className = 'card';
+      div.setAttribute('data-cadena', d.nombre);
       div.style.marginBottom = '10px';
 
       // ---- HEADER COLAPSABLE ----
@@ -2365,6 +2371,7 @@ async function cargarCarpetas() {
       const totalEnv = itemsEnviados.reduce(function(s,i){ return s + (i.total||0); }, 0);
       const carpEnv = document.createElement('div');
       carpEnv.className = 'card';
+      carpEnv.setAttribute('data-cot', 'Enviadas');
       carpEnv.style.cssText = 'margin-bottom:10px;overflow:hidden;border:2px solid #1A7A3C;';
       const headerEnv = document.createElement('div');
       headerEnv.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
@@ -2410,6 +2417,7 @@ async function cargarCarpetas() {
       // Carpeta colapsable
       const carpDiv = document.createElement('div');
       carpDiv.className = 'card';
+      carpDiv.setAttribute('data-cot', (grupo.supervisor || carpeta));
       carpDiv.style.marginBottom = '10px';
       carpDiv.style.overflow = 'hidden';
 
@@ -2726,6 +2734,7 @@ async function cargarTecnicosAdmin() {
       const d = doc.data();
       const div = document.createElement('div');
       div.className = 'card';
+      div.setAttribute('data-tecnico', d.nombre);
       div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
       const info = document.createElement('div');
       info.style.flex = '1';
@@ -5387,6 +5396,45 @@ function limpiarFiltrosPreventivos() {
   document.getElementById('filter-tecnico-preventivo').value = '';
   document.getElementById('filter-fecha-preventivo').value = '';
   filtrarPreventivos();
+}
+
+// =========== FILTROS COTIZACIONES ===========
+function filtrarCotizaciones() {
+  const buscar = (document.getElementById('cot-buscar') || {}).value.toLowerCase();
+  const items = document.querySelectorAll('#lista-carpetas > div[data-cot]');
+  let visibles = 0;
+  items.forEach(item => {
+    const cotText = item.getAttribute('data-cot') || '';
+    const mostrar = !buscar || cotText.toLowerCase().includes(buscar);
+    item.style.display = mostrar ? '' : 'none';
+    if (mostrar) visibles++;
+  });
+}
+
+// =========== FILTROS PERSONAL ===========
+function filtrarPersonal() {
+  const buscar = (document.getElementById('personal-buscar') || {}).value.toLowerCase();
+  const items = document.querySelectorAll('#lista-tecnicos-admin > div[data-tecnico]');
+  let visibles = 0;
+  items.forEach(item => {
+    const tecText = item.getAttribute('data-tecnico') || '';
+    const mostrar = !buscar || tecText.toLowerCase().includes(buscar);
+    item.style.display = mostrar ? '' : 'none';
+    if (mostrar) visibles++;
+  });
+}
+
+// =========== FILTROS CADENAS ===========
+function filtrarCadenas() {
+  const buscar = (document.getElementById('cadenas-buscar') || {}).value.toLowerCase();
+  const items = document.querySelectorAll('#lista-cadenas-admin > div[data-cadena]');
+  let visibles = 0;
+  items.forEach(item => {
+    const cadText = item.getAttribute('data-cadena') || '';
+    const mostrar = !buscar || cadText.toLowerCase().includes(buscar);
+    item.style.display = mostrar ? '' : 'none';
+    if (mostrar) visibles++;
+  });
 }
 
 // =========== EXCEL COTIZACIONES ===========
