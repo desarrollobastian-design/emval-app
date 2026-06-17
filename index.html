@@ -1838,7 +1838,6 @@ async function cargarCadenasAdmin() {
         row.appendChild(rowTop);
         subsContainer.appendChild(row);
       });
-      body.appendChild(subsContainer);
 
       // ---- BOTÓN AGREGAR SUCURSAL (COLAPSABLE) ----
       const btnAddSucDiv = document.createElement('div');
@@ -1848,6 +1847,8 @@ async function cargarCadenasAdmin() {
       btnAddSuc.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
       btnAddSucDiv.appendChild(btnAddSuc);
       body.appendChild(btnAddSucDiv);
+
+      body.appendChild(subsContainer);
 
       // ---- FORMULARIO AGREGAR SUCURSAL (COLAPSABLE) ----
       const sep = document.createElement('div');
