@@ -2246,6 +2246,28 @@ async function enviarCotizacion() {
 }
 
 function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
+  // Buscador dentro de la carpeta
+  const searchRow = document.createElement('div');
+  searchRow.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Buscar en esta carpeta...';
+  searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;';
+  const itemsContainer = document.createElement('div');
+  itemsContainer.style.cssText = 'display:flex;flex-direction:column;';
+
+  const filtrarItems = function() {
+    const termino = searchInput.value.toLowerCase();
+    const rows = itemsContainer.querySelectorAll('[data-cot-row]');
+    rows.forEach(function(row) {
+      const texto = row.getAttribute('data-cot-row').toLowerCase();
+      row.style.display = texto.includes(termino) ? 'block' : 'none';
+    });
+  };
+  searchInput.oninput = filtrarItems;
+  searchRow.appendChild(searchInput);
+  contenido.appendChild(searchRow);
+
   const selRow = document.createElement('div');
   selRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
   const btnSelTodas = document.createElement('button');
@@ -2262,6 +2284,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   contenido.appendChild(selRow);
   items.forEach(function(it) {
     const row = document.createElement('div');
+    row.setAttribute('data-cot-row', (it.local || '') + ' ' + (it.fecha || '') + ' ' + (it.descripcionTrabajo || '') + ' ' + (it.supervisor || ''));
     row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
     const checkRow = document.createElement('div');
     checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
@@ -2330,8 +2353,9 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     checkRow.appendChild(chk);
     checkRow.appendChild(rowContent);
     row.appendChild(checkRow);
-    contenido.appendChild(row);
+    itemsContainer.appendChild(row);
   });
+  contenido.appendChild(itemsContainer);
 }
 
 async function cargarCarpetas() {
