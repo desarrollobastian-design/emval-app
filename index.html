@@ -607,7 +607,17 @@
   </div>
   <div class="content">
     <div style="margin-bottom:12px;">
-      <input type="text" id="cot-buscar" placeholder="🔍 Buscar cotización..." style="width:100%;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:8px;" onkeyup="filtrarCotizaciones();">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input type="text" id="cot-buscar" placeholder="🔍 Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;">⚙️ Filtro</button>
+      </div>
+      <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);margin-bottom:8px;">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
+        <div id="filtro-input-cot-general" style="display:none;">
+          <label id="filtro-label-cot-general" style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;"></label>
+          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris2);border-radius:4px;padding:6px 8px;font-size:12px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+        </div>
+      </div>
     </div>
     <div id="lista-carpetas"></div>
   </div>
@@ -1698,46 +1708,74 @@ async function cargarCadenasAdmin() {
 
       const panelFiltros = document.createElement('div');
       panelFiltros.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);';
+
+      const filtroInputDivSub = document.createElement('div');
+      filtroInputDivSub.style.cssText = 'display:none;margin-bottom:8px;';
+      const filtroInputLabelSub = document.createElement('label');
+      filtroInputLabelSub.style.cssText = 'font-size:11px;font-weight:600;display:block;margin-bottom:4px;';
+      const filtroInputSub = document.createElement('input');
+      filtroInputSub.type = 'text';
+      filtroInputSub.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:4px;padding:6px 8px;font-size:12px;font-family:inherit;';
+      filtroInputDivSub.appendChild(filtroInputLabelSub);
+      filtroInputDivSub.appendChild(filtroInputSub);
+
       const filtroOptions = [
         { label: 'Centro', value: 'centro' },
         { label: 'Supervisor', value: 'supervisor' },
         { label: 'Dirección', value: 'direccion' }
       ];
       let filtroActivo = null;
+      const botonesFiltroSub = document.createElement('div');
+      botonesFiltroSub.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
       filtroOptions.forEach(function(opt) {
         const btn = document.createElement('button');
         btn.textContent = opt.label;
-        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px;';
+        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
         btn.onclick = function() {
-          filtroActivo = filtroActivo === opt.value ? null : opt.value;
-          btnFiltro.style.background = filtroActivo ? 'var(--azul)' : 'var(--gris2)';
-          btnFiltro.style.color = filtroActivo ? 'white' : 'black';
+          if (filtroActivo === opt.value) {
+            filtroActivo = null;
+            filtroInputDivSub.style.display = 'none';
+            btn.style.background = 'white';
+            btn.style.color = 'black';
+          } else {
+            filtroActivo = opt.value;
+            filtroInputLabelSub.textContent = opt.label + ':';
+            filtroInputSub.placeholder = 'Ingresa ' + opt.label.toLowerCase();
+            filtroInputSub.value = '';
+            filtroInputDivSub.style.display = 'block';
+            filtroInputSub.focus();
+            Array.from(botonesFiltroSub.querySelectorAll('button')).forEach(b => { b.style.background = 'white'; b.style.color = 'black'; });
+            btn.style.background = 'var(--azul)';
+            btn.style.color = 'white';
+          }
           aplicarFiltro();
         };
-        panelFiltros.appendChild(btn);
+        botonesFiltroSub.appendChild(btn);
       });
+      panelFiltros.appendChild(botonesFiltroSub);
+      panelFiltros.appendChild(filtroInputDivSub);
 
       const subsContainer = document.createElement('div');
       subsContainer.style.cssText = 'display:flex;flex-direction:column;';
 
       const aplicarFiltro = function() {
-        const termino = searchSubInput.value.toLowerCase();
+        const terminoBusqueda = searchSubInput.value.toLowerCase();
+        const terminoFiltro = filtroInputSub.value.toLowerCase();
         const rows = subsContainer.querySelectorAll('[data-sucursal-row]');
         rows.forEach(function(row) {
           const texto = row.getAttribute('data-sucursal-row').toLowerCase();
-          let mostrar = texto.includes(termino);
-          if (filtroActivo && mostrar) {
-            const attrs = row.getAttribute('data-sucursal-attrs') || '';
-            mostrar = attrs.includes('|' + filtroActivo + '|');
+          let mostrar = texto.includes(terminoBusqueda);
+          if (filtroActivo && mostrar && terminoFiltro) {
+            mostrar = texto.includes(terminoFiltro);
           }
           row.style.display = mostrar ? 'block' : 'none';
         });
       };
       searchSubInput.oninput = aplicarFiltro;
+      filtroInputSub.oninput = aplicarFiltro;
       btnFiltro.onclick = function() {
-        panelFiltros.style.display = panelFiltros.style.display === 'none' ? 'flex' : 'none';
+        panelFiltros.style.display = panelFiltros.style.display === 'none' ? 'block' : 'none';
       };
-      panelFiltros.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);flex-wrap:wrap;gap:4px;';
 
       searchRow.appendChild(searchSubInput);
       searchRow.appendChild(btnFiltro);
@@ -2313,7 +2351,7 @@ async function enviarCotizacion() {
 }
 
 function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
-  // Buscador dentro de la carpeta con filtros
+  // Buscador dentro de la carpeta con filtro inteligente
   const searchRow = document.createElement('div');
   searchRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
   const searchInput = document.createElement('input');
@@ -2326,45 +2364,85 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   btnFiltoCot.style.cssText = 'background:var(--gris2);border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
   const panelFiltrosCot = document.createElement('div');
-  panelFiltrosCot.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);flex-wrap:wrap;gap:4px;';
+  panelFiltrosCot.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);';
+  const filtroInputDiv = document.createElement('div');
+  filtroInputDiv.style.cssText = 'display:none;margin-bottom:8px;';
+  const filtroInputLabel = document.createElement('label');
+  filtroInputLabel.style.cssText = 'font-size:11px;font-weight:600;display:block;margin-bottom:4px;';
+  const filtroInput = document.createElement('input');
+  filtroInput.type = 'text';
+  filtroInput.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:4px;padding:6px 8px;font-size:12px;font-family:inherit;';
+  filtroInputDiv.appendChild(filtroInputLabel);
+  filtroInputDiv.appendChild(filtroInput);
+
   const filtroOptionsCot = [
     { label: 'Local', value: 'local' },
-    { label: 'Numero Cot', value: 'cotizacion' },
+    { label: 'Número Cot', value: 'cotizacion' },
     { label: 'CECO', value: 'ceco' }
   ];
   let filtroActivoCot = null;
+
+  const botonesFiltro = document.createElement('div');
+  botonesFiltro.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
   filtroOptionsCot.forEach(function(opt) {
     const btn = document.createElement('button');
     btn.textContent = opt.label;
-    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px;';
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
     btn.onclick = function() {
-      filtroActivoCot = filtroActivoCot === opt.value ? null : opt.value;
-      btnFiltoCot.style.background = filtroActivoCot ? 'var(--azul)' : 'var(--gris2)';
-      btnFiltoCot.style.color = filtroActivoCot ? 'white' : 'black';
+      if (filtroActivoCot === opt.value) {
+        filtroActivoCot = null;
+        filtroInputDiv.style.display = 'none';
+        btn.style.background = 'white';
+        btn.style.color = 'black';
+      } else {
+        filtroActivoCot = opt.value;
+        filtroInputLabel.textContent = opt.label + ':';
+        filtroInput.placeholder = 'Ingresa ' + opt.label.toLowerCase();
+        filtroInput.value = '';
+        filtroInputDiv.style.display = 'block';
+        filtroInput.focus();
+        Array.from(botonesFiltro.querySelectorAll('button')).forEach(b => { b.style.background = 'white'; b.style.color = 'black'; });
+        btn.style.background = 'var(--azul)';
+        btn.style.color = 'white';
+      }
       aplicarFiltroCot();
     };
-    panelFiltrosCot.appendChild(btn);
+    botonesFiltro.appendChild(btn);
   });
+
+  panelFiltrosCot.appendChild(botonesFiltro);
+  panelFiltrosCot.appendChild(filtroInputDiv);
 
   const itemsContainer = document.createElement('div');
   itemsContainer.style.cssText = 'display:flex;flex-direction:column;';
 
   const aplicarFiltroCot = function() {
-    const termino = searchInput.value.toLowerCase();
+    const terminoBusqueda = searchInput.value.toLowerCase();
+    const terminoFiltro = filtroInput.value.toLowerCase();
     const rows = itemsContainer.querySelectorAll('[data-cot-row]');
     rows.forEach(function(row) {
       const texto = row.getAttribute('data-cot-row').toLowerCase();
-      let mostrar = texto.includes(termino);
-      if (filtroActivoCot && mostrar) {
-        const attrs = row.getAttribute('data-cot-attrs') || '';
-        mostrar = attrs.includes('|' + filtroActivoCot + '|');
+      let mostrar = texto.includes(terminoBusqueda);
+
+      if (filtroActivoCot && mostrar && terminoFiltro) {
+        let encontrado = false;
+        if (filtroActivoCot === 'local') {
+          encontrado = row.getAttribute('data-cot-row').toLowerCase().split('|')[0].includes(terminoFiltro);
+        } else if (filtroActivoCot === 'cotizacion') {
+          const attrs = row.getAttribute('data-cot-attrs') || '';
+          encontrado = attrs.includes(terminoFiltro);
+        } else if (filtroActivoCot === 'ceco') {
+          encontrado = row.getAttribute('data-cot-row').toLowerCase().includes('ceco:' + terminoFiltro) || row.getAttribute('data-cot-row').toLowerCase().includes(terminoFiltro);
+        }
+        mostrar = encontrado;
       }
       row.style.display = mostrar ? 'block' : 'none';
     });
   };
   searchInput.oninput = aplicarFiltroCot;
+  filtroInput.oninput = aplicarFiltroCot;
   btnFiltoCot.onclick = function() {
-    panelFiltrosCot.style.display = panelFiltrosCot.style.display === 'none' ? 'flex' : 'none';
+    panelFiltrosCot.style.display = panelFiltrosCot.style.display === 'none' ? 'block' : 'none';
   };
 
   searchRow.appendChild(searchInput);
@@ -2639,6 +2717,7 @@ async function cargarCarpetas() {
 
       lista.appendChild(carpDiv);
     });
+    _inicializarFiltrosCotizacionesGeneral();
   } catch(e) {
     console.error(e);
     toast('Error cargando cotizaciones');
@@ -5580,13 +5659,65 @@ function limpiarFiltrosPreventivos() {
 }
 
 // =========== FILTROS COTIZACIONES ===========
+let _filtroActivoCotGeneral = null;
+
+function _inicializarFiltrosCotizacionesGeneral() {
+  const btnFiltro = document.getElementById('btn-filtro-cot-general');
+  const panelFiltro = document.getElementById('panel-filtro-cot-general');
+  const botonesDiv = document.getElementById('botones-filtro-cot-general');
+
+  if (!btnFiltro || !panelFiltro) return;
+
+  const opciones = [
+    { label: 'Supervisor', value: 'supervisor' },
+    { label: 'Local', value: 'local' },
+    { label: 'Número Cot', value: 'numero-cot' }
+  ];
+
+  btnFiltro.onclick = function() {
+    panelFiltro.style.display = panelFiltro.style.display === 'none' ? 'block' : 'none';
+  };
+
+  opciones.forEach(function(opt) {
+    const btn = document.createElement('button');
+    btn.textContent = opt.label;
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+    btn.onclick = function() {
+      if (_filtroActivoCotGeneral === opt.value) {
+        _filtroActivoCotGeneral = null;
+        document.getElementById('filtro-input-cot-general').style.display = 'none';
+        btn.style.background = 'white';
+        btn.style.color = 'black';
+      } else {
+        _filtroActivoCotGeneral = opt.value;
+        document.getElementById('filtro-label-cot-general').textContent = opt.label + ':';
+        document.getElementById('filtro-valor-cot-general').placeholder = 'Ingresa ' + opt.label.toLowerCase();
+        document.getElementById('filtro-valor-cot-general').value = '';
+        document.getElementById('filtro-input-cot-general').style.display = 'block';
+        document.getElementById('filtro-valor-cot-general').focus();
+        Array.from(botonesDiv.querySelectorAll('button')).forEach(b => { b.style.background = 'white'; b.style.color = 'black'; });
+        btn.style.background = 'var(--azul)';
+        btn.style.color = 'white';
+      }
+      filtrarCotizaciones();
+    };
+    botonesDiv.appendChild(btn);
+  });
+}
+
 function filtrarCotizaciones() {
   const buscar = (document.getElementById('cot-buscar') || {}).value.toLowerCase();
+  const filtroValor = (document.getElementById('filtro-valor-cot-general') || {}).value.toLowerCase();
   const items = document.querySelectorAll('#lista-carpetas > div[data-cot]');
   let visibles = 0;
   items.forEach(item => {
     const cotText = item.getAttribute('data-cot') || '';
-    const mostrar = !buscar || cotText.toLowerCase().includes(buscar);
+    let mostrar = !buscar || cotText.toLowerCase().includes(buscar);
+
+    if (_filtroActivoCotGeneral && mostrar && filtroValor) {
+      mostrar = cotText.toLowerCase().includes(filtroValor);
+    }
+
     item.style.display = mostrar ? '' : 'none';
     if (mostrar) visibles++;
   });
