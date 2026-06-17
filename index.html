@@ -1840,12 +1840,18 @@ async function cargarCadenasAdmin() {
       });
       body.appendChild(subsContainer);
 
-      // ---- FORMULARIO AGREGAR SUCURSAL ----
+      // ---- BOTÓN AGREGAR SUCURSAL (COLAPSABLE) ----
+      const btnAddSucDiv = document.createElement('div');
+      btnAddSucDiv.style.cssText = 'margin-top:12px;margin-bottom:10px;';
+      const btnAddSuc = document.createElement('button');
+      btnAddSuc.textContent = '+ Agregar sucursal';
+      btnAddSuc.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
+      btnAddSucDiv.appendChild(btnAddSuc);
+      body.appendChild(btnAddSucDiv);
+
+      // ---- FORMULARIO AGREGAR SUCURSAL (COLAPSABLE) ----
       const sep = document.createElement('div');
-      sep.style.cssText = 'margin-top:12px;padding-top:12px;border-top:2px dashed var(--gris2);';
-      const addTit = document.createElement('div');
-      addTit.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;';
-      addTit.textContent = 'Agregar sucursal';
+      sep.style.cssText = 'display:none;margin-bottom:10px;padding:12px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);';
       const inpCentro = document.createElement('input');
       inpCentro.type = 'text'; inpCentro.placeholder = 'Numero de centro (Ej: 345)';
       inpCentro.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
@@ -1862,12 +1868,24 @@ async function cargarCadenasAdmin() {
       inpEmail.type = 'email'; inpEmail.placeholder = 'Email admin (opcional)';
       inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:8px;';
       const btnAdd = document.createElement('button');
-      btnAdd.textContent = '+ Agregar sucursal';
-      btnAdd.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnAdd.textContent = '✓ Agregar sucursal';
+      btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:6px;';
       btnAdd.onclick = (function(dId, iCentro, iNom, iDir, iSup, iEmail){ return function(){ agregarSucursal(dId, iCentro, iNom, iDir, iSup, iEmail); }; })(docId, inpCentro, inpNom, inpDir, inpSup, inpEmail);
-      sep.appendChild(addTit); sep.appendChild(inpCentro); sep.appendChild(inpNom); sep.appendChild(inpDir);
-      sep.appendChild(inpSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd);
+      const btnCancel = document.createElement('button');
+      btnCancel.textContent = 'Cancelar';
+      btnCancel.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;';
+      btnCancel.onclick = function() { sep.style.display = 'none'; btnAddSuc.textContent = '+ Agregar sucursal'; };
+      sep.appendChild(inpCentro); sep.appendChild(inpNom); sep.appendChild(inpDir);
+      sep.appendChild(inpSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd); sep.appendChild(btnCancel);
       body.appendChild(sep);
+
+      // Toggle del formulario
+      btnAddSuc.onclick = function() {
+        const abierto = sep.style.display !== 'none';
+        sep.style.display = abierto ? 'none' : 'block';
+        btnAddSuc.textContent = abierto ? '+ Agregar sucursal' : '- Ocultar formulario';
+        if (!abierto) inpNom.focus();
+      };
 
       div.appendChild(body);
       lista.appendChild(div);
