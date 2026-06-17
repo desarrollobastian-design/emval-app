@@ -563,6 +563,33 @@
     <h2>Trabajos Preventivos</h2>
   </div>
   <div class="content">
+    <!-- FILTROS Y BÚSQUEDA PREVENTIVOS -->
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input type="text" id="preventivo-buscar" placeholder="🔍 Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarPreventivos();">
+        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
+      </div>
+      <div id="panel-filtros-preventivos" style="display:none;background:var(--gris-claro);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
+        <div>
+          <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
+          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--texto3);font-weight:600;">TÉCNICO</label>
+          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1;">
+          <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
+          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
+        </div>
+        <button onclick="limpiarFiltrosPreventivos()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:6px;padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
+      </div>
+      <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="preventivo-contador">0 resultados</div>
+    </div>
     <div id="lista-preventivos"></div>
   </div>
 </div>
@@ -4630,6 +4657,10 @@ async function cargarPreventivos() {
       const card = document.createElement('div');
       card.className = 'card';
       card.style.marginBottom = '12px';
+      card.setAttribute('data-local', ot.local || '');
+      card.setAttribute('data-tecnico', ot.tecnico || '');
+      card.setAttribute('data-fecha', ot.fecha || '');
+      card.setAttribute('data-ot', (otNum || '') + ' ' + (ot.local || '') + ' ' + (ot.tecnico || ''));
 
       // ---- Header ----
       const hdr = document.createElement('div');
@@ -4696,6 +4727,40 @@ async function cargarPreventivos() {
       card.appendChild(btns);
       lista.appendChild(card);
     });
+
+    // Populate filtros
+    const locales = new Set();
+    const tecnicos = new Set();
+    prevOTs.forEach(ot => {
+      if (ot.local) locales.add(ot.local);
+      if (ot.tecnico) tecnicos.add(ot.tecnico);
+    });
+    const selectLocal = document.getElementById('filter-local-preventivo');
+    const selectTecnico = document.getElementById('filter-tecnico-preventivo');
+    if (selectLocal) {
+      selectLocal.innerHTML = '<option value="">Todos</option>';
+      Array.from(locales).sort().forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l;
+        opt.textContent = l;
+        selectLocal.appendChild(opt);
+      });
+    }
+    if (selectTecnico) {
+      selectTecnico.innerHTML = '<option value="">Todos</option>';
+      Array.from(tecnicos).sort().forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        selectTecnico.appendChild(opt);
+      });
+    }
+
+    // Actualizar contador
+    const contador = document.getElementById('preventivo-contador');
+    if (contador) {
+      contador.textContent = prevOTs.length + ' resultado' + (prevOTs.length !== 1 ? 's' : '');
+    }
   } catch(e) {
     console.error('Error cargando preventivos:', e);
     toast('Error cargando OTs preventivas');
@@ -5275,6 +5340,53 @@ function limpiarFiltrosTecnico() {
   document.getElementById('filter-tipo-tecnico').value = '';
   document.getElementById('filter-fecha-tecnico').value = '';
   filtrarOTsTecnico();
+}
+
+function toggleFiltrosPreventivos() {
+  const panel = document.getElementById('panel-filtros-preventivos');
+  if (!panel) return;
+  const estaBierto = panel.style.display !== 'none' && panel.style.display !== '';
+  panel.style.display = estaBierto ? 'none' : 'grid';
+}
+
+function filtrarPreventivos() {
+  const buscar = (document.getElementById('preventivo-buscar') || {}).value.toLowerCase();
+  const filtroLocal = (document.getElementById('filter-local-preventivo') || {}).value;
+  const filtroTecnico = (document.getElementById('filter-tecnico-preventivo') || {}).value;
+  const filtroFecha = (document.getElementById('filter-fecha-preventivo') || {}).value;
+
+  const cards = document.querySelectorAll('#s-preventivos .card');
+  let visibles = 0;
+  cards.forEach(card => {
+    const local = card.getAttribute('data-local') || '';
+    const tecnico = card.getAttribute('data-tecnico') || '';
+    const fecha = card.getAttribute('data-fecha') || '';
+    const otText = card.getAttribute('data-ot') || '';
+
+    // Condiciones de filtro
+    const coincideBusqueda = !buscar || otText.toLowerCase().includes(buscar);
+    const coincideLocal = !filtroLocal || local === filtroLocal;
+    const coincideTecnico = !filtroTecnico || tecnico === filtroTecnico;
+    const coincideFecha = !filtroFecha || fecha === filtroFecha;
+
+    const mostrar = coincideBusqueda && coincideLocal && coincideTecnico && coincideFecha;
+    card.style.display = mostrar ? '' : 'none';
+    if (mostrar) visibles++;
+  });
+
+  // Actualizar contador
+  const contador = document.getElementById('preventivo-contador');
+  if (contador) {
+    contador.textContent = visibles + ' resultado' + (visibles !== 1 ? 's' : '');
+  }
+}
+
+function limpiarFiltrosPreventivos() {
+  document.getElementById('preventivo-buscar').value = '';
+  document.getElementById('filter-local-preventivo').value = '';
+  document.getElementById('filter-tecnico-preventivo').value = '';
+  document.getElementById('filter-fecha-preventivo').value = '';
+  filtrarPreventivos();
 }
 
 // =========== EXCEL COTIZACIONES ===========
