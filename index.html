@@ -1682,13 +1682,35 @@ async function cargarCadenasAdmin() {
       cadBtns.appendChild(btnEdit); cadBtns.appendChild(btnDel);
       body.appendChild(cadBtns);
 
+      // Buscador de sucursales
+      const searchSubDiv = document.createElement('div');
+      searchSubDiv.style.cssText = 'margin-bottom:10px;display:flex;gap:8px;';
+      const searchSubInput = document.createElement('input');
+      searchSubInput.type = 'text';
+      searchSubInput.placeholder = 'Buscar sucursal...';
+      searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;';
+      const subsContainer = document.createElement('div');
+      subsContainer.style.cssText = 'display:flex;flex-direction:column;';
+
+      const filtrarSubs = function() {
+        const termino = searchSubInput.value.toLowerCase();
+        const rows = subsContainer.querySelectorAll('[data-sucursal-row]');
+        rows.forEach(function(row) {
+          const texto = row.getAttribute('data-sucursal-row').toLowerCase();
+          row.style.display = texto.includes(termino) ? 'block' : 'none';
+        });
+      };
+      searchSubInput.oninput = filtrarSubs;
+      searchSubDiv.appendChild(searchSubInput);
+      body.appendChild(searchSubDiv);
+
       // Lista de sucursales
       const subs = d.sucursales || [];
       if (subs.length === 0) {
         const noSuc = document.createElement('p');
         noSuc.style.cssText = 'font-size:12px;color:var(--texto3);text-align:center;padding:8px 0;';
         noSuc.textContent = 'Sin sucursales aun';
-        body.appendChild(noSuc);
+        subsContainer.appendChild(noSuc);
       }
       subs.forEach(function(s, i) {
         const sNombre = typeof s === 'object' ? s.nombre : s;
@@ -1698,6 +1720,7 @@ async function cargarCadenasAdmin() {
         const sCentro = typeof s === 'object' ? (s.centro || '') : '';
 
         const row = document.createElement('div');
+        row.setAttribute('data-sucursal-row', sNombre + ' ' + sDir + ' ' + sCentro + ' ' + sSup);
         row.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
 
         const rowTop = document.createElement('div');
@@ -1732,8 +1755,9 @@ async function cargarCadenasAdmin() {
 
         rowTop.appendChild(rowInfo); rowTop.appendChild(rowBtns);
         row.appendChild(rowTop);
-        body.appendChild(row);
+        subsContainer.appendChild(row);
       });
+      body.appendChild(subsContainer);
 
       // ---- FORMULARIO AGREGAR SUCURSAL ----
       const sep = document.createElement('div');
