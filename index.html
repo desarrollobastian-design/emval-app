@@ -523,6 +523,35 @@
     <h2 id="detalle-tecnico-nombre">OTs</h2>
   </div>
   <div class="content">
+    <!-- FILTROS Y BÚSQUEDA OTs -->
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input type="text" id="ot-buscar-tecnico" placeholder="🔍 Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
+        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
+      </div>
+      <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris-claro);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
+        <div>
+          <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
+          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--texto3);font-weight:600;">TIPO</label>
+          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
+            <option value="">Todos</option>
+            <option value="correctivo">Correctivo</option>
+            <option value="preventivo">Preventivo</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1;">
+          <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
+          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
+        </div>
+        <button onclick="limpiarFiltrosTecnico()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:6px;padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
+      </div>
+      <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="ot-contador-tecnico">0 resultados</div>
+    </div>
     <div id="lista-ots-tecnico-detalle"></div>
   </div>
 </div>
@@ -612,48 +641,7 @@
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
       <button id="btn-ventas" class="btn btn-verde btn-sm" onclick="go('s-ventas');cargarVentas();" style="flex:1;font-size:12px;display:none;">Ventas</button>
     </div>
-    <!-- PANEL FILTROS Y BÚSQUEDA -->
-    <div style="margin-bottom:16px;">
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="ot-buscar" placeholder="🔍 Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarOTsSupervisor();">
-        <button onclick="toggleFiltros()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
-      </div>
-      <div id="panel-filtros-ots" style="display:none;background:var(--gris-claro);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
-        <div>
-          <label style="font-size:11px;color:var(--texto3);font-weight:600;">TÉCNICO</label>
-          <select id="filter-tecnico" onchange="filtrarOTsSupervisor()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
-            <option value="">Todos</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local" onchange="filtrarOTsSupervisor()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
-            <option value="">Todos</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--texto3);font-weight:600;">TIPO</label>
-          <select id="filter-tipo" onchange="filtrarOTsSupervisor()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
-            <option value="">Todos</option>
-            <option value="correctivo">Correctivo</option>
-            <option value="preventivo">Preventivo</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--texto3);font-weight:600;">DESDE (FECHA)</label>
-          <input type="date" id="filter-fecha-desde" onchange="filtrarOTsSupervisor()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
-        </div>
-        <div style="grid-column:2;">
-          <label style="font-size:11px;color:var(--texto3);font-weight:600;">HASTA (FECHA)</label>
-          <input type="date" id="filter-fecha-hasta" onchange="filtrarOTsSupervisor()" style="width:100%;padding:6px 8px;border:1px solid var(--gris);border-radius:6px;font-size:12px;font-family:inherit;">
-        </div>
-        <button onclick="limpiarFiltros()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:6px;padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs REGISTRADAS</div>
-      <div style="font-size:11px;color:var(--texto3);" id="ot-contador">0 resultados</div>
-    </div>
+    <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs DE HOY</div>
     <div class="ot-card">
       <div class="ot-icon" style="background:#FEF0E6;">⚠️</div>
       <div class="ot-info">
@@ -4766,6 +4754,10 @@ async function verOTsTecnico(nombre, grupo) {
     const card = document.createElement('div');
     card.className = 'card';
     card.style.marginBottom = '12px';
+    card.setAttribute('data-local', ot.local || '');
+    card.setAttribute('data-tipo', ot.tipo || '');
+    card.setAttribute('data-fecha', ot.fecha || '');
+    card.setAttribute('data-ot', (ot.numero || '') + ' ' + (ot.local || '') + ' ' + (ot.descripcionTrabajo || ''));
 
     // Header con logo + info
     const header = document.createElement('div');
@@ -4915,6 +4907,28 @@ async function verOTsTecnico(nombre, grupo) {
     card.appendChild(btns);
     lista.appendChild(card);
   });
+
+  // Populate filtro LOCAL
+  const locales = new Set();
+  ots.forEach(ot => {
+    if (ot.local) locales.add(ot.local);
+  });
+  const selectLocal = document.getElementById('filter-local-tecnico');
+  if (selectLocal) {
+    selectLocal.innerHTML = '<option value="">Todos</option>';
+    Array.from(locales).sort().forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l;
+      opt.textContent = l;
+      selectLocal.appendChild(opt);
+    });
+  }
+
+  // Actualizar contador
+  const contador = document.getElementById('ot-contador-tecnico');
+  if (contador) {
+    contador.textContent = ots.length + ' resultado' + (ots.length !== 1 ? 's' : '');
+  }
 }
 
 // =========== SELECCION MULTIPLE COTIZACIONES ===========
@@ -5102,50 +5116,23 @@ async function cargarOTsSupervisor() {
       if (cdata.otId) otsCotizadas[cdata.otId] = cd.id;
     });
 
-    // Cargar todas las OTs (sin filtrar por fecha)
-    const docsHoy = snap.docs;
+    // Filtrar solo OTs de hoy
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2,'0');
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    const yyyy = now.getFullYear();
+    const todayStr = dd + '-' + mm + '-' + yyyy;
+    const docsHoy = snap.docs.filter(doc => (doc.data().fecha || '') === todayStr);
     if (docsHoy.length === 0) {
       const p = document.createElement('p');
       p.style = 'font-size:13px;color:var(--texto3);text-align:center;padding:20px';
-      p.textContent = 'No hay OTs registradas';
+      p.textContent = 'No hay OTs registradas hoy';
       lista.appendChild(p);
     }
-
-    // Populate filter dropdowns
-    const tecnicos = new Set();
-    const locales = new Set();
-    docsHoy.forEach(doc => {
-      const d = doc.data();
-      if (d.tecnico) tecnicos.add(d.tecnico);
-      if (d.local) locales.add(d.local);
-    });
-    const selectTec = document.getElementById('filter-tecnico');
-    const selectLoc = document.getElementById('filter-local');
-    Array.from(tecnicos).sort().forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t;
-      opt.textContent = t;
-      selectTec.appendChild(opt);
-    });
-    Array.from(locales).sort().forEach(l => {
-      const opt = document.createElement('option');
-      opt.value = l;
-      opt.textContent = l;
-      selectLoc.appendChild(opt);
-    });
-
-    // Actualizar contador
-    document.getElementById('ot-contador').textContent = docsHoy.length + ' resultado' + (docsHoy.length !== 1 ? 's' : '');
-
     docsHoy.forEach(doc => {
       const d = doc.data();
       const card = document.createElement('div');
       card.className = 'ot-card';
-      card.setAttribute('data-tecnico', d.tecnico || '');
-      card.setAttribute('data-local', d.local || '');
-      card.setAttribute('data-tipo', d.tipo || '');
-      card.setAttribute('data-fecha', d.fecha || '');
-      card.setAttribute('data-ot', (d.numero || '') + ' ' + (d.local || '') + ' ' + (d.tecnico || '') + ' ' + (d.descripcionTrabajo || ''));
       const bg = d.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
       const badge = d.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
       const label = d.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
@@ -5243,25 +5230,22 @@ async function cargarOTsSupervisor() {
   }
 }
 
-function toggleFiltros() {
-  const panel = document.getElementById('panel-filtros-ots');
+function toggleFiltrosTecnico() {
+  const panel = document.getElementById('panel-filtros-ots-tecnico');
   if (!panel) return;
   const estaBierto = panel.style.display !== 'none' && panel.style.display !== '';
   panel.style.display = estaBierto ? 'none' : 'grid';
 }
 
-function filtrarOTsSupervisor() {
-  const buscar = (document.getElementById('ot-buscar') || {}).value.toLowerCase();
-  const filtroTecnico = (document.getElementById('filter-tecnico') || {}).value;
-  const filtroLocal = (document.getElementById('filter-local') || {}).value;
-  const filtroTipo = (document.getElementById('filter-tipo') || {}).value;
-  const filtroFechaDesde = (document.getElementById('filter-fecha-desde') || {}).value;
-  const filtroFechaHasta = (document.getElementById('filter-fecha-hasta') || {}).value;
+function filtrarOTsTecnico() {
+  const buscar = (document.getElementById('ot-buscar-tecnico') || {}).value.toLowerCase();
+  const filtroLocal = (document.getElementById('filter-local-tecnico') || {}).value;
+  const filtroTipo = (document.getElementById('filter-tipo-tecnico') || {}).value;
+  const filtroFecha = (document.getElementById('filter-fecha-tecnico') || {}).value;
 
-  const cards = document.querySelectorAll('#s-supervisor .ot-card');
+  const cards = document.querySelectorAll('#s-ots-tecnico-detalle .card');
   let visibles = 0;
   cards.forEach(card => {
-    const tecnico = card.getAttribute('data-tecnico') || '';
     const local = card.getAttribute('data-local') || '';
     const tipo = card.getAttribute('data-tipo') || '';
     const fecha = card.getAttribute('data-fecha') || '';
@@ -5269,57 +5253,28 @@ function filtrarOTsSupervisor() {
 
     // Condiciones de filtro
     const coincideBusqueda = !buscar || otText.toLowerCase().includes(buscar);
-    const coincideTecnico = !filtroTecnico || tecnico === filtroTecnico;
     const coincideLocal = !filtroLocal || local === filtroLocal;
     const coincideTipo = !filtroTipo || tipo === filtroTipo;
+    const coincideFecha = !filtroFecha || fecha === filtroFecha;
 
-    let coincideFecha = true;
-    if (filtroFechaDesde || filtroFechaHasta) {
-      const fechaOt = new Date(fecha.split('-').reverse().join('-'));
-      if (filtroFechaDesde) {
-        const desde = new Date(filtroFechaDesde);
-        coincideFecha = coincideFecha && fechaOt >= desde;
-      }
-      if (filtroFechaHasta) {
-        const hasta = new Date(filtroFechaHasta);
-        hasta.setHours(23, 59, 59);
-        coincideFecha = coincideFecha && fechaOt <= hasta;
-      }
-    }
-
-    const mostrar = coincideBusqueda && coincideTecnico && coincideLocal && coincideTipo && coincideFecha;
-    card.style.display = mostrar ? 'flex' : 'none';
+    const mostrar = coincideBusqueda && coincideLocal && coincideTipo && coincideFecha;
+    card.style.display = mostrar ? '' : 'none';
     if (mostrar) visibles++;
   });
 
   // Actualizar contador
-  const contador = document.getElementById('ot-contador');
+  const contador = document.getElementById('ot-contador-tecnico');
   if (contador) {
     contador.textContent = visibles + ' resultado' + (visibles !== 1 ? 's' : '');
   }
-
-  // Mostrar "sin resultados" si no hay visibles
-  const lista = document.querySelector('#s-supervisor .content');
-  let sinResultados = lista.querySelector('[data-sin-resultados]');
-  if (visibles === 0 && !sinResultados) {
-    sinResultados = document.createElement('p');
-    sinResultados.setAttribute('data-sin-resultados', '1');
-    sinResultados.style.cssText = 'font-size:13px;color:var(--texto3);text-align:center;padding:20px';
-    sinResultados.textContent = 'No hay OTs que coincidan con los filtros';
-    lista.appendChild(sinResultados);
-  } else if (sinResultados && visibles > 0) {
-    sinResultados.remove();
-  }
 }
 
-function limpiarFiltros() {
-  document.getElementById('ot-buscar').value = '';
-  document.getElementById('filter-tecnico').value = '';
-  document.getElementById('filter-local').value = '';
-  document.getElementById('filter-tipo').value = '';
-  document.getElementById('filter-fecha-desde').value = '';
-  document.getElementById('filter-fecha-hasta').value = '';
-  filtrarOTsSupervisor();
+function limpiarFiltrosTecnico() {
+  document.getElementById('ot-buscar-tecnico').value = '';
+  document.getElementById('filter-local-tecnico').value = '';
+  document.getElementById('filter-tipo-tecnico').value = '';
+  document.getElementById('filter-fecha-tecnico').value = '';
+  filtrarOTsTecnico();
 }
 
 // =========== EXCEL COTIZACIONES ===========
