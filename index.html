@@ -1682,26 +1682,67 @@ async function cargarCadenasAdmin() {
       cadBtns.appendChild(btnEdit); cadBtns.appendChild(btnDel);
       body.appendChild(cadBtns);
 
-      // Buscador de sucursales
+      // Buscador de sucursales con filtros
       const searchSubDiv = document.createElement('div');
-      searchSubDiv.style.cssText = 'margin-bottom:10px;display:flex;gap:8px;';
+      searchSubDiv.style.cssText = 'margin-bottom:10px;';
+      const searchRow = document.createElement('div');
+      searchRow.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;';
       const searchSubInput = document.createElement('input');
       searchSubInput.type = 'text';
       searchSubInput.placeholder = 'Buscar sucursal...';
       searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;';
+
+      const btnFiltro = document.createElement('button');
+      btnFiltro.textContent = '⚙️ Filtro';
+      btnFiltro.style.cssText = 'background:var(--gris2);border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+
+      const panelFiltros = document.createElement('div');
+      panelFiltros.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);';
+      const filtroOptions = [
+        { label: 'Centro', value: 'centro' },
+        { label: 'Supervisor', value: 'supervisor' },
+        { label: 'Dirección', value: 'direccion' }
+      ];
+      let filtroActivo = null;
+      filtroOptions.forEach(function(opt) {
+        const btn = document.createElement('button');
+        btn.textContent = opt.label;
+        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px;';
+        btn.onclick = function() {
+          filtroActivo = filtroActivo === opt.value ? null : opt.value;
+          btnFiltro.style.background = filtroActivo ? 'var(--azul)' : 'var(--gris2)';
+          btnFiltro.style.color = filtroActivo ? 'white' : 'black';
+          aplicarFiltro();
+        };
+        panelFiltros.appendChild(btn);
+      });
+
       const subsContainer = document.createElement('div');
       subsContainer.style.cssText = 'display:flex;flex-direction:column;';
 
-      const filtrarSubs = function() {
+      const aplicarFiltro = function() {
         const termino = searchSubInput.value.toLowerCase();
         const rows = subsContainer.querySelectorAll('[data-sucursal-row]');
         rows.forEach(function(row) {
           const texto = row.getAttribute('data-sucursal-row').toLowerCase();
-          row.style.display = texto.includes(termino) ? 'block' : 'none';
+          let mostrar = texto.includes(termino);
+          if (filtroActivo && mostrar) {
+            const attrs = row.getAttribute('data-sucursal-attrs') || '';
+            mostrar = attrs.includes('|' + filtroActivo + '|');
+          }
+          row.style.display = mostrar ? 'block' : 'none';
         });
       };
-      searchSubInput.oninput = filtrarSubs;
-      searchSubDiv.appendChild(searchSubInput);
+      searchSubInput.oninput = aplicarFiltro;
+      btnFiltro.onclick = function() {
+        panelFiltros.style.display = panelFiltros.style.display === 'none' ? 'flex' : 'none';
+      };
+      panelFiltros.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);flex-wrap:wrap;gap:4px;';
+
+      searchRow.appendChild(searchSubInput);
+      searchRow.appendChild(btnFiltro);
+      searchSubDiv.appendChild(searchRow);
+      searchSubDiv.appendChild(panelFiltros);
       body.appendChild(searchSubDiv);
 
       // Lista de sucursales
@@ -1721,6 +1762,8 @@ async function cargarCadenasAdmin() {
 
         const row = document.createElement('div');
         row.setAttribute('data-sucursal-row', sNombre + ' ' + sDir + ' ' + sCentro + ' ' + sSup);
+        const attrs = (sCentro ? '|centro|' : '') + (sSup ? '|supervisor|' : '') + (sDir ? '|direccion|' : '');
+        row.setAttribute('data-sucursal-attrs', attrs);
         row.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
 
         const rowTop = document.createElement('div');
@@ -2270,27 +2313,64 @@ async function enviarCotizacion() {
 }
 
 function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
-  // Buscador dentro de la carpeta
+  // Buscador dentro de la carpeta con filtros
   const searchRow = document.createElement('div');
-  searchRow.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+  searchRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
   const searchInput = document.createElement('input');
   searchInput.type = 'text';
   searchInput.placeholder = 'Buscar en esta carpeta...';
   searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;';
+
+  const btnFiltoCot = document.createElement('button');
+  btnFiltoCot.textContent = '⚙️ Filtro';
+  btnFiltoCot.style.cssText = 'background:var(--gris2);border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+
+  const panelFiltrosCot = document.createElement('div');
+  panelFiltrosCot.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:6px;border:1px solid var(--gris2);flex-wrap:wrap;gap:4px;';
+  const filtroOptionsCot = [
+    { label: 'Local', value: 'local' },
+    { label: 'Numero Cot', value: 'cotizacion' },
+    { label: 'CECO', value: 'ceco' }
+  ];
+  let filtroActivoCot = null;
+  filtroOptionsCot.forEach(function(opt) {
+    const btn = document.createElement('button');
+    btn.textContent = opt.label;
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px;';
+    btn.onclick = function() {
+      filtroActivoCot = filtroActivoCot === opt.value ? null : opt.value;
+      btnFiltoCot.style.background = filtroActivoCot ? 'var(--azul)' : 'var(--gris2)';
+      btnFiltoCot.style.color = filtroActivoCot ? 'white' : 'black';
+      aplicarFiltroCot();
+    };
+    panelFiltrosCot.appendChild(btn);
+  });
+
   const itemsContainer = document.createElement('div');
   itemsContainer.style.cssText = 'display:flex;flex-direction:column;';
 
-  const filtrarItems = function() {
+  const aplicarFiltroCot = function() {
     const termino = searchInput.value.toLowerCase();
     const rows = itemsContainer.querySelectorAll('[data-cot-row]');
     rows.forEach(function(row) {
       const texto = row.getAttribute('data-cot-row').toLowerCase();
-      row.style.display = texto.includes(termino) ? 'block' : 'none';
+      let mostrar = texto.includes(termino);
+      if (filtroActivoCot && mostrar) {
+        const attrs = row.getAttribute('data-cot-attrs') || '';
+        mostrar = attrs.includes('|' + filtroActivoCot + '|');
+      }
+      row.style.display = mostrar ? 'block' : 'none';
     });
   };
-  searchInput.oninput = filtrarItems;
+  searchInput.oninput = aplicarFiltroCot;
+  btnFiltoCot.onclick = function() {
+    panelFiltrosCot.style.display = panelFiltrosCot.style.display === 'none' ? 'flex' : 'none';
+  };
+
   searchRow.appendChild(searchInput);
+  searchRow.appendChild(btnFiltoCot);
   contenido.appendChild(searchRow);
+  contenido.appendChild(panelFiltrosCot);
 
   const selRow = document.createElement('div');
   selRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
@@ -2309,6 +2389,8 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   items.forEach(function(it) {
     const row = document.createElement('div');
     row.setAttribute('data-cot-row', (it.local || '') + ' ' + (it.fecha || '') + ' ' + (it.descripcionTrabajo || '') + ' ' + (it.supervisor || '') + ' ' + (it.numeroCotizacion || '') + ' ' + (it.centro || ''));
+    const attrs = (it.local ? '|local|' : '') + (it.numeroCotizacion ? '|cotizacion|' : '') + (it.centro ? '|ceco|' : '');
+    row.setAttribute('data-cot-attrs', attrs);
     row.style.cssText = 'padding:10px 0;border-top:1px solid var(--gris2);';
     const checkRow = document.createElement('div');
     checkRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
