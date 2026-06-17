@@ -657,10 +657,10 @@
   </div>
   <div class="content">
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-num">12</div><div class="stat-label">OTs este mes</div></div>
-      <div class="stat-card"><div class="stat-num">3</div><div class="stat-label">Esta semana</div></div>
-      <div class="stat-card"><div class="stat-num">8</div><div class="stat-label">Correctivos</div></div>
-      <div class="stat-card"><div class="stat-num">4</div><div class="stat-label">Preventivos</div></div>
+      <div class="stat-card" style="display:none;"><div class="stat-num">12</div><div class="stat-label">OTs este mes</div></div>
+      <div class="stat-card" style="display:none;"><div class="stat-num">3</div><div class="stat-label">Esta semana</div></div>
+      <div class="stat-card" style="display:none;"><div class="stat-num">8</div><div class="stat-label">Correctivos</div></div>
+      <div class="stat-card" style="display:none;"><div class="stat-num">4</div><div class="stat-label">Preventivos</div></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:4px;">
       <button class="btn btn-secondary btn-sm" onclick="go('s-ots-tecnicos');cargarOTsTecnicos();" style="flex:1;font-size:12px;">Ver OTs</button>
@@ -5337,10 +5337,13 @@ async function cargarOTsSupervisor() {
     const total = snap.size;
     const correctivos = snap.docs.filter(d => d.data().tipo === 'correctivo').length;
     const preventivos = snap.docs.filter(d => d.data().tipo === 'preventivo').length;
+    const statCards = document.querySelectorAll('#s-supervisor .stat-card');
     const statNums = document.querySelectorAll('#s-supervisor .stat-num');
     if (statNums[0]) statNums[0].textContent = total;
     if (statNums[2]) statNums[2].textContent = correctivos;
     if (statNums[3]) statNums[3].textContent = preventivos;
+    // Mostrar stat-cards
+    statCards.forEach(function(card) { card.style.display = ''; });
 
     // Cargar cadenas para logos en el panel supervisor
     const cadenasSnap2 = await db.collection('cadenas').get();
