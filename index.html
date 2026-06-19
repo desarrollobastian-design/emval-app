@@ -112,7 +112,21 @@
   .local-info { flex: 1; margin-left: 12px; }
   .local-name { font-size: 15px; font-weight: 600; }
   .local-addr { font-size: 12px; color: var(--texto3); margin-top: 2px; }
-  
+
+  /* PAUSED ORDERS CARD */
+  .paused-order-card { background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%); border: 2px solid #FCD34D; border-radius: var(--radio); padding: 14px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 8px rgba(252, 211, 77, 0.2); position: relative; }
+  .paused-order-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(252, 211, 77, 0.35); border-color: #FBBF24; }
+  .paused-order-card:active { transform: translateY(0); }
+  .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .paused-order-num { font-size: 16px; font-weight: 700; color: #78350F; font-family: 'DM Mono', monospace; }
+  .paused-order-type { font-size: 11px; background: rgba(120, 53, 15, 0.1); color: #78350F; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+  .paused-order-local { font-size: 14px; font-weight: 600; color: #78350F; margin-bottom: 6px; }
+  .paused-order-meta { display: flex; gap: 12px; font-size: 12px; color: #92400E; margin-bottom: 10px; }
+  .paused-order-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(120, 53, 15, 0.15); padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #78350F; }
+  .paused-order-action { width: 100%; background: linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%); color: white; border: none; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'DM Sans', sans-serif; }
+  .paused-order-action:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 159, 39, 0.3); }
+  .paused-order-action:active { transform: translateY(0); }
+
   /* FIRMA */
   .firma-container { border: 2px dashed var(--gris3); border-radius: var(--radio); overflow: hidden; }
   .firma-container.signed { border-color: var(--verde); }
@@ -311,6 +325,16 @@
   </div>
   <div class="content">
     <div style="font-size:13px;color:var(--texto2);">Paso 1 de 4 - Selecciona la cadena</div>
+
+    <!-- TRABAJOS PAUSADOS -->
+    <div id="seccion-pausadas" style="display:none;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--texto);flex:1;">⏸ Trabajos pausados</div>
+        <div style="font-size:11px;background:#FEF3C7;color:#78350F;padding:4px 8px;border-radius:6px;font-weight:600;" id="contador-pausadas">0</div>
+      </div>
+      <div id="lista-pausadas" style="display:grid;gap:10px;"></div>
+    </div>
+
     <div id="lista-cadenas"></div>
   </div>
 </div>
@@ -383,7 +407,7 @@
   <div class="content">
     <div style="font-size: 13px; color: var(--texto2);">Paso 3 de 4 — Fotografia el estado antes de comenzar</div>
     <div class="foto-grid" id="grid-antes"></div>
-    <button class="btn" onclick="agregarFotoBox('antes')" style="margin-top:12px;background:#2D5AA0;color:white;border:none;border-radius:14px;padding:12px 14px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(45,90,160,0.2);" onmouseover="this.style.background='#1B3A6B';this.style.boxShadow='0 4px 12px rgba(45,90,160,0.4);this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#2D5AA0';this.style.boxShadow='0 2px 8px rgba(45,90,160,0.2)';this.style.transform='translateY(0)'">📷 Agregar foto</button>
+    <button class="btn" onclick="agregarFotoBox('antes')" style="margin-top:12px;background:linear-gradient(135deg, #2D5AA0 0%, #1B3A6B 100%);color:white;border:none;border-radius:14px;padding:14px 16px;font-size:15px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 4px 12px rgba(45,90,160,0.3);position:relative;overflow:hidden;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(45,90,160,0.5)';this.style.background='linear-gradient(135deg, #1B3A6B 0%, #0F2345 100%)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(45,90,160,0.3)';this.style.background='linear-gradient(135deg, #2D5AA0 0%, #1B3A6B 100%)'">📷 Agregar foto</button>
     <input type="file" id="input-foto" accept="image/*" capture="environment" style="display:none" onchange="procesarFoto(event)">
     <div class="mt-auto" style="margin-top:16px;">
       <button class="btn btn-primary" onclick="irEjecucion()">Iniciar trabajo →</button>
@@ -416,7 +440,7 @@
     <div class="field">
       <label>Fotos — Trabajo terminado</label>
       <div class="foto-grid" id="grid-despues"></div>
-      <button class="btn" onclick="agregarFotoBox('despues')" style="margin-top:12px;background:#27A06B;color:white;border:none;border-radius:14px;padding:12px 14px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(39,160,107,0.2);" onmouseover="this.style.background='#1E8052';this.style.boxShadow='0 4px 12px rgba(39,160,107,0.4);this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#27A06B';this.style.boxShadow='0 2px 8px rgba(39,160,107,0.2)';this.style.transform='translateY(0)'">📷 Agregar foto</button>
+      <button class="btn" onclick="agregarFotoBox('despues')" style="margin-top:12px;background:linear-gradient(135deg, #27A06B 0%, #1E8052 100%);color:white;border:none;border-radius:14px;padding:14px 16px;font-size:15px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 4px 12px rgba(39,160,107,0.3);position:relative;overflow:hidden;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(39,160,107,0.5)';this.style.background='linear-gradient(135deg, #1E8052 0%, #155A36 100%)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(39,160,107,0.3)';this.style.background='linear-gradient(135deg, #27A06B 0%, #1E8052 100%)'">📷 Agregar foto</button>
     </div>
 
     <div class="field">
@@ -424,8 +448,8 @@
       <div class="firma-container" id="firma-container">
         <canvas id="firma-canvas" width="600" height="200"></canvas>
         <div class="firma-actions">
-          <button class="btn btn-secondary btn-sm" onclick="limpiarFirma()" style="flex:1">Limpiar</button>
-          <button class="btn btn-verde btn-sm" onclick="confirmarFirma()" style="flex:1">✓ Confirmar firma</button>
+          <button class="btn btn-sm" onclick="limpiarFirma()" style="flex:1;background:linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%);color:white;border:none;cursor:pointer;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(239,159,39,0.3);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 16px rgba(239,159,39,0.5)';this.style.background='linear-gradient(135deg, #D97E0A 0%, #B85C00 100%)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(239,159,39,0.3)';this.style.background='linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%)'">🔄 Limpiar</button>
+          <button class="btn btn-verde btn-sm" onclick="confirmarFirma()" style="flex:1;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(39,160,107,0.3);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 16px rgba(39,160,107,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(39,160,107,0.3)'">✓ Confirmar firma</button>
         </div>
       </div>
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pidele al administrador que firme con el dedo</div>
@@ -1020,6 +1044,7 @@ function nuevaOT() {
     if(el) el.textContent = '#' + estado.otNumero;
   });
   go('s-cadena');
+  cargarOTsPausadasEnCadena();
   // Esperar Firebase antes de cargar cadenas
   if (window._firebaseReady) {
     cargarCadenasApp();
@@ -1031,6 +1056,7 @@ function nuevaOT() {
       if (window._firebaseReady) {
         clearInterval(_esperar);
         cargarCadenasApp();
+        cargarOTsPausadasEnCadena();
       } else if (_intentos > 30) {
         clearInterval(_esperar);
         document.getElementById('lista-cadenas').innerHTML = '<p style="font-size:13px;color:var(--rojo);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
@@ -1306,7 +1332,8 @@ function pausarOT() {
 
     toast('✅ OT pausada correctamente');
     setTimeout(function() {
-      go('s-tipo');
+      cargarOTsPausadasEnCadena();
+      go('s-cadena');
     }, 500);
   } catch(e) {
     console.error('Error en pausarOT:', e);
@@ -3050,6 +3077,81 @@ function seleccionarCadena(cadena) {
   const badge = document.getElementById('ot-num-local');
   if (badge) badge.textContent = document.getElementById('ot-num-cadena').textContent;
   go('s-local');
+}
+
+// =========== TRABAJOS PAUSADOS ===========
+function cargarOTsPausadasEnCadena() {
+  const seccion = document.getElementById('seccion-pausadas');
+  const lista = document.getElementById('lista-pausadas');
+  const contador = document.getElementById('contador-pausadas');
+
+  if (!seccion || !lista || !contador) return;
+
+  try {
+    const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+
+    if (otsPausadas.length === 0) {
+      seccion.style.display = 'none';
+      return;
+    }
+
+    seccion.style.display = 'block';
+    lista.innerHTML = '';
+    contador.textContent = otsPausadas.length;
+
+    otsPausadas.forEach(function(ot) {
+      const card = document.createElement('div');
+      card.className = 'paused-order-card';
+      card.style.cursor = 'pointer';
+
+      const header = document.createElement('div');
+      header.className = 'paused-order-header';
+      const numOT = document.createElement('div');
+      numOT.className = 'paused-order-num';
+      numOT.textContent = '# ' + ot.numero;
+      const tipo = document.createElement('div');
+      tipo.className = 'paused-order-type';
+      tipo.textContent = (ot.tipo === 'preventivo' ? '🔧 ' : '🔨 ') + (ot.tipo || 'N/A');
+      header.appendChild(numOT);
+      header.appendChild(tipo);
+
+      const local = document.createElement('div');
+      local.className = 'paused-order-local';
+      local.textContent = ot.local || 'Sin sucursal';
+
+      const meta = document.createElement('div');
+      meta.className = 'paused-order-meta';
+      const fechaEl = document.createElement('div');
+      fechaEl.textContent = '📅 ' + (ot.fecha || 'N/A');
+      const horaEl = document.createElement('div');
+      horaEl.textContent = '🕐 ' + (ot.hora || 'N/A');
+      meta.appendChild(fechaEl);
+      meta.appendChild(horaEl);
+
+      const badge = document.createElement('div');
+      badge.className = 'paused-order-badge';
+      badge.textContent = '⏸ En Pausa';
+
+      const btn = document.createElement('button');
+      btn.className = 'paused-order-action';
+      btn.textContent = '▶ Continuar OT';
+      btn.onclick = (function(otId) {
+        return function() {
+          continuarOT('local_' + otId);
+        };
+      })(ot.numero);
+
+      card.appendChild(header);
+      card.appendChild(local);
+      card.appendChild(meta);
+      card.appendChild(badge);
+      card.appendChild(btn);
+      lista.appendChild(card);
+    });
+  } catch(e) {
+    console.error('Error cargando OTs pausadas:', e);
+    seccion.style.display = 'none';
+  }
 }
 
 // =========== PANEL ADMIN ===========
@@ -6742,6 +6844,7 @@ function _getUsuariosCached() {
   if (window._firebaseReady) {
     cargarUsuariosApp();
     cargarCadenasApp();
+    cargarOTsPausadasEnCadena();
   } else {
     setTimeout(iniciarCarga, 100);
   }
