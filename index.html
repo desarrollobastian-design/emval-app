@@ -1242,53 +1242,73 @@ function responderServicio(idx, respuesta) {
 
 // =========== PAUSAR OT ===========
 function pausarOT() {
-  if (!estado.otNumero) {
-    estado.otNumero = Math.floor(9000 + Math.random() * 1000);
-  }
-  const descEl = document.getElementById('desc-trabajo');
-  const desc = descEl ? descEl.value.trim() : '';
-
-  const fotosAntes = estado.fotosAntes.filter(f => f).length;
-  if (fotosAntes === 0) { toast('Toma al menos 1 foto antes de pausar'); return; }
-
-  const fecha = new Date().toLocaleDateString('es-CL');
-  const hora = new Date().toLocaleTimeString('es-CL');
-
-  // Guardar localmente (offline)
-  const ot = {
-    numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
-    tecnico: estado.usuario, fecha: fecha, hora: hora, descripcion: desc,
-    fotosAntes, fotosDespues: estado.fotosDespues.filter(f => f).length,
-    estado: 'En Pausa', pausa: true, firmada: false
-  };
   try {
-    const ots = JSON.parse(localStorage.getItem('emval_ots') || '[]');
-    ots.unshift(ot);
-    localStorage.setItem('emval_ots', JSON.stringify(ots));
-  } catch(e) {}
-
-  // Guardar en Firebase
-  try {
-    if (window._firebaseReady) {
-      const db = window.firebase.firestore();
-      db.collection('ordenes').add({
-        numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
-        tecnico: estado.usuario, fecha: fecha, hora: hora, descripcion: desc,
-        fotosAntes: estado.fotosAntes, fotosDespues: estado.fotosDespues,
-        estado: 'En Pausa', pausa: true, firmada: false,
-        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-      }).then(function(docRef) {
-        toast('OT pausada correctamente. Puedes continuar después.');
-        setTimeout(function(){ nuevaOT(); go('s-solicitar'); }, 1000);
-      }).catch(function(e) {
-        console.error('Error guardando OT pausada:', e);
-        toast('OT guardada localmente (sin conexión)');
-        setTimeout(function(){ nuevaOT(); go('s-solicitar'); }, 1000);
-      });
+    if (!estado.otNumero) {
+      estado.otNumero = Math.floor(9000 + Math.random() * 1000);
     }
+    const descEl = document.getElementById('desc-trabajo');
+    const desc = descEl ? descEl.value.trim() : '';
+
+    const fotosAntes = estado.fotosAntes.filter(f => f).length;
+    if (fotosAntes === 0) { toast('Toma al menos 1 foto antes de pausar'); return; }
+
+    const fecha = new Date().toLocaleDateString('es-CL');
+    const hora = new Date().toLocaleTimeString('es-CL');
+
+    // Guardar OT pausada
+    const otPausada = {
+      numero: estado.otNumero,
+      local: estado.local,
+      tipo: estado.tipo,
+      tecnico: estado.usuario,
+      fecha: fecha,
+      hora: hora,
+      descripcion: desc,
+      fotosAntes: estado.fotosAntes,
+      fotosDespues: estado.fotosDespues,
+      estado: 'En Pausa',
+      pausa: true,
+      firmada: false,
+      creadoEn: new Date().toISOString()
+    };
+
+    // Guardar en localStorage
+    try {
+      const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+      otsPausadas.unshift(otPausada);
+      localStorage.setItem('emval_ots_pausadas', JSON.stringify(otsPausadas));
+    } catch(e) { console.error('Error localStorage:', e); }
+
+    // Guardar en Firebase en background
+    if (window._firebaseReady) {
+      try {
+        const db = window.firebase.firestore();
+        db.collection('ordenes').add({
+          numero: estado.otNumero,
+          local: estado.local,
+          tipo: estado.tipo,
+          tecnico: estado.usuario,
+          fecha: fecha,
+          hora: hora,
+          descripcion: desc,
+          fotosAntes: estado.fotosAntes,
+          fotosDespues: estado.fotosDespues,
+          estado: 'En Pausa',
+          pausa: true,
+          firmada: false,
+          creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(function(e) {
+          console.error('Error Firebase pausarOT:', e);
+        });
+      } catch(e) { console.error('Error Firebase:', e); }
+    }
+
+    toast('✅ OT pausada correctamente');
+    nuevaOT();
+    go('s-solicitar');
   } catch(e) {
     console.error('Error en pausarOT:', e);
-    toast('Error al pausar. Intenta de nuevo.');
+    toast('Error al pausar');
   }
 }
 
@@ -4878,16 +4898,31 @@ async function generarPDFCotizacion() {
 // =========== OTs POR TECNICO ===========
 async function cargarOTsTecnicos() {
   try {
-    if (!window._firebaseReady) { setTimeout(cargarOTsTecnicos, 800); return; }
-    const db = window.firebase.firestore();
-    const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
     const tecnicos = {};
-    snap.docs.forEach(function(doc) {
-      const d = doc.data();
-      const t = d.tecnico || 'Sin asignar';
-      if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
-      tecnicos[t].ots.push({ id: doc.id, ...d });
-    });
+
+    // Cargar OTs pausadas del localStorage (sin conexión)
+    try {
+      const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+      otsPausadas.forEach(function(ot) {
+        const t = ot.tecnico || 'Sin asignar';
+        if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
+        tecnicos[t].ots.push({ id: 'local_' + ot.numero, ...ot });
+      });
+    } catch(e) {}
+
+    // Cargar OTs de Firebase
+    if (window._firebaseReady) {
+      try {
+        const db = window.firebase.firestore();
+        const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
+        snap.docs.forEach(function(doc) {
+          const d = doc.data();
+          const t = d.tecnico || 'Sin asignar';
+          if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
+          tecnicos[t].ots.push({ id: doc.id, ...d });
+        });
+      } catch(e) { console.error('Error cargando Firebase:', e); }
+    }
     const lista = document.getElementById('lista-tecnicos-ots');
     lista.innerHTML = '';
     if (Object.keys(tecnicos).length === 0) {
