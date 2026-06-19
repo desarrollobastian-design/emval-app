@@ -383,7 +383,7 @@
   <div class="content">
     <div style="font-size: 13px; color: var(--texto2);">Paso 3 de 4 — Fotografia el estado antes de comenzar</div>
     <div class="foto-grid" id="grid-antes"></div>
-    <button class="btn btn-secondary" onclick="agregarFotoBox('antes')" style="margin-top:4px;">+ Agregar foto</button>
+    <button class="btn" onclick="agregarFotoBox('antes')" style="margin-top:12px;background:#2D5AA0;color:white;border:none;border-radius:14px;padding:12px 14px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(45,90,160,0.2);" onmouseover="this.style.background='#1B3A6B';this.style.boxShadow='0 4px 12px rgba(45,90,160,0.4);this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#2D5AA0';this.style.boxShadow='0 2px 8px rgba(45,90,160,0.2)';this.style.transform='translateY(0)'">📷 Agregar foto</button>
     <input type="file" id="input-foto" accept="image/*" capture="environment" style="display:none" onchange="procesarFoto(event)">
     <div class="mt-auto" style="margin-top:16px;">
       <button class="btn btn-primary" onclick="irEjecucion()">Iniciar trabajo →</button>
@@ -416,7 +416,7 @@
     <div class="field">
       <label>Fotos — Trabajo terminado</label>
       <div class="foto-grid" id="grid-despues"></div>
-      <button class="btn btn-secondary" onclick="agregarFotoBox('despues')" style="margin-top:4px;">+ Agregar foto</button>
+      <button class="btn" onclick="agregarFotoBox('despues')" style="margin-top:12px;background:#27A06B;color:white;border:none;border-radius:14px;padding:12px 14px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(39,160,107,0.2);" onmouseover="this.style.background='#1E8052';this.style.boxShadow='0 4px 12px rgba(39,160,107,0.4);this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#27A06B';this.style.boxShadow='0 2px 8px rgba(39,160,107,0.2)';this.style.transform='translateY(0)'">📷 Agregar foto</button>
     </div>
 
     <div class="field">
