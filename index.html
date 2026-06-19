@@ -114,16 +114,19 @@
   .local-addr { font-size: 12px; color: var(--texto3); margin-top: 2px; }
 
   /* PAUSED ORDERS CARD */
-  .paused-order-card { background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%); border: 2px solid #FCD34D; border-radius: var(--radio); padding: 14px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 8px rgba(252, 211, 77, 0.2); position: relative; }
+  .paused-order-card { background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%); border: 2px solid #FCD34D; border-radius: var(--radio); padding: 14px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 8px rgba(252, 211, 77, 0.2); position: relative; display: flex; gap: 12px; align-items: flex-start; }
   .paused-order-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(252, 211, 77, 0.35); border-color: #FBBF24; }
   .paused-order-card:active { transform: translateY(0); }
-  .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .paused-order-num { font-size: 16px; font-weight: 700; color: #78350F; font-family: 'DM Mono', monospace; }
-  .paused-order-type { font-size: 11px; background: rgba(120, 53, 15, 0.1); color: #78350F; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-  .paused-order-local { font-size: 14px; font-weight: 600; color: #78350F; margin-bottom: 6px; }
-  .paused-order-meta { display: flex; gap: 12px; font-size: 12px; color: #92400E; margin-bottom: 10px; }
-  .paused-order-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(120, 53, 15, 0.15); padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #78350F; }
-  .paused-order-action { width: 100%; background: linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%); color: white; border: none; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'DM Sans', sans-serif; }
+  .paused-order-logo { width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
+  .paused-order-logo img { width: 100%; height: 100%; object-fit: cover; }
+  .paused-order-content { flex: 1; }
+  .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .paused-order-num { font-size: 15px; font-weight: 700; color: #78350F; font-family: 'DM Mono', monospace; }
+  .paused-order-type { font-size: 10px; background: rgba(120, 53, 15, 0.15); color: #78350F; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+  .paused-order-local { font-size: 13px; font-weight: 600; color: #78350F; margin-bottom: 4px; }
+  .paused-order-meta { display: flex; gap: 10px; font-size: 11px; color: #92400E; margin-bottom: 8px; }
+  .paused-order-badge { display: inline-flex; align-items: center; gap: 3px; background: rgba(120, 53, 15, 0.15); padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #78350F; }
+  .paused-order-action { width: 100%; background: linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%); color: white; border: none; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'DM Sans', sans-serif; }
   .paused-order-action:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 159, 39, 0.3); }
   .paused-order-action:active { transform: translateY(0); }
 
@@ -326,13 +329,16 @@
   <div class="content">
     <div style="font-size:13px;color:var(--texto2);">Paso 1 de 4 - Selecciona la cadena</div>
 
-    <!-- TRABAJOS PAUSADOS -->
+    <!-- TRABAJOS PAUSADOS (ACORDEÓN) -->
     <div id="seccion-pausadas" style="display:none;margin-bottom:20px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:600;color:var(--texto);flex:1;">⏸ Trabajos pausados</div>
-        <div style="font-size:11px;background:#FEF3C7;color:#78350F;padding:4px 8px;border-radius:6px;font-weight:600;" id="contador-pausadas">0</div>
-      </div>
-      <div id="lista-pausadas" style="display:grid;gap:10px;"></div>
+      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border:2px solid #FCD34D;border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:14px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);" onmouseover="this.style.boxShadow='0 4px 16px rgba(252, 211, 77, 0.35)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 8px rgba(252, 211, 77, 0.2)';this.style.transform='translateY(0)'">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span>⏸ Trabajos pausados</span>
+          <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:4px;font-weight:600;" id="contador-pausadas">0</div>
+        </div>
+        <span id="toggle-icon" style="transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);">▼</span>
+      </button>
+      <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
 
     <div id="lista-cadenas"></div>
@@ -3084,11 +3090,14 @@ function cargarOTsPausadasEnCadena() {
   const seccion = document.getElementById('seccion-pausadas');
   const lista = document.getElementById('lista-pausadas');
   const contador = document.getElementById('contador-pausadas');
+  const toggleBtn = document.getElementById('toggle-pausadas');
+  const toggleIcon = document.getElementById('toggle-icon');
 
-  if (!seccion || !lista || !contador) return;
+  if (!seccion || !lista || !contador || !toggleBtn) return;
 
   try {
     const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+    const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
 
     if (otsPausadas.length === 0) {
       seccion.style.display = 'none';
@@ -3099,55 +3108,120 @@ function cargarOTsPausadasEnCadena() {
     lista.innerHTML = '';
     contador.textContent = otsPausadas.length;
 
-    otsPausadas.forEach(function(ot) {
-      const card = document.createElement('div');
-      card.className = 'paused-order-card';
-      card.style.cursor = 'pointer';
+    // Lógica del toggle (acordeón)
+    let expanded = false;
+    toggleBtn.onclick = function() {
+      expanded = !expanded;
+      if (expanded) {
+        lista.style.display = 'grid';
+        setTimeout(function() {
+          lista.style.opacity = '1';
+          lista.style.maxHeight = '2000px';
+        }, 10);
+        toggleIcon.style.transform = 'rotate(180deg)';
+      } else {
+        lista.style.opacity = '0';
+        lista.style.maxHeight = '0';
+        toggleIcon.style.transform = 'rotate(0deg)';
+        setTimeout(function() {
+          if (!expanded) lista.style.display = 'none';
+        }, 250);
+      }
+    };
 
-      const header = document.createElement('div');
-      header.className = 'paused-order-header';
-      const numOT = document.createElement('div');
-      numOT.className = 'paused-order-num';
-      numOT.textContent = '# ' + ot.numero;
-      const tipo = document.createElement('div');
-      tipo.className = 'paused-order-type';
-      tipo.textContent = (ot.tipo === 'preventivo' ? '🔧 ' : '🔨 ') + (ot.tipo || 'N/A');
-      header.appendChild(numOT);
-      header.appendChild(tipo);
+    // Mapear cadenas para obtener logos
+    const cadenaMap = {};
+    if (db) {
+      db.collection('cadenas').get().then(function(snap) {
+        snap.docs.forEach(function(doc) {
+          const d = doc.data();
+          cadenaMap[d.nombre] = { logo: d.logo, color: d.color, letra: d.letra };
+        });
+        renderizarOTsPausadas();
+      }).catch(function() {
+        renderizarOTsPausadas();
+      });
+    } else {
+      renderizarOTsPausadas();
+    }
 
-      const local = document.createElement('div');
-      local.className = 'paused-order-local';
-      local.textContent = ot.local || 'Sin sucursal';
+    function renderizarOTsPausadas() {
+      otsPausadas.forEach(function(ot) {
+        const card = document.createElement('div');
+        card.className = 'paused-order-card';
 
-      const meta = document.createElement('div');
-      meta.className = 'paused-order-meta';
-      const fechaEl = document.createElement('div');
-      fechaEl.textContent = '📅 ' + (ot.fecha || 'N/A');
-      const horaEl = document.createElement('div');
-      horaEl.textContent = '🕐 ' + (ot.hora || 'N/A');
-      meta.appendChild(fechaEl);
-      meta.appendChild(horaEl);
+        // Logo de la empresa
+        const logo = document.createElement('div');
+        logo.className = 'paused-order-logo';
+        const cad = cadenaMap[ot.local];
+        if (cad) {
+          if (cad.logo) {
+            const img = document.createElement('img');
+            img.src = cad.logo;
+            img.onerror = function() { logo.textContent = cad.letra || ot.local.charAt(0); };
+            logo.appendChild(img);
+          } else {
+            logo.textContent = cad.letra || ot.local.charAt(0);
+            logo.style.background = cad.color || '#1B3A6B';
+          }
+        } else {
+          logo.textContent = ot.local.charAt(0);
+          logo.style.background = '#EF9F27';
+        }
 
-      const badge = document.createElement('div');
-      badge.className = 'paused-order-badge';
-      badge.textContent = '⏸ En Pausa';
+        // Contenido
+        const content = document.createElement('div');
+        content.className = 'paused-order-content';
 
-      const btn = document.createElement('button');
-      btn.className = 'paused-order-action';
-      btn.textContent = '▶ Continuar OT';
-      btn.onclick = (function(otId) {
-        return function() {
-          continuarOT('local_' + otId);
-        };
-      })(ot.numero);
+        const header = document.createElement('div');
+        header.className = 'paused-order-header';
+        const numOT = document.createElement('div');
+        numOT.className = 'paused-order-num';
+        numOT.textContent = '#' + ot.numero;
+        const tipo = document.createElement('div');
+        tipo.className = 'paused-order-type';
+        tipo.textContent = (ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo');
+        header.appendChild(numOT);
+        header.appendChild(tipo);
 
-      card.appendChild(header);
-      card.appendChild(local);
-      card.appendChild(meta);
-      card.appendChild(badge);
-      card.appendChild(btn);
-      lista.appendChild(card);
-    });
+        const local = document.createElement('div');
+        local.className = 'paused-order-local';
+        local.textContent = ot.local || 'Sin sucursal';
+
+        const meta = document.createElement('div');
+        meta.className = 'paused-order-meta';
+        const fechaEl = document.createElement('div');
+        fechaEl.textContent = (ot.fecha || 'N/A');
+        const horaEl = document.createElement('div');
+        horaEl.textContent = (ot.hora || 'N/A');
+        meta.appendChild(fechaEl);
+        meta.appendChild(horaEl);
+
+        const badge = document.createElement('div');
+        badge.className = 'paused-order-badge';
+        badge.textContent = '⏸ En Pausa';
+
+        const btn = document.createElement('button');
+        btn.className = 'paused-order-action';
+        btn.textContent = '▶ Continuar OT';
+        btn.onclick = (function(otId) {
+          return function(e) {
+            e.stopPropagation();
+            continuarOT('local_' + otId);
+          };
+        })(ot.numero);
+
+        content.appendChild(header);
+        content.appendChild(local);
+        content.appendChild(meta);
+        content.appendChild(badge);
+        content.appendChild(btn);
+
+        card.appendChild(logo);
+        card.appendChild(content);
+        lista.appendChild(card);
+      });
+    }
   } catch(e) {
     console.error('Error cargando OTs pausadas:', e);
     seccion.style.display = 'none';
