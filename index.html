@@ -1306,8 +1306,7 @@ function pausarOT() {
 
     toast('✅ OT pausada correctamente');
     setTimeout(function() {
-      cargarOTsTecnicos();
-      go('s-ots-tecnicos');
+      go('s-tipo');
     }, 500);
   } catch(e) {
     console.error('Error en pausarOT:', e);
