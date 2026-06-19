@@ -446,7 +446,10 @@
     </div>
 
     <div class="mt-auto">
-      <button class="btn btn-primary" onclick="cerrarOT()">Cerrar y generar OT →</button>
+      <div style="display:flex;gap:8px;flex-direction:column;">
+        <button class="btn btn-secondary" onclick="pausarOT()">⏸ Pausar (continuar después)</button>
+        <button class="btn btn-primary" onclick="cerrarOT()">✓ Cerrar y generar OT →</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1235,6 +1238,58 @@ function responderServicio(idx, respuesta) {
   const noBtn = document.getElementById('svc-no-' + idx);
   if (siBtn) { siBtn.style.background = respuesta === 'si' ? '#27A06B' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
   if (noBtn) { noBtn.style.background = respuesta === 'no' ? '#E74C3C' : '#E8ECF5'; noBtn.style.color = respuesta === 'no' ? 'white' : '#6B7280'; }
+}
+
+// =========== PAUSAR OT ===========
+function pausarOT() {
+  if (!estado.otNumero) {
+    estado.otNumero = Math.floor(9000 + Math.random() * 1000);
+  }
+  const descEl = document.getElementById('desc-trabajo');
+  const desc = descEl ? descEl.value.trim() : '';
+
+  const fotosAntes = estado.fotosAntes.filter(f => f).length;
+  if (fotosAntes === 0) { toast('Toma al menos 1 foto antes de pausar'); return; }
+
+  const fecha = new Date().toLocaleDateString('es-CL');
+  const hora = new Date().toLocaleTimeString('es-CL');
+
+  // Guardar localmente (offline)
+  const ot = {
+    numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
+    tecnico: estado.usuario, fecha: fecha, hora: hora, descripcion: desc,
+    fotosAntes, fotosDespues: estado.fotosDespues.filter(f => f).length,
+    estado: 'En Pausa', pausa: true, firmada: false
+  };
+  try {
+    const ots = JSON.parse(localStorage.getItem('emval_ots') || '[]');
+    ots.unshift(ot);
+    localStorage.setItem('emval_ots', JSON.stringify(ots));
+  } catch(e) {}
+
+  // Guardar en Firebase
+  try {
+    if (window._firebaseReady) {
+      const db = window.firebase.firestore();
+      db.collection('ordenes').add({
+        numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
+        tecnico: estado.usuario, fecha: fecha, hora: hora, descripcion: desc,
+        fotosAntes: estado.fotosAntes, fotosDespues: estado.fotosDespues,
+        estado: 'En Pausa', pausa: true, firmada: false,
+        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+      }).then(function(docRef) {
+        toast('OT pausada correctamente. Puedes continuar después.');
+        setTimeout(function(){ nuevaOT(); go('s-solicitar'); }, 1000);
+      }).catch(function(e) {
+        console.error('Error guardando OT pausada:', e);
+        toast('OT guardada localmente (sin conexión)');
+        setTimeout(function(){ nuevaOT(); go('s-solicitar'); }, 1000);
+      });
+    }
+  } catch(e) {
+    console.error('Error en pausarOT:', e);
+    toast('Error al pausar. Intenta de nuevo.');
+  }
 }
 
 // =========== CERRAR OT ===========
@@ -4879,6 +4934,47 @@ async function cargarOTsTecnicos() {
   }
 }
 
+// =========== CONTINUAR OT PAUSADA ===========
+function continuarOT(otId) {
+  try {
+    const db = window.firebase.firestore();
+    db.collection('ordenes').doc(otId).get().then(function(doc) {
+      if (!doc.exists) {
+        toast('OT no encontrada');
+        return;
+      }
+      const d = doc.data();
+
+      // Cargar datos en estado
+      estado.otNumero = d.numero;
+      estado.tipo = d.tipo;
+      estado.local = d.local;
+      estado.ceco = d.ceco || '';
+      estado.direccion = d.direccion || '';
+      estado.fotosAntes = d.fotosAntes || [];
+      estado.fotosDespues = d.fotosDespues || [];
+      estado.fotoTimbre = d.fotoTimbre || null;
+
+      // Cargar servicios si es preventivo
+      if (d.tipo === 'preventivo') {
+        estado.serviciosPreventivo = d.serviciosPreventivo || [];
+      }
+
+      // Ir a la pantalla de ejecución
+      cargarEjecucionScreen().then(function() {
+        go('s-ejecutar');
+        toast('OT cargada. Continúa donde la dejaste.');
+      });
+    }).catch(function(e) {
+      console.error('Error cargando OT:', e);
+      toast('Error cargando la OT');
+    });
+  } catch(e) {
+    console.error('Error en continuarOT:', e);
+    toast('Error. Intenta de nuevo.');
+  }
+}
+
 // =========== PREVENTIVOS (SUPERVISOR) ===========
 async function cargarPreventivos() {
   try {
@@ -5157,6 +5253,17 @@ async function verOTsTecnico(nombre, grupo) {
     statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
     card.appendChild(statsDiv);
 
+    // Badge de estado (En Pausa)
+    if (ot.estado === 'En Pausa' || ot.pausa) {
+      const estadoDiv = document.createElement('div');
+      estadoDiv.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
+      const estadoBadge = document.createElement('span');
+      estadoBadge.style.cssText = 'display:inline-block;background:#FEF3C7;color:#78350F;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;';
+      estadoBadge.textContent = '⏸ En Pausa - Esperando continuar';
+      estadoDiv.appendChild(estadoBadge);
+      card.appendChild(estadoDiv);
+    }
+
     // Audios del tecnico
     if (ot.audios && ot.audios.length > 0) {
       const audioSection = document.createElement('div');
@@ -5192,6 +5299,15 @@ async function verOTsTecnico(nombre, grupo) {
     // Botones PDF y Cotizacion
     const btns = document.createElement('div');
     btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+
+    // Boton Continuar si está en pausa
+    if (ot.estado === 'En Pausa' || ot.pausa) {
+      const btnContinuar = document.createElement('button');
+      btnContinuar.textContent = '▶ Continuar OT';
+      btnContinuar.style.cssText = 'flex:1;background:var(--naranja);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnContinuar.onclick = (function(id){ return function(){ continuarOT(id); }; })(ot.id);
+      btns.appendChild(btnContinuar);
+    }
 
     // Boton Ver PDF: usar URL de Firestore si existe, sino usar embed con base64
     const urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
