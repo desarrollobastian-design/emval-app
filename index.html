@@ -5076,6 +5076,41 @@ async function cargarOTsTecnicos() {
 // =========== CONTINUAR OT PAUSADA ===========
 function continuarOT(otId) {
   try {
+    // Si el ID empieza con 'local_', buscar en localStorage
+    if (otId.startsWith('local_')) {
+      const numero = otId.replace('local_', '');
+      const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero; });
+
+      if (!ot) {
+        toast('OT no encontrada en registro local');
+        return;
+      }
+
+      // Cargar datos en estado
+      estado.otNumero = ot.numero;
+      estado.tipo = ot.tipo;
+      estado.local = ot.local;
+      estado.ceco = ot.ceco || '';
+      estado.direccion = ot.direccion || '';
+      estado.fotosAntes = ot.fotosAntes || [];
+      estado.fotosDespues = ot.fotosDespues || [];
+      estado.fotoTimbre = ot.fotoTimbre || null;
+
+      // Cargar servicios si es preventivo
+      if (ot.tipo === 'preventivo') {
+        estado.serviciosPreventivo = ot.serviciosPreventivo || [];
+      }
+
+      // Ir a la pantalla de ejecución
+      cargarEjecucionScreen().then(function() {
+        go('s-ejecutar');
+        toast('OT cargada. Continúa donde la dejaste.');
+      });
+      return;
+    }
+
+    // Si no, buscar en Firebase
     const db = window.firebase.firestore();
     db.collection('ordenes').doc(otId).get().then(function(doc) {
       if (!doc.exists) {
