@@ -113,21 +113,108 @@
   .local-name { font-size: 15px; font-weight: 600; }
   .local-addr { font-size: 12px; color: var(--texto3); margin-top: 2px; }
 
-  /* PAUSED ORDERS CARD */
-  .paused-order-card { background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%); border: 2px solid #FCD34D; border-radius: var(--radio); padding: 14px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 8px rgba(252, 211, 77, 0.2); position: relative; display: flex; gap: 12px; align-items: flex-start; }
-  .paused-order-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(252, 211, 77, 0.35); border-color: #FBBF24; }
+  /* PAUSED ORDERS CARD - Bento Grid Style */
+  .paused-order-card {
+    background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%);
+    border: 2px solid #FCD34D;
+    border-radius: 18px;
+    padding: 18px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 12px rgba(252, 211, 77, 0.25);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .paused-order-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(252, 211, 77, 0.4);
+    border-color: #FBBF24;
+  }
   .paused-order-card:active { transform: translateY(0); }
-  .paused-order-logo { width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
+
+  .paused-order-top { display: flex; align-items: flex-start; gap: 14px; }
+  .paused-order-logo {
+    width: 70px;
+    height: 70px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
   .paused-order-logo img { width: 100%; height: 100%; object-fit: cover; }
-  .paused-order-content { flex: 1; }
-  .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .paused-order-num { font-size: 15px; font-weight: 700; color: #78350F; font-family: 'DM Mono', monospace; }
-  .paused-order-type { font-size: 10px; background: rgba(120, 53, 15, 0.15); color: #78350F; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
-  .paused-order-local { font-size: 13px; font-weight: 600; color: #78350F; margin-bottom: 4px; }
-  .paused-order-meta { display: flex; gap: 10px; font-size: 11px; color: #92400E; margin-bottom: 8px; }
-  .paused-order-badge { display: inline-flex; align-items: center; gap: 3px; background: rgba(120, 53, 15, 0.15); padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #78350F; }
-  .paused-order-action { width: 100%; background: linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%); color: white; border: none; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'DM Sans', sans-serif; }
-  .paused-order-action:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 159, 39, 0.3); }
+
+  .paused-order-header-info { flex: 1; }
+  .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .paused-order-num {
+    font-size: 18px;
+    font-weight: 800;
+    color: #78350F;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+  .paused-order-type {
+    font-size: 11px;
+    background: rgba(120, 53, 15, 0.2);
+    color: #78350F;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .paused-order-local {
+    font-size: 15px;
+    font-weight: 700;
+    color: #78350F;
+    margin-bottom: 4px;
+  }
+  .paused-order-meta {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: #92400E;
+    font-weight: 500;
+  }
+
+  .paused-order-bottom { display: flex; align-items: center; gap: 12px; }
+  .paused-order-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(120, 53, 15, 0.15);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #78350F;
+    white-space: nowrap;
+  }
+  .paused-order-action {
+    flex: 1;
+    background: linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%);
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: 'DM Sans', sans-serif;
+    box-shadow: 0 2px 8px rgba(239, 159, 39, 0.2);
+  }
+  .paused-order-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239, 159, 39, 0.4);
+  }
   .paused-order-action:active { transform: translateY(0); }
 
   /* FIRMA */
@@ -3099,14 +3186,31 @@ function cargarOTsPausadasEnCadena() {
     const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
     const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
 
-    if (otsPausadas.length === 0) {
-      seccion.style.display = 'none';
+    // Filtrar solo las OTs pausadas por el técnico actual
+    const otsMias = otsPausadas.filter(function(ot) {
+      return ot.tecnico === estado.usuario;
+    });
+
+    // Siempre mostrar la sección, pero vacía si no hay OTs del técnico actual
+    seccion.style.display = 'block';
+
+    if (otsMias.length === 0) {
+      lista.innerHTML = '<div style="text-align:center;padding:20px 16px;color:var(--texto3);font-size:13px;">Sin trabajos pausados. Pausa una OT para continuar después.</div>';
+      lista.style.display = 'grid';
+      lista.style.opacity = '1';
+      lista.style.maxHeight = 'none';
+      contador.textContent = '0';
+      toggleBtn.style.opacity = '0.5';
+      toggleBtn.style.pointerEvents = 'none';
       return;
     }
 
+    toggleBtn.style.opacity = '1';
+    toggleBtn.style.pointerEvents = 'auto';
+
     seccion.style.display = 'block';
     lista.innerHTML = '';
-    contador.textContent = otsPausadas.length;
+    contador.textContent = otsMias.length;
 
     // Lógica del toggle (acordeón)
     let expanded = false;
@@ -3146,9 +3250,13 @@ function cargarOTsPausadasEnCadena() {
     }
 
     function renderizarOTsPausadas() {
-      otsPausadas.forEach(function(ot) {
+      otsMias.forEach(function(ot) {
         const card = document.createElement('div');
         card.className = 'paused-order-card';
+
+        // Sección TOP: Logo + Info Header
+        const top = document.createElement('div');
+        top.className = 'paused-order-top';
 
         // Logo de la empresa
         const logo = document.createElement('div');
@@ -3158,7 +3266,10 @@ function cargarOTsPausadasEnCadena() {
           if (cad.logo) {
             const img = document.createElement('img');
             img.src = cad.logo;
-            img.onerror = function() { logo.textContent = cad.letra || ot.local.charAt(0); };
+            img.onerror = function() {
+              logo.textContent = cad.letra || ot.local.charAt(0);
+              logo.style.fontSize = '32px';
+            };
             logo.appendChild(img);
           } else {
             logo.textContent = cad.letra || ot.local.charAt(0);
@@ -3167,22 +3278,23 @@ function cargarOTsPausadasEnCadena() {
         } else {
           logo.textContent = ot.local.charAt(0);
           logo.style.background = '#EF9F27';
+          logo.style.fontSize = '32px';
         }
 
-        // Contenido
-        const content = document.createElement('div');
-        content.className = 'paused-order-content';
+        // Header Info
+        const headerInfo = document.createElement('div');
+        headerInfo.className = 'paused-order-header-info';
 
-        const header = document.createElement('div');
-        header.className = 'paused-order-header';
+        const headerRow = document.createElement('div');
+        headerRow.className = 'paused-order-header';
         const numOT = document.createElement('div');
         numOT.className = 'paused-order-num';
         numOT.textContent = '#' + ot.numero;
         const tipo = document.createElement('div');
         tipo.className = 'paused-order-type';
         tipo.textContent = (ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo');
-        header.appendChild(numOT);
-        header.appendChild(tipo);
+        headerRow.appendChild(numOT);
+        headerRow.appendChild(tipo);
 
         const local = document.createElement('div');
         local.className = 'paused-order-local';
@@ -3191,11 +3303,22 @@ function cargarOTsPausadasEnCadena() {
         const meta = document.createElement('div');
         meta.className = 'paused-order-meta';
         const fechaEl = document.createElement('div');
-        fechaEl.textContent = (ot.fecha || 'N/A');
+        fechaEl.textContent = ot.fecha || 'N/A';
         const horaEl = document.createElement('div');
-        horaEl.textContent = (ot.hora || 'N/A');
+        horaEl.textContent = ot.hora || 'N/A';
         meta.appendChild(fechaEl);
         meta.appendChild(horaEl);
+
+        headerInfo.appendChild(headerRow);
+        headerInfo.appendChild(local);
+        headerInfo.appendChild(meta);
+
+        top.appendChild(logo);
+        top.appendChild(headerInfo);
+
+        // Sección BOTTOM: Badge + Botón
+        const bottom = document.createElement('div');
+        bottom.className = 'paused-order-bottom';
 
         const badge = document.createElement('div');
         badge.className = 'paused-order-badge';
@@ -3211,14 +3334,11 @@ function cargarOTsPausadasEnCadena() {
           };
         })(ot.numero);
 
-        content.appendChild(header);
-        content.appendChild(local);
-        content.appendChild(meta);
-        content.appendChild(badge);
-        content.appendChild(btn);
+        bottom.appendChild(badge);
+        bottom.appendChild(btn);
 
-        card.appendChild(logo);
-        card.appendChild(content);
+        card.appendChild(top);
+        card.appendChild(bottom);
         lista.appendChild(card);
       });
     }
