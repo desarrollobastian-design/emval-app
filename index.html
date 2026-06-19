@@ -1305,8 +1305,10 @@ function pausarOT() {
     }
 
     toast('✅ OT pausada correctamente');
-    nuevaOT();
-    go('s-solicitar');
+    setTimeout(function() {
+      cargarOTsTecnicos();
+      go('s-ots-tecnicos');
+    }, 500);
   } catch(e) {
     console.error('Error en pausarOT:', e);
     toast('Error al pausar');
