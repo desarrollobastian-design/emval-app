@@ -998,6 +998,35 @@ function cargarOTsPausadas() {
   return [];
 }
 
+// Elimina una OT de la lista de pausadas (al completarla)
+function eliminarOTPausada(numero, tecnico) {
+  try {
+    const otsPausadas = cargarOTsPausadas();
+    const filtradas = otsPausadas.filter(function(ot) {
+      const mismaNumero = ot.numero != null && numero != null && ot.numero.toString() === numero.toString();
+      const mismoTecnico = ot.tecnico === tecnico;
+      return !(mismaNumero && mismoTecnico);
+    });
+    guardarOTsPausadas(filtradas);
+  } catch(e) { console.error('Error eliminando OT pausada:', e); }
+
+  // Tambien quitar el registro "En Pausa" de Firebase si existe
+  if (window._firebaseReady) {
+    try {
+      const db = window.firebase.firestore();
+      db.collection('ordenes')
+        .where('numero', '==', numero)
+        .where('tecnico', '==', tecnico)
+        .where('pausa', '==', true)
+        .get().then(function(snapshot) {
+          snapshot.docs.forEach(function(doc) {
+            db.collection('ordenes').doc(doc.id).delete();
+          });
+        }).catch(function(){});
+    } catch(e) {}
+  }
+}
+
 // =========== ESTADO GLOBAL ===========
 let estado = {
   usuario: null, cargo: null, avatar: null, emailSucursal: '',
@@ -1680,6 +1709,9 @@ function cerrarOT() {
     ots.unshift(ot);
     localStorage.setItem('emval_ots', JSON.stringify(ots));
   } catch(e) {}
+
+  // Quitar de trabajos pausados (la OT ya se completó)
+  eliminarOTPausada(estado.otNumero, estado.usuario);
 
   // Guardar en Firebase (nube)
   guardarEnFirebase(ot, desc, fecha);
