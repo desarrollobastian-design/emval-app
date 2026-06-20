@@ -979,13 +979,59 @@ try {
   if (stored) {
     const parsed = JSON.parse(stored);
     console.log('[INIT] OTs pausadas almacenadas:', parsed.length, parsed);
+  } else {
+    console.warn('[INIT] ⚠️ localStorage VACÍO - localStorage puede estar limpiándose entre sesiones');
   }
 } catch(e) {
   console.warn('[INIT] Error accediendo localStorage:', e.message);
 }
+
+// Verificar si localStorage está disponible
+try {
+  localStorage.setItem('_test_', '1');
+  localStorage.removeItem('_test_');
+  console.log('[INIT] localStorage disponible y persistente');
+} catch(e) {
+  console.warn('[INIT] ⚠️ localStorage NO disponible (probablemente modo incógnito)');
+}
 </script>
 
 <script>
+// =========== HELPERS PARA PERSISTENCIA ===========
+function guardarOTsPausadas(ots) {
+  try {
+    localStorage.setItem('emval_ots_pausadas', JSON.stringify(ots));
+    console.log('[STORAGE] Guardado en localStorage:', ots.length);
+  } catch(e) {
+    console.warn('[STORAGE] localStorage fallo, usando sessionStorage:', e.message);
+    sessionStorage.setItem('emval_ots_pausadas', JSON.stringify(ots));
+  }
+}
+
+function cargarOTsPausadas() {
+  try {
+    const local = localStorage.getItem('emval_ots_pausadas');
+    if (local) {
+      console.log('[STORAGE] Cargado desde localStorage');
+      return JSON.parse(local);
+    }
+  } catch(e) {
+    console.warn('[STORAGE] localStorage fallo, intentando sessionStorage:', e.message);
+  }
+
+  try {
+    const session = sessionStorage.getItem('emval_ots_pausadas');
+    if (session) {
+      console.log('[STORAGE] Cargado desde sessionStorage');
+      return JSON.parse(session);
+    }
+  } catch(e) {
+    console.warn('[STORAGE] sessionStorage fallo:', e.message);
+  }
+
+  return [];
+}
+
 // =========== ESTADO GLOBAL ===========
 let estado = {
   usuario: null, cargo: null, avatar: null, emailSucursal: '',
@@ -1498,9 +1544,9 @@ function pausarOT() {
       creadoEn: new Date().toISOString()
     };
 
-    // Guardar en localStorage
+    // Guardar en almacenamiento
     try {
-      const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+      const otsPausadas = cargarOTsPausadas();
       const existeIndex = otsPausadas.findIndex(function(ot) {
         return ot.numero.toString() === estado.otNumero.toString() && ot.tecnico === estado.usuario;
       });
@@ -1511,9 +1557,9 @@ function pausarOT() {
         otsPausadas.unshift(otPausada);
         console.log('[PAUSA] Creando OT nueva', estado.otNumero);
       }
-      localStorage.setItem('emval_ots_pausadas', JSON.stringify(otsPausadas));
-      console.log('[PAUSA] Total OTs pausadas en localStorage:', otsPausadas.length, otsPausadas);
-    } catch(e) { console.error('Error localStorage:', e); }
+      guardarOTsPausadas(otsPausadas);
+      console.log('[PAUSA] Total OTs pausadas:', otsPausadas.length, otsPausadas);
+    } catch(e) { console.error('Error guardando OT pausada:', e); }
 
     // Guardar en Firebase en background
     if (window._firebaseReady) {
@@ -3334,7 +3380,7 @@ function cargarOTsPausadasEnCadena() {
   if (!seccion || !lista || !contador || !toggleBtn) return;
 
   try {
-    const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+    const otsPausadas = cargarOTsPausadas();
     const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
 
     // Filtrar solo las OTs pausadas por el técnico actual
@@ -3343,7 +3389,7 @@ function cargarOTsPausadasEnCadena() {
     });
 
     console.log('[CARGAR] Usuario actual:', estado.usuario);
-    console.log('[CARGAR] Total OTs en localStorage:', otsPausadas.length);
+    console.log('[CARGAR] Total OTs en almacenamiento:', otsPausadas.length);
     console.log('[CARGAR] OTs del técnico actual:', otsMias.length, otsMias);
 
     // Siempre mostrar la sección, pero vacía si no hay OTs del técnico actual
@@ -5442,10 +5488,10 @@ async function cargarOTsTecnicos() {
 // =========== CONTINUAR OT PAUSADA ===========
 function continuarOT(otId) {
   try {
-    // Si el ID empieza con 'local_', buscar en localStorage
+    // Si el ID empieza con 'local_', buscar en almacenamiento
     if (otId.startsWith('local_')) {
       const numero = otId.replace('local_', '');
-      const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
+      const otsPausadas = cargarOTsPausadas();
       const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero; });
 
       if (!ot) {
