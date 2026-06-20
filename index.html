@@ -6368,7 +6368,11 @@ async function cargarOTsSupervisor() {
     const mm = String(now.getMonth()+1).padStart(2,'0');
     const yyyy = now.getFullYear();
     const todayStr = dd + '-' + mm + '-' + yyyy;
-    const docsHoy = snap.docs.filter(doc => (doc.data().fecha || '') === todayStr);
+    // OTs de hoy COMPLETADAS (las pausadas se muestran en la seccion "Trabajos pausados")
+    const docsHoy = snap.docs.filter(doc => {
+      const dd2 = doc.data();
+      return (dd2.fecha || '') === todayStr && dd2.pausa !== true;
+    });
     if (docsHoy.length === 0) {
       const p = document.createElement('p');
       p.style = 'font-size:13px;color:var(--texto3);text-align:center;padding:20px';
