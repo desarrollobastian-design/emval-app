@@ -1379,6 +1379,7 @@ function pausarOT() {
     const otPausada = {
       numero: estado.otNumero,
       local: estado.local,
+      cadena: cadenaSeleccionada ? cadenaSeleccionada.nombre : '',
       tipo: estado.tipo,
       tecnico: estado.usuario,
       fecha: fecha,
@@ -1406,6 +1407,7 @@ function pausarOT() {
         db.collection('ordenes').add({
           numero: estado.otNumero,
           local: estado.local,
+          cadena: cadenaSeleccionada ? cadenaSeleccionada.nombre : '',
           tipo: estado.tipo,
           tecnico: estado.usuario,
           fecha: fecha,
@@ -3261,22 +3263,22 @@ function cargarOTsPausadasEnCadena() {
         // Logo de la empresa
         const logo = document.createElement('div');
         logo.className = 'paused-order-logo';
-        const cad = cadenaMap[ot.local];
+        const cad = cadenaMap[ot.cadena || ot.local];
         if (cad) {
           if (cad.logo) {
             const img = document.createElement('img');
             img.src = cad.logo;
             img.onerror = function() {
-              logo.textContent = cad.letra || ot.local.charAt(0);
+              logo.textContent = cad.letra || (ot.cadena || ot.local).charAt(0);
               logo.style.fontSize = '32px';
             };
             logo.appendChild(img);
           } else {
-            logo.textContent = cad.letra || ot.local.charAt(0);
+            logo.textContent = cad.letra || (ot.cadena || ot.local).charAt(0);
             logo.style.background = cad.color || '#1B3A6B';
           }
         } else {
-          logo.textContent = ot.local.charAt(0);
+          logo.textContent = (ot.cadena || ot.local).charAt(0);
           logo.style.background = '#EF9F27';
           logo.style.fontSize = '32px';
         }
