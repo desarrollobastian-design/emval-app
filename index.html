@@ -428,14 +428,6 @@
       <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
 
-    <div style="margin-bottom:16px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar cadena</label>
-      <div style="display:flex;gap:8px;align-items:stretch;">
-        <input type="text" id="search-cadenas" placeholder="Ej: Entel, Unimarc" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:10px;outline:none;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarCadenas(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
-        <button style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:10px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="document.getElementById('search-cadenas').value='';filtrarCadenas('')">✕</button>
-      </div>
-    </div>
-
     <div id="lista-cadenas"></div>
   </div>
 </div>
@@ -456,7 +448,7 @@
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
       <div style="display:flex;gap:8px;align-items:stretch;">
         <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:10px;outline:none;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
-        <button style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:10px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="document.getElementById('search-sucursales').value='';filtrarSucursales('')">✕</button>
+        <button type="button" style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:10px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
       </div>
     </div>
 
@@ -504,7 +496,7 @@
 <!-- ============ SCREEN: FOTOS ANTES ============ -->
 <div class="screen" id="s-fotos-antes">
   <div class="topbar">
-    <button class="back" onclick="go('s-tipo')">←</button>
+    <button class="back" onclick="volverASucursales()">←</button>
     <h2>Fotos — Estado inicial</h2>
     <span class="ot-badge" id="ot-num-antes">#---</span>
   </div>
@@ -528,7 +520,7 @@
 <!-- ============ SCREEN: EJECUCIÓN ============ -->
 <div class="screen" id="s-ejecucion">
   <div class="topbar">
-    <button class="back" onclick="go('s-fotos-antes')">←</button>
+    <button class="back" onclick="volverAFotosAntes()">←</button>
     <h2>Trabajo ejecutado</h2>
     <span class="ot-badge" id="ot-num-ejec">#---</span>
   </div>
@@ -1199,6 +1191,88 @@ function seleccionarTipo(tipo) {
 function irFotosAntes() {
   if (!estado.tipo) { toast('Selecciona un tipo de trabajo'); return; }
   go('s-fotos-antes');
+  renderizarFotosScreen();
+}
+
+function volverASucursales() {
+  go('s-cadena');
+  cargarCadenasApp();
+}
+
+function volverAFotosAntes() {
+  go('s-fotos-antes');
+  renderizarFotosScreen();
+}
+
+function renderizarFotosScreen() {
+  const gridAntes = document.getElementById('grid-antes');
+  const gridDespues = document.getElementById('grid-despues');
+
+  if (!gridAntes) return;
+
+  // Renderizar fotos ANTES
+  gridAntes.innerHTML = '';
+  contadorAntes = 0;
+  if (estado.fotosAntes.length === 0) {
+    agregarFotoBox('antes');
+    agregarFotoBox('antes');
+  } else {
+    estado.fotosAntes.forEach(function(foto, idx) {
+      const id = 'antes_' + idx;
+      const box = document.createElement('div');
+      box.className = 'foto-box';
+      if (foto !== null) box.classList.add('filled');
+      box.id = id;
+      box.innerHTML = CAMARA_SVG + '<span>Antes ' + (idx+1) + '</span>';
+      box.onclick = (function(bid, bt, bi){ return function(){ tomarFoto(bid, bt, bi); }; })(id, 'antes', idx);
+      gridAntes.appendChild(box);
+
+      if (foto !== null) {
+        let img = document.createElement('img');
+        img.src = foto;
+        box.appendChild(img);
+        let chk = document.createElement('div');
+        chk.className = 'foto-check';
+        chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+        box.appendChild(chk);
+      }
+      contadorAntes++;
+    });
+    if (estado.fotosAntes.length > 0) agregarFotoBox('antes');
+  }
+
+  // Renderizar fotos DESPUES
+  if (gridDespues) {
+    gridDespues.innerHTML = '';
+    contadorDespues = 0;
+    if (estado.fotosDespues.length === 0) {
+      agregarFotoBox('despues');
+      agregarFotoBox('despues');
+    } else {
+      estado.fotosDespues.forEach(function(foto, idx) {
+        const id = 'despues_' + idx;
+        const box = document.createElement('div');
+        box.className = 'foto-box';
+        if (foto !== null) box.classList.add('filled');
+        box.id = id;
+        box.innerHTML = CAMARA_SVG + '<span>Despues ' + (idx+1) + '</span>';
+        box.onclick = (function(bid, bt, bi){ return function(){ tomarFoto(bid, bt, bi); }; })(id, 'despues', idx);
+        gridDespues.appendChild(box);
+
+        if (foto !== null) {
+          let img = document.createElement('img');
+          img.src = foto;
+          box.appendChild(img);
+          let chk = document.createElement('div');
+          chk.className = 'foto-check';
+          chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+          box.appendChild(chk);
+        }
+        contadorDespues++;
+      });
+      if (estado.fotosDespues.length > 0) agregarFotoBox('despues');
+    }
+  }
 }
 
 // =========== FOTOS ILIMITADAS ===========
@@ -1415,7 +1489,14 @@ function pausarOT() {
     // Guardar en localStorage
     try {
       const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
-      otsPausadas.unshift(otPausada);
+      const existeIndex = otsPausadas.findIndex(function(ot) {
+        return ot.numero.toString() === estado.otNumero.toString() && ot.tecnico === estado.usuario;
+      });
+      if (existeIndex >= 0) {
+        otsPausadas[existeIndex] = otPausada;
+      } else {
+        otsPausadas.unshift(otPausada);
+      }
       localStorage.setItem('emval_ots_pausadas', JSON.stringify(otsPausadas));
     } catch(e) { console.error('Error localStorage:', e); }
 
@@ -1423,23 +1504,39 @@ function pausarOT() {
     if (window._firebaseReady) {
       try {
         const db = window.firebase.firestore();
-        db.collection('ordenes').add({
-          numero: estado.otNumero,
-          local: estado.local,
-          cadena: cadenaSeleccionada ? cadenaSeleccionada.nombre : '',
-          tipo: estado.tipo,
-          tecnico: estado.usuario,
-          fecha: fecha,
-          hora: hora,
-          descripcion: desc,
-          fotosAntes: estado.fotosAntes,
-          fotosDespues: estado.fotosDespues,
-          direccion: estado.direccion || '',
-          ceco: estado.ceco || '',
-          estado: 'En Pausa',
-          pausa: true,
-          firmada: false,
-          creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+        db.collection('ordenes').where('numero', '==', estado.otNumero).where('tecnico', '==', estado.usuario).get().then(function(snapshot) {
+          if (snapshot.empty) {
+            db.collection('ordenes').add({
+              numero: estado.otNumero,
+              local: estado.local,
+              cadena: cadenaSeleccionada ? cadenaSeleccionada.nombre : '',
+              tipo: estado.tipo,
+              tecnico: estado.usuario,
+              fecha: fecha,
+              hora: hora,
+              descripcion: desc,
+              fotosAntes: estado.fotosAntes,
+              fotosDespues: estado.fotosDespues,
+              direccion: estado.direccion || '',
+              ceco: estado.ceco || '',
+              estado: 'En Pausa',
+              pausa: true,
+              firmada: false,
+              creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            snapshot.docs.forEach(function(doc) {
+              db.collection('ordenes').doc(doc.id).update({
+                descripcion: desc,
+                fotosAntes: estado.fotosAntes,
+                fotosDespues: estado.fotosDespues,
+                fecha: fecha,
+                hora: hora,
+                estado: 'En Pausa',
+                pausa: true
+              });
+            });
+          }
         }).catch(function(e) {
           console.error('Error Firebase pausarOT:', e);
         });
@@ -3029,7 +3126,7 @@ async function cargarCadenasApp() {
         if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
       });
       cached.forEach(function(c) {
-        var card = document.createElement('div'); card.className = 'cadena-card'; card.setAttribute('data-cadena-nombre', c.nombre);
+        var card = document.createElement('div'); card.className = 'cadena-card';
         var logoDiv = document.createElement('div'); logoDiv.className = 'cadena-logo fallback';
         logoDiv.style.background = c.color || '#1B3A6B';
         if (c.logo) {
@@ -3092,7 +3189,6 @@ async function cargarCadenasApp() {
     cadenas.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
-      card.setAttribute('data-cadena-nombre', c.nombre);
       const logoDiv = document.createElement('div');
       logoDiv.className = 'cadena-logo';
       logoDiv.style.background = c.color || '#1B3A6B';
@@ -3198,20 +3294,6 @@ function seleccionarCadena(cadena) {
 }
 
 // =========== FILTROS DE BÚSQUEDA ===========
-function filtrarCadenas(termino) {
-  const lista = document.getElementById('lista-cadenas');
-  if (!lista) return;
-
-  const term = termino.toLowerCase().trim();
-  const items = lista.querySelectorAll('[data-cadena-nombre]');
-
-  items.forEach(function(item) {
-    const nombre = item.getAttribute('data-cadena-nombre').toLowerCase();
-    const match = nombre.includes(term) || term === '';
-    item.style.display = match ? 'block' : 'none';
-  });
-}
-
 function filtrarSucursales(termino) {
   const lista = document.getElementById('lista-sucursales');
   if (!lista) return;
