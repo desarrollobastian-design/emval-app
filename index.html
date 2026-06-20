@@ -3371,6 +3371,14 @@ function cargarOTsPausadasEnCadena() {
 
     // Mapear cadenas para obtener logos
     const cadenaMap = {};
+
+    // Primero agregar cadenas por defecto
+    if (typeof CADENAS_DEFAULT !== 'undefined') {
+      CADENAS_DEFAULT.forEach(function(c) {
+        cadenaMap[c.nombre] = { logo: c.logo, color: c.color, letra: c.letra };
+      });
+    }
+
     if (db) {
       db.collection('cadenas').get().then(function(snap) {
         snap.docs.forEach(function(doc) {
