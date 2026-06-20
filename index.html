@@ -536,7 +536,7 @@
     <div id="ejecucion-prev-content" style="display:none;"></div>
     <div class="field">
       <label id="ejecucion-trabajo-label">Trabajo realizado</label>
-      <textarea id="desc-trabajo" placeholder="Describe detalladamente lo que se hizo..."></textarea>
+      <textarea id="desc-trabajo" placeholder="Describe detalladamente lo que se hizo..." oninput="estado.descripcion=this.value"></textarea>
     </div>
 
     <div class="field">
@@ -1181,6 +1181,7 @@ function nuevaOT() {
   estado.pdfUrlCloudinary = null;
   estado.direccion = null;
   estado.ceco = null;
+  estado.descripcion = '';
   estado.numEquipos = '';
   estado.serviciosPreventivo = [];
   estado.firmada = false;
@@ -1331,6 +1332,34 @@ function renderizarFotosScreen() {
       if (estado.fotosDespues.length > 0) agregarFotoBox('despues');
     }
   }
+}
+
+// Renderiza SOLO las fotos "después" en la pantalla de ejecución (al continuar OT pausada)
+function renderizarFotosDespuesEjecucion() {
+  const grid = document.getElementById('grid-despues');
+  if (!grid) return;
+  const tieneAlguna = (estado.fotosDespues || []).some(function(f){ return f; });
+  if (!tieneAlguna) return; // flujo normal: dejar las casillas existentes tal cual
+  grid.innerHTML = '';
+  contadorDespues = 0;
+  estado.fotosDespues.forEach(function(foto, idx) {
+    const id = 'despues_' + idx;
+    const box = document.createElement('div');
+    box.className = 'foto-box';
+    if (foto) box.classList.add('filled');
+    box.id = id;
+    box.innerHTML = CAMARA_SVG + '<span>Despues ' + (idx+1) + '</span>';
+    box.onclick = (function(bid, bt, bi){ return function(){ tomarFoto(bid, bt, bi); }; })(id, 'despues', idx);
+    grid.appendChild(box);
+    if (foto) {
+      const img = document.createElement('img'); img.src = foto; box.appendChild(img);
+      const chk = document.createElement('div'); chk.className = 'foto-check';
+      chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+      box.appendChild(chk);
+    }
+    contadorDespues++;
+  });
+  agregarFotoBox('despues'); // casilla extra para agregar más
 }
 
 // =========== FOTOS ILIMITADAS ===========
@@ -1497,6 +1526,21 @@ function cargarEjecucionScreen() {
     prevCont.innerHTML = '';
     if (trabajoLabel) trabajoLabel.textContent = 'Trabajo realizado';
     if (descTA) descTA.placeholder = 'Describe detalladamente lo que se hizo...';
+  }
+
+  // Restaurar descripción guardada (al continuar OT pausada)
+  if (descTA) descTA.value = estado.descripcion || '';
+
+  // Restaurar fotos "después" desde el estado (al continuar OT pausada)
+  renderizarFotosDespuesEjecucion();
+
+  // Restaurar foto del timbre si existe
+  const timbreBox = document.getElementById('ftimbre');
+  if (timbreBox && estado.fotoTimbre) {
+    timbreBox.classList.add('filled');
+    let timg = timbreBox.querySelector('img');
+    if (!timg) { timg = document.createElement('img'); timbreBox.appendChild(timg); }
+    timg.src = estado.fotoTimbre;
   }
 }
 
@@ -5525,6 +5569,7 @@ function continuarOT(otId) {
       estado.local = ot.local;
       estado.ceco = ot.ceco || '';
       estado.direccion = ot.direccion || '';
+      estado.descripcion = ot.descripcion || '';
       estado.fotosAntes = ot.fotosAntes || [];
       estado.fotosDespues = ot.fotosDespues || [];
       estado.fotoTimbre = ot.fotoTimbre || null;
@@ -5562,6 +5607,7 @@ function continuarOT(otId) {
       estado.local = d.local;
       estado.ceco = d.ceco || '';
       estado.direccion = d.direccion || '';
+      estado.descripcion = d.descripcion || '';
       estado.fotosAntes = d.fotosAntes || [];
       estado.fotosDespues = d.fotosDespues || [];
       estado.fotoTimbre = d.fotoTimbre || null;
