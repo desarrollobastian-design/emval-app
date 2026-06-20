@@ -3379,6 +3379,12 @@ function cargarOTsPausadasEnCadena() {
 
   if (!seccion || !lista || !contador || !toggleBtn) return;
 
+  // No cargar si no hay usuario inicializado (evita filtrado incorrecta)
+  if (!estado.usuario) {
+    console.log('[CARGAR] Usuario no inicializado aún, ignorando carga');
+    return;
+  }
+
   try {
     const otsPausadas = cargarOTsPausadas();
     const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
