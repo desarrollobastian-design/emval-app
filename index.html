@@ -971,6 +971,18 @@ firebase.initializeApp({
 });
 window._firebaseReady = true;
 console.log('Firebase v9 compat listo');
+
+// Debug localStorage
+try {
+  const stored = localStorage.getItem('emval_ots_pausadas');
+  console.log('[INIT] localStorage.emval_ots_pausadas existe:', !!stored);
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    console.log('[INIT] OTs pausadas almacenadas:', parsed.length, parsed);
+  }
+} catch(e) {
+  console.warn('[INIT] Error accediendo localStorage:', e.message);
+}
 </script>
 
 <script>
@@ -1494,10 +1506,13 @@ function pausarOT() {
       });
       if (existeIndex >= 0) {
         otsPausadas[existeIndex] = otPausada;
+        console.log('[PAUSA] Actualizando OT existente', estado.otNumero);
       } else {
         otsPausadas.unshift(otPausada);
+        console.log('[PAUSA] Creando OT nueva', estado.otNumero);
       }
       localStorage.setItem('emval_ots_pausadas', JSON.stringify(otsPausadas));
+      console.log('[PAUSA] Total OTs pausadas en localStorage:', otsPausadas.length, otsPausadas);
     } catch(e) { console.error('Error localStorage:', e); }
 
     // Guardar en Firebase en background
@@ -3326,6 +3341,10 @@ function cargarOTsPausadasEnCadena() {
     const otsMias = otsPausadas.filter(function(ot) {
       return ot.tecnico === estado.usuario;
     });
+
+    console.log('[CARGAR] Usuario actual:', estado.usuario);
+    console.log('[CARGAR] Total OTs en localStorage:', otsPausadas.length);
+    console.log('[CARGAR] OTs del técnico actual:', otsMias.length, otsMias);
 
     // Siempre mostrar la sección, pero vacía si no hay OTs del técnico actual
     seccion.style.display = 'block';
