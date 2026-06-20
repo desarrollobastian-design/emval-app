@@ -1148,6 +1148,10 @@ function nuevaOT() {
   estado.direccion = null;
   estado.ceco = null;
   estado.descripcion = '';
+  estado.cadenaNombre = '';
+  estado.cadenaLogo = '';
+  estado.cadenaColor = '';
+  estado.cadenaLetra = '';
   estado.numEquipos = '';
   estado.serviciosPreventivo = [];
   estado.firmada = false;
@@ -1538,7 +1542,10 @@ function pausarOT() {
     const otPausada = {
       numero: estado.otNumero,
       local: estado.local,
-      cadena: cadenaSeleccionada ? cadenaSeleccionada.nombre : '',
+      cadena: (cadenaSeleccionada && cadenaSeleccionada.nombre) || estado.cadenaNombre || '',
+      cadenaLogo: estado.cadenaLogo || (cadenaSeleccionada && cadenaSeleccionada.logo) || '',
+      cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
+      cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
       tipo: estado.tipo,
       tecnico: estado.usuario,
       fecha: fecha,
@@ -1577,7 +1584,10 @@ function pausarOT() {
             db.collection('ordenes').add({
               numero: estado.otNumero,
               local: estado.local,
-              cadena: cadenaSeleccionada ? cadenaSeleccionada.nombre : '',
+              cadena: (cadenaSeleccionada && cadenaSeleccionada.nombre) || estado.cadenaNombre || '',
+              cadenaLogo: estado.cadenaLogo || (cadenaSeleccionada && cadenaSeleccionada.logo) || '',
+              cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
+              cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
               tipo: estado.tipo,
               tecnico: estado.usuario,
               fecha: fecha,
@@ -3310,6 +3320,11 @@ async function cargarCadenasApp() {
 
 function seleccionarCadena(cadena) {
   cadenaSeleccionada = cadena;
+  // Guardar datos de la cadena en estado para que la OT pausada conserve su logo
+  estado.cadenaNombre = cadena.nombre || '';
+  estado.cadenaLogo = cadena.logo || '';
+  estado.cadenaColor = cadena.color || '';
+  estado.cadenaLetra = cadena.letra || (cadena.nombre ? cadena.nombre.charAt(0) : '');
   document.getElementById('local-topbar-titulo').textContent = cadena.nombre;
   document.getElementById('local-subtitulo').textContent = 'Paso 1 de 4 - Sucursal de ' + cadena.nombre;
   const lista = document.getElementById('lista-sucursales');
@@ -3478,20 +3493,23 @@ function cargarOTsPausadasEnCadena() {
         logo.className = 'paused-order-logo';
         const nombreCadena = ot.cadena || (ot.local ? ot.local.split(' ')[0] : '');
         const cad = cadenaMap[nombreCadena];
-        if (cad && cad.logo) {
+        // Preferir el logo guardado en la propia OT (robusto), luego el mapa de cadenas
+        const logoUrl = ot.cadenaLogo || (cad && cad.logo) || '';
+        const logoColor = ot.cadenaColor || (cad && cad.color) || '#EF9F27';
+        const logoLetra = ot.cadenaLetra || (cad && cad.letra) || nombreCadena.charAt(0) || (ot.local ? ot.local.charAt(0) : '?');
+        if (logoUrl) {
           const img = document.createElement('img');
-          img.src = cad.logo;
+          img.src = logoUrl;
           img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
           img.onerror = function() {
-            logo.textContent = cad.letra || nombreCadena.charAt(0);
-            logo.style.cssText = 'font-size:32px;';
+            logo.innerHTML = '';
+            logo.textContent = logoLetra;
+            logo.style.cssText = 'background:' + logoColor + ';font-size:32px;';
           };
           logo.appendChild(img);
         } else {
-          const letra = cad ? cad.letra : (nombreCadena.charAt(0) || ot.local.charAt(0));
-          const bg = cad ? (cad.color || '#1B3A6B') : '#EF9F27';
-          logo.textContent = letra;
-          logo.style.cssText = 'background:' + bg + ';font-size:32px;';
+          logo.textContent = logoLetra;
+          logo.style.cssText = 'background:' + logoColor + ';font-size:32px;';
         }
 
         // Header Info
@@ -5512,6 +5530,10 @@ function continuarOT(otId) {
       estado.ceco = ot.ceco || '';
       estado.direccion = ot.direccion || '';
       estado.descripcion = ot.descripcion || '';
+      estado.cadenaNombre = ot.cadena || '';
+      estado.cadenaLogo = ot.cadenaLogo || '';
+      estado.cadenaColor = ot.cadenaColor || '';
+      estado.cadenaLetra = ot.cadenaLetra || '';
       estado.fotosAntes = ot.fotosAntes || [];
       estado.fotosDespues = ot.fotosDespues || [];
       estado.fotoTimbre = ot.fotoTimbre || null;
@@ -5544,6 +5566,10 @@ function continuarOT(otId) {
       estado.ceco = d.ceco || '';
       estado.direccion = d.direccion || '';
       estado.descripcion = d.descripcion || '';
+      estado.cadenaNombre = d.cadena || '';
+      estado.cadenaLogo = d.cadenaLogo || '';
+      estado.cadenaColor = d.cadenaColor || '';
+      estado.cadenaLetra = d.cadenaLetra || '';
       estado.fotosAntes = d.fotosAntes || [];
       estado.fotosDespues = d.fotosDespues || [];
       estado.fotoTimbre = d.fotoTimbre || null;
