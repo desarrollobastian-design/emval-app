@@ -810,6 +810,15 @@
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="flex:1;font-size:12px;display:none;">Facturar</button>
       <button id="btn-ventas" class="btn btn-verde btn-sm" onclick="go('s-ventas');cargarVentas();" style="flex:1;font-size:12px;display:none;">Ventas</button>
     </div>
+    <!-- TRABAJOS PAUSADOS (admin/supervisor) -->
+    <div id="sup-pausadas-seccion" style="display:none;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+        <span style="color:#D97706;">⏸</span> TRABAJOS PAUSADOS
+        <span id="sup-pausadas-count" style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">0</span>
+      </div>
+      <div id="sup-pausadas-lista"></div>
+    </div>
+
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs DE HOY</div>
     <div class="ot-card" style="display:none;">
       <div class="ot-icon" style="background:#FEF0E6;">⚠️</div>
@@ -943,6 +952,20 @@
 </div>
 <div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
   ⏳ <span id="pending-count">0</span> OT(s) pendiente(s) — Toca para subir
+</div>
+
+<!-- MODAL: Reasignar OT pausada a otro tecnico -->
+<div id="modal-reasignar" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalReasignar(event)">
+  <div style="background:white;border-radius:18px;max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+    <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
+      <div style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
+      <div id="modal-reasignar-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Selecciona el nuevo técnico</div>
+    </div>
+    <div id="modal-reasignar-lista" style="overflow-y:auto;padding:10px 14px;flex:1;"></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--gris2);">
+      <button onclick="cerrarModalReasignar()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <!-- FIREBASE SDK v9 compat -->
@@ -6344,8 +6367,293 @@ async function cargarOTsSupervisor() {
       }
       lista.appendChild(card);
     });
+
+    // Cargar seccion de trabajos pausados (todos los tecnicos)
+    cargarPausadasSupervisor();
   } catch(e) {
     console.error('Error cargando OTs:', e);
+  }
+}
+
+// =========== TRABAJOS PAUSADOS (PANEL ADMIN/SUPERVISOR) ===========
+// Lee de Firebase TODAS las OTs pausadas (de todos los tecnicos), sin filtro de fecha
+async function cargarPausadasSupervisor() {
+  const seccion = document.getElementById('sup-pausadas-seccion');
+  const listaEl = document.getElementById('sup-pausadas-lista');
+  const countEl = document.getElementById('sup-pausadas-count');
+  if (!seccion || !listaEl) return;
+
+  try {
+    if (!window._firebaseReady) return;
+    const db = window.firebase.firestore();
+    const snap = await db.collection('ordenes').where('pausa', '==', true).get();
+
+    if (snap.empty) {
+      seccion.style.display = 'none';
+      listaEl.innerHTML = '';
+      return;
+    }
+
+    // Mapa de cadenas para resolver logos por nombre de sucursal
+    const cadenaMap = {};
+    try {
+      const cadSnap = await db.collection('cadenas').get();
+      cadSnap.docs.forEach(function(cd) {
+        const cdata = cd.data();
+        cadenaMap[cdata.nombre] = cdata;
+        (cdata.sucursales || []).forEach(function(s) {
+          const sn = typeof s === 'object' ? s.nombre : s;
+          cadenaMap[sn] = cdata;
+        });
+      });
+    } catch(e) {}
+
+    // Ordenar por fecha de creacion (mas reciente primero)
+    const docs = snap.docs.slice().sort(function(a, b) {
+      const ta = _msCreado(a.data().creadoEn);
+      const tb = _msCreado(b.data().creadoEn);
+      return tb - ta;
+    });
+
+    seccion.style.display = 'block';
+    countEl.textContent = docs.length;
+    listaEl.innerHTML = '';
+
+    docs.forEach(function(doc) {
+      const d = doc.data();
+      const card = _crearCardPausadaSup(doc.id, d, cadenaMap);
+      listaEl.appendChild(card);
+    });
+  } catch(e) {
+    console.error('Error cargando pausadas supervisor:', e);
+    seccion.style.display = 'none';
+  }
+}
+
+// Calcula milisegundos desde un campo creadoEn (Timestamp de Firestore o ISO string)
+function _msCreado(creadoEn) {
+  try {
+    if (!creadoEn) return 0;
+    if (typeof creadoEn.toDate === 'function') return creadoEn.toDate().getTime();
+    return new Date(creadoEn).getTime() || 0;
+  } catch(e) { return 0; }
+}
+
+// Texto "hace X dias / hoy / ayer"
+function _haceCuanto(creadoEn) {
+  const ms = _msCreado(creadoEn);
+  if (!ms) return '';
+  const dias = Math.floor((Date.now() - ms) / 86400000);
+  if (dias <= 0) return 'Hoy';
+  if (dias === 1) return 'Ayer';
+  return 'Hace ' + dias + ' días';
+}
+
+// Crea la card visual de una OT pausada en el panel admin/supervisor
+function _crearCardPausadaSup(docId, d, cadenaMap) {
+  const esAdmin = estado.cargo === 'Administrador';
+  const cad = cadenaMap[d.cadena] || cadenaMap[d.local] || null;
+  const logoUrl = d.cadenaLogo || (cad && cad.logo) || '';
+  const logoColor = d.cadenaColor || (cad && cad.color) || '#D97706';
+  const logoLetra = d.cadenaLetra || (cad && cad.letra) || (d.local ? d.local.charAt(0) : 'P');
+
+  const card = document.createElement('div');
+  card.className = 'ot-card';
+  card.style.cssText = 'background:linear-gradient(135deg,#FEF9E7 0%,#FEF3C7 100%);border:1.5px solid #FCD34D;align-items:flex-start;';
+
+  // Logo
+  const iconEl = document.createElement('div');
+  iconEl.className = 'ot-icon';
+  iconEl.style.cssText = 'overflow:hidden;background:' + logoColor + ';color:white;font-weight:700;';
+  if (logoUrl) {
+    const img = document.createElement('img');
+    img.src = logoUrl;
+    img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+    img.onerror = function() { iconEl.removeChild(img); iconEl.textContent = logoLetra; };
+    iconEl.appendChild(img);
+  } else {
+    iconEl.textContent = logoLetra;
+  }
+
+  // Info
+  const info = document.createElement('div');
+  info.className = 'ot-info';
+  info.style.flex = '1';
+
+  const titulo = document.createElement('div');
+  titulo.className = 'ot-titulo';
+  titulo.textContent = d.local || 'Sin sucursal';
+
+  const sub = document.createElement('div');
+  sub.className = 'ot-sub';
+  const tipoLabel = d.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo';
+  const badge = d.tipo === 'preventivo' ? 'badge-prev' : 'badge-corr';
+  const cecoTxt = d.ceco ? ' · CeCo:' + d.ceco : '';
+  sub.innerHTML = '#' + (d.numero || '----') + cecoTxt + ' · <span class="badge ' + badge + '">' + tipoLabel + '</span>';
+
+  const meta = document.createElement('div');
+  meta.className = 'ot-sub';
+  meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+  const pausaBadge = '<span style="background:#D97706;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;">⏸ EN PAUSA</span>';
+  const tecnicoTxt = '<span>👤 ' + (d.tecnico || 'Sin técnico') + '</span>';
+  const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
+  meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
+
+  info.appendChild(titulo);
+  info.appendChild(sub);
+  info.appendChild(meta);
+
+  if (d.descripcion) {
+    const desc = document.createElement('div');
+    desc.className = 'ot-sub';
+    desc.style.cssText = 'margin-top:4px;color:var(--texto3);font-style:italic;';
+    desc.textContent = '"' + d.descripcion.substring(0, 70) + (d.descripcion.length > 70 ? '...' : '') + '"';
+    info.appendChild(desc);
+  }
+
+  // Botones de accion
+  const acciones = document.createElement('div');
+  acciones.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
+
+  const btnReasignar = document.createElement('button');
+  btnReasignar.textContent = '↔ Reasignar';
+  btnReasignar.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnReasignar.onclick = function() { abrirModalReasignar(docId, d); };
+
+  const btnNotificar = document.createElement('button');
+  btnNotificar.textContent = '💬 Notificar';
+  btnNotificar.style.cssText = 'background:#25D366;color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnNotificar.onclick = function() { notificarTecnicoPausada(d); };
+
+  acciones.appendChild(btnReasignar);
+  acciones.appendChild(btnNotificar);
+
+  if (esAdmin) {
+    const btnEliminar = document.createElement('button');
+    btnEliminar.textContent = '🗑 Eliminar';
+    btnEliminar.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    btnEliminar.onclick = function() { eliminarPausadaSup(docId, d, card); };
+    acciones.appendChild(btnEliminar);
+  }
+
+  info.appendChild(acciones);
+  card.appendChild(iconEl);
+  card.appendChild(info);
+  return card;
+}
+
+// --- Reasignar OT pausada a otro tecnico ---
+let _reasignarDocId = null;
+let _reasignarOT = null;
+
+async function abrirModalReasignar(docId, d) {
+  _reasignarDocId = docId;
+  _reasignarOT = d;
+  const modal = document.getElementById('modal-reasignar');
+  const lista = document.getElementById('modal-reasignar-lista');
+  const sub = document.getElementById('modal-reasignar-sub');
+  sub.textContent = 'OT #' + (d.numero || '----') + ' · ' + (d.local || '') + ' · actual: ' + (d.tecnico || 'Sin técnico');
+  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:16px;">Cargando técnicos...</p>';
+  modal.style.display = 'flex';
+
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    lista.innerHTML = '';
+    const tecnicos = snap.docs
+      .map(function(doc){ return doc.data(); })
+      .filter(function(t){
+        const c = (t.cargo || '').toLowerCase();
+        return c.indexOf('supervisor') === -1 && c.indexOf('administrador') === -1;
+      });
+
+    if (tecnicos.length === 0) {
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:16px;">No hay técnicos registrados</p>';
+      return;
+    }
+
+    tecnicos.forEach(function(t) {
+      const esActual = t.nombre === d.tecnico;
+      const row = document.createElement('button');
+      row.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;background:' + (esActual ? '#F1F5F9' : 'white') + ';border:1.5px solid var(--gris2);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:' + (esActual ? 'default' : 'pointer') + ';font-family:inherit;text-align:left;';
+      const av = document.createElement('div');
+      av.style.cssText = 'width:38px;height:38px;border-radius:10px;background:var(--azul);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;';
+      av.textContent = (t.nombre || '?').charAt(0).toUpperCase();
+      const nom = document.createElement('div');
+      nom.style.flex = '1';
+      nom.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + t.nombre + '</div><div style="font-size:12px;color:var(--texto3);">' + (esActual ? 'Técnico actual' : (t.cargo || 'Técnico')) + '</div>';
+      row.appendChild(av);
+      row.appendChild(nom);
+      if (!esActual) {
+        row.onclick = function() { confirmarReasignar(t.nombre); };
+      } else {
+        const chk = document.createElement('span');
+        chk.textContent = '✓';
+        chk.style.cssText = 'color:var(--verde);font-weight:700;';
+        row.appendChild(chk);
+      }
+      lista.appendChild(row);
+    });
+  } catch(e) {
+    console.error('Error cargando tecnicos:', e);
+    lista.innerHTML = '<p style="font-size:13px;color:var(--rojo);text-align:center;padding:16px;">Error cargando técnicos</p>';
+  }
+}
+
+async function confirmarReasignar(nuevoTecnico) {
+  if (!_reasignarDocId) return;
+  if (!confirm('¿Reasignar la OT #' + (_reasignarOT.numero||'') + ' a ' + nuevoTecnico + '?')) return;
+  try {
+    const db = window.firebase.firestore();
+    await db.collection('ordenes').doc(_reasignarDocId).update({ tecnico: nuevoTecnico });
+    toast('OT reasignada a ' + nuevoTecnico);
+    cerrarModalReasignar();
+    cargarPausadasSupervisor();
+  } catch(e) {
+    console.error('Error reasignando:', e);
+    toast('Error al reasignar');
+  }
+}
+
+function cerrarModalReasignar(ev) {
+  if (ev && ev.target && ev.target.id !== 'modal-reasignar') return;
+  document.getElementById('modal-reasignar').style.display = 'none';
+  _reasignarDocId = null;
+  _reasignarOT = null;
+}
+
+// --- Notificar al tecnico por WhatsApp ---
+function notificarTecnicoPausada(d) {
+  const nl = '%0A';
+  const msg = encodeURIComponent('*Recordatorio EMVAL*') + nl + nl +
+    encodeURIComponent('Tienes una OT pausada pendiente de completar:') + nl + nl +
+    encodeURIComponent('OT: #' + (d.numero || '----')) + nl +
+    encodeURIComponent('Sucursal: ' + (d.local || '-')) + nl +
+    encodeURIComponent('Tipo: ' + (d.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo')) + nl +
+    (d.direccion ? encodeURIComponent('Dirección: ' + d.direccion) + nl : '') + nl +
+    encodeURIComponent('Por favor retómala y complétala cuando puedas.');
+  window.open('https://wa.me/?text=' + msg, '_blank');
+}
+
+// --- Eliminar OT pausada (solo admin) ---
+async function eliminarPausadaSup(docId, d, card) {
+  if (!confirm('¿Eliminar la OT pausada #' + (d.numero||'') + ' de ' + (d.local||'') + '?\nEsta acción no se puede deshacer.')) return;
+  const ok = await verificarPasswordAdmin();
+  if (!ok) return;
+  try {
+    const db = window.firebase.firestore();
+    await db.collection('ordenes').doc(docId).delete();
+    toast('OT pausada eliminada');
+    if (card) card.remove();
+    // Actualizar contador
+    const countEl = document.getElementById('sup-pausadas-count');
+    const seccion = document.getElementById('sup-pausadas-seccion');
+    const restantes = document.querySelectorAll('#sup-pausadas-lista .ot-card').length;
+    if (countEl) countEl.textContent = restantes;
+    if (restantes === 0 && seccion) seccion.style.display = 'none';
+  } catch(e) {
+    console.error('Error eliminando pausada:', e);
+    toast('Error al eliminar');
   }
 }
 
