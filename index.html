@@ -428,6 +428,14 @@
       <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
 
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar cadena</label>
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="search-cadenas" placeholder="Ej: Entel, Unimarc" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:10px;outline:none;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarCadenas(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
+        <button style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:10px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="document.getElementById('search-cadenas').value='';filtrarCadenas('')">✕</button>
+      </div>
+    </div>
+
     <div id="lista-cadenas"></div>
   </div>
 </div>
@@ -443,6 +451,15 @@
   </div>
   <div class="content">
     <div style="font-size:13px;color:var(--texto2);" id="local-subtitulo">Paso 1 de 4 - Selecciona la sucursal</div>
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:10px;outline:none;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
+        <button style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:10px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="document.getElementById('search-sucursales').value='';filtrarSucursales('')">✕</button>
+      </div>
+    </div>
+
     <div id="lista-sucursales"></div>
   </div>
 </div>
@@ -564,8 +581,8 @@
 
     <div class="mt-auto">
       <div style="display:flex;gap:8px;flex-direction:column;">
-        <button class="btn" onclick="pausarOT()" style="background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);" onmouseover="this.style.background='#FBBF24';this.style.boxShadow='0 4px 12px rgba(252,211,77,0.5);this.style.transform='translateY(-2px)'" onmouseout="this.style.background='#FCD34D';this.style.boxShadow='0 2px 8px rgba(252,211,77,0.3)';this.style.transform='translateY(0)'">⏸ Pausar (continuar después)</button>
-        <button class="btn" onclick="cerrarOT()" style="background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);" onmouseover="this.style.background='#1E8052';this.style.boxShadow='0 4px 16px rgba(39,160,107,0.5);this.style.transform='translateY(-2px)'" onmouseout="this.style.background='#27A06B';this.style.boxShadow='0 2px 12px rgba(39,160,107,0.3)';this.style.transform='translateY(0)'">✓ Cerrar y generar OT →</button>
+        <button class="btn" onclick="pausarOT()" style="background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);" onmouseover="this.style.cssText='background:#FBBF24;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 4px 12px rgba(252,211,77,0.5);transform:translateY(-2px);'" onmouseout="this.style.cssText='background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);transform:translateY(0);'">⏸ Pausar (continuar después)</button>
+        <button class="btn" onclick="cerrarOT()" style="background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);" onmouseover="this.style.cssText='background:#1E8052;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 4px 16px rgba(39,160,107,0.5);transform:translateY(-2px);'" onmouseout="this.style.cssText='background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);transform:translateY(0);'">✓ Cerrar y generar OT →</button>
       </div>
     </div>
   </div>
@@ -1387,6 +1404,8 @@ function pausarOT() {
       descripcion: desc,
       fotosAntes: estado.fotosAntes,
       fotosDespues: estado.fotosDespues,
+      direccion: estado.direccion || '',
+      ceco: estado.ceco || '',
       estado: 'En Pausa',
       pausa: true,
       firmada: false,
@@ -1415,6 +1434,8 @@ function pausarOT() {
           descripcion: desc,
           fotosAntes: estado.fotosAntes,
           fotosDespues: estado.fotosDespues,
+          direccion: estado.direccion || '',
+          ceco: estado.ceco || '',
           estado: 'En Pausa',
           pausa: true,
           firmada: false,
@@ -3008,7 +3029,7 @@ async function cargarCadenasApp() {
         if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
       });
       cached.forEach(function(c) {
-        var card = document.createElement('div'); card.className = 'cadena-card';
+        var card = document.createElement('div'); card.className = 'cadena-card'; card.setAttribute('data-cadena-nombre', c.nombre);
         var logoDiv = document.createElement('div'); logoDiv.className = 'cadena-logo fallback';
         logoDiv.style.background = c.color || '#1B3A6B';
         if (c.logo) {
@@ -3071,6 +3092,7 @@ async function cargarCadenasApp() {
     cadenas.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
+      card.setAttribute('data-cadena-nombre', c.nombre);
       const logoDiv = document.createElement('div');
       logoDiv.className = 'cadena-logo';
       logoDiv.style.background = c.color || '#1B3A6B';
@@ -3139,6 +3161,7 @@ function seleccionarCadena(cadena) {
     const supSuc = typeof suc_item === 'object' ? (suc_item.supervisor || '') : '';
     const centroSuc = typeof suc_item === 'object' ? (suc_item.centro || '') : '';
     const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-sucursal-nombre', nombre);
     wrapper.onclick = (function(n, dir, em, cen){ return function(){ seleccionarLocal(n, dir, em, cen); }; })(nombre, dirSuc, emailSuc, centroSuc);
     const item = document.createElement('div');
     item.className = 'local-item';
@@ -3172,6 +3195,35 @@ function seleccionarCadena(cadena) {
   const badge = document.getElementById('ot-num-local');
   if (badge) badge.textContent = document.getElementById('ot-num-cadena').textContent;
   go('s-local');
+}
+
+// =========== FILTROS DE BÚSQUEDA ===========
+function filtrarCadenas(termino) {
+  const lista = document.getElementById('lista-cadenas');
+  if (!lista) return;
+
+  const term = termino.toLowerCase().trim();
+  const items = lista.querySelectorAll('[data-cadena-nombre]');
+
+  items.forEach(function(item) {
+    const nombre = item.getAttribute('data-cadena-nombre').toLowerCase();
+    const match = nombre.includes(term) || term === '';
+    item.style.display = match ? 'block' : 'none';
+  });
+}
+
+function filtrarSucursales(termino) {
+  const lista = document.getElementById('lista-sucursales');
+  if (!lista) return;
+
+  const term = termino.toLowerCase().trim();
+  const items = lista.querySelectorAll('[data-sucursal-nombre]');
+
+  items.forEach(function(item) {
+    const nombre = item.getAttribute('data-sucursal-nombre').toLowerCase();
+    const match = nombre.includes(term) || term === '';
+    item.style.display = match ? 'block' : 'none';
+  });
 }
 
 // =========== TRABAJOS PAUSADOS ===========
@@ -3263,32 +3315,43 @@ function cargarOTsPausadasEnCadena() {
         // Logo de la empresa
         const logo = document.createElement('div');
         logo.className = 'paused-order-logo';
-        const cad = cadenaMap[ot.cadena || ot.local];
-        if (cad) {
-          if (cad.logo) {
-            const img = document.createElement('img');
-            img.src = cad.logo;
-            img.onerror = function() {
-              logo.textContent = cad.letra || (ot.cadena || ot.local).charAt(0);
-              logo.style.fontSize = '32px';
-            };
-            logo.appendChild(img);
-          } else {
-            logo.textContent = cad.letra || (ot.cadena || ot.local).charAt(0);
-            logo.style.background = cad.color || '#1B3A6B';
-          }
+        const nombreCadena = ot.cadena || (ot.local ? ot.local.split(' ')[0] : '');
+        const cad = cadenaMap[nombreCadena];
+        if (cad && cad.logo) {
+          const img = document.createElement('img');
+          img.src = cad.logo;
+          img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+          img.onerror = function() {
+            logo.textContent = cad.letra || nombreCadena.charAt(0);
+            logo.style.cssText = 'font-size:32px;';
+          };
+          logo.appendChild(img);
         } else {
-          logo.textContent = (ot.cadena || ot.local).charAt(0);
-          logo.style.background = '#EF9F27';
-          logo.style.fontSize = '32px';
+          const letra = cad ? cad.letra : (nombreCadena.charAt(0) || ot.local.charAt(0));
+          const bg = cad ? (cad.color || '#1B3A6B') : '#EF9F27';
+          logo.textContent = letra;
+          logo.style.cssText = 'background:' + bg + ';font-size:32px;';
         }
 
         // Header Info
         const headerInfo = document.createElement('div');
         headerInfo.className = 'paused-order-header-info';
 
+        const local = document.createElement('div');
+        local.className = 'paused-order-local';
+        local.style.cssText = 'font-size:14px;font-weight:700;color:var(--texto);margin-bottom:4px;';
+        local.textContent = ot.local || 'Sin sucursal';
+
+        const detalles = document.createElement('div');
+        detalles.style.cssText = 'font-size:12px;color:var(--texto3);line-height:1.4;margin-bottom:8px;';
+        let detalleTexto = [];
+        if (ot.ceco) detalleTexto.push('CECO: ' + ot.ceco);
+        if (ot.direccion) detalleTexto.push(ot.direccion);
+        detalles.textContent = detalleTexto.join(' | ');
+
         const headerRow = document.createElement('div');
         headerRow.className = 'paused-order-header';
+        headerRow.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;';
         const numOT = document.createElement('div');
         numOT.className = 'paused-order-num';
         numOT.textContent = '#' + ot.numero;
@@ -3298,12 +3361,9 @@ function cargarOTsPausadasEnCadena() {
         headerRow.appendChild(numOT);
         headerRow.appendChild(tipo);
 
-        const local = document.createElement('div');
-        local.className = 'paused-order-local';
-        local.textContent = ot.local || 'Sin sucursal';
-
         const meta = document.createElement('div');
         meta.className = 'paused-order-meta';
+        meta.style.cssText = 'display:flex;gap:8px;font-size:11px;color:var(--texto3);';
         const fechaEl = document.createElement('div');
         fechaEl.textContent = ot.fecha || 'N/A';
         const horaEl = document.createElement('div');
@@ -3311,8 +3371,9 @@ function cargarOTsPausadasEnCadena() {
         meta.appendChild(fechaEl);
         meta.appendChild(horaEl);
 
-        headerInfo.appendChild(headerRow);
         headerInfo.appendChild(local);
+        headerInfo.appendChild(detalles);
+        headerInfo.appendChild(headerRow);
         headerInfo.appendChild(meta);
 
         top.appendChild(logo);
@@ -5299,10 +5360,9 @@ function continuarOT(otId) {
       }
 
       // Ir a la pantalla de ejecución
-      cargarEjecucionScreen().then(function() {
-        go('s-ejecutar');
-        toast('OT cargada. Continúa donde la dejaste.');
-      });
+      go('s-ejecucion');
+      cargarEjecucionScreen();
+      toast('OT cargada. Continúa donde la dejaste.');
       return;
     }
 
@@ -5331,10 +5391,9 @@ function continuarOT(otId) {
       }
 
       // Ir a la pantalla de ejecución
-      cargarEjecucionScreen().then(function() {
-        go('s-ejecutar');
-        toast('OT cargada. Continúa donde la dejaste.');
-      });
+      go('s-ejecucion');
+      cargarEjecucionScreen();
+      toast('OT cargada. Continúa donde la dejaste.');
     }).catch(function(e) {
       console.error('Error cargando OT:', e);
       toast('Error cargando la OT');
