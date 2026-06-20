@@ -151,6 +151,32 @@
   }
   .paused-order-logo img { width: 100%; height: 100%; object-fit: cover; }
 
+  /* Animaciones cards trabajos pausados (panel admin/supervisor) */
+  @keyframes supPausadaIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .ot-card.sup-pausada-card {
+    cursor: default;
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s cubic-bezier(0.4,0,0.2,1), border-color 0.25s;
+    animation: supPausadaIn 0.35s cubic-bezier(0.4,0,0.2,1) both;
+  }
+  .ot-card.sup-pausada-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 26px rgba(217, 119, 6, 0.22);
+    border-color: #F59E0B;
+  }
+  .sup-accion-btn {
+    transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s, filter 0.18s;
+  }
+  .sup-accion-btn:hover { transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+  .sup-accion-btn:active { transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .ot-card.sup-pausada-card,
+    .ot-card.sup-pausada-card:hover,
+    .sup-accion-btn:hover { animation: none; transform: none; }
+  }
+
   .paused-order-header-info { flex: 1; }
   .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .paused-order-num {
@@ -6419,9 +6445,11 @@ async function cargarPausadasSupervisor() {
     countEl.textContent = docs.length;
     listaEl.innerHTML = '';
 
-    docs.forEach(function(doc) {
+    docs.forEach(function(doc, idx) {
       const d = doc.data();
       const card = _crearCardPausadaSup(doc.id, d, cadenaMap);
+      // Entrada escalonada (stagger), con tope para no demorar demasiado
+      card.style.animationDelay = Math.min(idx * 55, 440) + 'ms';
       listaEl.appendChild(card);
     });
   } catch(e) {
@@ -6458,7 +6486,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   const logoLetra = d.cadenaLetra || (cad && cad.letra) || (d.local ? d.local.charAt(0) : 'P');
 
   const card = document.createElement('div');
-  card.className = 'ot-card';
+  card.className = 'ot-card sup-pausada-card';
   card.style.cssText = 'background:linear-gradient(135deg,#FEF9E7 0%,#FEF3C7 100%);border:1.5px solid #FCD34D;align-items:flex-start;';
 
   // Logo
@@ -6516,20 +6544,16 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   acciones.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
 
   const btnReasignar = document.createElement('button');
+  btnReasignar.className = 'sup-accion-btn';
   btnReasignar.textContent = '↔ Reasignar';
   btnReasignar.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnReasignar.onclick = function() { abrirModalReasignar(docId, d); };
 
-  const btnNotificar = document.createElement('button');
-  btnNotificar.textContent = '💬 Notificar';
-  btnNotificar.style.cssText = 'background:#25D366;color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
-  btnNotificar.onclick = function() { notificarTecnicoPausada(d); };
-
   acciones.appendChild(btnReasignar);
-  acciones.appendChild(btnNotificar);
 
   if (esAdmin) {
     const btnEliminar = document.createElement('button');
+    btnEliminar.className = 'sup-accion-btn';
     btnEliminar.textContent = '🗑 Eliminar';
     btnEliminar.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
     btnEliminar.onclick = function() { eliminarPausadaSup(docId, d, card); };
@@ -6620,19 +6644,6 @@ function cerrarModalReasignar(ev) {
   document.getElementById('modal-reasignar').style.display = 'none';
   _reasignarDocId = null;
   _reasignarOT = null;
-}
-
-// --- Notificar al tecnico por WhatsApp ---
-function notificarTecnicoPausada(d) {
-  const nl = '%0A';
-  const msg = encodeURIComponent('*Recordatorio EMVAL*') + nl + nl +
-    encodeURIComponent('Tienes una OT pausada pendiente de completar:') + nl + nl +
-    encodeURIComponent('OT: #' + (d.numero || '----')) + nl +
-    encodeURIComponent('Sucursal: ' + (d.local || '-')) + nl +
-    encodeURIComponent('Tipo: ' + (d.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo')) + nl +
-    (d.direccion ? encodeURIComponent('Dirección: ' + d.direccion) + nl : '') + nl +
-    encodeURIComponent('Por favor retómala y complétala cuando puedas.');
-  window.open('https://wa.me/?text=' + msg, '_blank');
 }
 
 // --- Eliminar OT pausada (solo admin) ---
