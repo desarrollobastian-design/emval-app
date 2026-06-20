@@ -971,29 +971,6 @@ firebase.initializeApp({
 });
 window._firebaseReady = true;
 console.log('Firebase v9 compat listo');
-
-// Debug localStorage
-try {
-  const stored = localStorage.getItem('emval_ots_pausadas');
-  console.log('[INIT] localStorage.emval_ots_pausadas existe:', !!stored);
-  if (stored) {
-    const parsed = JSON.parse(stored);
-    console.log('[INIT] OTs pausadas almacenadas:', parsed.length, parsed);
-  } else {
-    console.warn('[INIT] ⚠️ localStorage VACÍO - localStorage puede estar limpiándose entre sesiones');
-  }
-} catch(e) {
-  console.warn('[INIT] Error accediendo localStorage:', e.message);
-}
-
-// Verificar si localStorage está disponible
-try {
-  localStorage.setItem('_test_', '1');
-  localStorage.removeItem('_test_');
-  console.log('[INIT] localStorage disponible y persistente');
-} catch(e) {
-  console.warn('[INIT] ⚠️ localStorage NO disponible (probablemente modo incógnito)');
-}
 </script>
 
 <script>
@@ -1001,33 +978,22 @@ try {
 function guardarOTsPausadas(ots) {
   try {
     localStorage.setItem('emval_ots_pausadas', JSON.stringify(ots));
-    console.log('[STORAGE] Guardado en localStorage:', ots.length);
   } catch(e) {
-    console.warn('[STORAGE] localStorage fallo, usando sessionStorage:', e.message);
-    sessionStorage.setItem('emval_ots_pausadas', JSON.stringify(ots));
+    // Si localStorage falla (cuota o modo incógnito), usar sessionStorage
+    try { sessionStorage.setItem('emval_ots_pausadas', JSON.stringify(ots)); } catch(e2) {}
   }
 }
 
 function cargarOTsPausadas() {
   try {
     const local = localStorage.getItem('emval_ots_pausadas');
-    if (local) {
-      console.log('[STORAGE] Cargado desde localStorage');
-      return JSON.parse(local);
-    }
-  } catch(e) {
-    console.warn('[STORAGE] localStorage fallo, intentando sessionStorage:', e.message);
-  }
+    if (local) return JSON.parse(local);
+  } catch(e) {}
 
   try {
     const session = sessionStorage.getItem('emval_ots_pausadas');
-    if (session) {
-      console.log('[STORAGE] Cargado desde sessionStorage');
-      return JSON.parse(session);
-    }
-  } catch(e) {
-    console.warn('[STORAGE] sessionStorage fallo:', e.message);
-  }
+    if (session) return JSON.parse(session);
+  } catch(e) {}
 
   return [];
 }
@@ -1596,19 +1562,10 @@ function pausarOT() {
       });
       if (existeIndex >= 0) {
         otsPausadas[existeIndex] = otPausada;
-        console.log('[PAUSA] Actualizando OT existente', estado.otNumero);
       } else {
         otsPausadas.unshift(otPausada);
-        console.log('[PAUSA] Creando OT nueva', estado.otNumero);
       }
-      console.log('[PAUSA] Datos a guardar:', {
-        numero: otPausada.numero,
-        descripcion: otPausada.descripcion,
-        fotosAntes: otPausada.fotosAntes.length,
-        fotosDespues: otPausada.fotosDespues.length
-      });
       guardarOTsPausadas(otsPausadas);
-      console.log('[PAUSA] Total OTs pausadas:', otsPausadas.length);
     } catch(e) { console.error('Error guardando OT pausada:', e); }
 
     // Guardar en Firebase en background
@@ -3429,11 +3386,8 @@ function cargarOTsPausadasEnCadena() {
 
   if (!seccion || !lista || !contador || !toggleBtn) return;
 
-  // No cargar si no hay usuario inicializado (evita filtrado incorrecta)
-  if (!estado.usuario) {
-    console.log('[CARGAR] Usuario no inicializado aún, ignorando carga');
-    return;
-  }
+  // No cargar si no hay usuario inicializado (evita filtrado incorrecto)
+  if (!estado.usuario) return;
 
   try {
     const otsPausadas = cargarOTsPausadas();
@@ -3443,10 +3397,6 @@ function cargarOTsPausadasEnCadena() {
     const otsMias = otsPausadas.filter(function(ot) {
       return ot.tecnico === estado.usuario;
     });
-
-    console.log('[CARGAR] Usuario actual:', estado.usuario);
-    console.log('[CARGAR] Total OTs en almacenamiento:', otsPausadas.length);
-    console.log('[CARGAR] OTs del técnico actual:', otsMias.length, otsMias);
 
     // Siempre mostrar la sección, pero vacía si no hay OTs del técnico actual
     seccion.style.display = 'block';
@@ -5551,17 +5501,9 @@ function continuarOT(otId) {
       const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero; });
 
       if (!ot) {
-        console.error('[CONTINUAR] OT no encontrada:', numero);
         toast('OT no encontrada en registro local');
         return;
       }
-
-      console.log('[CONTINUAR] OT encontrada:', {
-        numero: ot.numero,
-        descripcion: ot.descripcion,
-        fotosAntes: (ot.fotosAntes || []).length,
-        fotosDespues: (ot.fotosDespues || []).length
-      });
 
       // Cargar datos en estado
       estado.otNumero = ot.numero;
@@ -5573,12 +5515,6 @@ function continuarOT(otId) {
       estado.fotosAntes = ot.fotosAntes || [];
       estado.fotosDespues = ot.fotosDespues || [];
       estado.fotoTimbre = ot.fotoTimbre || null;
-
-      console.log('[CONTINUAR] Estado restaurado:', {
-        otNumero: estado.otNumero,
-        fotosAntes: estado.fotosAntes.length,
-        fotosDespues: estado.fotosDespues.length
-      });
 
       // Cargar servicios si es preventivo
       if (ot.tipo === 'preventivo') {
