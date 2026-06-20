@@ -3473,7 +3473,85 @@ function filtrarSucursales(termino) {
 }
 
 // =========== TRABAJOS PAUSADOS ===========
+// Punto de entrada: pinta desde localStorage (rápido/offline) y luego reconcilia con Firebase
 function cargarOTsPausadasEnCadena() {
+  _renderPausadasEnCadena();
+  _reconciliarPausadasFirebase().then(function(huboCambios) {
+    if (huboCambios) _renderPausadasEnCadena();
+  });
+}
+
+// Mapea un documento de Firebase a la forma de OT pausada en localStorage
+function _firebaseADTOPausada(fo) {
+  return {
+    numero: fo.numero,
+    local: fo.local || '',
+    cadena: fo.cadena || '',
+    cadenaLogo: fo.cadenaLogo || '',
+    cadenaColor: fo.cadenaColor || '',
+    cadenaLetra: fo.cadenaLetra || '',
+    tipo: fo.tipo || 'correctivo',
+    tecnico: fo.tecnico || '',
+    fecha: fo.fecha || '',
+    hora: fo.hora || '',
+    descripcion: fo.descripcion || '',
+    fotosAntes: fo.fotosAntes || [],
+    fotosDespues: fo.fotosDespues || [],
+    direccion: fo.direccion || '',
+    ceco: fo.ceco || '',
+    estado: 'En Pausa',
+    pausa: true,
+    firmada: false,
+    creadoEn: (fo.creadoEn && fo.creadoEn.toDate) ? fo.creadoEn.toDate().toISOString() : (fo.creadoEn || new Date().toISOString())
+  };
+}
+
+// Reconcilia las OTs pausadas del técnico con Firebase (fuente de verdad para reasignaciones).
+// Devuelve true si hubo cambios en localStorage.
+async function _reconciliarPausadasFirebase() {
+  if (!window._firebaseReady || !navigator.onLine || !estado.usuario) return false;
+  try {
+    const db = window.firebase.firestore();
+    const snap = await db.collection('ordenes').where('pausa', '==', true).get();
+    const fbPausadas = snap.docs.map(function(d){ return d.data(); });
+
+    const misEnFb = fbPausadas.filter(function(o){ return o.tecnico === estado.usuario; });
+    const numerosMiosFb = {};
+    misEnFb.forEach(function(o){ numerosMiosFb[String(o.numero)] = true; });
+    const todosNumerosFb = {};
+    fbPausadas.forEach(function(o){ todosNumerosFb[String(o.numero)] = true; });
+
+    let local = cargarOTsPausadas();
+    let cambios = false;
+
+    // 1) Quitar de MIS pausadas locales las que en Firebase ya no son mías
+    local = local.filter(function(ot) {
+      if (ot.tecnico !== estado.usuario) return true;          // de otro técnico en este equipo: no tocar
+      const num = String(ot.numero);
+      if (numerosMiosFb[num]) return true;                     // sigue siendo mía
+      if (todosNumerosFb[num]) { cambios = true; return false; } // reasignada a otro técnico → quitar
+      return true;                                             // no está en Firebase (local sin sincronizar) → mantener
+    });
+
+    // 2) Agregar las que Firebase dice que son mías pero no tengo localmente (reasignadas hacia mí u otro equipo)
+    const numerosLocalesMios = {};
+    local.forEach(function(o){ if (o.tecnico === estado.usuario) numerosLocalesMios[String(o.numero)] = true; });
+    misEnFb.forEach(function(fo) {
+      if (!numerosLocalesMios[String(fo.numero)]) {
+        local.unshift(_firebaseADTOPausada(fo));
+        cambios = true;
+      }
+    });
+
+    if (cambios) guardarOTsPausadas(local);
+    return cambios;
+  } catch(e) {
+    console.error('Error reconciliando pausadas con Firebase:', e);
+    return false;
+  }
+}
+
+function _renderPausadasEnCadena() {
   const seccion = document.getElementById('seccion-pausadas');
   const lista = document.getElementById('lista-pausadas');
   const contador = document.getElementById('contador-pausadas');
