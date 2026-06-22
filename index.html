@@ -511,7 +511,7 @@
     </div>
     <div class="field">
       <label>Descripción del problema</label>
-      <textarea id="desc-problema" placeholder="Ej: Problemas en cámara exterior de aguas servidas..."></textarea>
+      <textarea id="desc-problema" placeholder="Ej: Problemas en cámara exterior de aguas servidas..." oninput="estado.descripProblema=this.value;programarAutoguardadoOT()"></textarea>
     </div>
     <div class="mt-auto">
       <button class="btn btn-primary" onclick="irFotosAntes()">Continuar →</button>
@@ -562,7 +562,7 @@
     <div id="ejecucion-prev-content" style="display:none;"></div>
     <div class="field">
       <label id="ejecucion-trabajo-label">Trabajo realizado</label>
-      <textarea id="desc-trabajo" placeholder="Describe detalladamente lo que se hizo..." oninput="estado.descripcion=this.value"></textarea>
+      <textarea id="desc-trabajo" placeholder="Describe detalladamente lo que se hizo..." oninput="estado.descripcion=this.value;programarAutoguardadoOT()"></textarea>
     </div>
 
     <div class="field">
@@ -583,7 +583,7 @@
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pidele al administrador que firme con el dedo</div>
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
-        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" />
+        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
         <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde);margin-top:4px;display:none;">Email configurado automaticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envia automaticamente</div>
       </div>
@@ -1047,6 +1047,247 @@ function cargarOTsPausadas() {
   return [];
 }
 
+const EMVAL_AUTOSAVE_VERSION = 1;
+let _autoSaveTimer = null;
+let _restaurandoBorradorOT = false;
+
+function sincronizarCamposOTEnEstado() {
+  if (typeof estado === 'undefined' || !estado) return;
+  const problema = document.getElementById('desc-problema');
+  if (problema) estado.descripProblema = problema.value || '';
+  const trabajo = document.getElementById('desc-trabajo');
+  if (trabajo) estado.descripcion = trabajo.value || '';
+  const email = document.getElementById('email-admin');
+  if (email) estado.emailAdmin = email.value || '';
+  const equipos = document.getElementById('num-equipos');
+  if (equipos) estado.numEquipos = equipos.value || '';
+}
+
+function _conteoFotos(fotos) {
+  return (fotos || []).filter(function(f){ return !!f; }).length;
+}
+
+function _hayDatosOTEnCurso() {
+  if (typeof estado === 'undefined' || !estado || !estado.usuario || !estado.otNumero) return false;
+  sincronizarCamposOTEnEstado();
+  return !!(
+    estado.local ||
+    estado.tipo ||
+    estado.descripProblema ||
+    estado.descripcion ||
+    estado.numEquipos ||
+    estado.fotoTimbre ||
+    _conteoFotos(estado.fotosAntes) ||
+    _conteoFotos(estado.fotosDespues) ||
+    (estado.serviciosPreventivo || []).some(function(s){ return s && s.respuesta; })
+  );
+}
+
+function _capturarFirmaBorrador() {
+  if (!estado || !estado.firmada) return '';
+  try {
+    const firmaCanvas = document.getElementById('firma-canvas');
+    if (!firmaCanvas) return estado.firmaImagen || '';
+    const tempC = document.createElement('canvas');
+    tempC.width = firmaCanvas.width;
+    tempC.height = firmaCanvas.height;
+    const tempCtx = tempC.getContext('2d');
+    tempCtx.fillStyle = '#FFFFFF';
+    tempCtx.fillRect(0, 0, tempC.width, tempC.height);
+    tempCtx.drawImage(firmaCanvas, 0, 0);
+    return tempC.toDataURL('image/jpeg', 0.7);
+  } catch(e) {
+    return estado.firmaImagen || '';
+  }
+}
+
+function _crearOTPausadaDesdeEstado() {
+  sincronizarCamposOTEnEstado();
+  const ahora = new Date();
+  return {
+    numero: estado.otNumero,
+    local: estado.local,
+    cadena: (cadenaSeleccionada && cadenaSeleccionada.nombre) || estado.cadenaNombre || '',
+    cadenaLogo: estado.cadenaLogo || (cadenaSeleccionada && cadenaSeleccionada.logo) || '',
+    cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
+    cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
+    tipo: estado.tipo,
+    tecnico: estado.usuario,
+    fecha: ahora.toLocaleDateString('es-CL'),
+    hora: ahora.toLocaleTimeString('es-CL'),
+    descripcionProblema: estado.descripProblema || '',
+    descripcion: estado.descripcion || '',
+    descripcionTrabajo: estado.descripcion || '',
+    fotosAntes: estado.fotosAntes || [],
+    fotosDespues: estado.fotosDespues || [],
+    fotoTimbre: estado.fotoTimbre || null,
+    direccion: estado.direccion || '',
+    ceco: estado.ceco || '',
+    numEquipos: estado.numEquipos || '',
+    serviciosPreventivo: estado.serviciosPreventivo || [],
+    emailAdmin: estado.emailAdmin || estado.emailSucursal || '',
+    estado: 'En Pausa',
+    pausa: true,
+    autoDraft: true,
+    firmada: !!estado.firmada,
+    firmaImagen: _capturarFirmaBorrador(),
+    creadoEn: estado.creadoEnBorrador || ahora.toISOString(),
+    actualizadoEn: ahora.toISOString(),
+    autosaveVersion: EMVAL_AUTOSAVE_VERSION
+  };
+}
+
+function guardarBorradorOTActual() {
+  if (_restaurandoBorradorOT || !_hayDatosOTEnCurso()) return false;
+  try {
+    const otBorrador = _crearOTPausadaDesdeEstado();
+    const otsPausadas = cargarOTsPausadas();
+    const idx = otsPausadas.findIndex(function(ot) {
+      return ot.numero != null &&
+        otBorrador.numero != null &&
+        ot.numero.toString() === otBorrador.numero.toString() &&
+        ot.tecnico === otBorrador.tecnico;
+    });
+    if (idx >= 0) {
+      otsPausadas[idx] = Object.assign({}, otsPausadas[idx], otBorrador);
+    } else {
+      otsPausadas.unshift(otBorrador);
+    }
+    guardarOTsPausadas(otsPausadas);
+    return true;
+  } catch(e) {
+    console.error('Error autoguardando OT:', e);
+    return false;
+  }
+}
+
+function programarAutoguardadoOT() {
+  if (_restaurandoBorradorOT) return;
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(guardarBorradorOTActual, 350);
+}
+
+function _actualizarBadgesOT() {
+  ['ot-num-cadena','ot-num-local','ot-num-tipo','ot-num-antes','ot-num-ejec'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '#' + (estado.otNumero || '---');
+  });
+}
+
+function _cargarEstadoDesdeOTGuardada(ot) {
+  estado.otNumero = ot.numero;
+  estado.tipo = ot.tipo || null;
+  estado.local = ot.local || null;
+  estado.ceco = ot.ceco || '';
+  estado.direccion = ot.direccion || '';
+  estado.descripProblema = ot.descripcionProblema || ot.descripProblema || '';
+  estado.descripcion = ot.descripcionTrabajo || ot.descripcion || '';
+  estado.cadenaNombre = ot.cadena || '';
+  estado.cadenaLogo = ot.cadenaLogo || '';
+  estado.cadenaColor = ot.cadenaColor || '';
+  estado.cadenaLetra = ot.cadenaLetra || '';
+  estado.fotosAntes = ot.fotosAntes || [];
+  estado.fotosDespues = ot.fotosDespues || [];
+  estado.fotoTimbre = ot.fotoTimbre || null;
+  estado.numEquipos = ot.numEquipos || '';
+  estado.serviciosPreventivo = ot.serviciosPreventivo || [];
+  estado.emailAdmin = ot.emailAdmin || '';
+  estado.firmada = !!ot.firmada;
+  estado.firmaImagen = ot.firmaImagen || '';
+  estado.creadoEnBorrador = ot.creadoEn || new Date().toISOString();
+  cadenaSeleccionada = estado.cadenaNombre ? {
+    nombre: estado.cadenaNombre,
+    logo: estado.cadenaLogo,
+    color: estado.cadenaColor,
+    letra: estado.cadenaLetra
+  } : cadenaSeleccionada;
+  _actualizarBadgesOT();
+}
+
+function _restaurarCamposDOMDesdeEstado() {
+  const problema = document.getElementById('desc-problema');
+  if (problema) problema.value = estado.descripProblema || '';
+  const trabajo = document.getElementById('desc-trabajo');
+  if (trabajo) trabajo.value = estado.descripcion || '';
+  const email = document.getElementById('email-admin');
+  if (email) email.value = estado.emailAdmin || estado.emailSucursal || '';
+  const equipos = document.getElementById('num-equipos');
+  if (equipos) equipos.value = estado.numEquipos || '';
+  const prev = document.getElementById('t-prev');
+  const corr = document.getElementById('t-corr');
+  if (prev) prev.classList.toggle('selected', estado.tipo === 'preventivo');
+  if (corr) corr.classList.toggle('selected', estado.tipo === 'correctivo');
+}
+
+function _restaurarFirmaDesdeEstado() {
+  try {
+    if (!estado.firmaImagen) return;
+    const firmaCanvas = document.getElementById('firma-canvas');
+    const firmaCont = document.getElementById('firma-container');
+    const firmaStatus = document.getElementById('firma-status');
+    if (!firmaCanvas) return;
+    const img = new Image();
+    img.onload = function() {
+      ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+      ctx.drawImage(img, 0, 0, firmaCanvas.width, firmaCanvas.height);
+      firmaConfirmada = true;
+      estado.firmada = true;
+      if (firmaCont) firmaCont.classList.add('signed');
+      if (firmaStatus) {
+        firmaStatus.textContent = '[ok] Firma confirmada';
+        firmaStatus.style.color = 'var(--verde)';
+      }
+    };
+    img.src = estado.firmaImagen;
+  } catch(e) {}
+}
+
+function abrirOTGuardada(ot) {
+  _restaurandoBorradorOT = true;
+  _cargarEstadoDesdeOTGuardada(ot);
+  const tieneAntes = _conteoFotos(estado.fotosAntes) > 0;
+  const tieneEjecucion = !!(estado.descripcion || _conteoFotos(estado.fotosDespues) || estado.fotoTimbre || estado.firmada);
+
+  if (tieneEjecucion) {
+    go('s-ejecucion');
+    cargarEjecucionScreen();
+  } else if (tieneAntes || estado.tipo) {
+    go('s-fotos-antes');
+    renderizarFotosScreen();
+  } else if (estado.local) {
+    go('s-tipo');
+  } else {
+    go('s-cadena');
+    cargarCadenasApp();
+    cargarOTsPausadasEnCadena();
+  }
+
+  _restaurarCamposDOMDesdeEstado();
+  _restaurarFirmaDesdeEstado();
+  _restaurandoBorradorOT = false;
+}
+
+function _ultimoBorradorTecnico() {
+  if (!estado.usuario) return null;
+  const borradores = cargarOTsPausadas()
+    .filter(function(ot){ return ot.tecnico === estado.usuario && ot.autoDraft === true; })
+    .sort(function(a, b) {
+      return new Date(b.actualizadoEn || b.creadoEn || 0) - new Date(a.actualizadoEn || a.creadoEn || 0);
+    });
+  return borradores[0] || null;
+}
+
+function restaurarBorradorPendienteTecnico() {
+  const borrador = _ultimoBorradorTecnico();
+  if (!borrador) return false;
+  const local = borrador.local ? (' en ' + borrador.local) : '';
+  const msg = 'Tienes una OT autoguardada #' + borrador.numero + local + '.\n\nQuieres continuar donde quedaste?';
+  if (!confirm(msg)) return false;
+  abrirOTGuardada(borrador);
+  toast('OT autoguardada restaurada');
+  return true;
+}
+
 // Elimina una OT de la lista de pausadas (al completarla)
 function eliminarOTPausada(numero, tecnico) {
   try {
@@ -1091,6 +1332,9 @@ let estado = {
   fotosDespues: [null,null,null,null],
   fotoTimbre: null,
   firmada: false,
+  firmaImagen: '',
+  emailAdmin: '',
+  creadoEnBorrador: '',
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
@@ -1179,7 +1423,7 @@ function loginExitoso() {
     if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
     var btnVentas = document.getElementById('btn-ventas');
     if (btnVentas) btnVentas.style.display = esAdmin ? 'flex' : 'none';
-  } else {
+  } else if (!restaurarBorradorPendienteTecnico()) {
     nuevaOT();
   }
   toast('Bienvenido, ' + estado.usuario.split(' ')[0] + '!');
@@ -1212,20 +1456,29 @@ async function validarPassword() {
   }
 }
 
-function cerrarSesion() { estado.usuario = null; go('s-usuarios'); }
+function cerrarSesion() {
+  guardarBorradorOTActual();
+  estado.usuario = null;
+  go('s-usuarios');
+}
 
 // =========== NUEVA OT ===========
 function nuevaOT() {
+  if (!_restaurandoBorradorOT) guardarBorradorOTActual();
   estado.otNumero = 9475 + Math.floor(Math.random()*100);
+  estado.creadoEnBorrador = new Date().toISOString();
   estado.tipo = null;
   estado.fotosAntes = [];
   estado.fotosDespues = [];
   estado.fotoTimbre = null;
+  estado.firmaImagen = '';
+  estado.emailAdmin = '';
   estado.pdfUrl = null;
   estado.pdfUrlCloudinary = null;
   estado.direccion = null;
   estado.ceco = null;
   estado.descripcion = '';
+  estado.descripProblema = '';
   estado.cadenaNombre = '';
   estado.cadenaLogo = '';
   estado.cadenaColor = '';
@@ -1248,10 +1501,7 @@ function nuevaOT() {
   document.getElementById('desc-trabajo').value = '';
   document.getElementById('firma-status').textContent = 'Pidele al administrador que firme con el dedo';
   document.getElementById('firma-container').classList.remove('signed');
-  ['ot-num-cadena','ot-num-local','ot-num-tipo','ot-num-antes','ot-num-ejec'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.textContent = '#' + estado.otNumero;
-  });
+  _actualizarBadgesOT();
   go('s-cadena');
   cargarOTsPausadasEnCadena();
   // Esperar Firebase antes de cargar cadenas
@@ -1280,6 +1530,7 @@ function seleccionarLocal(nombre, direccion, emailAdmin, centro) {
   estado.direccion = direccion || '';
   estado.ceco = centro || '';
   estado.emailSucursal = emailAdmin || '';
+  programarAutoguardadoOT();
   toast(nombre + ' seleccionado');
   setTimeout(() => {
     go('s-tipo');
@@ -1293,10 +1544,13 @@ function seleccionarTipo(tipo) {
   estado.tipo = tipo;
   document.getElementById('t-prev').classList.toggle('selected', tipo === 'preventivo');
   document.getElementById('t-corr').classList.toggle('selected', tipo === 'correctivo');
+  programarAutoguardadoOT();
 }
 
 function irFotosAntes() {
   if (!estado.tipo) { toast('Selecciona un tipo de trabajo'); return; }
+  sincronizarCamposOTEnEstado();
+  programarAutoguardadoOT();
   go('s-fotos-antes');
   renderizarFotosScreen();
 }
@@ -1456,11 +1710,16 @@ function procesarFoto(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(ev) {
+  reader.onload = async function(ev) {
     const id = estado.fotoActualId;
     const tipo = estado.fotoActualTipo;
     const idx = estado.fotoActualIdx;
-    const data = ev.target.result;
+    let data = ev.target.result;
+    try {
+      data = await comprimirImagen(data, 1200, 0.72);
+    } catch(e) {
+      console.warn('No se pudo comprimir foto:', e);
+    }
     if (tipo === 'antes') estado.fotosAntes[idx] = data;
     else if (tipo === 'despues') estado.fotosDespues[idx] = data;
     else if (tipo === 'timbre') estado.fotoTimbre = data;
@@ -1471,6 +1730,7 @@ function procesarFoto(e) {
     img.src = data;
     let chk = box.querySelector('.foto-check');
     if (!chk) { chk = document.createElement('div'); chk.className = 'foto-check'; chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; box.appendChild(chk); }
+    programarAutoguardadoOT();
     toast('Foto guardada');
   };
   reader.readAsDataURL(file);
@@ -1480,6 +1740,8 @@ function procesarFoto(e) {
 function irEjecucion() {
   const conFotos = estado.fotosAntes.filter(function(f){ return f !== null; }).length;
   if (conFotos === 0) { toast('Toma al menos 1 foto del estado inicial'); return; }
+  sincronizarCamposOTEnEstado();
+  programarAutoguardadoOT();
   go('s-ejecucion');
   cargarEjecucionScreen();
 }
@@ -1505,7 +1767,13 @@ canvas.addEventListener('touchstart', e => { e.preventDefault(); dibujando = tru
 canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!dibujando) return; const p = getPos(e, canvas); ctx.lineTo(p.x, p.y); ctx.stroke(); }, {passive:false});
 canvas.addEventListener('touchend', () => dibujando = false);
 
-function limpiarFirma() { ctx.clearRect(0, 0, canvas.width, canvas.height); firmaConfirmada = false; estado.firmada = false; }
+function limpiarFirma() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  firmaConfirmada = false;
+  estado.firmada = false;
+  estado.firmaImagen = '';
+  programarAutoguardadoOT();
+}
 
 function confirmarFirma() {
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -1515,6 +1783,8 @@ function confirmarFirma() {
   document.getElementById('firma-status').textContent = '[ok] Firma confirmada';
   document.getElementById('firma-status').style.color = 'var(--verde)';
   document.getElementById('firma-container').classList.add('signed');
+  estado.firmaImagen = _capturarFirmaBorrador();
+  programarAutoguardadoOT();
   toast('Firma guardada');
 }
 
@@ -1545,7 +1815,7 @@ function cargarEjecucionScreen() {
     }
     let html = '<div class="field">';
     html += '<label>Nº Equipos Suscritos</label>';
-    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value"/>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
     html += '</div>';
     html += '<div class="field"><label>Servicios a realizar</label>';
     html += '<div style="border:1.5px solid var(--gris2);border-radius:10px;overflow:hidden;">';
@@ -1599,6 +1869,7 @@ function responderServicio(idx, respuesta) {
   const noBtn = document.getElementById('svc-no-' + idx);
   if (siBtn) { siBtn.style.background = respuesta === 'si' ? '#27A06B' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
   if (noBtn) { noBtn.style.background = respuesta === 'no' ? '#E74C3C' : '#E8ECF5'; noBtn.style.color = respuesta === 'no' ? 'white' : '#6B7280'; }
+  programarAutoguardadoOT();
 }
 
 // =========== PAUSAR OT ===========
@@ -1616,28 +1887,14 @@ function pausarOT() {
     const fecha = new Date().toLocaleDateString('es-CL');
     const hora = new Date().toLocaleTimeString('es-CL');
 
-    // Guardar OT pausada
-    const otPausada = {
-      numero: estado.otNumero,
-      local: estado.local,
-      cadena: (cadenaSeleccionada && cadenaSeleccionada.nombre) || estado.cadenaNombre || '',
-      cadenaLogo: estado.cadenaLogo || (cadenaSeleccionada && cadenaSeleccionada.logo) || '',
-      cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
-      cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
-      tipo: estado.tipo,
-      tecnico: estado.usuario,
-      fecha: fecha,
-      hora: hora,
-      descripcion: desc,
-      fotosAntes: estado.fotosAntes,
-      fotosDespues: estado.fotosDespues,
-      direccion: estado.direccion || '',
-      ceco: estado.ceco || '',
-      estado: 'En Pausa',
-      pausa: true,
-      firmada: false,
-      creadoEn: new Date().toISOString()
-    };
+    sincronizarCamposOTEnEstado();
+    const otPausada = _crearOTPausadaDesdeEstado();
+    otPausada.fecha = fecha;
+    otPausada.hora = hora;
+    otPausada.descripcion = desc;
+    otPausada.descripcionTrabajo = desc;
+    otPausada.autoDraft = false;
+    otPausada.firmada = false;
 
     // Guardar en almacenamiento
     try {
@@ -1670,11 +1927,17 @@ function pausarOT() {
               tecnico: estado.usuario,
               fecha: fecha,
               hora: hora,
+              descripcionProblema: estado.descripProblema || '',
               descripcion: desc,
+              descripcionTrabajo: desc,
+              numEquipos: estado.numEquipos || '',
+              serviciosPreventivo: estado.serviciosPreventivo || [],
               fotosAntes: estado.fotosAntes,
               fotosDespues: estado.fotosDespues,
+              fotoTimbre: estado.fotoTimbre || null,
               direccion: estado.direccion || '',
               ceco: estado.ceco || '',
+              emailAdmin: estado.emailAdmin || estado.emailSucursal || '',
               estado: 'En Pausa',
               pausa: true,
               firmada: false,
@@ -1683,11 +1946,19 @@ function pausarOT() {
           } else {
             snapshot.docs.forEach(function(doc) {
               db.collection('ordenes').doc(doc.id).update({
+                descripcionProblema: estado.descripProblema || '',
                 descripcion: desc,
+                descripcionTrabajo: desc,
+                numEquipos: estado.numEquipos || '',
+                serviciosPreventivo: estado.serviciosPreventivo || [],
                 fotosAntes: estado.fotosAntes,
                 fotosDespues: estado.fotosDespues,
+                fotoTimbre: estado.fotoTimbre || null,
                 fecha: fecha,
                 hora: hora,
+                direccion: estado.direccion || '',
+                ceco: estado.ceco || '',
+                emailAdmin: estado.emailAdmin || estado.emailSucursal || '',
                 estado: 'En Pausa',
                 pausa: true
               });
@@ -1716,6 +1987,7 @@ function cerrarOT() {
   if (!estado.otNumero) {
     estado.otNumero = Math.floor(9000 + Math.random() * 1000);
   }
+  sincronizarCamposOTEnEstado();
   const descEl = document.getElementById('desc-trabajo');
   const desc = descEl ? descEl.value.trim() : '';
   if (estado.tipo === 'preventivo') {
@@ -3406,6 +3678,7 @@ function seleccionarCadena(cadena) {
   estado.cadenaLogo = cadena.logo || '';
   estado.cadenaColor = cadena.color || '';
   estado.cadenaLetra = cadena.letra || (cadena.nombre ? cadena.nombre.charAt(0) : '');
+  programarAutoguardadoOT();
   document.getElementById('local-topbar-titulo').textContent = cadena.nombre;
   document.getElementById('local-subtitulo').textContent = 'Paso 1 de 4 - Sucursal de ' + cadena.nombre;
   const lista = document.getElementById('lista-sucursales');
@@ -3494,14 +3767,21 @@ function _firebaseADTOPausada(fo) {
     tecnico: fo.tecnico || '',
     fecha: fo.fecha || '',
     hora: fo.hora || '',
-    descripcion: fo.descripcion || '',
+    descripcionProblema: fo.descripcionProblema || '',
+    descripcion: fo.descripcionTrabajo || fo.descripcion || '',
+    descripcionTrabajo: fo.descripcionTrabajo || fo.descripcion || '',
     fotosAntes: fo.fotosAntes || [],
     fotosDespues: fo.fotosDespues || [],
+    fotoTimbre: fo.fotoTimbre || null,
     direccion: fo.direccion || '',
     ceco: fo.ceco || '',
+    numEquipos: fo.numEquipos || '',
+    serviciosPreventivo: fo.serviciosPreventivo || [],
+    emailAdmin: fo.emailAdmin || '',
     estado: 'En Pausa',
     pausa: true,
-    firmada: false,
+    firmada: !!fo.firmada,
+    firmaImagen: fo.firmaImagen || '',
     creadoEn: (fo.creadoEn && fo.creadoEn.toDate) ? fo.creadoEn.toDate().toISOString() : (fo.creadoEn || new Date().toISOString())
   };
 }
@@ -3723,7 +4003,7 @@ function _renderPausadasEnCadena() {
 
         const badge = document.createElement('div');
         badge.className = 'paused-order-badge';
-        badge.textContent = '⏸ En Pausa';
+        badge.textContent = ot.autoDraft ? 'Autoguardada' : '⏸ En Pausa';
 
         const btn = document.createElement('button');
         btn.className = 'paused-order-action';
@@ -5682,6 +5962,10 @@ function continuarOT(otId) {
         return;
       }
 
+      abrirOTGuardada(ot);
+      toast('OT cargada. Continua donde la dejaste.');
+      return;
+
       // Cargar datos en estado
       estado.otNumero = ot.numero;
       estado.tipo = ot.tipo;
@@ -5717,6 +6001,10 @@ function continuarOT(otId) {
         return;
       }
       const d = doc.data();
+
+      abrirOTGuardada(_firebaseADTOPausada(d));
+      toast('OT cargada. Continua donde la dejaste.');
+      return;
 
       // Cargar datos en estado
       estado.otNumero = d.numero;
@@ -7734,6 +8022,18 @@ window.addEventListener('online', function() {
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
+});
+
+window.addEventListener('pagehide', function() {
+  guardarBorradorOTActual();
+});
+
+window.addEventListener('beforeunload', function() {
+  guardarBorradorOTActual();
+});
+
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') guardarBorradorOTActual();
 });
 
 // =========== CACHE OFFLINE CADENAS/USUARIOS ===========
