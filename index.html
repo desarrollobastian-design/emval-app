@@ -1873,6 +1873,88 @@ function responderServicio(idx, respuesta) {
 }
 
 // =========== PAUSAR OT ===========
+// Comprime un array de fotos base64 (deja las URLs http tal cual)
+async function _comprimirFotos(arr) {
+  const out = [];
+  const items = (arr || []).filter(function(f){ return f; });
+  for (let i = 0; i < items.length; i++) {
+    try { out.push(await comprimirImagen(items[i], 1000, 0.6)); }
+    catch(e) { out.push(items[i]); }
+  }
+  return out;
+}
+
+// Actualiza las fotos de una OT pausada en localStorage (para dejar base64 comprimido y liviano)
+function _actualizarFotosLocalPausada(numero, tecnico, fotosA, fotosD) {
+  try {
+    const ots = cargarOTsPausadas();
+    const idx = ots.findIndex(function(o){
+      return o.numero != null && o.numero.toString() === String(numero) && o.tecnico === tecnico;
+    });
+    if (idx >= 0) {
+      ots[idx].fotosAntes = fotosA;
+      ots[idx].fotosDespues = fotosD;
+      guardarOTsPausadas(ots);
+    }
+  } catch(e) { console.error('Error actualizando fotos locales pausada:', e); }
+}
+
+// Sincroniza una OT pausada con Firebase: sube fotos a Cloudinary y guarda solo URLs (doc liviano)
+async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap) {
+  try {
+    // Comprimir para localStorage (offline, liviano) y para subir
+    const compA = await _comprimirFotos(fotosAntesSnap);
+    const compD = await _comprimirFotos(fotosDespuesSnap);
+    _actualizarFotosLocalPausada(ot.numero, ot.tecnico, compA, compD);
+
+    // Sin conexión: queda solo local (no visible para admin hasta sincronizar)
+    if (!window._firebaseReady || !navigator.onLine) return;
+
+    const db = window.firebase.firestore();
+    const urlsAntes = await _subirFotosPausadaACloud(compA, ot.numero, 'antes');
+    const urlsDespues = await _subirFotosPausadaACloud(compD, ot.numero, 'despues');
+
+    const payload = {
+      numero: ot.numero,
+      local: ot.local || '',
+      cadena: ot.cadena || '',
+      cadenaLogo: ot.cadenaLogo || '',
+      cadenaColor: ot.cadenaColor || '',
+      cadenaLetra: ot.cadenaLetra || '',
+      tipo: ot.tipo,
+      tecnico: ot.tecnico,
+      fecha: ot.fecha,
+      hora: ot.hora,
+      descripcionProblema: ot.descripcionProblema || '',
+      descripcion: ot.descripcion || '',
+      descripcionTrabajo: ot.descripcionTrabajo || ot.descripcion || '',
+      numEquipos: ot.numEquipos || '',
+      serviciosPreventivo: ot.serviciosPreventivo || [],
+      fotosAntes: urlsAntes,
+      fotosDespues: urlsDespues,
+      direccion: ot.direccion || '',
+      ceco: ot.ceco || '',
+      emailAdmin: ot.emailAdmin || '',
+      estado: 'En Pausa',
+      pausa: true,
+      firmada: false
+    };
+
+    const snapshot = await db.collection('ordenes')
+      .where('numero', '==', ot.numero).where('tecnico', '==', ot.tecnico).get();
+    if (snapshot.empty) {
+      payload.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('ordenes').add(payload);
+    } else {
+      for (let i = 0; i < snapshot.docs.length; i++) {
+        await db.collection('ordenes').doc(snapshot.docs[i].id).update(payload);
+      }
+    }
+  } catch(e) {
+    console.error('Error sincronizando OT pausada con Firebase:', e);
+  }
+}
+
 function pausarOT() {
   try {
     if (!estado.otNumero) {
@@ -1896,7 +1978,7 @@ function pausarOT() {
     otPausada.autoDraft = false;
     otPausada.firmada = false;
 
-    // Guardar en almacenamiento
+    // Guardar en almacenamiento local (base64, para continuar offline)
     try {
       const otsPausadas = cargarOTsPausadas();
       const existeIndex = otsPausadas.findIndex(function(ot) {
@@ -1910,65 +1992,9 @@ function pausarOT() {
       guardarOTsPausadas(otsPausadas);
     } catch(e) { console.error('Error guardando OT pausada:', e); }
 
-    // Guardar en Firebase en background
-    if (window._firebaseReady) {
-      try {
-        const db = window.firebase.firestore();
-        db.collection('ordenes').where('numero', '==', estado.otNumero).where('tecnico', '==', estado.usuario).get().then(function(snapshot) {
-          if (snapshot.empty) {
-            db.collection('ordenes').add({
-              numero: estado.otNumero,
-              local: estado.local,
-              cadena: (cadenaSeleccionada && cadenaSeleccionada.nombre) || estado.cadenaNombre || '',
-              cadenaLogo: estado.cadenaLogo || (cadenaSeleccionada && cadenaSeleccionada.logo) || '',
-              cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
-              cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
-              tipo: estado.tipo,
-              tecnico: estado.usuario,
-              fecha: fecha,
-              hora: hora,
-              descripcionProblema: estado.descripProblema || '',
-              descripcion: desc,
-              descripcionTrabajo: desc,
-              numEquipos: estado.numEquipos || '',
-              serviciosPreventivo: estado.serviciosPreventivo || [],
-              fotosAntes: estado.fotosAntes,
-              fotosDespues: estado.fotosDespues,
-              fotoTimbre: estado.fotoTimbre || null,
-              direccion: estado.direccion || '',
-              ceco: estado.ceco || '',
-              emailAdmin: estado.emailAdmin || estado.emailSucursal || '',
-              estado: 'En Pausa',
-              pausa: true,
-              firmada: false,
-              creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-            });
-          } else {
-            snapshot.docs.forEach(function(doc) {
-              db.collection('ordenes').doc(doc.id).update({
-                descripcionProblema: estado.descripProblema || '',
-                descripcion: desc,
-                descripcionTrabajo: desc,
-                numEquipos: estado.numEquipos || '',
-                serviciosPreventivo: estado.serviciosPreventivo || [],
-                fotosAntes: estado.fotosAntes,
-                fotosDespues: estado.fotosDespues,
-                fotoTimbre: estado.fotoTimbre || null,
-                fecha: fecha,
-                hora: hora,
-                direccion: estado.direccion || '',
-                ceco: estado.ceco || '',
-                emailAdmin: estado.emailAdmin || estado.emailSucursal || '',
-                estado: 'En Pausa',
-                pausa: true
-              });
-            });
-          }
-        }).catch(function(e) {
-          console.error('Error Firebase pausarOT:', e);
-        });
-      } catch(e) { console.error('Error Firebase:', e); }
-    }
+    // Sincronizar con Firebase en segundo plano (sube fotos a Cloudinary -> URLs).
+    // Usa una copia (snapshot) de las fotos para evitar carreras si se inicia otra OT.
+    _sincronizarPausadaFirebase(otPausada, estado.fotosAntes.slice(), estado.fotosDespues.slice());
 
     toast('✅ OT pausada correctamente');
     setTimeout(function() {
@@ -2081,6 +2107,44 @@ async function subirCloudinary(dataUrl, carpeta, nombre) {
     console.error('Error subiendo a Cloudinary:', e);
     return null;
   }
+}
+
+// Sube fotos base64 a Cloudinary y devuelve URLs (si ya es URL http, la deja igual)
+async function _subirFotosPausadaACloud(arr, numero, prefijo) {
+  const urls = [];
+  const fotos = (arr || []).filter(function(f){ return f; });
+  for (let i = 0; i < fotos.length; i++) {
+    const f = fotos[i];
+    if (typeof f === 'string' && f.startsWith('http')) {
+      urls.push(f); // ya es URL de Cloudinary, no re-subir
+      continue;
+    }
+    try {
+      const url = await subirCloudinary(f, numero, prefijo + '_' + i + '.jpg');
+      if (url) urls.push(url);
+    } catch(e) { console.warn('Error subiendo foto pausada:', e); }
+  }
+  return urls;
+}
+
+// Convierte URLs (Cloudinary) a base64 para uso offline; si ya es base64, la deja igual
+async function _urlsABase64(arr) {
+  const out = [];
+  const items = (arr || []).filter(function(f){ return f; });
+  for (let i = 0; i < items.length; i++) {
+    const f = items[i];
+    if (typeof f === 'string' && f.startsWith('http')) {
+      try {
+        const resp = await fetch(f);
+        const blob = await resp.blob();
+        const b64 = await _blobToBase64(blob);
+        out.push(b64);
+      } catch(e) { out.push(f); } // si falla la descarga, dejar la URL (se verá online)
+    } else {
+      out.push(f);
+    }
+  }
+  return out;
 }
 
 function _notificarOTCompletada(numero, local, tecnico, tipo, fecha) {
@@ -3816,12 +3880,15 @@ async function _reconciliarPausadasFirebase() {
     // 2) Agregar las que Firebase dice que son mías pero no tengo localmente (reasignadas hacia mí u otro equipo)
     const numerosLocalesMios = {};
     local.forEach(function(o){ if (o.tecnico === estado.usuario) numerosLocalesMios[String(o.numero)] = true; });
-    misEnFb.forEach(function(fo) {
-      if (!numerosLocalesMios[String(fo.numero)]) {
-        local.unshift(_firebaseADTOPausada(fo));
-        cambios = true;
-      }
-    });
+    const nuevas = misEnFb.filter(function(fo){ return !numerosLocalesMios[String(fo.numero)]; });
+    for (let i = 0; i < nuevas.length; i++) {
+      const otLocal = _firebaseADTOPausada(nuevas[i]);
+      // Las fotos vienen como URLs de Cloudinary → convertir a base64 para continuar offline
+      otLocal.fotosAntes = await _urlsABase64(otLocal.fotosAntes);
+      otLocal.fotosDespues = await _urlsABase64(otLocal.fotosDespues);
+      local.unshift(otLocal);
+      cambios = true;
+    }
 
     if (cambios) guardarOTsPausadas(local);
     return cambios;
