@@ -432,7 +432,7 @@
 <!-- ============ SCREEN: SELECCIÓN LOCAL ============ -->
 <div class="screen" id="s-cadena">
   <div class="topbar">
-    <button class="back" onclick="cerrarSesion()">←</button>
+    <button class="back" onclick="volverDesdeCadena()">←</button>
     <h2>Seleccionar cadena</h2>
     <span class="ot-badge" id="ot-num-cadena">#---</span>
   </div>
@@ -761,6 +761,7 @@
     <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
   </div>
   <div class="content">
+    <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="cot-buscar" placeholder="🔍 Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
@@ -984,12 +985,30 @@
 <div id="modal-reasignar" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalReasignar(event)">
   <div style="background:white;border-radius:18px;max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
-      <div style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
+      <div id="modal-reasignar-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
       <div id="modal-reasignar-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Selecciona el nuevo técnico</div>
     </div>
     <div id="modal-reasignar-lista" style="overflow-y:auto;padding:10px 14px;flex:1;"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--gris2);">
       <button onclick="cerrarModalReasignar()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: enviar cotización a uno o varios correos -->
+<div id="modal-enviar-cot" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalEnviarCot(event)">
+  <div style="background:white;border-radius:18px;max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+    <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
+      <div style="font-size:16px;font-weight:700;color:var(--texto);">Enviar cotización</div>
+      <div id="modal-enviar-cot-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Agrega uno o más correos de destino</div>
+    </div>
+    <div style="overflow-y:auto;padding:14px 18px;flex:1;">
+      <div id="modal-enviar-cot-lista"></div>
+      <button type="button" onclick="agregarFilaEmailCot('')" style="width:100%;background:transparent;color:var(--azul);border:1.5px dashed var(--azul);border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;">+ Agregar otro correo</button>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;">
+      <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
     </div>
   </div>
 </div>
@@ -1050,6 +1069,9 @@ function cargarOTsPausadas() {
 const EMVAL_AUTOSAVE_VERSION = 1;
 let _autoSaveTimer = null;
 let _restaurandoBorradorOT = false;
+// true cuando una OT se acaba de completar (cerrarOT): evita que un autoguardado
+// posterior (visibilitychange/pagehide/cerrarSesion) reviva el borrador ya cerrado.
+let _otFinalizada = false;
 
 function sincronizarCamposOTEnEstado() {
   if (typeof estado === 'undefined' || !estado) return;
@@ -1126,8 +1148,10 @@ function _crearOTPausadaDesdeEstado() {
     numEquipos: estado.numEquipos || '',
     serviciosPreventivo: estado.serviciosPreventivo || [],
     emailAdmin: estado.emailAdmin || estado.emailSucursal || '',
-    estado: 'En Pausa',
+    estado: estado.enEspera ? 'En espera' : 'En Pausa',
     pausa: true,
+    enEspera: !!estado.enEspera,
+    cotizacionId: estado.cotizacionId || '',
     autoDraft: true,
     firmada: !!estado.firmada,
     firmaImagen: _capturarFirmaBorrador(),
@@ -1138,7 +1162,7 @@ function _crearOTPausadaDesdeEstado() {
 }
 
 function guardarBorradorOTActual() {
-  if (_restaurandoBorradorOT || !_hayDatosOTEnCurso()) return false;
+  if (_otFinalizada || _restaurandoBorradorOT || !_hayDatosOTEnCurso()) return false;
   try {
     const otBorrador = _crearOTPausadaDesdeEstado();
     const otsPausadas = cargarOTsPausadas();
@@ -1162,7 +1186,7 @@ function guardarBorradorOTActual() {
 }
 
 function programarAutoguardadoOT() {
-  if (_restaurandoBorradorOT) return;
+  if (_restaurandoBorradorOT || window._modoCotPrevia) return;
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(guardarBorradorOTActual, 350);
 }
@@ -1195,6 +1219,9 @@ function _cargarEstadoDesdeOTGuardada(ot) {
   estado.firmada = !!ot.firmada;
   estado.firmaImagen = ot.firmaImagen || '';
   estado.creadoEnBorrador = ot.creadoEn || new Date().toISOString();
+  // Vínculo con cotización previa (OT "en espera"): se arrastra para unir el recibo al completar
+  estado.cotizacionId = ot.cotizacionId || '';
+  estado.enEspera = !!ot.enEspera;
   cadenaSeleccionada = estado.cadenaNombre ? {
     nombre: estado.cadenaNombre,
     logo: estado.cadenaLogo,
@@ -1244,6 +1271,7 @@ function _restaurarFirmaDesdeEstado() {
 
 function abrirOTGuardada(ot) {
   _restaurandoBorradorOT = true;
+  _otFinalizada = false;
   _cargarEstadoDesdeOTGuardada(ot);
   const tieneAntes = _conteoFotos(estado.fotosAntes) > 0;
   const tieneEjecucion = !!(estado.descripcion || _conteoFotos(estado.fotosDespues) || estado.fotoTimbre || estado.firmada);
@@ -1317,6 +1345,39 @@ function eliminarOTPausada(numero, tecnico) {
   }
 }
 
+// Elimina borradores autoguardados (autoDraft) que corresponden a OTs ya completadas.
+// Una OT completada queda registrada en localStorage 'emval_ots'; si un borrador
+// comparte numero+tecnico con una completada, es un "zombi" que debe desaparecer.
+// Solo toca autoDraft===true (nunca una "En Pausa" real). Devuelve true si hubo cambios.
+function _limpiarBorradoresCompletados() {
+  try {
+    let completadas = [];
+    try { completadas = JSON.parse(localStorage.getItem('emval_ots') || '[]'); } catch(e) { completadas = []; }
+    if (!completadas.length) return false;
+
+    const claveCompletada = {};
+    completadas.forEach(function(o) {
+      if (o && o.numero != null) claveCompletada[String(o.numero) + '|' + (o.tecnico || '')] = true;
+    });
+
+    const pausadas = cargarOTsPausadas();
+    const filtradas = pausadas.filter(function(ot) {
+      if (!ot || ot.autoDraft !== true) return true; // solo borradores autoguardados
+      const clave = String(ot.numero) + '|' + (ot.tecnico || '');
+      return !claveCompletada[clave]; // descartar si ya se completó
+    });
+
+    if (filtradas.length !== pausadas.length) {
+      guardarOTsPausadas(filtradas);
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.error('Error limpiando borradores completados:', e);
+    return false;
+  }
+}
+
 // =========== ESTADO GLOBAL ===========
 let estado = {
   usuario: null, cargo: null, avatar: null, emailSucursal: '',
@@ -1335,6 +1396,8 @@ let estado = {
   firmaImagen: '',
   emailAdmin: '',
   creadoEnBorrador: '',
+  cotizacionId: '',
+  enEspera: false,
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
@@ -1465,6 +1528,9 @@ function cerrarSesion() {
 // =========== NUEVA OT ===========
 function nuevaOT() {
   if (!_restaurandoBorradorOT) guardarBorradorOTActual();
+  _otFinalizada = false;
+  estado.cotizacionId = '';
+  estado.enEspera = false;
   estado.otNumero = 9475 + Math.floor(Math.random()*100);
   estado.creadoEnBorrador = new Date().toISOString();
   estado.tipo = null;
@@ -1524,8 +1590,66 @@ function nuevaOT() {
   }
 }
 
+// =========== COTIZACIÓN PREVIA (entrada Pedro/admin) ===========
+function iniciarCotizacionPrevia() {
+  window._modoCotPrevia = true;
+  _otFinalizada = false;
+  cadenaSeleccionada = null;
+  const secP = document.getElementById('seccion-pausadas');
+  if (secP) secP.style.display = 'none';
+  go('s-cadena');
+  cargarCadenasApp();
+  toast('Cotización previa: elige la sucursal');
+}
+
+function volverDesdeCadena() {
+  if (window._modoCotPrevia) {
+    window._modoCotPrevia = false;
+    go('s-carpetas');
+    cargarCarpetas();
+    return;
+  }
+  cerrarSesion();
+}
+
+// Abre el cotizador en modo "previa" (sin OT previa) para la sucursal elegida
+function _iniciarCotizadorPrevia(nombre, direccion, emailAdmin, centro) {
+  const ahora = new Date();
+  cotizacionActual = {
+    id: null, otId: null, numero: '',
+    local: nombre, direccion: direccion || '',
+    centroSucursal: centro || '', emailSucursal: emailAdmin || '',
+    cadena: (cadenaSeleccionada && cadenaSeleccionada.nombre) || estado.cadenaNombre || '',
+    cadenaLogo: (cadenaSeleccionada && cadenaSeleccionada.logo) || estado.cadenaLogo || '',
+    cadenaColor: (cadenaSeleccionada && cadenaSeleccionada.color) || estado.cadenaColor || '',
+    cadenaLetra: (cadenaSeleccionada && cadenaSeleccionada.letra) || estado.cadenaLetra || '',
+    tecnico: '', fecha: ahora.toLocaleDateString('es-CL'),
+    descripcionTrabajo: '', esPrevia: true, estadoCot: 'Pendiente'
+  };
+  window._editandoCotizacionId = null;
+  window._cotizacionOrigen = 's-carpetas';
+  itemsCot = [
+    { desc: 'Mano de obra', qty: 1, precio: 0 },
+    { desc: 'Materiales', qty: 1, precio: 0 }
+  ];
+  const r = document.getElementById('cot-resumen-ot');
+  if (r) r.innerHTML = '<div class="summary-row"><span class="sum-label">Local</span><span class="sum-val">' + nombre + '</span></div>' +
+    '<div class="summary-row"><span class="sum-label">Técnico</span><span class="sum-val">Por asignar</span></div>' +
+    '<div class="summary-row"><span class="sum-label">Fecha</span><span class="sum-val">' + cotizacionActual.fecha + '</span></div>' +
+    '<div class="summary-row" style="border:none"><span class="sum-label">Tipo</span><span class="sum-val" style="color:var(--azul);font-weight:600;">Cotización previa</span></div>';
+  const cp = document.getElementById('cot-carpeta'); if (cp) cp.value = nombre || '';
+  const dt = document.getElementById('cot-detalle-trabajo'); if (dt) dt.value = '';
+  const ns = document.getElementById('cot-nombre-servicio'); if (ns) ns.value = '';
+  renderItemsCot();
+  go('s-cotizacion');
+}
+
 // =========== LOCAL ===========
 function seleccionarLocal(nombre, direccion, emailAdmin, centro) {
+  if (window._modoCotPrevia) {
+    _iniciarCotizadorPrevia(nombre, direccion, emailAdmin, centro);
+    return;
+  }
   estado.local = nombre;
   estado.direccion = direccion || '';
   estado.ceco = centro || '';
@@ -1935,8 +2059,10 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       direccion: ot.direccion || '',
       ceco: ot.ceco || '',
       emailAdmin: ot.emailAdmin || '',
-      estado: 'En Pausa',
+      estado: ot.enEspera ? 'En espera' : 'En Pausa',
       pausa: true,
+      enEspera: !!ot.enEspera,
+      cotizacionId: ot.cotizacionId || '',
       firmada: false
     };
 
@@ -2044,6 +2170,10 @@ function cerrarOT() {
 
   // Guardar email admin
   estado.emailAdmin = document.getElementById('email-admin').value.trim();
+
+  // OT completada: bloquear autoguardado para que no reviva como borrador
+  // (visibilitychange/pagehide/cerrarSesion) hasta que se inicie/continúe otra OT.
+  _otFinalizada = true;
 
   // Guardar localmente (offline)
   const ot = {
@@ -2203,6 +2333,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
         serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
         fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
         fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
+        cotizacionId: estado.cotizacionId || '',
         audiosBase64: audiosBase64, savedAt: new Date().toISOString()
       });
       toast('Sin internet — OT guardada para sincronizar cuando haya conexion');
@@ -2256,6 +2387,16 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     });
 
+    // Si esta OT nació de una cotización previa aceptada, unir el recibo de obra a la cotización
+    if (estado.cotizacionId) {
+      await _vincularCotizacionRealizada(estado.cotizacionId, {
+        numero: otBase.numero, fecha: fecha,
+        urlsAntes: urlsAntes, urlsDespues: urlsDespues,
+        urlTimbre: urlTimbre, firmaBase64: firmaBase64,
+        tecnico: estado.usuario
+      });
+    }
+
     toast('OT guardada en la nube [ok]');
     _notificarOTCompletada(otBase.numero, estado.local, estado.usuario, estado.tipo, fecha);
   } catch(e) {
@@ -2271,6 +2412,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
         serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
         fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
         fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
+        cotizacionId: estado.cotizacionId || '',
         audiosBase64: audiosBase64, savedAt: new Date().toISOString()
       });
       toast('OT guardada offline — se sincronizara cuando haya internet');
@@ -3099,6 +3241,17 @@ async function guardarCotizacion() {
       numeroCotizacion: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2)+'01'; })(),
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     };
+    // Cotización previa: ciclo de estado propio, sin OT de origen, conserva branding de cadena
+    if (cotizacionActual.esPrevia) {
+      cotData.tipoCot = 'previa';
+      cotData.estadoCot = cotizacionActual.estadoCot || 'Pendiente';
+      cotData.cadena = cotizacionActual.cadena || '';
+      cotData.cadenaLogo = cotizacionActual.cadenaLogo || '';
+      cotData.cadenaColor = cotizacionActual.cadenaColor || '';
+      cotData.cadenaLetra = cotizacionActual.cadenaLetra || '';
+      cotData.otId = null;
+      cotData.otNumero = '';
+    }
     let savedDocId;
     const editId = window._editandoCotizacionId;
     if (editId) {
@@ -3137,6 +3290,11 @@ async function guardarCotizacion() {
       toast('Cotizacion guardada');
       go('s-preventivos');
       cargarPreventivos();
+    } else if (origen === 's-carpetas') {
+      window._modoCotPrevia = false;
+      toast('Cotización guardada');
+      go('s-carpetas');
+      cargarCarpetas();
     } else {
       toast('Cotizacion guardada');
       go('s-supervisor');
@@ -3159,7 +3317,13 @@ async function editarCotizacion(cotData) {
     tecnico: cotData.tecnico || '',
     fecha: cotData.fecha,
     descripcionTrabajo: cotData.descripcionTrabajo || '',
-    centroSucursal: cotData.centro || ''
+    centroSucursal: cotData.centro || '',
+    esPrevia: cotData.tipoCot === 'previa',
+    estadoCot: cotData.estadoCot || '',
+    cadena: cotData.cadena || '',
+    cadenaLogo: cotData.cadenaLogo || '',
+    cadenaColor: cotData.cadenaColor || '',
+    cadenaLetra: cotData.cadenaLetra || ''
   };
   itemsCot = (cotData.items || []).map(function(i){ return { desc: i.desc||'', qty: i.qty||1, precio: i.precio||0 }; });
   document.getElementById('cot-detalle-trabajo').value = cotData.descripcionTrabajo || '';
@@ -3373,6 +3537,17 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
       rowContent.appendChild(totalDiv);
       rowContent.appendChild(descDiv);
     }
+    if (it.tipoCot === 'previa' && it.estadoCot) {
+      const stDiv = document.createElement('div');
+      stDiv.style.cssText = 'margin-top:4px;';
+      const stTag = document.createElement('span');
+      const _stColors = { 'Pendiente': ['#FEF3C7','#92400E'], 'Aceptada': ['#DBEAFE','#1E40AF'], 'Realizada': ['#DCFCE7','#166534'] };
+      const _c = _stColors[it.estadoCot] || ['#E5E7EB','#374151'];
+      stTag.style.cssText = 'display:inline-block;background:' + _c[0] + ';color:' + _c[1] + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;';
+      stTag.textContent = 'Previa · ' + it.estadoCot + (it.tecnicoAsignado ? ' → ' + it.tecnicoAsignado : '');
+      stDiv.appendChild(stTag);
+      rowContent.appendChild(stDiv);
+    }
     if (it.enviado) {
       const envDiv = document.createElement('div');
       envDiv.style.cssText = 'margin-top:4px;';
@@ -3397,6 +3572,20 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnEdit.onclick = (function(data){ return function(){ editarCotizacion(data); }; })(it);
     btnsRow.appendChild(btnPdf);
     btnsRow.appendChild(btnEdit);
+    if (it.tipoCot === 'previa' && it.estadoCot === 'Pendiente') {
+      const btnAcept = document.createElement('button');
+      btnAcept.textContent = 'Aceptar → crear OT';
+      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja);color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnAcept.onclick = (function(id){ return function(){ aceptarCotizacionPrevia(id); }; })(it.id);
+      btnsRow.appendChild(btnAcept);
+    }
+    if (it.tipoCot === 'previa' && it.estadoCot === 'Realizada') {
+      const btnVer = document.createElement('button');
+      btnVer.textContent = 'Ver trabajo';
+      btnVer.style.cssText = 'flex:1.4;background:#166534;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnVer.onclick = (function(id){ return function(){ verTrabajoCotizacion(id); }; })(it.id);
+      btnsRow.appendChild(btnVer);
+    }
     rowContent.appendChild(btnsRow);
     checkRow.appendChild(chk);
     checkRow.appendChild(rowContent);
@@ -3434,7 +3623,14 @@ async function cargarCarpetas() {
         descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
         descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '',
         carpeta: d.carpeta || '', supervisor: d.supervisor || '',
-        pdfUrl: d.pdfUrl || '', enviado: d.enviado || false };
+        pdfUrl: d.pdfUrl || '', enviado: d.enviado || false,
+        tipoCot: d.tipoCot || '', estadoCot: d.estadoCot || '',
+        tecnicoAsignado: d.tecnicoAsignado || '', otEnEsperaNumero: d.otEnEsperaNumero || '',
+        otCompletadaNumero: d.otCompletadaNumero || '', fechaRealizada: d.fechaRealizada || '',
+        tecnicoRealizo: d.tecnicoRealizo || '',
+        fotosAntes: d.fotosAntes || [], fotosDespues: d.fotosDespues || [],
+        fotoTimbre: d.fotoTimbre || null, firmaImagen: d.firmaImagen || '',
+        cadena: d.cadena || '', cadenaLogo: d.cadenaLogo || '', cadenaColor: d.cadenaColor || '', cadenaLetra: d.cadenaLetra || '' };
       window._todasCotizaciones[doc.id] = cotItem;
       if (d.enviado) {
         itemsEnviados.push(cotItem);
@@ -3842,8 +4038,11 @@ function _firebaseADTOPausada(fo) {
     numEquipos: fo.numEquipos || '',
     serviciosPreventivo: fo.serviciosPreventivo || [],
     emailAdmin: fo.emailAdmin || '',
-    estado: 'En Pausa',
+    estado: fo.enEspera ? 'En espera' : 'En Pausa',
     pausa: true,
+    enEspera: !!fo.enEspera,
+    cotizacionId: fo.cotizacionId || '',
+    cotizacionNumero: fo.cotizacionNumero || '',
     firmada: !!fo.firmada,
     firmaImagen: fo.firmaImagen || '',
     creadoEn: (fo.creadoEn && fo.creadoEn.toDate) ? fo.creadoEn.toDate().toISOString() : (fo.creadoEn || new Date().toISOString())
@@ -3911,6 +4110,8 @@ function _renderPausadasEnCadena() {
   if (!estado.usuario) return;
 
   try {
+    // Eliminar borradores zombis (OTs ya completadas que revivieron como autoguardadas)
+    _limpiarBorradoresCompletados();
     const otsPausadas = cargarOTsPausadas();
     const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
 
@@ -4070,11 +4271,17 @@ function _renderPausadasEnCadena() {
 
         const badge = document.createElement('div');
         badge.className = 'paused-order-badge';
-        badge.textContent = ot.autoDraft ? 'Autoguardada' : '⏸ En Pausa';
+        if (ot.enEspera) {
+          badge.textContent = '⏳ En espera' + (ot.cotizacionNumero ? ' · Cot ' + ot.cotizacionNumero : '');
+          badge.style.background = 'rgba(30, 64, 175, 0.15)';
+          badge.style.color = '#1E40AF';
+        } else {
+          badge.textContent = ot.autoDraft ? 'Autoguardada' : '⏸ En Pausa';
+        }
 
         const btn = document.createElement('button');
         btn.className = 'paused-order-action';
-        btn.textContent = '▶ Continuar OT';
+        btn.textContent = ot.enEspera ? '▶ Realizar OT' : '▶ Continuar OT';
         btn.onclick = (function(otId) {
           return function(e) {
             e.stopPropagation();
@@ -4084,6 +4291,24 @@ function _renderPausadasEnCadena() {
 
         bottom.appendChild(badge);
         bottom.appendChild(btn);
+
+        // Solo para borradores autoguardados: permitir descartarlos manualmente
+        if (ot.autoDraft) {
+          const btnDescartar = document.createElement('button');
+          btnDescartar.textContent = '✕';
+          btnDescartar.title = 'Descartar borrador';
+          btnDescartar.style.cssText = 'flex-shrink:0;width:44px;height:44px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;';
+          btnDescartar.onclick = (function(numero, tecnico) {
+            return function(e) {
+              e.stopPropagation();
+              if (!confirm('¿Descartar este borrador autoguardado? No se puede deshacer.')) return;
+              eliminarOTPausada(numero, tecnico);
+              cargarOTsPausadasEnCadena();
+              toast('Borrador descartado');
+            };
+          })(ot.numero, ot.tecnico);
+          bottom.appendChild(btnDescartar);
+        }
 
         card.appendChild(top);
         card.appendChild(bottom);
@@ -6559,12 +6784,89 @@ function obtenerCotizacionesSeleccionadas() {
   }).filter(Boolean);
 }
 
+let _cotsParaEnviar = [];
+
+// Email guardado de la sucursal de una cotización (best-effort) para pre-llenar el modal
+function _emailSucursalDeCot(cot) {
+  try {
+    if (!cot || !cot.local || !window._cadenasMapaCot) return '';
+    const cad = window._cadenasMapaCot[cot.local];
+    if (!cad || !cad.sucursales) return '';
+    const suc = cad.sucursales.find(function(s){
+      const n = typeof s === 'object' ? s.nombre : s;
+      return n === cot.local;
+    });
+    return (suc && typeof suc === 'object') ? (suc.email || '') : '';
+  } catch(e) { return ''; }
+}
+
+// Agrega una fila de input de correo al modal de envío
+function agregarFilaEmailCot(valor) {
+  const cont = document.getElementById('modal-enviar-cot-lista');
+  if (!cont) return;
+  const row = document.createElement('div');
+  row.className = 'fila-email-cot';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px;';
+  const inp = document.createElement('input');
+  inp.type = 'email';
+  inp.placeholder = 'correo@ejemplo.cl';
+  inp.value = valor || '';
+  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:14px;font-family:inherit;outline:none;';
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.textContent = '✕';
+  del.title = 'Quitar';
+  del.style.cssText = 'flex-shrink:0;width:40px;height:40px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;';
+  del.onclick = function() {
+    const filas = cont.querySelectorAll('.fila-email-cot');
+    if (filas.length <= 1) { inp.value = ''; return; } // siempre dejar al menos una fila
+    cont.removeChild(row);
+  };
+  row.appendChild(inp);
+  row.appendChild(del);
+  cont.appendChild(row);
+}
+
 async function enviarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
-  const email = prompt('Email del cliente:');
-  if (!email) return;
+  _cotsParaEnviar = seleccionadas;
+  const cont = document.getElementById('modal-enviar-cot-lista');
+  const sub = document.getElementById('modal-enviar-cot-sub');
+  if (sub) sub.textContent = seleccionadas.length + ' cotización(es) · agrega uno o más correos';
+  if (cont) cont.innerHTML = '';
+  agregarFilaEmailCot(_emailSucursalDeCot(seleccionadas[0]));
+  document.getElementById('modal-enviar-cot').style.display = 'flex';
+}
 
+function cerrarModalEnviarCot(ev) {
+  if (ev && ev.target !== ev.currentTarget) return;
+  const m = document.getElementById('modal-enviar-cot');
+  if (m) m.style.display = 'none';
+}
+
+// Valida los correos del modal y dispara el envío
+function confirmarEnviarCot() {
+  const cont = document.getElementById('modal-enviar-cot-lista');
+  if (!cont) return;
+  const inputs = cont.querySelectorAll('input[type=email]');
+  const emails = [];
+  const reEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  let invalido = '';
+  inputs.forEach(function(inp){
+    const v = (inp.value || '').trim();
+    if (!v) return;
+    if (!reEmail.test(v)) { invalido = v; return; }
+    if (emails.indexOf(v) === -1) emails.push(v);
+  });
+  if (invalido) { toast('Correo inválido: ' + invalido); return; }
+  if (emails.length === 0) { toast('Agrega al menos un correo'); return; }
+  cerrarModalEnviarCot();
+  _procesarEnvioCotizaciones(_cotsParaEnviar, emails);
+}
+
+// Genera/sube PDFs si faltan, arma el cuerpo y envía la(s) cotización(es) a cada correo
+async function _procesarEnvioCotizaciones(seleccionadas, emails) {
   // Si alguna cot no tiene pdfUrl, generarla y subirla ahora
   const sinUrl = seleccionadas.filter(function(it){ return !it.pdfUrl; });
   if (sinUrl.length > 0) {
@@ -6580,8 +6882,6 @@ async function enviarCotizacionesSeleccionadas() {
       } catch(e) { console.warn('Error generando PDF para', sinUrl[si].id, e); }
     }
   }
-
-  toast('Enviando email...');
 
   // Construir contenido HTML
   let resumenTotal = 0;
@@ -6607,35 +6907,55 @@ async function enviarCotizacionesSeleccionadas() {
     itemsHtml +
     '<p style="font-size:14px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
 
-  const _cotParams = {
-    email_admin: email,
-    email: email,
-    name: 'EMVAL E.I.R.L.',
-    ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
-    local: seleccionadas.map(function(it){ return it.local; }).join(', '),
-    fecha: new Date().toLocaleDateString('es-CL'),
-    tecnico: seleccionadas[0].tecnico || '',
-    tipo: 'Cotizacion',
-    cantidad: String(seleccionadas.length),
-    trabajo: cuerpoHtml,
-    pdf_url: ''
-  };
-  console.log('EmailJS cotizacion → service:', window.EMAILJS_COT_SERVICE, 'template:', window.EMAILJS_COT_TEMPLATE, 'to:', email);
-  try {
-    const result = await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _cotParams);
-    console.log('EmailJS cotizacion OK:', result.status, result.text);
-    // Marcar como enviado en Firestore
+  // Enviar a cada destinatario en un loop (entrega individual, robusto)
+  toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
+  let enviados = 0;
+  const fallidos = [];
+  for (var k = 0; k < emails.length; k++) {
+    const _cotParams = {
+      email_admin: emails[k],
+      email: emails[k],
+      name: 'EMVAL E.I.R.L.',
+      ot_numero: seleccionadas.map(function(it){ return it.otNumero || ''; }).join(', '),
+      local: seleccionadas.map(function(it){ return it.local; }).join(', '),
+      fecha: new Date().toLocaleDateString('es-CL'),
+      tecnico: seleccionadas[0].tecnico || '',
+      tipo: 'Cotizacion',
+      cantidad: String(seleccionadas.length),
+      trabajo: cuerpoHtml,
+      pdf_url: ''
+    };
+    try {
+      await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _cotParams);
+      enviados++;
+    } catch(e) {
+      console.error('EmailJS cotizacion ERROR (' + emails[k] + '):', JSON.stringify(e));
+      fallidos.push(emails[k]);
+    }
+  }
+
+  if (enviados > 0) {
+    // Marcar como enviado + registrar destinatarios en Firestore
     const db = window.firebase.firestore();
     for (var ei = 0; ei < seleccionadas.length; ei++) {
-      await db.collection('cotizaciones').doc(seleccionadas[ei].id).update({ enviado: true });
+      try {
+        await db.collection('cotizaciones').doc(seleccionadas[ei].id).update({
+          enviado: true,
+          emailsEnviados: window.firebase.firestore.FieldValue.arrayUnion.apply(null, emails)
+        });
+      } catch(e) { console.warn('No se pudo marcar enviado:', seleccionadas[ei].id, e); }
     }
-    toast('Email enviado con ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : ''));
     document.querySelectorAll('#lista-carpetas input[type=checkbox]').forEach(function(c){ c.checked = false; });
     actualizarBarraAcciones();
     await cargarCarpetas();
-  } catch(e) {
-    console.error('EmailJS cotizacion ERROR completo:', JSON.stringify(e));
-    toast('Error al enviar: ' + (e.text || e.message || JSON.stringify(e)));
+  }
+
+  if (fallidos.length === 0) {
+    toast('✅ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : ''));
+  } else if (enviados > 0) {
+    toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
+  } else {
+    toast('Error al enviar. Revisa los correos e intenta de nuevo.');
   }
 }
 
@@ -6959,7 +7279,9 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   const meta = document.createElement('div');
   meta.className = 'ot-sub';
   meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
-  const pausaBadge = '<span style="background:#D97706;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;">⏸ EN PAUSA</span>';
+  const pausaBadge = d.enEspera
+    ? '<span style="background:#1E40AF;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;">⏳ EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
+    : '<span style="background:#D97706;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;">⏸ EN PAUSA</span>';
   const tecnicoTxt = '<span>👤 ' + (d.tecnico || 'Sin técnico') + '</span>';
   const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
   meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
@@ -7007,16 +7329,9 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
 let _reasignarDocId = null;
 let _reasignarOT = null;
 
-async function abrirModalReasignar(docId, d) {
-  _reasignarDocId = docId;
-  _reasignarOT = d;
-  const modal = document.getElementById('modal-reasignar');
-  const lista = document.getElementById('modal-reasignar-lista');
-  const sub = document.getElementById('modal-reasignar-sub');
-  sub.textContent = 'OT #' + (d.numero || '----') + ' · ' + (d.local || '') + ' · actual: ' + (d.tecnico || 'Sin técnico');
+// Renderiza la lista de técnicos (excluye supervisor/admin) en el modal; onPick(nombre) al elegir
+async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
   lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:16px;">Cargando técnicos...</p>';
-  modal.style.display = 'flex';
-
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
@@ -7034,7 +7349,7 @@ async function abrirModalReasignar(docId, d) {
     }
 
     tecnicos.forEach(function(t) {
-      const esActual = t.nombre === d.tecnico;
+      const esActual = currentTec && t.nombre === currentTec;
       const row = document.createElement('button');
       row.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;background:' + (esActual ? '#F1F5F9' : 'white') + ';border:1.5px solid var(--gris2);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:' + (esActual ? 'default' : 'pointer') + ';font-family:inherit;text-align:left;';
       const av = document.createElement('div');
@@ -7046,7 +7361,7 @@ async function abrirModalReasignar(docId, d) {
       row.appendChild(av);
       row.appendChild(nom);
       if (!esActual) {
-        row.onclick = function() { confirmarReasignar(t.nombre); };
+        row.onclick = function() { onPick(t.nombre); };
       } else {
         const chk = document.createElement('span');
         chk.textContent = '✓';
@@ -7059,6 +7374,19 @@ async function abrirModalReasignar(docId, d) {
     console.error('Error cargando tecnicos:', e);
     lista.innerHTML = '<p style="font-size:13px;color:var(--rojo);text-align:center;padding:16px;">Error cargando técnicos</p>';
   }
+}
+
+async function abrirModalReasignar(docId, d) {
+  _reasignarDocId = docId;
+  _reasignarOT = d;
+  const modal = document.getElementById('modal-reasignar');
+  const lista = document.getElementById('modal-reasignar-lista');
+  const sub = document.getElementById('modal-reasignar-sub');
+  const tit = document.getElementById('modal-reasignar-titulo');
+  if (tit) tit.textContent = 'Reasignar OT';
+  sub.textContent = 'OT #' + (d.numero || '----') + ' · ' + (d.local || '') + ' · actual: ' + (d.tecnico || 'Sin técnico');
+  modal.style.display = 'flex';
+  _cargarListaTecnicosEnModal(lista, d.tecnico, function(nombre){ confirmarReasignar(nombre); });
 }
 
 async function confirmarReasignar(nuevoTecnico) {
@@ -7081,6 +7409,185 @@ function cerrarModalReasignar(ev) {
   document.getElementById('modal-reasignar').style.display = 'none';
   _reasignarDocId = null;
   _reasignarOT = null;
+}
+
+// --- Aceptar cotización previa → crear OT en espera asignada a un técnico ---
+function aceptarCotizacionPrevia(cotId) {
+  const cot = (window._todasCotizaciones && window._todasCotizaciones[cotId]) || null;
+  if (!cot) { toast('Cotización no encontrada'); return; }
+  if (!navigator.onLine || !window._firebaseReady) { toast('Necesitas conexión para aceptar y crear la OT'); return; }
+  const modal = document.getElementById('modal-reasignar');
+  const lista = document.getElementById('modal-reasignar-lista');
+  const sub = document.getElementById('modal-reasignar-sub');
+  const tit = document.getElementById('modal-reasignar-titulo');
+  if (tit) tit.textContent = 'Aceptar cotización · asignar técnico';
+  sub.textContent = (cot.local || '') + ' · ' + (cot.numeroCotizacion ? 'Cot ' + cot.numeroCotizacion + ' · ' : '') + 'elige el técnico que ejecutará';
+  modal.style.display = 'flex';
+  _cargarListaTecnicosEnModal(lista, '', function(nombre){ confirmarAceptarCotizacion(cotId, nombre); });
+}
+
+async function confirmarAceptarCotizacion(cotId, tecnico) {
+  const cot = (window._todasCotizaciones && window._todasCotizaciones[cotId]) || null;
+  if (!cot) { toast('Cotización no encontrada'); return; }
+  if (!confirm('¿Aceptar la cotización de ' + (cot.local || '') + ' y crear la OT en espera para ' + tecnico + '?')) return;
+  try {
+    const db = window.firebase.firestore();
+    const ahora = new Date();
+    const numero = Math.floor(9000 + Math.random() * 1000);
+    await db.collection('ordenes').add({
+      numero: numero,
+      local: cot.local || '',
+      cadena: cot.cadena || '',
+      cadenaLogo: cot.cadenaLogo || '',
+      cadenaColor: cot.cadenaColor || '',
+      cadenaLetra: cot.cadenaLetra || '',
+      tipo: 'correctivo',
+      tecnico: tecnico,
+      fecha: ahora.toLocaleDateString('es-CL'),
+      hora: ahora.toLocaleTimeString('es-CL'),
+      descripcionProblema: cot.descripcionTrabajo || '',
+      descripcion: '',
+      descripcionTrabajo: '',
+      numEquipos: '',
+      serviciosPreventivo: [],
+      fotosAntes: [],
+      fotosDespues: [],
+      fotoTimbre: null,
+      direccion: '',
+      ceco: cot.centro || '',
+      emailAdmin: '',
+      estado: 'En espera',
+      pausa: true,
+      enEspera: true,
+      cotizacionId: cotId,
+      cotizacionNumero: cot.numeroCotizacion || '',
+      cotizacionTotal: cot.total || 0,
+      firmada: false,
+      creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('cotizaciones').doc(cotId).update({
+      estadoCot: 'Aceptada',
+      tecnicoAsignado: tecnico,
+      otEnEsperaNumero: numero
+    });
+    toast('✅ Cotización aceptada · OT en espera para ' + tecnico);
+    cerrarModalReasignar();
+    cargarCarpetas();
+  } catch(e) {
+    console.error('Error aceptando cotización:', e);
+    toast('Error al aceptar la cotización');
+  }
+}
+
+// --- Unión: vincula el recibo de obra (OT completada) a la cotización previa ---
+// La cotización pasa a "Realizada" y guarda las fotos antes/después + firma del trabajo ejecutado.
+async function _vincularCotizacionRealizada(cotId, datos) {
+  try {
+    if (!cotId || !window._firebaseReady) return;
+    const db = window.firebase.firestore();
+    await db.collection('cotizaciones').doc(cotId).update({
+      estadoCot: 'Realizada',
+      otCompletadaNumero: datos.numero || '',
+      fotosAntes: datos.urlsAntes || [],
+      fotosDespues: datos.urlsDespues || [],
+      fotoTimbre: datos.urlTimbre || null,
+      firmaImagen: datos.firmaBase64 || '',
+      fechaRealizada: datos.fecha || new Date().toLocaleDateString('es-CL'),
+      tecnicoRealizo: datos.tecnico || ''
+    });
+  } catch(e) {
+    console.error('Error vinculando cotización realizada:', e);
+  }
+}
+
+// --- Ver el trabajo ejecutado de una cotización Realizada (modal con fotos antes/después + firma) ---
+function verTrabajoCotizacion(cotId) {
+  const cot = (window._todasCotizaciones && window._todasCotizaciones[cotId]) || null;
+  if (!cot) { toast('Cotización no encontrada'); return; }
+
+  const antes = (cot.fotosAntes || []).filter(function(u){ return !!u; });
+  const despues = (cot.fotosDespues || []).filter(function(u){ return !!u; });
+  const firma = cot.firmaImagen || '';
+  const timbre = cot.fotoTimbre || '';
+
+  // Overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.onclick = function(e){ if (e.target === overlay) document.body.removeChild(overlay); };
+
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:white;border-radius:18px;max-width:460px;width:100%;max-height:86vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+
+  // Header
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:16px 18px;border-bottom:1px solid var(--gris2);display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;background:white;';
+  const htxt = document.createElement('div');
+  htxt.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--texto);">Trabajo realizado</div>' +
+    '<div style="font-size:12px;color:var(--texto3);margin-top:2px;">' + (cot.local || '') +
+    (cot.otCompletadaNumero ? ' · OT #' + cot.otCompletadaNumero : '') +
+    (cot.fechaRealizada ? ' · ' + cot.fechaRealizada : '') +
+    (cot.tecnicoRealizo ? ' · ' + cot.tecnicoRealizo : '') + '</div>';
+  const xbtn = document.createElement('button');
+  xbtn.textContent = '✕';
+  xbtn.style.cssText = 'flex-shrink:0;width:36px;height:36px;background:var(--gris);border:none;border-radius:10px;font-size:16px;cursor:pointer;color:var(--texto2);';
+  xbtn.onclick = function(){ document.body.removeChild(overlay); };
+  head.appendChild(htxt);
+  head.appendChild(xbtn);
+  panel.appendChild(head);
+
+  const body = document.createElement('div');
+  body.style.cssText = 'padding:14px 18px 20px;';
+
+  function _seccionFotos(titulo, urls) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:16px;';
+    const t = document.createElement('div');
+    t.style.cssText = 'font-size:13px;font-weight:700;color:var(--texto);margin-bottom:8px;';
+    t.textContent = titulo;
+    wrap.appendChild(t);
+    if (!urls.length) {
+      const v = document.createElement('div');
+      v.style.cssText = 'font-size:12px;color:var(--texto3);';
+      v.textContent = 'Sin fotos';
+      wrap.appendChild(v);
+    } else {
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+      urls.forEach(function(u){
+        const img = document.createElement('img');
+        img.src = u;
+        img.loading = 'lazy';
+        img.alt = titulo;
+        img.style.cssText = 'width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--gris2);cursor:zoom-in;';
+        img.onclick = function(){ window.open(u, '_blank'); };
+        grid.appendChild(img);
+      });
+      wrap.appendChild(grid);
+    }
+    return wrap;
+  }
+
+  body.appendChild(_seccionFotos('Antes', antes));
+  body.appendChild(_seccionFotos('Después', despues));
+  if (timbre) body.appendChild(_seccionFotos('Timbre', [timbre]));
+
+  if (firma) {
+    const fwrap = document.createElement('div');
+    const ft = document.createElement('div');
+    ft.style.cssText = 'font-size:13px;font-weight:700;color:var(--texto);margin-bottom:8px;';
+    ft.textContent = 'Firma';
+    const fimg = document.createElement('img');
+    fimg.src = firma;
+    fimg.alt = 'Firma';
+    fimg.style.cssText = 'width:100%;max-height:140px;object-fit:contain;border-radius:10px;border:1px solid var(--gris2);background:white;';
+    fwrap.appendChild(ft);
+    fwrap.appendChild(fimg);
+    body.appendChild(fwrap);
+  }
+
+  panel.appendChild(body);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
 }
 
 // --- Eliminar OT pausada (solo admin) ---
@@ -8070,6 +8577,16 @@ async function sincronizarOTsPendientes() {
         firmada: true, firmaImagen: ot.firmaBase64,
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       });
+
+      // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
+      if (ot.cotizacionId) {
+        await _vincularCotizacionRealizada(ot.cotizacionId, {
+          numero: ot.numero, fecha: ot.fecha,
+          urlsAntes: urlsAntes, urlsDespues: urlsDespues,
+          urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,
+          tecnico: ot.tecnico
+        });
+      }
 
       await _eliminarOTPendiente(ot.id);
       toast('OT #' + ot.numero + ' sincronizada [ok]');
