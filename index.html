@@ -2828,19 +2828,22 @@ async function cargarCadenasAdmin() {
       const inpSup = document.createElement('input');
       inpSup.type = 'text'; inpSup.placeholder = 'Supervisor responsable (opcional)';
       inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      const inpEmailSup = document.createElement('input');
+      inpEmailSup.type = 'email'; inpEmailSup.placeholder = 'Correo del supervisor (opcional)';
+      inpEmailSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpEmail = document.createElement('input');
-      inpEmail.type = 'email'; inpEmail.placeholder = 'Email admin (opcional)';
+      inpEmail.type = 'email'; inpEmail.placeholder = 'Correo del local (opcional)';
       inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:8px;';
       const btnAdd = document.createElement('button');
       btnAdd.textContent = '✓ Agregar sucursal';
       btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:6px;';
-      btnAdd.onclick = (function(dId, iCentro, iNom, iDir, iSup, iEmail){ return function(){ agregarSucursal(dId, iCentro, iNom, iDir, iSup, iEmail); }; })(docId, inpCentro, inpNom, inpDir, inpSup, inpEmail);
+      btnAdd.onclick = (function(dId, iCentro, iNom, iDir, iSup, iEmailSup, iEmail){ return function(){ agregarSucursal(dId, iCentro, iNom, iDir, iSup, iEmailSup, iEmail); }; })(docId, inpCentro, inpNom, inpDir, inpSup, inpEmailSup, inpEmail);
       const btnCancel = document.createElement('button');
       btnCancel.textContent = 'Cancelar';
       btnCancel.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;';
       btnCancel.onclick = function() { sep.style.display = 'none'; btnAddSuc.textContent = '+ Agregar sucursal'; };
       sep.appendChild(inpCentro); sep.appendChild(inpNom); sep.appendChild(inpDir);
-      sep.appendChild(inpSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd); sep.appendChild(btnCancel);
+      sep.appendChild(inpSup); sep.appendChild(inpEmailSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd); sep.appendChild(btnCancel);
       body.appendChild(sep);
 
       // Toggle del formulario
@@ -2871,11 +2874,12 @@ async function eliminarCadena(id) {
   } catch(e) { toast('Error eliminando'); }
 }
 
-async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputSup, inputEmail) {
+async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputSup, inputEmailSup, inputEmail) {
   const centro = inputCentro ? inputCentro.value.trim() : '';
   const nombre = inputNombre.value.trim();
   const direccion = inputDir ? inputDir.value.trim() : '';
   const supervisor = inputSup ? inputSup.value.trim() : '';
+  const emailSupervisor = inputEmailSup ? inputEmailSup.value.trim() : '';
   const email = inputEmail ? inputEmail.value.trim() : '';
   if (!nombre) { toast('Escribe el nombre de la sucursal'); return; }
   try {
@@ -2887,12 +2891,13 @@ async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputS
       return sNom.trim().toLowerCase() === nombre.toLowerCase();
     });
     if (yaExisteSuc) { toast('Ya existe una sucursal llamada "' + nombre + '" en esta cadena'); return; }
-    subs.push({ centro: centro, nombre: nombre, direccion: direccion, supervisor: supervisor, email: email });
+    subs.push({ centro: centro, nombre: nombre, direccion: direccion, supervisor: supervisor, emailSupervisor: emailSupervisor, email: email });
     await db.collection('cadenas').doc(docId).update({ sucursales: subs });
     if (inputCentro) inputCentro.value = '';
     inputNombre.value = '';
     if (inputDir) inputDir.value = '';
     if (inputSup) inputSup.value = '';
+    if (inputEmailSup) inputEmailSup.value = '';
     if (inputEmail) inputEmail.value = '';
     toast('Sucursal agregada');
     await cargarCadenasAdmin();
@@ -2966,6 +2971,7 @@ function editarSucursal(docId, idx, s) {
   const sNombre = typeof s === 'object' ? s.nombre : s;
   const sDir = typeof s === 'object' ? (s.direccion || '') : '';
   const sSup = typeof s === 'object' ? (s.supervisor || '') : '';
+  const sEmailSup = typeof s === 'object' ? (s.emailSupervisor || '') : '';
   const sEmail = typeof s === 'object' ? (s.email || '') : '';
   const sCentro = typeof s === 'object' ? (s.centro || '') : '';
 
@@ -2995,13 +3001,16 @@ function editarSucursal(docId, idx, s) {
   const fNom = mkInput('Nombre', sNombre, 'Ej: Unimarc Chillan');
   const fDir = mkInput('Direccion', sDir, 'Ej: Av. El Roble 123');
   const fSup = mkInput('Supervisor', sSup, 'Nombre del supervisor');
-  const fEmail = mkInput('Email admin', sEmail, 'correo@ejemplo.com');
+  const fEmailSup = mkInput('Correo del supervisor', sEmailSup, 'supervisor@ejemplo.com');
+  fEmailSup.inp.type = 'email';
+  const fEmail = mkInput('Correo del local', sEmail, 'local@ejemplo.com');
   fEmail.inp.type = 'email';
 
   modal.appendChild(fCentro.wrap);
   modal.appendChild(fNom.wrap);
   modal.appendChild(fDir.wrap);
   modal.appendChild(fSup.wrap);
+  modal.appendChild(fEmailSup.wrap);
   modal.appendChild(fEmail.wrap);
 
   const btns = document.createElement('div');
@@ -3021,7 +3030,7 @@ function editarSucursal(docId, idx, s) {
       const ref = db.collection('cadenas').doc(docId);
       const docSnap = await ref.get();
       const subs = docSnap.data().sucursales || [];
-      subs[idx] = { centro: fCentro.inp.value.trim(), nombre: nuevoNombre, direccion: fDir.inp.value.trim(), supervisor: fSup.inp.value.trim(), email: fEmail.inp.value.trim() };
+      subs[idx] = { centro: fCentro.inp.value.trim(), nombre: nuevoNombre, direccion: fDir.inp.value.trim(), supervisor: fSup.inp.value.trim(), emailSupervisor: fEmailSup.inp.value.trim(), email: fEmail.inp.value.trim() };
       await ref.update({ sucursales: subs });
       toast('Sucursal actualizada');
       document.body.removeChild(overlay);
@@ -5803,7 +5812,10 @@ async function generarPDFCotizacionGuardada(cotData, options) {
       try {
         const pdfBlob = doc.output('blob');
         const fd = new FormData();
-        fd.append('file', pdfBlob, 'cot_' + (_otNPDF||'x') + '_' + Date.now() + '.pdf');
+        // Nombre descriptivo y único para que la descarga conserve un nombre buscable
+        const _nombrePdfCot = _slugPDFCot(cotData) + '_' + String(Date.now()).slice(-6);
+        fd.append('file', pdfBlob, _nombrePdfCot + '.pdf');
+        fd.append('public_id', _nombrePdfCot);
         fd.append('upload_preset', CLOUDINARY.uploadPreset);
         fd.append('folder', 'emval/cotizaciones');
         const res = await fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: fd });
@@ -6844,17 +6856,27 @@ function obtenerCotizacionesSeleccionadas() {
 let _cotsParaEnviar = [];
 
 // Email guardado de la sucursal de una cotización (best-effort) para pre-llenar el modal
-function _emailSucursalDeCot(cot) {
+function _sucursalDeCot(cot) {
   try {
-    if (!cot || !cot.local || !window._cadenasMapaCot) return '';
+    if (!cot || !cot.local || !window._cadenasMapaCot) return null;
     const cad = window._cadenasMapaCot[cot.local];
-    if (!cad || !cad.sucursales) return '';
+    if (!cad || !cad.sucursales) return null;
     const suc = cad.sucursales.find(function(s){
       const n = typeof s === 'object' ? s.nombre : s;
       return n === cot.local;
     });
-    return (suc && typeof suc === 'object') ? (suc.email || '') : '';
-  } catch(e) { return ''; }
+    return (suc && typeof suc === 'object') ? suc : null;
+  } catch(e) { return null; }
+}
+
+function _emailSucursalDeCot(cot) {
+  const suc = _sucursalDeCot(cot);
+  return suc ? (suc.email || '') : '';
+}
+
+function _emailSupervisorDeCot(cot) {
+  const suc = _sucursalDeCot(cot);
+  return suc ? (suc.emailSupervisor || '') : '';
 }
 
 // Agrega una fila de input de correo al modal de envío
@@ -6892,7 +6914,14 @@ async function enviarCotizacionesSeleccionadas() {
   const sub = document.getElementById('modal-enviar-cot-sub');
   if (sub) sub.textContent = seleccionadas.length + ' cotización(es) · agrega uno o más correos';
   if (cont) cont.innerHTML = '';
-  agregarFilaEmailCot(_emailSucursalDeCot(seleccionadas[0]));
+  // Pre-llenar con el correo del supervisor (primero) y el del local, sin vacíos ni duplicados
+  const prefill = [];
+  [_emailSupervisorDeCot(seleccionadas[0]), _emailSucursalDeCot(seleccionadas[0])].forEach(function(em){
+    const v = (em || '').trim();
+    if (v && prefill.indexOf(v) === -1) prefill.push(v);
+  });
+  if (prefill.length === 0) prefill.push('');
+  prefill.forEach(function(em){ agregarFilaEmailCot(em); });
   document.getElementById('modal-enviar-cot').style.display = 'flex';
 }
 
@@ -6922,6 +6951,53 @@ function confirmarEnviarCot() {
   _procesarEnvioCotizaciones(_cotsParaEnviar, emails);
 }
 
+// Normaliza un texto para usarlo como nombre de archivo (sin tildes, espacios->_)
+function _slugTexto(txt) {
+  return (txt || '')
+    .toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quitar tildes
+    .replace(/[^A-Za-z0-9]+/g, '_')                   // todo lo demás -> _
+    .replace(/^_+|_+$/g, '')                          // sin _ al inicio/fin
+    .substring(0, 60);
+}
+
+// Nombre de archivo descriptivo para el PDF de una cotización
+function _slugPDFCot(cot) {
+  cot = cot || {};
+  const local = _slugTexto(cot.local || 'cotizacion');
+  const servicio = _slugTexto(cot.nombreServicio || cot.descripcionTrabajo || '');
+  let fechaIso = '';
+  try { fechaIso = new Date().toISOString().slice(0, 10); } catch(e) { fechaIso = ''; }
+  let nombre = 'Cotizacion_' + local;
+  if (servicio) nombre += '_' + servicio;
+  if (fechaIso) nombre += '_' + fechaIso;
+  return nombre.substring(0, 100);
+}
+
+// Asunto descriptivo y buscable para el correo de cotizaciones
+function _asuntoCotizaciones(seleccionadas) {
+  const fecha = new Date().toLocaleDateString('es-CL');
+  if (seleccionadas.length === 1) {
+    const it = seleccionadas[0];
+    const partes = [];
+    if (it.local) partes.push(it.local);
+    const svc = (it.nombreServicio || (it.descripcionTrabajo || '').substring(0, 40)).trim();
+    if (svc) partes.push(svc);
+    partes.push(fecha);
+    if (it.numeroCotizacion) partes.push('N°' + it.numeroCotizacion);
+    return partes.join(' · ');
+  }
+  // Varias: contar + locales únicos (máx 3)
+  const locales = [];
+  seleccionadas.forEach(function(it){
+    const l = (it.local || '').trim();
+    if (l && locales.indexOf(l) === -1) locales.push(l);
+  });
+  let locStr = locales.slice(0, 3).join(', ');
+  if (locales.length > 3) locStr += ', +' + (locales.length - 3);
+  return seleccionadas.length + ' cotizaciones · ' + locStr + ' · ' + fecha;
+}
+
 // Genera/sube PDFs si faltan, arma el cuerpo y envía la(s) cotización(es) a cada correo
 async function _procesarEnvioCotizaciones(seleccionadas, emails) {
   // Si alguna cot no tiene pdfUrl, generarla y subirla ahora
@@ -6945,7 +7021,9 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
   let itemsHtml = '';
   seleccionadas.forEach(function(it, i) {
     resumenTotal += (it.total || 0);
-    const trabajo = (it.descripcionTrabajo || '').substring(0, 120);
+    const servicio = (it.nombreServicio || '').trim();
+    const trabajo = (it.descripcionTrabajo || '').trim();
+    const numCot = (it.numeroCotizacion || '').toString().trim();
     const total = '$' + (it.total || 0).toLocaleString('es-CL');
     const verPdf = it.pdfUrl
       ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600;">Ver / Descargar PDF</a>'
@@ -6953,16 +7031,20 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
     itemsHtml +=
       '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
         '<div style="font-weight:700;font-size:15px;color:#1B3A6B;">' + (i+1) + '. ' + (it.local||'') + ' &mdash; ' + (it.fecha||'') + '</div>' +
-        '<div style="margin-top:4px;font-size:13px;color:#444;">Trabajo: ' + trabajo + '</div>' +
+        (servicio ? '<div style="margin-top:4px;font-size:13px;color:#444;">Servicio: ' + servicio + '</div>' : '') +
+        (numCot ? '<div style="margin-top:2px;font-size:13px;color:#444;">N° cotización: ' + numCot + '</div>' : '') +
+        (trabajo ? '<div style="margin-top:2px;font-size:13px;color:#444;">Trabajo: ' + trabajo + '</div>' : '') +
         '<div style="margin-top:2px;font-size:13px;color:#444;">Total: ' + total + '</div>' +
         verPdf +
       '</div>';
   });
 
   const cuerpoHtml =
-    '<p style="font-size:14px;color:#222;">Estimado administrador,<br>Se adjuntan <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
+    '<p style="font-size:14px;color:#222;">Estimado/a:<br>Le compartimos <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
     itemsHtml +
     '<p style="font-size:14px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
+
+  const asunto = _asuntoCotizaciones(seleccionadas);
 
   // Enviar a cada destinatario en un loop (entrega individual, robusto)
   toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
@@ -6979,6 +7061,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
       tecnico: seleccionadas[0].tecnico || '',
       tipo: 'Cotizacion',
       cantidad: String(seleccionadas.length),
+      asunto: asunto,
       trabajo: cuerpoHtml,
       pdf_url: ''
     };

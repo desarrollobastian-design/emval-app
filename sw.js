@@ -1,4 +1,4 @@
-const CACHE_NAME = 'emval-v5';
+const CACHE_NAME = 'emval-v6';
 const APP_SHELL = [
   './',
   './index.html'
