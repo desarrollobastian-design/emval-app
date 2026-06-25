@@ -1047,8 +1047,17 @@ function guardarOTsPausadas(ots) {
   try {
     localStorage.setItem('emval_ots_pausadas', JSON.stringify(ots));
   } catch(e) {
-    // Si localStorage falla (cuota o modo incógnito), usar sessionStorage
-    try { sessionStorage.setItem('emval_ots_pausadas', JSON.stringify(ots)); } catch(e2) {}
+    // Cuota excedida (fotos base64 pesadas): reintentar sin las fotos para no perder
+    // la OT como recuperable; las fotos quedan en Firebase si ya se sincronizaron.
+    try {
+      const liviano = (ots || []).map(function(ot) {
+        return Object.assign({}, ot, { fotosAntes: [], fotosDespues: [], fotoTimbre: null });
+      });
+      localStorage.setItem('emval_ots_pausadas', JSON.stringify(liviano));
+    } catch(e2) {
+      // Último recurso: sessionStorage (modo incógnito o sin espacio)
+      try { sessionStorage.setItem('emval_ots_pausadas', JSON.stringify(ots)); } catch(e3) {}
+    }
   }
 }
 
@@ -1830,35 +1839,35 @@ function tomarFoto(id, tipo, idx) {
   document.getElementById('input-foto').click();
 }
 
-function procesarFoto(e) {
+async function procesarFoto(e) {
   const file = e.target.files[0];
+  e.target.value = '';
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async function(ev) {
-    const id = estado.fotoActualId;
-    const tipo = estado.fotoActualTipo;
-    const idx = estado.fotoActualIdx;
-    let data = ev.target.result;
-    try {
-      data = await comprimirImagen(data, 1200, 0.72);
-    } catch(e) {
-      console.warn('No se pudo comprimir foto:', e);
-    }
-    if (tipo === 'antes') estado.fotosAntes[idx] = data;
-    else if (tipo === 'despues') estado.fotosDespues[idx] = data;
-    else if (tipo === 'timbre') estado.fotoTimbre = data;
-    const box = document.getElementById(id);
+  const id = estado.fotoActualId;
+  const tipo = estado.fotoActualTipo;
+  const idx = estado.fotoActualIdx;
+  let data = null;
+  try {
+    // Comprime desde el File directo: no carga el bitmap full-res en RAM
+    data = await comprimirArchivoImagen(file, 1200, 0.72);
+  } catch(err) {
+    console.warn('No se pudo comprimir foto:', err);
+  }
+  if (!data) { toast('No se pudo procesar la foto, intenta de nuevo'); return; }
+  if (tipo === 'antes') estado.fotosAntes[idx] = data;
+  else if (tipo === 'despues') estado.fotosDespues[idx] = data;
+  else if (tipo === 'timbre') estado.fotoTimbre = data;
+  const box = document.getElementById(id);
+  if (box) {
     box.classList.add('filled');
     let img = box.querySelector('img');
     if (!img) { img = document.createElement('img'); box.appendChild(img); }
     img.src = data;
     let chk = box.querySelector('.foto-check');
     if (!chk) { chk = document.createElement('div'); chk.className = 'foto-check'; chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; box.appendChild(chk); }
-    programarAutoguardadoOT();
-    toast('Foto guardada');
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
+  }
+  programarAutoguardadoOT();
+  toast('Foto guardada');
 }
 
 function irEjecucion() {
@@ -5147,6 +5156,54 @@ function verPDF() {
 }
 
 // Compress image - si es URL externa devuelve base64 via fetch (evita CORS)
+// Comprime una foto directamente desde el File/Blob del lente SIN cargar el bitmap
+// full-res en RAM: createImageBitmap decodifica y reescala en un solo paso nativo.
+// Evita el "problema de memoria" en teléfonos de gama baja con cámaras de muchos MP.
+// Cae al camino clásico (readAsDataURL + comprimirImagen) si el navegador no soporta
+// createImageBitmap o el redimensionado nativo.
+async function comprimirArchivoImagen(file, maxWidth, quality) {
+  maxWidth = maxWidth || 1200;
+  quality = quality || 0.72;
+  if (file && typeof createImageBitmap === 'function') {
+    let bitmap = null;
+    try {
+      // 1er decode liviano solo para conocer dimensiones reales
+      bitmap = await createImageBitmap(file);
+      let w = bitmap.width, h = bitmap.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      // Re-decodificar redimensionando en el paso nativo (no retiene el bitmap grande)
+      try { bitmap.close(); } catch(e) {}
+      bitmap = await createImageBitmap(file, {
+        resizeWidth: w,
+        resizeHeight: h,
+        resizeQuality: 'high',
+        imageOrientation: 'from-image'
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      try { bitmap.close(); } catch(e) {}
+      bitmap = null;
+      return canvas.toDataURL('image/jpeg', quality);
+    } catch(e) {
+      if (bitmap) { try { bitmap.close(); } catch(e2) {} }
+      console.warn('createImageBitmap no disponible, usando camino clasico:', e);
+      // continua al fallback
+    }
+  }
+  // Fallback: leer como data URL y comprimir con el metodo clasico
+  const dataUrl = await new Promise(function(resolve) {
+    const reader = new FileReader();
+    reader.onload = function(ev) { resolve(ev.target.result); };
+    reader.onerror = function() { resolve(null); };
+    reader.readAsDataURL(file);
+  });
+  if (!dataUrl) return null;
+  return comprimirImagen(dataUrl, maxWidth, quality);
+}
+
 async function comprimirImagen(dataUrl, maxWidth, quality) {
   // Si es URL http (Cloudinary), ya fue convertida a base64 por cargarImagenComoBase64
   // Solo comprimir si es data URL local
