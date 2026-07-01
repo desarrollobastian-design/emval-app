@@ -810,6 +810,7 @@
         <div class="voz-lista" id="voz-lista"></div>
       </div>
     </div>
+    <button class="btn btn-primary" onclick="nuevaOT()">▶ Hacer otra OT</button>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Volver al inicio</button>
     <p style="font-size: 11px; color: var(--texto3); text-align: center;">OT guardada · se sincroniza automáticamente con la nube</p>
   </div>
@@ -1171,7 +1172,8 @@ function _crearOTPausadaDesdeEstado() {
 }
 
 function guardarBorradorOTActual() {
-  if (_otFinalizada || _restaurandoBorradorOT || !_hayDatosOTEnCurso()) return false;
+  // En modo edición de una OT ya terminada (solo admin) no se generan borradores pausados.
+  if (_otFinalizada || _restaurandoBorradorOT || estado.editandoOTId || !_hayDatosOTEnCurso()) return false;
   try {
     const otBorrador = _crearOTPausadaDesdeEstado();
     const otsPausadas = cargarOTsPausadas();
@@ -1182,7 +1184,12 @@ function guardarBorradorOTActual() {
         ot.tecnico === otBorrador.tecnico;
     });
     if (idx >= 0) {
-      otsPausadas[idx] = Object.assign({}, otsPausadas[idx], otBorrador);
+      // Preservar el estado de pausa manual: una hoja "En Pausa" (autoDraft:false) no debe
+      // degradarse a "Autoguardada" al alternar entre hojas.
+      var prev = otsPausadas[idx];
+      otsPausadas[idx] = Object.assign({}, prev, otBorrador, {
+        autoDraft: prev.autoDraft === false ? false : otBorrador.autoDraft
+      });
     } else {
       otsPausadas.unshift(otBorrador);
     }
@@ -1279,6 +1286,9 @@ function _restaurarFirmaDesdeEstado() {
 }
 
 function abrirOTGuardada(ot) {
+  // Guardar la hoja en curso antes de cargar otra (protege el trabajo si el tecnico
+  // toca otra tarjeta sin haber pausado la actual).
+  if (!_otFinalizada && _hayDatosOTEnCurso()) guardarBorradorOTActual();
   _restaurandoBorradorOT = true;
   _otFinalizada = false;
   _cargarEstadoDesdeOTGuardada(ot);
@@ -1302,6 +1312,24 @@ function abrirOTGuardada(ot) {
   _restaurarCamposDOMDesdeEstado();
   _restaurarFirmaDesdeEstado();
   _restaurandoBorradorOT = false;
+}
+
+// true si la foto ya es una URL subida (Cloudinary), no un base64 nuevo
+function _esUrlSubida(foto) {
+  return typeof foto === 'string' && /^https?:\/\//.test(foto);
+}
+
+// Editar una OT ya terminada (solo Administrador): reabre la OT en el formulario de
+// ejecución con sus fotos/textos/firma cargados. Al guardar (cerrarOT), se actualiza el
+// mismo documento y se regenera el PDF SIN reenviar correo (ver estado.editandoOTId).
+function editarOTTerminada(ot) {
+  if (estado.cargo !== 'Administrador') { toast('Solo el administrador puede editar OTs'); return; }
+  if (!ot || !ot.id) { toast('No se pudo abrir la OT para editar'); return; }
+  estado.editandoOTId = ot.id;
+  estado.editandoTecnico = ot.tecnico || '';
+  estado.editandoFecha = ot.fecha || '';
+  abrirOTGuardada(ot); // carga estado + navega a s-ejecucion + restaura DOM/firma
+  toast('Editando OT #' + (ot.numero || '') + '. Guarda para actualizar.');
 }
 
 function _ultimoBorradorTecnico() {
@@ -1407,6 +1435,7 @@ let estado = {
   creadoEnBorrador: '',
   cotizacionId: '',
   enEspera: false,
+  editandoOTId: '', editandoTecnico: '', editandoFecha: '',
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
@@ -1535,12 +1564,30 @@ function cerrarSesion() {
 }
 
 // =========== NUEVA OT ===========
+// Genera un numero de OT que no colisione con las OTs pausadas/en espera ni con las
+// completadas de este dispositivo (evita que dos hojas del mismo local se fusionen).
+function _generarNumeroOTUnico() {
+  var usados = {};
+  try {
+    cargarOTsPausadas().forEach(function(o){ if (o && o.numero != null) usados[String(o.numero)] = true; });
+  } catch(e){}
+  try {
+    JSON.parse(localStorage.getItem('emval_ots') || '[]').forEach(function(o){ if (o && o.numero != null) usados[String(o.numero)] = true; });
+  } catch(e){}
+  var n, intentos = 0;
+  do { n = 9000 + Math.floor(Math.random() * 1000); intentos++; } while (usados[String(n)] && intentos < 60);
+  return n;
+}
+
 function nuevaOT() {
   if (!_restaurandoBorradorOT) guardarBorradorOTActual();
   _otFinalizada = false;
   estado.cotizacionId = '';
   estado.enEspera = false;
-  estado.otNumero = 9475 + Math.floor(Math.random()*100);
+  estado.editandoOTId = '';
+  estado.editandoTecnico = '';
+  estado.editandoFecha = '';
+  estado.otNumero = _generarNumeroOTUnico();
   estado.creadoEnBorrador = new Date().toISOString();
   estado.tipo = null;
   estado.fotosAntes = [];
@@ -2093,7 +2140,7 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
 function pausarOT() {
   try {
     if (!estado.otNumero) {
-      estado.otNumero = Math.floor(9000 + Math.random() * 1000);
+      estado.otNumero = _generarNumeroOTUnico();
     }
     const descEl = document.getElementById('desc-trabajo');
     const desc = descEl ? descEl.value.trim() : '';
@@ -2131,11 +2178,12 @@ function pausarOT() {
     // Usa una copia (snapshot) de las fotos para evitar carreras si se inicia otra OT.
     _sincronizarPausadaFirebase(otPausada, estado.fotosAntes.slice(), estado.fotosDespues.slice());
 
-    toast('✅ OT pausada correctamente');
-    setTimeout(function() {
-      cargarOTsPausadasEnCadena();
-      go('s-cadena');
-    }, 500);
+    // Dejar la pausada a salvo y arrancar una OT nueva y limpia (estado + numero nuevo),
+    // para que el tecnico pueda hacer otra hoja del mismo local sin arrastres.
+    _otFinalizada = true;          // impide que nuevaOT() reguarde la pausada como autoDraft
+    clearTimeout(_autoSaveTimer);  // cancela autoguardado pendiente de la pausada
+    toast('✅ OT en espera. Ya puedes empezar otra hoja.');
+    setTimeout(function() { nuevaOT(); }, 500);
   } catch(e) {
     console.error('Error en pausarOT:', e);
     toast('Error al pausar');
@@ -2146,7 +2194,7 @@ function pausarOT() {
 function cerrarOT() {
   // Asegurar que haya numero de OT
   if (!estado.otNumero) {
-    estado.otNumero = Math.floor(9000 + Math.random() * 1000);
+    estado.otNumero = _generarNumeroOTUnico();
   }
   sincronizarCamposOTEnEstado();
   const descEl = document.getElementById('desc-trabajo');
@@ -2190,14 +2238,17 @@ function cerrarOT() {
     tecnico: estado.usuario, fecha: fecha, descripcion: desc,
     fotosAntes, fotosDespues, firmada: true
   };
-  try {
-    const ots = JSON.parse(localStorage.getItem('emval_ots') || '[]');
-    ots.unshift(ot);
-    localStorage.setItem('emval_ots', JSON.stringify(ots));
-  } catch(e) {}
+  // En una edicion de OT ya terminada no se re-registra localmente ni se toca la lista de pausadas.
+  if (!estado.editandoOTId) {
+    try {
+      const ots = JSON.parse(localStorage.getItem('emval_ots') || '[]');
+      ots.unshift(ot);
+      localStorage.setItem('emval_ots', JSON.stringify(ots));
+    } catch(e) {}
 
-  // Quitar de trabajos pausados (la OT ya se completó)
-  eliminarOTPausada(estado.otNumero, estado.usuario);
+    // Quitar de trabajos pausados (la OT ya se completó)
+    eliminarOTPausada(estado.otNumero, estado.usuario);
+  }
 
   // Guardar en Firebase (nube)
   guardarEnFirebase(ot, desc, fecha);
@@ -2286,7 +2337,7 @@ async function _urlsABase64(arr) {
   return out;
 }
 
-function _notificarOTCompletada(numero, local, tecnico, tipo, fecha) {
+function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl) {
   try {
     emailjs.send('service_xm6dmxl', 'template_agzfcux', {
       email_admin: window.PEDRO_NOTIF_EMAIL,
@@ -2296,7 +2347,7 @@ function _notificarOTCompletada(numero, local, tecnico, tipo, fecha) {
       tecnico: String(tecnico),
       tipo: tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
       trabajo: '',
-      pdf_url: ''
+      pdf_url: pdfUrl || ''
     }).catch(function(e){ console.warn('Notif email error:', e); });
   } catch(e) { console.warn('Notif email error:', e); }
 }
@@ -2358,22 +2409,30 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     toast('Guardando en la nube...');
     const db = window.firebase.firestore();
 
+    // Al editar una OT, las fotos existentes ya son URLs de Cloudinary: se mantienen tal cual
+    // y solo se suben las nuevas (base64). _esUrlSubida distingue una de otra.
     const urlsAntes = [];
     for (let i = 0; i < fotosAntesCopy.length; i++) {
+      if (_esUrlSubida(fotosAntesCopy[i])) { urlsAntes.push(fotosAntesCopy[i]); continue; }
       toast('Subiendo fotos antes ' + (i+1) + '...');
       const url = await subirCloudinary(fotosAntesCopy[i], otBase.numero, 'antes_' + i + '.jpg');
       if (url) urlsAntes.push(url);
     }
     const urlsDespues = [];
     for (let i = 0; i < fotosDespuesCopy.length; i++) {
+      if (_esUrlSubida(fotosDespuesCopy[i])) { urlsDespues.push(fotosDespuesCopy[i]); continue; }
       toast('Subiendo fotos despues ' + (i+1) + '...');
       const url = await subirCloudinary(fotosDespuesCopy[i], otBase.numero, 'despues_' + i + '.jpg');
       if (url) urlsDespues.push(url);
     }
     let urlTimbre = null;
     if (fotoTimbreCopy) {
-      toast('Subiendo foto timbre...');
-      urlTimbre = await subirCloudinary(fotoTimbreCopy, otBase.numero, 'timbre.jpg');
+      if (_esUrlSubida(fotoTimbreCopy)) {
+        urlTimbre = fotoTimbreCopy;
+      } else {
+        toast('Subiendo foto timbre...');
+        urlTimbre = await subirCloudinary(fotoTimbreCopy, otBase.numero, 'timbre.jpg');
+      }
     }
     const urlsAudio = [];
     for (let i = 0; i < audiosBase64.length; i++) {
@@ -2383,21 +2442,35 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     }
 
     toast('Guardando datos...');
-    await db.collection('ordenes').add({
+    // Modo edicion (solo admin): actualizar el mismo documento en vez de crear uno nuevo,
+    // preservando el tecnico y la fecha originales de la OT.
+    const esEdicion = !!estado.editandoOTId;
+    const otData = {
       numero: otBase.numero, local: estado.local, tipo: estado.tipo,
-      tecnico: estado.usuario, fecha: fecha,
+      tecnico: esEdicion ? (estado.editandoTecnico || estado.usuario) : estado.usuario,
+      fecha: esEdicion ? (estado.editandoFecha || fecha) : fecha,
       descripcionProblema: descripcionProblema,
       ceco: estado.ceco || '', descripcionTrabajo: desc,
       numEquipos: estado.numEquipos || '',
       serviciosPreventivo: estado.serviciosPreventivo || [],
       fotosAntes: urlsAntes, fotosDespues: urlsDespues,
-      fotoTimbre: urlTimbre, audios: urlsAudio,
-      firmada: true, firmaImagen: firmaBase64,
-      creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-    });
+      fotoTimbre: urlTimbre,
+      firmada: true, firmaImagen: firmaBase64
+    };
+    // No borrar audios existentes en una edicion sin nuevas grabaciones
+    if (!esEdicion || urlsAudio.length) otData.audios = urlsAudio;
 
-    // Si esta OT nació de una cotización previa aceptada, unir el recibo de obra a la cotización
-    if (estado.cotizacionId) {
+    if (esEdicion) {
+      await db.collection('ordenes').doc(estado.editandoOTId).update(otData);
+    } else {
+      otData.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('ordenes').add(otData);
+    }
+
+    // Solo unir el recibo a la cotización si esta OT realmente nació de una cotización
+    // aceptada (enEspera). Evita que una mantención normal, que arrastró un cotizacionId
+    // de otro flujo, marque por error una cotización como "Realizada".
+    if (!esEdicion && estado.cotizacionId && estado.enEspera === true) {
       await _vincularCotizacionRealizada(estado.cotizacionId, {
         numero: otBase.numero, fecha: fecha,
         urlsAntes: urlsAntes, urlsDespues: urlsDespues,
@@ -2406,8 +2479,8 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       });
     }
 
-    toast('OT guardada en la nube [ok]');
-    _notificarOTCompletada(otBase.numero, estado.local, estado.usuario, estado.tipo, fecha);
+    toast(esEdicion ? 'OT actualizada [ok]' : 'OT guardada en la nube [ok]');
+    // La notificacion de respaldo se dispara al final de guardarYEnviarPDF (con el link del PDF).
   } catch(e) {
     console.error('Error guardando OT:', e);
     // Red caída a mitad — guardar en IndexedDB
@@ -5391,8 +5464,9 @@ async function guardarYEnviarPDF() {
   }
 
   // --- Enviar email al admin del local con PDF adjunto (base64) ---
+  // En una edicion de OT (solo admin) NO se reenvía correo.
   const email = estado.emailSucursal || estado.emailAdmin;
-  if (email) {
+  if (email && !estado.editandoOTId) {
     try {
       toast('Enviando email con PDF...');
       const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
@@ -5419,15 +5493,32 @@ async function guardarYEnviarPDF() {
   if (window._firebaseReady && (pdfUrlCloudinary || pdfUrlFirestore)) {
     try {
       const db = window.firebase.firestore();
-      const snap = await db.collection('ordenes')
-        .where('numero', '==', estado.otNumero).get();
-      if (!snap.empty) {
-        await db.collection('ordenes').doc(snap.docs[0].id).update({
+      if (estado.editandoOTId) {
+        // En edicion, actualizar exactamente el documento que se está editando.
+        await db.collection('ordenes').doc(estado.editandoOTId).update({
           pdfUrl: pdfUrlFirestore || '',
           pdfUrlCloudinary: pdfUrlCloudinary || ''
         });
+      } else {
+        const snap = await db.collection('ordenes')
+          .where('numero', '==', estado.otNumero).get();
+        if (!snap.empty) {
+          await db.collection('ordenes').doc(snap.docs[0].id).update({
+            pdfUrl: pdfUrlFirestore || '',
+            pdfUrlCloudinary: pdfUrlCloudinary || ''
+          });
+        }
       }
     } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
+  }
+
+  // Notificacion de respaldo interno (con el link del PDF ya generado). No se envía en ediciones.
+  if (!estado.editandoOTId) {
+    _notificarOTCompletada(
+      estado.otNumero, estado.local, estado.usuario, estado.tipo,
+      new Date().toLocaleDateString('es-CL'),
+      pdfUrlCloudinary || pdfUrlFirestore || ''
+    );
   }
 
   return pdfUrlCloudinary || pdfUrlFirestore;
@@ -6316,7 +6407,10 @@ function continuarOT(otId) {
     if (otId.startsWith('local_')) {
       const numero = otId.replace('local_', '');
       const otsPausadas = cargarOTsPausadas();
-      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero; });
+      // Priorizar la OT del propio tecnico (evita abrir la de otro flujo con numero repetido);
+      // si el que mira es supervisor/admin, cae al match solo por numero.
+      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero && o.tecnico === estado.usuario; })
+              || otsPausadas.find(function(o) { return o.numero.toString() === numero; });
 
       if (!ot) {
         toast('OT no encontrada en registro local');
@@ -6779,6 +6873,14 @@ async function verOTsTecnico(nombre, grupo) {
       btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
       btns.appendChild(btnCot);
+    }
+    // Editar OT terminada (solo admin, y solo si no está en pausa/en espera)
+    if (estado.cargo === 'Administrador' && !ot.pausa && ot.estado !== 'En Pausa' && !ot.enEspera) {
+      const btnEditOT = document.createElement('button');
+      btnEditOT.textContent = '✏️ Editar OT';
+      btnEditOT.style.cssText = 'flex:1;background:var(--naranja);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEditOT.onclick = (function(otRef){ return function(){ editarOTTerminada(otRef); }; })(ot);
+      btns.appendChild(btnEditOT);
     }
     if (estado.cargo === 'Administrador') {
       const btnDelOT = document.createElement('button');
@@ -7573,7 +7675,7 @@ async function confirmarAceptarCotizacion(cotId, tecnico) {
   try {
     const db = window.firebase.firestore();
     const ahora = new Date();
-    const numero = Math.floor(9000 + Math.random() * 1000);
+    const numero = _generarNumeroOTUnico();
     await db.collection('ordenes').add({
       numero: numero,
       local: cot.local || '',
