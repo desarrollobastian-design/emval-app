@@ -540,7 +540,8 @@
     <div style="font-size: 13px; color: var(--texto2);">Paso 3 de 4 — Fotografia el estado antes de comenzar</div>
     <div class="foto-grid" id="grid-antes"></div>
     <button class="btn" onclick="agregarFotoBox('antes')" style="margin-top:12px;background:linear-gradient(135deg, #2D5AA0 0%, #1B3A6B 100%);color:white;border:none;border-radius:14px;padding:14px 16px;font-size:15px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 4px 12px rgba(45,90,160,0.3);position:relative;overflow:hidden;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(45,90,160,0.5)';this.style.background='linear-gradient(135deg, #1B3A6B 0%, #0F2345 100%)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(45,90,160,0.3)';this.style.background='linear-gradient(135deg, #2D5AA0 0%, #1B3A6B 100%)'">📷 Agregar foto</button>
-    <input type="file" id="input-foto" accept="image/*" capture="environment" style="display:none" onchange="procesarFoto(event)">
+    <input type="file" id="input-foto-camara" accept="image/*" capture="environment" style="display:none" onchange="procesarFoto(event)">
+    <input type="file" id="input-foto-galeria" accept="image/*" style="display:none" onchange="procesarFoto(event)">
     <div class="mt-auto" style="margin-top:16px;">
       <button class="btn btn-primary" onclick="irEjecucion()">Iniciar trabajo →</button>
     </div>
@@ -1893,7 +1894,40 @@ function tomarFoto(id, tipo, idx) {
   estado.fotoActualId = id;
   estado.fotoActualTipo = tipo;
   estado.fotoActualIdx = idx;
-  document.getElementById('input-foto').click();
+  _menuFuenteFoto();
+}
+
+function _menuFuenteFoto() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+  const cerrar = function(){ if (overlay.parentNode) document.body.removeChild(overlay); };
+  overlay.onclick = function(e){ if (e.target === overlay) cerrar(); };
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:white;border-radius:16px;padding:18px;width:100%;max-width:420px;box-shadow:var(--sombra-lg);';
+  modal.onclick = function(e){ e.stopPropagation(); };
+  modal.innerHTML = '<div style="font-size:15px;font-weight:700;color:var(--texto);text-align:center;margin-bottom:14px;">Agregar foto</div>';
+
+  const btnCam = document.createElement('button');
+  btnCam.textContent = '📷  Tomar foto';
+  btnCam.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
+  btnCam.onclick = function(){ cerrar(); document.getElementById('input-foto-camara').click(); };
+
+  const btnGal = document.createElement('button');
+  btnGal.textContent = '🖼️  Elegir de galería';
+  btnGal.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
+  btnGal.onclick = function(){ cerrar(); document.getElementById('input-foto-galeria').click(); };
+
+  const btnCan = document.createElement('button');
+  btnCan.textContent = 'Cancelar';
+  btnCan.style.cssText = 'width:100%;background:#EDF0F5;color:var(--texto2);border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnCan.onclick = cerrar;
+
+  modal.appendChild(btnCam);
+  modal.appendChild(btnGal);
+  modal.appendChild(btnCan);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }
 
 async function procesarFoto(e) {
@@ -3902,9 +3936,22 @@ const CADENAS_DEFAULT = [
 
 let cadenaSeleccionada = null;
 
+// Deduplica cadenas por nombre; se queda la que tenga más sucursales.
+function _dedupCadenas(lista) {
+  const vistos = {};
+  (lista || []).forEach(function(c) {
+    const k = ((c && c.nombre) || '').trim().toLowerCase();
+    if (!k) return;
+    if (!vistos[k] || (c.sucursales || []).length > (vistos[k].sucursales || []).length) {
+      vistos[k] = c;
+    }
+  });
+  return Object.values(vistos);
+}
+
 // Pinta las cadenas desde el cache de localStorage. Devuelve true si pinto algo.
 function _renderCadenasDesdeCache(lista) {
-  const cached = _getCadenasCached();
+  const cached = _dedupCadenas(_getCadenasCached()); // dedup por si el cache viejo trae repetidos
   if (!cached || cached.length === 0) return false;
   lista.innerHTML = '';
   const _ORDEN_C2 = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
@@ -3958,24 +4005,21 @@ async function cargarCadenasApp(_intento) {
     let cadenas = [];
     if (!snap.empty) {
       snap.docs.forEach(function(doc) { cadenas.push({ id: doc.id, ...doc.data() }); });
-      _cacheCadenas(cadenas); // Guardar en cache para offline
+      cadenas = _dedupCadenas(cadenas);       // quitar cadenas repetidas (queda la de más sucursales)
+      _cacheCadenas(cadenas);                 // cachear YA deduplicado para offline
     } else {
-      cadenas = CADENAS_DEFAULT;
-      // Save defaults to Firebase
-      for (let i = 0; i < cadenas.length; i++) {
-        await db.collection('cadenas').add({ ...cadenas[i], orden: i });
+      // snap vacío. Offline el get() puede resolver vacío en falso: NO pisar el
+      // render del cache ni sembrar Firebase (evita duplicar cadenas al reconectar).
+      // Mismo criterio que cargarUsuariosApp.
+      if (hayCacheCad) return;                 // ya pintamos las cadenas reales desde cache
+      cadenas = CADENAS_DEFAULT;               // sin cache: mostrar defaults localmente
+      if (navigator.onLine) {                  // sembrar SOLO si de verdad hay conexion (primer uso real)
+        for (let i = 0; i < cadenas.length; i++) {
+          try { await db.collection('cadenas').add({ ...cadenas[i], orden: i }); } catch(e) {}
+        }
       }
     }
-    // Deduplicar por nombre (queda el que tenga más sucursales)
-    const _vistosApp = {};
-    cadenas = cadenas.filter(function(c) {
-      const k = (c.nombre||'').trim().toLowerCase();
-      if (!_vistosApp[k] || (c.sucursales||[]).length > (_vistosApp[k].sucursales||[]).length) {
-        _vistosApp[k] = c; return false;
-      }
-      return false;
-    });
-    cadenas = Object.values(_vistosApp);
+    cadenas = _dedupCadenas(cadenas); // red de seguridad (defaults u otros caminos)
 
     lista.innerHTML = ''; // Limpiar "Cargando..." antes de agregar cadenas
     const _ORDEN_CADENAS = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
