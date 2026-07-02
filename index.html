@@ -3936,9 +3936,22 @@ const CADENAS_DEFAULT = [
 
 let cadenaSeleccionada = null;
 
+// Deduplica cadenas por nombre; se queda la que tenga más sucursales.
+function _dedupCadenas(lista) {
+  const vistos = {};
+  (lista || []).forEach(function(c) {
+    const k = ((c && c.nombre) || '').trim().toLowerCase();
+    if (!k) return;
+    if (!vistos[k] || (c.sucursales || []).length > (vistos[k].sucursales || []).length) {
+      vistos[k] = c;
+    }
+  });
+  return Object.values(vistos);
+}
+
 // Pinta las cadenas desde el cache de localStorage. Devuelve true si pinto algo.
 function _renderCadenasDesdeCache(lista) {
-  const cached = _getCadenasCached();
+  const cached = _dedupCadenas(_getCadenasCached()); // dedup por si el cache viejo trae repetidos
   if (!cached || cached.length === 0) return false;
   lista.innerHTML = '';
   const _ORDEN_C2 = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
@@ -3992,24 +4005,21 @@ async function cargarCadenasApp(_intento) {
     let cadenas = [];
     if (!snap.empty) {
       snap.docs.forEach(function(doc) { cadenas.push({ id: doc.id, ...doc.data() }); });
-      _cacheCadenas(cadenas); // Guardar en cache para offline
+      cadenas = _dedupCadenas(cadenas);       // quitar cadenas repetidas (queda la de más sucursales)
+      _cacheCadenas(cadenas);                 // cachear YA deduplicado para offline
     } else {
-      cadenas = CADENAS_DEFAULT;
-      // Save defaults to Firebase
-      for (let i = 0; i < cadenas.length; i++) {
-        await db.collection('cadenas').add({ ...cadenas[i], orden: i });
+      // snap vacío. Offline el get() puede resolver vacío en falso: NO pisar el
+      // render del cache ni sembrar Firebase (evita duplicar cadenas al reconectar).
+      // Mismo criterio que cargarUsuariosApp.
+      if (hayCacheCad) return;                 // ya pintamos las cadenas reales desde cache
+      cadenas = CADENAS_DEFAULT;               // sin cache: mostrar defaults localmente
+      if (navigator.onLine) {                  // sembrar SOLO si de verdad hay conexion (primer uso real)
+        for (let i = 0; i < cadenas.length; i++) {
+          try { await db.collection('cadenas').add({ ...cadenas[i], orden: i }); } catch(e) {}
+        }
       }
     }
-    // Deduplicar por nombre (queda el que tenga más sucursales)
-    const _vistosApp = {};
-    cadenas = cadenas.filter(function(c) {
-      const k = (c.nombre||'').trim().toLowerCase();
-      if (!_vistosApp[k] || (c.sucursales||[]).length > (_vistosApp[k].sucursales||[]).length) {
-        _vistosApp[k] = c; return false;
-      }
-      return false;
-    });
-    cadenas = Object.values(_vistosApp);
+    cadenas = _dedupCadenas(cadenas); // red de seguridad (defaults u otros caminos)
 
     lista.innerHTML = ''; // Limpiar "Cargando..." antes de agregar cadenas
     const _ORDEN_CADENAS = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
