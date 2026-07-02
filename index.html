@@ -454,6 +454,10 @@
       <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
 
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;font-size:13px;font-weight:700;color:var(--azul);">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--azul);color:white;font-size:15px;line-height:1;">+</span>
+      <span>Nueva OT — elige la cadena</span>
+    </div>
     <div id="lista-cadenas"></div>
   </div>
 </div>
@@ -1019,7 +1023,9 @@
 <script src="https://unpkg.com/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-  emailjs.init("E4wDaLmmuBovj2s8a");
+  // Guard: sin señal el SDK de EmailJS (unpkg) no carga; que no rompa el arranque
+  // y que igual se seteen las variables de config de abajo.
+  if (typeof emailjs !== 'undefined') { try { emailjs.init("E4wDaLmmuBovj2s8a"); } catch(e){} }
   // ---- EmailJS config cotizaciones (cambiar cuando esten creados) ----
   window.EMAILJS_COT_SERVICE  = 'service_xm6dmxl';   // Gmail conectado a cotizaciones.emval@gmail.com
   window.EMAILJS_COT_TEMPLATE = 'template_63rsw4i';  // Template "Contact Us" de cotizaciones
@@ -1172,8 +1178,9 @@ function _crearOTPausadaDesdeEstado() {
 }
 
 function guardarBorradorOTActual() {
-  // En modo edición de una OT ya terminada (solo admin) no se generan borradores pausados.
-  if (_otFinalizada || _restaurandoBorradorOT || estado.editandoOTId || !_hayDatosOTEnCurso()) return false;
+  // No generar borradores: sin hoja activa (inicio, sin numero), en edición de OT
+  // terminada, o sin datos en curso.
+  if (_otFinalizada || _restaurandoBorradorOT || estado.editandoOTId || !estado.otNumero || !_hayDatosOTEnCurso()) return false;
   try {
     const otBorrador = _crearOTPausadaDesdeEstado();
     const otsPausadas = cargarOTsPausadas();
@@ -1626,24 +1633,27 @@ function nuevaOT() {
   _actualizarBadgesOT();
   go('s-cadena');
   cargarOTsPausadasEnCadena();
-  // Esperar Firebase antes de cargar cadenas
-  if (window._firebaseReady) {
-    cargarCadenasApp();
-  } else {
-    document.getElementById('lista-cadenas').innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
-    var _intentos = 0;
-    var _esperar = setInterval(function() {
-      _intentos++;
-      if (window._firebaseReady) {
-        clearInterval(_esperar);
-        cargarCadenasApp();
-        cargarOTsPausadasEnCadena();
-      } else if (_intentos > 30) {
-        clearInterval(_esperar);
-        document.getElementById('lista-cadenas').innerHTML = '<p style="font-size:13px;color:var(--rojo);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
-      }
-    }, 200);
-  }
+  // cargarCadenasApp maneja online (espera Firebase) y offline (cache) internamente
+  cargarCadenasApp();
+}
+
+// Inicio del tecnico: muestra la lista de trabajos pausados SIN abrir una hoja nueva.
+// La hoja recien "nace" cuando el tecnico elige una cadena (ver seleccionarCadena).
+function _verInicioTecnico() {
+  nuevaOT();               // reset completo + navega a s-cadena + carga cadenas/pausadas
+  estado.otNumero = null;  // no dejamos ninguna hoja "abierta"
+  _otFinalizada = true;    // sin hoja activa -> sin autoguardado
+  _actualizarBadgesOT();   // badge -> #---
+  _expandirPausados();     // mostrar arriba la lista de pausados
+}
+
+// Expande el acordeon de "Trabajos pausados" (si hay alguno) haciendo clic en el toggle,
+// para que su estado interno quede sincronizado.
+function _expandirPausados() {
+  setTimeout(function() {
+    var btn = document.getElementById('toggle-pausadas');
+    if (btn && btn.style.pointerEvents !== 'none') btn.click();
+  }, 80);
 }
 
 // =========== COTIZACIÓN PREVIA (entrada Pedro/admin) ===========
@@ -2180,10 +2190,12 @@ function pausarOT() {
 
     // Dejar la pausada a salvo y arrancar una OT nueva y limpia (estado + numero nuevo),
     // para que el tecnico pueda hacer otra hoja del mismo local sin arrastres.
-    _otFinalizada = true;          // impide que nuevaOT() reguarde la pausada como autoDraft
+    _otFinalizada = true;          // sin hoja activa (no se autoguarda)
     clearTimeout(_autoSaveTimer);  // cancela autoguardado pendiente de la pausada
-    toast('✅ OT en espera. Ya puedes empezar otra hoja.');
-    setTimeout(function() { nuevaOT(); }, 500);
+    toast('✅ Guardada en "Trabajos pausados".');
+    // No abrir una hoja nueva sola: mostrar la lista de pausados. La nueva empieza
+    // cuando el tecnico elige una cadena.
+    setTimeout(function() { _verInicioTecnico(); }, 500);
   } catch(e) {
     console.error('Error en pausarOT:', e);
     toast('Error al pausar');
@@ -3890,46 +3902,53 @@ const CADENAS_DEFAULT = [
 
 let cadenaSeleccionada = null;
 
-async function cargarCadenasApp() {
+// Pinta las cadenas desde el cache de localStorage. Devuelve true si pinto algo.
+function _renderCadenasDesdeCache(lista) {
+  const cached = _getCadenasCached();
+  if (!cached || cached.length === 0) return false;
+  lista.innerHTML = '';
+  const _ORDEN_C2 = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
+  cached.sort(function(a, b) {
+    var ia = _ORDEN_C2.indexOf(a.nombre), ib = _ORDEN_C2.indexOf(b.nombre);
+    if (ia === -1 && ib === -1) return (a.orden||99)-(b.orden||99);
+    if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
+  });
+  cached.forEach(function(c) {
+    var card = document.createElement('div'); card.className = 'cadena-card';
+    var logoDiv = document.createElement('div'); logoDiv.className = 'cadena-logo fallback';
+    logoDiv.style.background = c.color || '#1B3A6B';
+    if (c.logo) {
+      var img = document.createElement('img'); img.src = c.logo;
+      img.onerror = function(){ logoDiv.innerHTML=''; logoDiv.textContent = c.letra || c.nombre.charAt(0); };
+      logoDiv.innerHTML = ''; logoDiv.appendChild(img); logoDiv.classList.remove('fallback');
+    } else { logoDiv.textContent = c.letra || c.nombre.charAt(0); }
+    var info = document.createElement('div'); info.className = 'cadena-info';
+    var n = (c.sucursales||[]).length;
+    info.innerHTML = '<div class="cadena-nombre">' + c.nombre + '</div><div class="cadena-nsuc">' + n + ' sucursal' + (n!==1?'es':'') + '</div>';
+    var arrow = document.createElement('svg'); arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
+    arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
+    arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
+    arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
+    card.appendChild(logoDiv); card.appendChild(info); card.appendChild(arrow);
+    card.onclick = (function(cad){ return function(){ seleccionarCadena(cad); }; })(c);
+    lista.appendChild(card);
+  });
+  return true;
+}
+
+async function cargarCadenasApp(_intento) {
+  _intento = _intento || 0;
   const lista = document.getElementById('lista-cadenas');
   if (!lista) return;
-  if (!window._firebaseReady) { setTimeout(cargarCadenasApp, 200); return; }
-  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
-
-  // Offline: usar cache de localStorage
-  if (!navigator.onLine) {
-    const cached = _getCadenasCached();
-    if (cached && cached.length > 0) {
-      lista.innerHTML = '';
-      const _ORDEN_C2 = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
-      cached.sort(function(a, b) {
-        var ia = _ORDEN_C2.indexOf(a.nombre), ib = _ORDEN_C2.indexOf(b.nombre);
-        if (ia === -1 && ib === -1) return (a.orden||99)-(b.orden||99);
-        if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
-      });
-      cached.forEach(function(c) {
-        var card = document.createElement('div'); card.className = 'cadena-card';
-        var logoDiv = document.createElement('div'); logoDiv.className = 'cadena-logo fallback';
-        logoDiv.style.background = c.color || '#1B3A6B';
-        if (c.logo) {
-          var img = document.createElement('img'); img.src = c.logo;
-          img.onerror = function(){ logoDiv.innerHTML=''; logoDiv.textContent = c.letra || c.nombre.charAt(0); };
-          logoDiv.innerHTML = ''; logoDiv.appendChild(img); logoDiv.classList.remove('fallback');
-        } else { logoDiv.textContent = c.letra || c.nombre.charAt(0); }
-        var info = document.createElement('div'); info.className = 'cadena-info';
-        var n = (c.sucursales||[]).length;
-        info.innerHTML = '<div class="cadena-nombre">' + c.nombre + '</div><div class="cadena-nsuc">' + n + ' sucursal' + (n!==1?'es':'') + '</div>';
-        var arrow = document.createElement('svg'); arrow.setAttribute('width','16'); arrow.setAttribute('height','16');
-        arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
-        arrow.setAttribute('stroke','#C8D0E0'); arrow.setAttribute('stroke-width','2');
-        arrow.innerHTML = '<polyline points="9 18 15 12 9 6"/>';
-        card.appendChild(logoDiv); card.appendChild(info); card.appendChild(arrow);
-        card.onclick = (function(cad){ return function(){ seleccionarCadena(cad); }; })(c);
-        lista.appendChild(card);
-      });
-      return;
-    }
-    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin conexion. Abre la app con internet al menos una vez.</p>';
+  // CACHE-FIRST: pintar desde el cache al instante (no depender de navigator.onLine,
+  // que puede mentir sin señal real). Luego se intenta refrescar desde Firestore.
+  const hayCacheCad = _renderCadenasDesdeCache(lista);
+  if (!hayCacheCad) {
+    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando...</p>';
+  }
+  // Esperar a que Firebase cargue para refrescar (tope ~12s); el cache ya se pinto.
+  if (!window._firebaseReady) {
+    if (_intento < 40) setTimeout(function(){ cargarCadenasApp(_intento + 1); }, 300);
     return;
   }
 
@@ -4003,8 +4022,11 @@ async function cargarCadenasApp() {
       lista.appendChild(card);
     });
   } catch(e) {
-    console.error('Error cargando cadenas:', e);
-    // Fallback to defaults
+    // Sin señal real: si ya pintamos desde cache, lo mantenemos.
+    console.warn('Cadenas: sin conexion, usando cache/default.', e && e.message);
+    if (hayCacheCad) return;
+    // Sin cache: fallback a defaults
+    lista.innerHTML = '';
     CADENAS_DEFAULT.forEach(function(c) {
       const card = document.createElement('div');
       card.className = 'cadena-card';
@@ -4024,6 +4046,14 @@ async function cargarCadenasApp() {
 
 function seleccionarCadena(cadena) {
   cadenaSeleccionada = cadena;
+  // Si venimos del "inicio" (sin hoja activa), aqui NACE la hoja: se numera y se
+  // habilita el autoguardado. Elegir cadena = empezar una OT nueva (accion explicita).
+  if (!estado.otNumero) {
+    estado.otNumero = _generarNumeroOTUnico();
+    estado.creadoEnBorrador = new Date().toISOString();
+    _otFinalizada = false;
+    _actualizarBadgesOT();
+  }
   // Guardar datos de la cadena en estado para que la OT pausada conserve su logo
   estado.cadenaNombre = cadena.nombre || '';
   estado.cadenaLogo = cadena.logo || '';
@@ -4767,29 +4797,35 @@ function _renderListaUsuarios(docs) {
   // Sin boton Supervisor separado - Pedro Arce (Administrador) tiene acceso al panel
 }
 
-async function cargarUsuariosApp() {
-  // Offline: usar cache
-  if (!navigator.onLine) {
-    const cached = _getUsuariosCached();
-    if (cached) { _renderListaUsuarios(cached); return; }
-    _renderListaUsuarios([]);
+async function cargarUsuariosApp(_intento) {
+  _intento = _intento || 0;
+  // CACHE-FIRST: pintar de inmediato desde el cache, sin depender de navigator.onLine
+  // (que puede mentir: en un subterraneo el telefono "cree" que hay red pero no hay,
+  // y esperar a Firestore deja la lista en blanco). Luego se intenta refrescar.
+  const cached = _getUsuariosCached();
+  const hayCache = !!(cached && cached.length);
+  if (hayCache) _renderListaUsuarios(cached);
+
+  // Esperar a que Firebase cargue para refrescar (tope ~12s); el cache ya se pinto.
+  if (!window._firebaseReady) {
+    if (!hayCache) _renderListaUsuarios([]);
+    if (_intento < 40) setTimeout(function(){ cargarUsuariosApp(_intento + 1); }, 300);
     return;
   }
   try {
-    if (!window._firebaseReady) { setTimeout(cargarUsuariosApp, 200); return; }
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
-    if (snap.empty) {
-      _renderListaUsuarios([]);
-      return;
-    }
+    if (snap.empty) { if (!hayCache) _renderListaUsuarios([]); return; }
     const docs = snap.docs.map(function(d){ return Object.assign({ _id: d.id }, d.data()); });
     _cacheUsuarios(docs); // Guardar en cache para offline
     _renderListaUsuarios(docs);
   } catch(e) {
-    console.error('Error cargando usuarios:', e);
-    const lista = document.getElementById('lista-usuarios');
-    if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Error de conexion. Recarga la pagina.</p>';
+    // Sin señal real: nos quedamos con lo que ya pintamos del cache.
+    console.warn('Usuarios: sin conexion, usando cache.', e && e.message);
+    if (!hayCache) {
+      const lista = document.getElementById('lista-usuarios');
+      if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin conexion. Abre la app con internet al menos una vez.</p>';
+    }
   }
 }
 
@@ -6702,6 +6738,17 @@ async function verOTsTecnico(nombre, grupo) {
     if (cdata.otId) otsCotizadasT[cdata.otId] = cd.id;
     if (cdata.otNumero) otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
   });
+
+  // Index de PDFs por otNumero (fallback para "Ver PDF" cuando el documento de la OT
+  // perdio su pdfUrl, p.ej. por colision de numero — el PDF igual existe en 'pdfs')
+  const pdfMapT = {};
+  try {
+    const pdfSnapT = await db.collection('pdfs').get();
+    pdfSnapT.docs.forEach(function(pd) {
+      const d = pd.data();
+      if (d.otNumero) pdfMapT[String(d.otNumero)] = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
+    });
+  } catch(e) { console.warn('No se pudo cargar el indice de PDFs:', e); }
   console.log('Cotizaciones encontradas:', Object.keys(otsCotizadasT).length, 'por id,', Object.keys(otsCotizadasPorNumero).length, 'por numero');
 
   lista.innerHTML = '';
@@ -6829,8 +6876,15 @@ async function verOTsTecnico(nombre, grupo) {
       btns.appendChild(btnContinuar);
     }
 
-    // Boton Ver PDF: usar URL de Firestore si existe, sino usar embed con base64
-    const urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
+    // Boton Ver PDF: URL propia de la OT; si no tiene, fallback al indice de 'pdfs'
+    // por numero (el PDF existe aunque el documento de la OT haya perdido su URL).
+    let urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
+    if (!urlParaVer) {
+      const _pinfoT = pdfMapT[String(ot.numero || ot.otNumero || '')];
+      if (_pinfoT) {
+        urlParaVer = _pinfoT.cloudUrl || ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + _pinfoT.id);
+      }
+    }
     if (urlParaVer) {
       const btnPdf = document.createElement('button');
       btnPdf.textContent = 'Ver PDF';
@@ -8877,15 +8931,13 @@ function _getUsuariosCached() {
   try { var v = localStorage.getItem('emval_users_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
 }
 
-// Iniciar carga cuando Firebase este listo
+// Iniciar carga. Los loaders son CACHE-FIRST: pintan de inmediato desde localStorage
+// (así la app abre aunque no haya señal) y se auto-reintentan para refrescar cuando
+// Firebase esté listo. No dependen de navigator.onLine (que puede mentir sin red real).
 (function iniciarCarga() {
-  if (window._firebaseReady) {
-    cargarUsuariosApp();
-    cargarCadenasApp();
-    cargarOTsPausadasEnCadena();
-  } else {
-    setTimeout(iniciarCarga, 100);
-  }
+  cargarUsuariosApp();
+  cargarCadenasApp();
+  cargarOTsPausadasEnCadena();
 })();
 setTimeout(function(){
   var urlParams = new URLSearchParams(window.location.search);
