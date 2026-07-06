@@ -1532,8 +1532,11 @@ function loginExitoso() {
     if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
     var btnVentas = document.getElementById('btn-ventas');
     if (btnVentas) btnVentas.style.display = esAdmin ? 'flex' : 'none';
-  } else if (!restaurarBorradorPendienteTecnico()) {
-    nuevaOT();
+  } else {
+    // No reabrir ninguna hoja sola al entrar: mostrar el inicio con los trabajos
+    // pausados/borradores listados. El tecnico toca una tarjeta para continuar o
+    // elige una cadena para empezar (misma filosofia que tras Pausar).
+    _verInicioTecnico();
   }
   toast('Bienvenido, ' + estado.usuario.split(' ')[0] + '!');
 }
@@ -2277,6 +2280,7 @@ function cerrarOT() {
   // OT completada: bloquear autoguardado para que no reviva como borrador
   // (visibilitychange/pagehide/cerrarSesion) hasta que se inicie/continúe otra OT.
   _otFinalizada = true;
+  clearTimeout(_autoSaveTimer);  // cancela cualquier autoguardado pendiente (no revivir borrador)
 
   // Guardar localmente (offline)
   const ot = {
