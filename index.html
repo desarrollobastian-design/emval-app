@@ -848,6 +848,7 @@
       <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
         <span style="color:#D97706;">⏸</span> TRABAJOS PAUSADOS
         <span id="sup-pausadas-count" style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">0</span>
+        <button onclick="cargarPausadasSupervisor()" title="Actualizar lista" style="margin-left:auto;background:transparent;border:1px solid var(--gris3, #D0D5DD);color:var(--texto2);border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit;">🔄 Actualizar</button>
       </div>
       <div id="sup-pausadas-lista"></div>
     </div>
@@ -1343,7 +1344,7 @@ function editarOTTerminada(ot) {
 function _ultimoBorradorTecnico() {
   if (!estado.usuario) return null;
   const borradores = cargarOTsPausadas()
-    .filter(function(ot){ return ot.tecnico === estado.usuario && ot.autoDraft === true; })
+    .filter(function(ot){ return _mismoTecnico(ot.tecnico, estado.usuario) && ot.autoDraft === true; })
     .sort(function(a, b) {
       return new Date(b.actualizadoEn || b.creadoEn || 0) - new Date(a.actualizadoEn || a.creadoEn || 0);
     });
@@ -1362,12 +1363,20 @@ function restaurarBorradorPendienteTecnico() {
 }
 
 // Elimina una OT de la lista de pausadas (al completarla)
+// Compara nombres de técnico de forma robusta: ignora diferencias de tilde (NFC vs NFD),
+// espacios sobrantes y mayúsculas. Evita que una OT "desaparezca" de la lista del técnico
+// por una diferencia de codificación del nombre entre el login y el doc guardado.
+function _mismoTecnico(a, b) {
+  return String(a == null ? '' : a).normalize('NFC').trim().toLowerCase()
+       === String(b == null ? '' : b).normalize('NFC').trim().toLowerCase();
+}
+
 function eliminarOTPausada(numero, tecnico) {
   try {
     const otsPausadas = cargarOTsPausadas();
     const filtradas = otsPausadas.filter(function(ot) {
       const mismaNumero = ot.numero != null && numero != null && ot.numero.toString() === numero.toString();
-      const mismoTecnico = ot.tecnico === tecnico;
+      const mismoTecnico = _mismoTecnico(ot.tecnico, tecnico);
       return !(mismaNumero && mismoTecnico);
     });
     guardarOTsPausadas(filtradas);
@@ -1467,6 +1476,10 @@ async function verificarPasswordAdmin() {
 
 // =========== NAVEGACION ===========
 function go(id) {
+  // Cerrar la escucha en vivo de pausadas al salir del panel supervisor
+  if (id !== 's-supervisor' && typeof detenerPausadasSupervisor === 'function') {
+    detenerPausadasSupervisor();
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const screen = document.getElementById(id);
   if (screen) screen.classList.add('active');
@@ -2179,9 +2192,44 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
         await db.collection('ordenes').doc(snapshot.docs[i].id).update(payload);
       }
     }
+    // Llegó a Firestore: ya no está pendiente de subir
+    _marcarPausadaSincronizada(ot.numero, ot.tecnico);
   } catch(e) {
     console.error('Error sincronizando OT pausada con Firebase:', e);
   }
+}
+
+// Quita la marca pendienteSync de una pausada local una vez que se subió a Firestore.
+function _marcarPausadaSincronizada(numero, tecnico) {
+  try {
+    const pausadas = cargarOTsPausadas();
+    let cambio = false;
+    pausadas.forEach(function(ot) {
+      if (ot.numero != null && numero != null && ot.numero.toString() === numero.toString()
+          && _mismoTecnico(ot.tecnico, tecnico) && ot.pendienteSync) {
+        ot.pendienteSync = false;
+        cambio = true;
+      }
+    });
+    if (cambio) guardarOTsPausadas(pausadas);
+  } catch(e) { console.error('Error marcando pausada sincronizada:', e); }
+}
+
+// Reintenta subir a Firestore todas las pausadas locales que quedaron pendientes
+// (p. ej. se pausó con mala señal). Idempotente: _sincronizarPausadaFirebase hace
+// add/update por numero+tecnico y limpia la marca al lograrlo.
+function sincronizarPausadasPendientes() {
+  if (!window._firebaseReady || !navigator.onLine) return;
+  let pendientes;
+  try {
+    pendientes = cargarOTsPausadas().filter(function(ot) {
+      return ot && !ot.autoDraft && ot.pendienteSync;
+    });
+  } catch(e) { return; }
+  if (!pendientes.length) return;
+  pendientes.forEach(function(ot) {
+    _sincronizarPausadaFirebase(ot, (ot.fotosAntes || []).slice(), (ot.fotosDespues || []).slice());
+  });
 }
 
 function pausarOT() {
@@ -2206,6 +2254,7 @@ function pausarOT() {
     otPausada.descripcionTrabajo = desc;
     otPausada.autoDraft = false;
     otPausada.firmada = false;
+    otPausada.pendienteSync = true;   // se limpia cuando llega a Firestore (ver _sincronizarPausadaFirebase)
 
     // Guardar en almacenamiento local (base64, para continuar offline)
     try {
@@ -2229,7 +2278,7 @@ function pausarOT() {
     // para que el tecnico pueda hacer otra hoja del mismo local sin arrastres.
     _otFinalizada = true;          // sin hoja activa (no se autoguarda)
     clearTimeout(_autoSaveTimer);  // cancela autoguardado pendiente de la pausada
-    toast('✅ Guardada en "Trabajos pausados".');
+    toast(navigator.onLine ? '✅ Guardada en "Trabajos pausados".' : '✅ Guardada. Se subirá al recuperar señal.');
     // No abrir una hoja nueva sola: mostrar la lista de pausados. La nueva empieza
     // cuando el tecnico elige una cadena.
     setTimeout(function() { _verInicioTecnico(); }, 500);
@@ -4227,7 +4276,7 @@ async function _reconciliarPausadasFirebase() {
     const snap = await db.collection('ordenes').where('pausa', '==', true).get();
     const fbPausadas = snap.docs.map(function(d){ return d.data(); });
 
-    const misEnFb = fbPausadas.filter(function(o){ return o.tecnico === estado.usuario; });
+    const misEnFb = fbPausadas.filter(function(o){ return _mismoTecnico(o.tecnico, estado.usuario); });
     const numerosMiosFb = {};
     misEnFb.forEach(function(o){ numerosMiosFb[String(o.numero)] = true; });
     const todosNumerosFb = {};
@@ -4238,7 +4287,7 @@ async function _reconciliarPausadasFirebase() {
 
     // 1) Quitar de MIS pausadas locales las que en Firebase ya no son mías
     local = local.filter(function(ot) {
-      if (ot.tecnico !== estado.usuario) return true;          // de otro técnico en este equipo: no tocar
+      if (!_mismoTecnico(ot.tecnico, estado.usuario)) return true; // de otro técnico en este equipo: no tocar
       const num = String(ot.numero);
       if (numerosMiosFb[num]) return true;                     // sigue siendo mía
       if (todosNumerosFb[num]) { cambios = true; return false; } // reasignada a otro técnico → quitar
@@ -4247,7 +4296,7 @@ async function _reconciliarPausadasFirebase() {
 
     // 2) Agregar las que Firebase dice que son mías pero no tengo localmente (reasignadas hacia mí u otro equipo)
     const numerosLocalesMios = {};
-    local.forEach(function(o){ if (o.tecnico === estado.usuario) numerosLocalesMios[String(o.numero)] = true; });
+    local.forEach(function(o){ if (_mismoTecnico(o.tecnico, estado.usuario)) numerosLocalesMios[String(o.numero)] = true; });
     const nuevas = misEnFb.filter(function(fo){ return !numerosLocalesMios[String(fo.numero)]; });
     for (let i = 0; i < nuevas.length; i++) {
       const otLocal = _firebaseADTOPausada(nuevas[i]);
@@ -4286,7 +4335,7 @@ function _renderPausadasEnCadena() {
 
     // Filtrar solo las OTs pausadas por el técnico actual
     const otsMias = otsPausadas.filter(function(ot) {
-      return ot.tecnico === estado.usuario;
+      return _mismoTecnico(ot.tecnico, estado.usuario);
     });
 
     // Siempre mostrar la sección, pero vacía si no hay OTs del técnico actual
@@ -4461,8 +4510,9 @@ function _renderPausadasEnCadena() {
         bottom.appendChild(badge);
         bottom.appendChild(btn);
 
-        // Solo para borradores autoguardados: permitir descartarlos manualmente
-        if (ot.autoDraft) {
+        // Solo el Administrador (Pedro) puede descartar borradores. Los técnicos NO pueden
+        // borrar OTs pausadas/autoguardadas: así no pierden su trabajo tocando la ✕ por error.
+        if (ot.autoDraft && estado.cargo === 'Administrador') {
           const btnDescartar = document.createElement('button');
           btnDescartar.textContent = '✕';
           btnDescartar.title = 'Descartar borrador';
@@ -6493,7 +6543,7 @@ function continuarOT(otId) {
       const otsPausadas = cargarOTsPausadas();
       // Priorizar la OT del propio tecnico (evita abrir la de otro flujo con numero repetido);
       // si el que mira es supervisor/admin, cae al match solo por numero.
-      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero && o.tecnico === estado.usuario; })
+      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero && _mismoTecnico(o.tecnico, estado.usuario); })
               || otsPausadas.find(function(o) { return o.numero.toString() === numero; });
 
       if (!ot) {
@@ -7504,57 +7554,76 @@ async function cargarOTsSupervisor() {
 
 // =========== TRABAJOS PAUSADOS (PANEL ADMIN/SUPERVISOR) ===========
 // Lee de Firebase TODAS las OTs pausadas (de todos los tecnicos), sin filtro de fecha
+// Suscripción en vivo (onSnapshot) para que las pausadas aparezcan al instante.
+let _unsubPausadasSup = null;
+let _cadenaMapSup = null;
+
 async function cargarPausadasSupervisor() {
   const seccion = document.getElementById('sup-pausadas-seccion');
   const listaEl = document.getElementById('sup-pausadas-lista');
   const countEl = document.getElementById('sup-pausadas-count');
   if (!seccion || !listaEl) return;
+  if (!window._firebaseReady) return;
+  const db = window.firebase.firestore();
 
-  try {
-    if (!window._firebaseReady) return;
-    const db = window.firebase.firestore();
-    const snap = await db.collection('ordenes').where('pausa', '==', true).get();
-
-    if (snap.empty) {
-      seccion.style.display = 'none';
-      listaEl.innerHTML = '';
-      return;
-    }
-
-    // Mapa de cadenas para resolver logos por nombre de sucursal
-    const cadenaMap = {};
+  // Mapa de cadenas para resolver logos (se carga una vez; cambia rara vez)
+  if (!_cadenaMapSup) {
+    _cadenaMapSup = {};
     try {
       const cadSnap = await db.collection('cadenas').get();
       cadSnap.docs.forEach(function(cd) {
         const cdata = cd.data();
-        cadenaMap[cdata.nombre] = cdata;
+        _cadenaMapSup[cdata.nombre] = cdata;
         (cdata.sucursales || []).forEach(function(s) {
           const sn = typeof s === 'object' ? s.nombre : s;
-          cadenaMap[sn] = cdata;
+          _cadenaMapSup[sn] = cdata;
         });
       });
     } catch(e) {}
+  }
 
+  // Cerrar suscripción previa antes de re-suscribir (evita listeners duplicados)
+  detenerPausadasSupervisor();
+
+  // Escuchar en tiempo real: se actualiza sola al pausar/completar/eliminar
+  _unsubPausadasSup = db.collection('ordenes').where('pausa', '==', true)
+    .onSnapshot(function(snap) {
+      _renderPausadasSup(snap, seccion, listaEl, countEl);
+    }, function(err) {
+      console.error('Error escuchando pausadas supervisor:', err);
+    });
+}
+
+function detenerPausadasSupervisor() {
+  if (_unsubPausadasSup) {
+    try { _unsubPausadasSup(); } catch(e) {}
+    _unsubPausadasSup = null;
+  }
+}
+
+function _renderPausadasSup(snap, seccion, listaEl, countEl) {
+  try {
+    if (!snap || snap.empty) {
+      seccion.style.display = 'none';
+      listaEl.innerHTML = '';
+      return;
+    }
     // Ordenar por fecha de creacion (mas reciente primero)
     const docs = snap.docs.slice().sort(function(a, b) {
-      const ta = _msCreado(a.data().creadoEn);
-      const tb = _msCreado(b.data().creadoEn);
-      return tb - ta;
+      return _msCreado(b.data().creadoEn) - _msCreado(a.data().creadoEn);
     });
 
     seccion.style.display = 'block';
-    countEl.textContent = docs.length;
+    if (countEl) countEl.textContent = docs.length;
     listaEl.innerHTML = '';
 
     docs.forEach(function(doc, idx) {
-      const d = doc.data();
-      const card = _crearCardPausadaSup(doc.id, d, cadenaMap);
-      // Entrada escalonada (stagger), con tope para no demorar demasiado
+      const card = _crearCardPausadaSup(doc.id, doc.data(), _cadenaMapSup || {});
       card.style.animationDelay = Math.min(idx * 55, 440) + 'ms';
       listaEl.appendChild(card);
     });
   } catch(e) {
-    console.error('Error cargando pausadas supervisor:', e);
+    console.error('Error render pausadas supervisor:', e);
     seccion.style.display = 'none';
   }
 }
@@ -8947,6 +9016,7 @@ async function sincronizarOTsPendientes() {
 window.addEventListener('online', function() {
   actualizarIndicadorPendientes();
   setTimeout(sincronizarOTsPendientes, 2000);
+  setTimeout(sincronizarPausadasPendientes, 2500);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -9000,6 +9070,11 @@ if ('serviceWorker' in navigator) {
 
 // Estado inicial de conexion
 actualizarIndicadorPendientes();
+
+// Reintentar subir pausadas que quedaron pendientes por mala señal:
+// al iniciar (si hay conexión) y cada 90 s como red de seguridad.
+setTimeout(sincronizarPausadasPendientes, 3000);
+setInterval(sincronizarPausadasPendientes, 90000);
 </script>
 </body>
 </html>
