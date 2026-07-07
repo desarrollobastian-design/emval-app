@@ -1343,7 +1343,7 @@ function editarOTTerminada(ot) {
 function _ultimoBorradorTecnico() {
   if (!estado.usuario) return null;
   const borradores = cargarOTsPausadas()
-    .filter(function(ot){ return ot.tecnico === estado.usuario && ot.autoDraft === true; })
+    .filter(function(ot){ return _mismoTecnico(ot.tecnico, estado.usuario) && ot.autoDraft === true; })
     .sort(function(a, b) {
       return new Date(b.actualizadoEn || b.creadoEn || 0) - new Date(a.actualizadoEn || a.creadoEn || 0);
     });
@@ -1362,12 +1362,20 @@ function restaurarBorradorPendienteTecnico() {
 }
 
 // Elimina una OT de la lista de pausadas (al completarla)
+// Compara nombres de técnico de forma robusta: ignora diferencias de tilde (NFC vs NFD),
+// espacios sobrantes y mayúsculas. Evita que una OT "desaparezca" de la lista del técnico
+// por una diferencia de codificación del nombre entre el login y el doc guardado.
+function _mismoTecnico(a, b) {
+  return String(a == null ? '' : a).normalize('NFC').trim().toLowerCase()
+       === String(b == null ? '' : b).normalize('NFC').trim().toLowerCase();
+}
+
 function eliminarOTPausada(numero, tecnico) {
   try {
     const otsPausadas = cargarOTsPausadas();
     const filtradas = otsPausadas.filter(function(ot) {
       const mismaNumero = ot.numero != null && numero != null && ot.numero.toString() === numero.toString();
-      const mismoTecnico = ot.tecnico === tecnico;
+      const mismoTecnico = _mismoTecnico(ot.tecnico, tecnico);
       return !(mismaNumero && mismoTecnico);
     });
     guardarOTsPausadas(filtradas);
@@ -4227,7 +4235,7 @@ async function _reconciliarPausadasFirebase() {
     const snap = await db.collection('ordenes').where('pausa', '==', true).get();
     const fbPausadas = snap.docs.map(function(d){ return d.data(); });
 
-    const misEnFb = fbPausadas.filter(function(o){ return o.tecnico === estado.usuario; });
+    const misEnFb = fbPausadas.filter(function(o){ return _mismoTecnico(o.tecnico, estado.usuario); });
     const numerosMiosFb = {};
     misEnFb.forEach(function(o){ numerosMiosFb[String(o.numero)] = true; });
     const todosNumerosFb = {};
@@ -4238,7 +4246,7 @@ async function _reconciliarPausadasFirebase() {
 
     // 1) Quitar de MIS pausadas locales las que en Firebase ya no son mías
     local = local.filter(function(ot) {
-      if (ot.tecnico !== estado.usuario) return true;          // de otro técnico en este equipo: no tocar
+      if (!_mismoTecnico(ot.tecnico, estado.usuario)) return true; // de otro técnico en este equipo: no tocar
       const num = String(ot.numero);
       if (numerosMiosFb[num]) return true;                     // sigue siendo mía
       if (todosNumerosFb[num]) { cambios = true; return false; } // reasignada a otro técnico → quitar
@@ -4247,7 +4255,7 @@ async function _reconciliarPausadasFirebase() {
 
     // 2) Agregar las que Firebase dice que son mías pero no tengo localmente (reasignadas hacia mí u otro equipo)
     const numerosLocalesMios = {};
-    local.forEach(function(o){ if (o.tecnico === estado.usuario) numerosLocalesMios[String(o.numero)] = true; });
+    local.forEach(function(o){ if (_mismoTecnico(o.tecnico, estado.usuario)) numerosLocalesMios[String(o.numero)] = true; });
     const nuevas = misEnFb.filter(function(fo){ return !numerosLocalesMios[String(fo.numero)]; });
     for (let i = 0; i < nuevas.length; i++) {
       const otLocal = _firebaseADTOPausada(nuevas[i]);
@@ -4286,7 +4294,7 @@ function _renderPausadasEnCadena() {
 
     // Filtrar solo las OTs pausadas por el técnico actual
     const otsMias = otsPausadas.filter(function(ot) {
-      return ot.tecnico === estado.usuario;
+      return _mismoTecnico(ot.tecnico, estado.usuario);
     });
 
     // Siempre mostrar la sección, pero vacía si no hay OTs del técnico actual
@@ -4461,8 +4469,9 @@ function _renderPausadasEnCadena() {
         bottom.appendChild(badge);
         bottom.appendChild(btn);
 
-        // Solo para borradores autoguardados: permitir descartarlos manualmente
-        if (ot.autoDraft) {
+        // Solo el Administrador (Pedro) puede descartar borradores. Los técnicos NO pueden
+        // borrar OTs pausadas/autoguardadas: así no pierden su trabajo tocando la ✕ por error.
+        if (ot.autoDraft && estado.cargo === 'Administrador') {
           const btnDescartar = document.createElement('button');
           btnDescartar.textContent = '✕';
           btnDescartar.title = 'Descartar borrador';
@@ -6493,7 +6502,7 @@ function continuarOT(otId) {
       const otsPausadas = cargarOTsPausadas();
       // Priorizar la OT del propio tecnico (evita abrir la de otro flujo con numero repetido);
       // si el que mira es supervisor/admin, cae al match solo por numero.
-      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero && o.tecnico === estado.usuario; })
+      const ot = otsPausadas.find(function(o) { return o.numero.toString() === numero && _mismoTecnico(o.tecnico, estado.usuario); })
               || otsPausadas.find(function(o) { return o.numero.toString() === numero; });
 
       if (!ot) {
