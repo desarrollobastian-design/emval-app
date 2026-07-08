@@ -563,7 +563,10 @@
   </div>
   <div class="content">
     <div style="font-size: 13px; color: var(--texto2);">Paso 4 de 4 — Documenta el trabajo realizado</div>
-    
+
+    <!-- Solo en modo edición (admin): acceso a las fotos del inicio -->
+    <button id="btn-ver-antes-edit" onclick="go('s-fotos-antes');renderizarFotosScreen();" style="display:none;width:100%;background:#EEF2FB;color:var(--azul);border:1.5px solid #C7D6F0;border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;">📷 Ver / editar fotos del inicio (antes)</button>
+
     <div id="ejecucion-prev-content" style="display:none;"></div>
     <div class="field">
       <label id="ejecucion-trabajo-label">Trabajo realizado</label>
@@ -604,8 +607,8 @@
 
     <div class="mt-auto">
       <div style="display:flex;gap:8px;flex-direction:column;">
-        <button class="btn" onclick="pausarOT()" style="background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);" onmouseover="this.style.cssText='background:#FBBF24;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 4px 12px rgba(252,211,77,0.5);transform:translateY(-2px);'" onmouseout="this.style.cssText='background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);transform:translateY(0);'">⏸ Pausar (continuar después)</button>
-        <button class="btn" onclick="cerrarOT()" style="background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);" onmouseover="this.style.cssText='background:#1E8052;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 4px 16px rgba(39,160,107,0.5);transform:translateY(-2px);'" onmouseout="this.style.cssText='background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);transform:translateY(0);'">✓ Cerrar y generar OT →</button>
+        <button id="btn-pausar-ot" class="btn" onclick="pausarOT()" style="background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);" onmouseover="this.style.cssText='background:#FBBF24;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 4px 12px rgba(252,211,77,0.5);transform:translateY(-2px);'" onmouseout="this.style.cssText='background:#FCD34D;color:#78350F;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(252,211,77,0.3);transform:translateY(0);'">⏸ Pausar (continuar después)</button>
+        <button id="btn-cerrar-ot" class="btn" onclick="cerrarOT()" style="background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);" onmouseover="this.style.cssText='background:#1E8052;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 4px 16px rgba(39,160,107,0.5);transform:translateY(-2px);'" onmouseout="this.style.cssText='background:#27A06B;color:white;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(39,160,107,0.3);transform:translateY(0);'">✓ Cerrar y generar OT →</button>
       </div>
     </div>
   </div>
@@ -1764,12 +1767,29 @@ function irFotosAntes() {
   renderizarFotosScreen();
 }
 
+// Cierra el modo edición de una OT (admin) y vuelve al panel de OTs, sin caer al login.
+function salirDeEdicion() {
+  estado.editandoOTId = '';
+  estado.editandoTecnico = '';
+  estado.editandoFecha = '';
+  estado.otClientId = '';
+  _otFinalizada = true;          // no dejar la hoja activa
+  clearTimeout(_autoSaveTimer);
+  go('s-ots-tecnicos');
+  cargarOTsTecnicos();
+  toast('Edición cerrada');
+}
+
 function volverASucursales() {
+  // En edición, el "atrás" de las fotos del inicio vuelve a la hoja de ejecución (no a cadenas)
+  if (estado.editandoOTId) { go('s-ejecucion'); cargarEjecucionScreen(); return; }
   go('s-cadena');
   cargarCadenasApp();
 }
 
 function volverAFotosAntes() {
+  // En edición, el "atrás" de ejecución cierra la edición y vuelve al panel (no al login)
+  if (estado.editandoOTId) { salirDeEdicion(); return; }
   go('s-fotos-antes');
   renderizarFotosScreen();
 }
@@ -1962,7 +1982,7 @@ async function procesarFoto(e) {
   } catch(err) {
     console.warn('No se pudo comprimir foto:', err);
   }
-  if (!data) { toast('No se pudo procesar la foto, intenta de nuevo'); return; }
+  if (!data) { toast('No se pudo procesar la imagen. Usa una foto JPG/PNG (evita HEIC).'); return; }
   if (tipo === 'antes') estado.fotosAntes[idx] = data;
   else if (tipo === 'despues') estado.fotosDespues[idx] = data;
   else if (tipo === 'timbre') estado.fotoTimbre = data;
@@ -2050,6 +2070,15 @@ function cargarEjecucionScreen() {
   const trabajoLabel = document.getElementById('ejecucion-trabajo-label');
   const descTA = document.getElementById('desc-trabajo');
   if (!prevCont) return;
+
+  // Modo edición (admin): botón "Guardar cambios", sin "Pausar", y acceso a fotos del inicio
+  const _editando = !!estado.editandoOTId;
+  const _btnVerAntes = document.getElementById('btn-ver-antes-edit');
+  const _btnPausar = document.getElementById('btn-pausar-ot');
+  const _btnCerrar = document.getElementById('btn-cerrar-ot');
+  if (_btnVerAntes) _btnVerAntes.style.display = _editando ? 'block' : 'none';
+  if (_btnPausar) _btnPausar.style.display = _editando ? 'none' : 'block';
+  if (_btnCerrar) _btnCerrar.textContent = _editando ? '✓ Guardar cambios' : '✓ Cerrar y generar OT →';
 
   if (estado.tipo === 'preventivo') {
     if (!estado.serviciosPreventivo || estado.serviciosPreventivo.length === 0) {
@@ -5478,7 +5507,9 @@ async function comprimirImagen(dataUrl, maxWidth, quality) {
       ctx.drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL('image/jpeg', quality || 0.5));
     };
-    img.onerror = function() { resolve(dataUrl); };
+    // Si la imagen no se puede decodificar (p. ej. HEIC en el PC), devolver null
+    // para que quien llama la rechace en vez de guardar una foto vacía/corrupta.
+    img.onerror = function() { resolve(null); };
     img.src = dataUrl;
   });
 }
@@ -6935,7 +6966,7 @@ async function verOTsTecnico(nombre, grupo) {
     const subDiv = document.createElement('div');
     subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
     const cecoValTec = ot.ceco || cecoMapTec[ot.local] || '';
-    subDiv.innerHTML = (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
+    subDiv.innerHTML = '<b style="color:var(--azul)">#' + (ot.numero || '—') + '</b> · ' + (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
     headerInfo.appendChild(subDiv);
     header.appendChild(iconEl);
