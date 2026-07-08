@@ -2557,6 +2557,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
     fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
     cotizacionId: estado.cotizacionId || '', enEspera: estado.enEspera === true,
+    emailLocal: estado.emailSucursal || estado.emailAdmin || '',
     audiosBase64: audiosBase64, savedAt: new Date().toISOString()
   };
 
@@ -5616,6 +5617,12 @@ async function guardarYEnviarPDF() {
   const pdfBlob = doc.output('blob');
   console.log('PDF completo size:', pdfBlob.size, 'bytes');
 
+  // Si la OT (nueva) está en la cola offline, guardar el PDF ahí para subirlo al
+  // sincronizar y que el correo lleve el link (sin señal no se puede subir ahora).
+  if (!estado.editandoOTId && estado.otClientId) {
+    _agregarPDFaColaPendiente(estado.otClientId, pdfBase64);
+  }
+
   // --- Subir PDF a Cloudinary como base64 (mas confiable que blob) ---
   let pdfUrlCloudinary = null;
   try {
@@ -5653,7 +5660,7 @@ async function guardarYEnviarPDF() {
         local: estado.local,
         tecnico: estado.usuario,
         fecha: new Date().toLocaleDateString('es-CL'),
-        pdfData: pdfBase64,
+        pdfData: (pdfBase64 && pdfBase64.length < 900000) ? pdfBase64 : '',
         pdfUrl: '',
         pdfUrlCloudinary: pdfUrlCloudinary || '',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
@@ -8940,6 +8947,41 @@ function toast(msg) {
 
 // =========== OFFLINE / INDEXEDDB ===========
 
+// Sube un PDF (base64 completo 'data:...;base64,...') a Cloudinary (raw) y devuelve la URL.
+async function _subirPDFaCloudinary(pdfDataUri, numero) {
+  try {
+    const solo = String(pdfDataUri || '').split(',').pop();
+    if (!solo) return null;
+    const formData = new FormData();
+    formData.append('file', 'data:application/pdf;base64,' + solo);
+    formData.append('upload_preset', 'emval_pdf');
+    formData.append('folder', 'emval/pdfs');
+    formData.append('public_id', 'Recepcion_Obra_OT' + (numero || '') + '.pdf');
+    const resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: formData }, 30000);
+    const data = await resp.json();
+    return data.secure_url || null;
+  } catch(e) { console.error('Error subiendo PDF a Cloudinary (sync):', e); return null; }
+}
+
+// Guarda el PDF generado offline dentro del item pendiente (por clientId), para subirlo
+// al sincronizar. Si el item ya se sincronizó (online), no hace nada.
+async function _agregarPDFaColaPendiente(clientId, pdfBase64) {
+  if (!clientId || !pdfBase64) return;
+  try {
+    const items = await _obtenerOTsPendientes();
+    const it = items.find(function(o){ return o.clientId === clientId; });
+    if (!it) return;
+    it.pdfBase64 = pdfBase64;
+    const db = await _abrirDBOffline();
+    await new Promise(function(resolve, reject){
+      const tx = db.transaction('ots_pendientes', 'readwrite');
+      tx.objectStore('ots_pendientes').put(it);
+      tx.oncomplete = resolve;
+      tx.onerror = function(e){ reject(e.target.error); };
+    });
+  } catch(e) { console.warn('No se pudo guardar PDF en la cola:', e); }
+}
+
 function _abrirDBOffline() {
   return new Promise(function(resolve, reject) {
     var req = indexedDB.open('emval_offline', 1);
@@ -9071,6 +9113,16 @@ async function sincronizarOTsPendientes() {
         await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
       }
 
+      // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link
+      var pdfUrlSync = '';
+      if (ot.pdfBase64) {
+        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot.numero)) || '';
+        if (pdfUrlSync && ot.clientId) {
+          try { await db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }); }
+          catch(e) { console.warn('No se pudo guardar pdfUrl en la OT (sync):', e); }
+        }
+      }
+
       // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
       if (ot.cotizacionId) {
         await _vincularCotizacionRealizada(ot.cotizacionId, {
@@ -9081,9 +9133,21 @@ async function sincronizarOTsPendientes() {
         });
       }
 
+      // Correo al local con el PDF (el que no se pudo enviar offline), ya con link
+      if (ot.emailLocal && pdfUrlSync && typeof emailjs !== 'undefined') {
+        try {
+          await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
+            email_admin: ot.emailLocal, ot_numero: String(ot.numero), local: String(ot.local || ''),
+            fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || ''),
+            tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+            trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
+          });
+        } catch(e) { console.warn('Error email local (sync):', e); }
+      }
+
       await _eliminarOTPendiente(ot.id);
       toast('OT #' + ot.numero + ' sincronizada [ok]');
-      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha);
+      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha, pdfUrlSync);
     } catch(err) {
       console.error('Error sincronizando OT pendiente:', err);
       toast('Error sincronizando OT #' + ot.numero + ', se reintentara');
