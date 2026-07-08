@@ -1453,6 +1453,7 @@ let estado = {
   cotizacionId: '',
   enEspera: false,
   editandoOTId: '', editandoTecnico: '', editandoFecha: '',
+  otClientId: '',
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
@@ -1611,6 +1612,7 @@ function nuevaOT() {
   estado.editandoOTId = '';
   estado.editandoTecnico = '';
   estado.editandoFecha = '';
+  estado.otClientId = '';
   estado.otNumero = _generarNumeroOTUnico();
   estado.creadoEnBorrador = new Date().toISOString();
   estado.tipo = null;
@@ -2331,6 +2333,9 @@ function cerrarOT() {
   _otFinalizada = true;
   clearTimeout(_autoSaveTimer);  // cancela cualquier autoguardado pendiente (no revivir borrador)
 
+  // Id de cliente único para esta OT nueva (escritura idempotente / cola de reintento)
+  if (!estado.editandoOTId) estado.otClientId = estado.otClientId || _uid();
+
   // Guardar localmente (offline)
   const ot = {
     numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
@@ -2368,6 +2373,32 @@ const CLOUDINARY = {
   uploadPreset: 'emval_unsigned'
 };
 
+// Genera un id único de cliente para una OT (para escritura idempotente en Firestore)
+function _uid() {
+  return 'ot_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+}
+
+// Rechaza una promesa si tarda más de ms. Clave: el SDK de Firestore, con mala señal
+// y sin persistencia, deja el add()/set() colgado sin resolver ni rechazar; el timeout
+// permite darse por vencido y confiar en la cola de reintento (IndexedDB).
+function _conTimeout(promise, ms, etiqueta) {
+  return new Promise(function(resolve, reject) {
+    var to = setTimeout(function(){ reject(new Error('timeout ' + (etiqueta || ''))); }, ms);
+    Promise.resolve(promise).then(
+      function(v){ clearTimeout(to); resolve(v); },
+      function(e){ clearTimeout(to); reject(e); }
+    );
+  });
+}
+
+// fetch con timeout real (AbortController) para que la subida no se cuelgue con mala señal
+function _fetchConTimeout(url, opts, ms) {
+  var ctrl = new AbortController();
+  var to = setTimeout(function(){ ctrl.abort(); }, ms || 30000);
+  return fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal }))
+    .finally(function(){ clearTimeout(to); });
+}
+
 async function subirCloudinary(dataUrl, carpeta, nombre) {
   try {
     if (nombre.match(/\.(jpg|jpeg|png)$/i)) {
@@ -2387,7 +2418,7 @@ async function subirCloudinary(dataUrl, carpeta, nombre) {
       const blob = await res.blob();
       formData.append('file', blob, nombre);
     }
-    const resp = await fetch(endpoint, { method: 'POST', body: formData });
+    const resp = await _fetchConTimeout(endpoint, { method: 'POST', body: formData }, 30000);
     const data = await resp.json();
     if (data.secure_url) return data.secure_url;
     console.error('Cloudinary error:', data);
@@ -2480,27 +2511,44 @@ async function guardarEnFirebase(otBase, desc, fecha) {
   const fotosDespuesCopy = estado.fotosDespues.filter(f => f);
   const fotoTimbreCopy = estado.fotoTimbre;
 
-  // Si no hay internet, guardar en IndexedDB y salir
-  if (!navigator.onLine || !window._firebaseReady) {
+  const esEdicion = !!estado.editandoOTId;
+  // Id de cliente para escritura idempotente: al reintentar desde la cola se escribe el
+  // MISMO documento (doc(clientId)), nunca se duplica. En edición es el id real de la OT.
+  const clientId = esEdicion ? estado.editandoOTId : (estado.otClientId || _uid());
+
+  // Payload COMPLETO (fotos/firma/timbre/audios en base64) para la cola de reintento.
+  const pendPayload = {
+    clientId: clientId,
+    numero: otBase.numero, local: estado.local, tipo: estado.tipo,
+    tecnico: estado.usuario, fecha: fecha,
+    descripcionProblema: descripcionProblema,
+    descripcionTrabajo: desc, ceco: estado.ceco || '',
+    numEquipos: estado.numEquipos || '',
+    serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
+    fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
+    fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
+    cotizacionId: estado.cotizacionId || '', enEspera: estado.enEspera === true,
+    audiosBase64: audiosBase64, savedAt: new Date().toISOString()
+  };
+
+  // WRITE-AHEAD: guardar SIEMPRE en IndexedDB ANTES de tocar la nube (solo OTs nuevas).
+  // Así, aunque la señal esté muerta (navigator.onLine miente) o el técnico cierre la app,
+  // la OT terminada NO se pierde: queda en la cola y se sube sola. En edición no se encola
+  // (evitaría duplicar el documento existente).
+  // Nota: no mostramos el indicador aquí para no "parpadear" la barra en el caso normal
+  // (buena señal): el ítem se encola y se borra en segundos. El indicador se muestra solo
+  // si el guardado en la nube falla o no hay conexión (más abajo).
+  let pendId = null;
+  if (!esEdicion) {
     try {
-      await _guardarOTPendiente({
-        numero: otBase.numero, local: estado.local, tipo: estado.tipo,
-        tecnico: estado.usuario, fecha: fecha,
-        descripcionProblema: descripcionProblema,
-        descripcionTrabajo: desc, ceco: estado.ceco || '',
-        numEquipos: estado.numEquipos || '',
-        serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
-        fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
-        fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
-        cotizacionId: estado.cotizacionId || '',
-        audiosBase64: audiosBase64, savedAt: new Date().toISOString()
-      });
-      toast('Sin internet — OT guardada para sincronizar cuando haya conexion');
-      actualizarIndicadorPendientes();
-    } catch(edb) {
-      console.error('Error guardando OT offline:', edb);
-      toast('Error guardando OT localmente');
-    }
+      pendId = await _guardarOTPendiente(pendPayload);
+    } catch(edb) { console.error('Error encolando OT (write-ahead):', edb); }
+  }
+
+  // Sin conexión declarada: no intentar la nube. Nueva ya quedó a salvo en la cola.
+  if (!navigator.onLine || !window._firebaseReady) {
+    if (!esEdicion) actualizarIndicadorPendientes();
+    toast(esEdicion ? 'Sin internet — no se pudo actualizar' : '✅ OT guardada. Se subirá sola al recuperar señal.');
     return;
   }
 
@@ -2541,9 +2589,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     }
 
     toast('Guardando datos...');
-    // Modo edicion (solo admin): actualizar el mismo documento en vez de crear uno nuevo,
-    // preservando el tecnico y la fecha originales de la OT.
-    const esEdicion = !!estado.editandoOTId;
+    // Modo edicion (solo admin): actualizar el mismo documento, preservando tecnico y fecha originales.
     const otData = {
       numero: otBase.numero, local: estado.local, tipo: estado.tipo,
       tecnico: esEdicion ? (estado.editandoTecnico || estado.usuario) : estado.usuario,
@@ -2559,47 +2605,41 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     // No borrar audios existentes en una edicion sin nuevas grabaciones
     if (!esEdicion || urlsAudio.length) otData.audios = urlsAudio;
 
+    // Escritura con TIMEOUT: si la nube se cuelga por mala señal, se rechaza y la OT
+    // queda en la cola (write-ahead) para reintentar. Idempotente por doc(clientId).
     if (esEdicion) {
-      await db.collection('ordenes').doc(estado.editandoOTId).update(otData);
+      await _conTimeout(db.collection('ordenes').doc(clientId).update(otData), 25000, 'update OT');
     } else {
       otData.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('ordenes').add(otData);
+      await _conTimeout(db.collection('ordenes').doc(clientId).set(otData, { merge: true }), 25000, 'set OT');
     }
 
-    // Solo unir el recibo a la cotización si esta OT realmente nació de una cotización
-    // aceptada (enEspera). Evita que una mantención normal, que arrastró un cotizacionId
-    // de otro flujo, marque por error una cotización como "Realizada".
+    // Éxito confirmado → quitar de la cola de reintento (ya no está pendiente)
+    if (pendId != null) { try { await _eliminarOTPendiente(pendId); } catch(e) {} }
+    actualizarIndicadorPendientes();
+
+    // Unir el recibo a la cotización solo si la OT nació de una cotización aceptada (enEspera).
     if (!esEdicion && estado.cotizacionId && estado.enEspera === true) {
-      await _vincularCotizacionRealizada(estado.cotizacionId, {
-        numero: otBase.numero, fecha: fecha,
-        urlsAntes: urlsAntes, urlsDespues: urlsDespues,
-        urlTimbre: urlTimbre, firmaBase64: firmaBase64,
-        tecnico: estado.usuario
-      });
+      try {
+        await _vincularCotizacionRealizada(estado.cotizacionId, {
+          numero: otBase.numero, fecha: fecha,
+          urlsAntes: urlsAntes, urlsDespues: urlsDespues,
+          urlTimbre: urlTimbre, firmaBase64: firmaBase64,
+          tecnico: estado.usuario
+        });
+      } catch(evc) { console.error('Error vinculando cotizacion:', evc); }
     }
 
     toast(esEdicion ? 'OT actualizada [ok]' : 'OT guardada en la nube [ok]');
     // La notificacion de respaldo se dispara al final de guardarYEnviarPDF (con el link del PDF).
   } catch(e) {
     console.error('Error guardando OT:', e);
-    // Red caída a mitad — guardar en IndexedDB
-    try {
-      await _guardarOTPendiente({
-        numero: otBase.numero, local: estado.local, tipo: estado.tipo,
-        tecnico: estado.usuario, fecha: fecha,
-        descripcionProblema: descripcionProblema,
-        descripcionTrabajo: desc, ceco: estado.ceco || '',
-        numEquipos: estado.numEquipos || '',
-        serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
-        fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
-        fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
-        cotizacionId: estado.cotizacionId || '',
-        audiosBase64: audiosBase64, savedAt: new Date().toISOString()
-      });
-      toast('OT guardada offline — se sincronizara cuando haya internet');
+    if (esEdicion) {
+      toast('No se pudo actualizar la OT. Reintenta con buena señal.');
+    } else {
+      // La OT ya está a salvo en la cola (write-ahead) → se subirá sola. Mostrar indicador.
       actualizarIndicadorPendientes();
-    } catch(edb2) {
-      toast('Error guardando OT. Contacta al supervisor.');
+      toast('✅ OT guardada. Se subirá sola al mejorar la señal.');
     }
   }
 }
@@ -8887,8 +8927,10 @@ async function _guardarOTPendiente(data) {
   var db = await _abrirDBOffline();
   return new Promise(function(resolve, reject) {
     var tx = db.transaction('ots_pendientes', 'readwrite');
-    tx.objectStore('ots_pendientes').add(data);
-    tx.oncomplete = resolve;
+    var req = tx.objectStore('ots_pendientes').add(data);
+    var nuevoId = null;
+    req.onsuccess = function() { nuevoId = req.result; };
+    tx.oncomplete = function() { resolve(nuevoId); };
     tx.onerror = function(e) { reject(e.target.error); };
   });
 }
@@ -8978,7 +9020,7 @@ async function sincronizarOTsPendientes() {
       }
 
       var db = window.firebase.firestore();
-      await db.collection('ordenes').add({
+      var otDoc = {
         numero: ot.numero, local: ot.local, tipo: ot.tipo,
         tecnico: ot.tecnico, fecha: ot.fecha,
         descripcionProblema: ot.descripcionProblema || '',
@@ -8989,7 +9031,14 @@ async function sincronizarOTsPendientes() {
         fotoTimbre: urlTimbre, audios: urlsAudio,
         firmada: true, firmaImagen: ot.firmaBase64,
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      if (ot.clientId) {
+        // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
+        await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
+      } else {
+        // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
+        await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
+      }
 
       // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
       if (ot.cotizacionId) {
@@ -9071,9 +9120,12 @@ if ('serviceWorker' in navigator) {
 // Estado inicial de conexion
 actualizarIndicadorPendientes();
 
-// Reintentar subir pausadas que quedaron pendientes por mala señal:
-// al iniciar (si hay conexión) y cada 90 s como red de seguridad.
+// Reintentar subir trabajo que quedó pendiente por mala señal (OTs terminadas Y pausadas):
+// al iniciar (si hay conexión) y cada 90 s como red de seguridad. No depende del evento
+// 'online' (que nunca dispara si navigator.onLine se mantuvo en true con señal muerta).
+setTimeout(sincronizarOTsPendientes, 3500);
 setTimeout(sincronizarPausadasPendientes, 3000);
+setInterval(sincronizarOTsPendientes, 90000);
 setInterval(sincronizarPausadasPendientes, 90000);
 </script>
 </body>
