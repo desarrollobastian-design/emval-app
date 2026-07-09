@@ -372,6 +372,22 @@ La lista de pausadas es en vivo (`onSnapshot`) — un botón de refresh manual c
 - ✅ **#1 Layout 2-columnas del admin** — hecho (grid responsivo en las 3 listas planas + s-admin ancho con controles contenidos). Falta solo QA visual fino en localhost con Pedro (¿2 o 3 columnas en su monitor grande? hoy 2 por el cap de 980px).
 - ⏳ **#2 Modales in-app** para `confirm()`/`prompt()` destructivos — sigue pendiente (pasada dedicada con testing).
 
+### Fixes post-crítica del layout (2026-07-09)
+
+Auditoría del grid recién construido. Corregido:
+- 🐛 **Regresión del propio grid**: los estados vacíos y de error caían dentro de `.card-grid` y se encogían a **una sola columna** — el texto "No hay OTs registradas hoy" quedaba centrado en la mitad izquierda, y la card de error de pausadas se veía a media pantalla (el estado que existe para dar confianza transmitía descuido). Nueva regla `.card-grid > p, .card-grid > .grid-full { grid-column: 1 / -1; }` — el mismo patrón que ya usaba `.stat-card-primary`.
+- ✅ Ortografía: "**Aún** no hay OTs registradas".
+- ✅ Selector `#s-admin #panel-cadenas > .btn-primary` (hijo directo). Antes, sin el `>`, también alcanzaba el botón "Guardar" del formulario. El botón "+ Agregar cadena" se desenvolvió de su `div` para que el selector quede simétrico con el de personal.
+- ✅ Borradas 3 `.ot-card` demo muertas (`display:none` **y** eliminadas por JS al cargar) dentro de `#sup-ots-hoy-lista`.
+- ✅ El badge de conteo de pausadas ya **no inventa un `!`** en estado de error: se oculta, y reaparece con el conteo real al recuperarse.
+
+**Deuda abierta — contraste del verde (NO arreglado, decisión de marca pendiente con Pedro):**
+Texto blanco sobre `--verde` (`#27A06B`) da **≈3.3:1**. WCAG AA pide **4.5:1** para texto normal. Afecta `.btn-verde` ("Confirmar firma", "Ventas") y `.top-action-verde` ("Descargar Excel"). Es el peor caso que §1 manda optimizar: técnico con sol directo, en la acción más irreversible del flujo.
+- **Recomendación**: conservar `--verde` como color de *estado* (relleno sin texto encima — `foto-box.filled`, hero de éxito) y agregar **`--verde-btn: #1E8052`** (ya está en la paleta: es el trazo del ícono de preventivo) para botones con texto blanco → **≈4.9:1, pasa AA**. Dos verdes con semántica distinta (*estado* vs *acción*), no un color arbitrario de más.
+
+**Nota sobre el Service Worker (corrige una creencia equivocada):**
+`sw.js` sirve las navegaciones **network-first** (`sw.js:37-48`): un reload online siempre trae el `index.html` fresco de la red y lo re-cachea. Por lo tanto los bumps de `CACHE_NAME` (`v14 → v15 → v16`) **no son lo que propaga** `index.html` a los usuarios online — sirven para purgar cachés viejos. No hace falta bumpear la versión para que un cambio de HTML llegue.
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*
