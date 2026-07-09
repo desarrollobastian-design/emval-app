@@ -67,6 +67,10 @@ const PARES = [
   { nombre: 'Barra pendientes',     texto: '#FFFFFF',  fondo: '--naranja-btn',tam: 'normal',  donde: '#pending-bar / #correos-bar / badge EN PAUSA' },
   { nombre: 'Barra offline/error',  texto: '#FFFFFF',  fondo: '--rojo',       tam: 'normal',  donde: '#offline-bar' },
   { nombre: 'Hero de exito (sub)',  texto: '#FFFFFF',  fondo: '--verde-btn',  tam: 'normal',  donde: '.success-hero, subtitulo 13px' },
+  // Etiquetas sobre foto: DEBEN ser solidas. Con rgba() el contraste lo decide la foto del
+  // tecnico (DESPUES caia a 2.41:1 sobre una pared blanca) y el peor caso no es testeable.
+  { nombre: 'Etiqueta ANTES',       texto: '#FFFFFF',  fondo: '--azul',       tam: 'normal',  donde: 'comparacion antes/despues (solida sobre la foto)' },
+  { nombre: 'Etiqueta DESPUES',     texto: '#FFFFFF',  fondo: '--verde-btn',  tam: 'normal',  donde: 'comparacion antes/despues (solida sobre la foto)' },
   { nombre: 'Boton WhatsApp',       texto: '#FFFFFF',  fondo: '#25D366',      tam: 'normal',  donde: '.btn-whatsapp',
     tolerado: 'verde corporativo de WhatsApp; impuesto por un tercero, no es nuestra decision' },
 
