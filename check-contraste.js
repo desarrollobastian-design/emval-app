@@ -74,6 +74,11 @@ const PARES = [
   { nombre: 'Boton WhatsApp',       texto: '#FFFFFF',  fondo: '#25D366',      tam: 'normal',  donde: '.btn-whatsapp',
     tolerado: 'verde corporativo de WhatsApp; impuesto por un tercero, no es nuestra decision' },
 
+  // --- Badges: texto de 11px sobre fondo tenido. Hexes literales, no tokens. ---
+  { nombre: 'Badge preventivo',     texto: '#1A7A3C',  fondo: '#E6F4EA',      tam: 'normal',  donde: '.badge-prev (11px/600)' },
+  { nombre: 'Badge correctivo',     texto: '#B45309',  fondo: '#FEF0E6',      tam: 'normal',  donde: '.badge-corr (11px/600)' },
+  { nombre: 'Badge conteo pausadas',texto: '#92400E',  fondo: '#FEF3C7',      tam: 'normal',  donde: '#sup-pausadas-count (11px/700)' },
+
   // --- Texto sobre superficies claras (--fondo es el peor caso) ---
   { nombre: 'Texto primario',       texto: '--texto',  fondo: '--fondo',      tam: 'normal',  donde: 'body' },
   { nombre: 'Texto secundario',     texto: '--texto2', fondo: '--fondo',      tam: 'normal',  donde: 'labels, .stat-label' },
