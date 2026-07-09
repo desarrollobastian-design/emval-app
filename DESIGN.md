@@ -415,6 +415,53 @@ Continuación de `d915a6b`. La app promete *"nunca te deja con dudas sobre qué 
 
 > **Lección:** `textContent` sobre un contenedor con hijos es destructivo. Es el primo del bug `[mic]` (meter SVG dentro de un `textContent`): las dos caras del mismo malentendido.
 
+### Dos verdes + contraste verificable (2026-07-09)
+
+**Decisión aprobada: `--verde` se divide en dos, por semántica.**
+
+| Token | Valor | Rol | Lleva texto encima |
+|-------|-------|-----|--------------------|
+| `--verde` | `#27A06B` | **Verde de ESTADO** — `foto-box.filled`, `step.done`, `success-hero`, íconos, bordes | No |
+| `--verde-btn` | `#1E8052` | **Verde de ACCIÓN** — fondo de botones con texto blanco | Sí |
+
+Blanco sobre `--verde` da **3.3:1** (falla AA). Sobre `--verde-btn`, **4.92:1** (pasa). El `#1E8052` no es un color nuevo: ya estaba en la paleta como trazo del ícono de preventivo.
+
+Migrados 9 sitios con texto blanco: `.btn-verde`, `.top-action-verde`, el botón "Enviar" del modal de cotización, "Elegir de galería", "Agregar sucursal", "PDF", "Generar cotización", y el toggle Sí/No de servicios (que tenía `#27A06B` hardcodeado ×2). **No se tocó** ningún uso de `--verde` como relleno de estado ni como color de ícono.
+
+**Nuevo: `check-contraste.js` — el contraste deja de ser una opinión.**
+
+```
+node check-contraste.js
+```
+
+Script sin dependencias (~90 líneas) que lee los tokens del `:root` de `index.html`, calcula el ratio WCAG 2.1 de los pares de color que la app usa de verdad, e imprime una tabla. Sale con código `1` si algún par de texto baja del mínimo AA. Existe porque el bug del verde **sobrevivió a cuatro críticas de diseño**: "se ve bien" no es un test.
+
+**Resultado del primer run (2026-07-09): 12 pares · 5 fallos reales · 1 tolerado.**
+
+| Par | Ratio | Estado |
+|-----|-------|--------|
+| Botón primario (blanco / `--azul`) | 11.27:1 | ✅ |
+| **Botón verde de acción** (blanco / `--verde-btn`) | **4.92:1** | ✅ |
+| Botón secundario (`--texto` / `--gris2`) | 14.26:1 | ✅ |
+| Texto primario / secundario | 16.13:1 · 5.95:1 | ✅ |
+| Ícono preventivo (gráfico, mín 3.0) | 4.92:1 | ✅ |
+| Botón destructivo (blanco / `--rojo`) | 4.13:1 | ❌ |
+| Barra offline / error (blanco / `--rojo`) | 4.13:1 | ❌ |
+| Barra pendientes (blanco / `#D97706`) | 3.19:1 | ❌ |
+| Verde como **texto** (`--verde` / blanco) | 3.32:1 | ❌ |
+| Texto terciario (`--texto3` / blanco) | 2.54:1 | ❌ |
+| Botón WhatsApp (blanco / `#25D366`) | 1.98:1 | ⚠️ tolerado |
+
+> **`#25D366` es tolerado**: es el verde corporativo de WhatsApp, impuesto por un tercero. No es una decisión nuestra y cambiarlo rompería el reconocimiento del canal.
+
+**Deuda abierta — 4 decisiones para Pedro (NO tocadas):**
+1. **Rojo `--rojo` (#E53E3E) con blanco: 4.13:1.** Afecta botones "Eliminar" y la barra de offline/error. Un `#C7302F` lo llevaría sobre 4.5:1.
+2. **Ámbar `#D97706` con blanco: 3.19:1.** Es la barra de pendientes y la de correos — justo el feedback de estado que la app promete que nunca falle. Texto oscuro sobre ámbar, o un ámbar más oscuro.
+3. **`--verde` como color de texto: 3.32:1.** Montos, totales, "Firma: Sí". Probablemente deba usar `--verde-btn` también.
+4. **`--texto3` (#9AA3B2) sobre blanco: 2.54:1.** El más grave. Es todo el texto de metadatos. Ya se corrigió en dos lugares puntuales (`--texto3` → `--texto2`); el token entero necesita oscurecerse o restringirse a decoración.
+
+> Mientras existan estos 5 fallos, `check-contraste.js` sale con código 1 — **a propósito**. No se "arregla" el script bajando el estándar: se arreglan los colores, o se marcan como tolerados con una razón escrita.
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*

@@ -17,6 +17,10 @@
     --azul: #1B3A6B;
     --azul-claro: #2D5AA0;
     --verde: #27A06B;
+    /* Verde de ACCION: fondo de botones con texto blanco (4.9:1, cumple WCAG AA).
+       El --verde de arriba es verde de ESTADO (relleno sin texto encima: foto lista,
+       paso completado, hero de exito). Blanco sobre --verde da 3.3:1 y no pasa AA. */
+    --verde-btn: #1E8052;
     --rojo: #E53E3E;
     --naranja: #EF9F27;
     --fondo: #F4F6FB;
@@ -75,8 +79,8 @@
   #s-admin #panel-personal > .btn-primary, #s-admin #panel-cadenas > .btn-primary { width: auto; }
   /* Accion compacta de topbar (reemplaza botones inline hechos a mano) */
   .top-action { background: rgba(255,255,255,0.15); border: none; color: #fff; border-radius: var(--radio-sm); padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; }
-  .top-action-verde { background: var(--verde); }
-  @media (hover: hover) { .top-action:hover { background: rgba(255,255,255,0.25); } .top-action-verde:hover { background: #218a5b; } }
+  .top-action-verde { background: var(--verde-btn); }
+  @media (hover: hover) { .top-action:hover { background: rgba(255,255,255,0.25); } .top-action-verde:hover { background: #186844; } }
   
   /* STEP INDICATOR */
   .steps { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 16px; background: white; border-bottom: 1px solid var(--gris2); }
@@ -108,7 +112,7 @@
   .seg-tab.active { background: var(--azul); color: #fff; }
   .seg-tab:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   .btn-secondary { background: var(--gris2); color: var(--texto); }
-  .btn-verde { background: var(--verde); color: white; }
+  .btn-verde { background: var(--verde-btn); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
   .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); }
   
@@ -1047,7 +1051,7 @@
     </div>
     <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;">
       <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
-      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde);color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
+      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
     </div>
   </div>
 </div>
@@ -1982,7 +1986,7 @@ function _menuFuenteFoto() {
 
   const btnGal = document.createElement('button');
   btnGal.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>  Elegir de galería';
-  btnGal.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
+  btnGal.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
   btnGal.onclick = function(){ cerrar(); document.getElementById('input-foto-galeria').click(); };
 
   const btnCan = document.createElement('button');
@@ -2125,7 +2129,7 @@ function cargarEjecucionScreen() {
     html += '</div>';
     estado.serviciosPreventivo.forEach(function(svc, idx) {
       const bg = idx % 2 === 0 ? 'white' : '#F8F9FB';
-      const siSt = svc.respuesta === 'si' ? 'background:#27A06B;color:white;' : 'background:#E8ECF5;color:#6B7280;';
+      const siSt = svc.respuesta === 'si' ? 'background:var(--verde-btn);color:white;' : 'background:#E8ECF5;color:#6B7280;';
       const noSt = svc.respuesta === 'no' ? 'background:#E74C3C;color:white;' : 'background:#E8ECF5;color:#6B7280;';
       html += '<div style="display:flex;padding:8px 12px;gap:8px;align-items:center;background:' + bg + ';border-bottom:1px solid #E5E7EB;">';
       html += '<span style="flex:1;font-size:13px;color:var(--texto);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
@@ -2167,7 +2171,7 @@ function responderServicio(idx, respuesta) {
   estado.serviciosPreventivo[idx].respuesta = respuesta;
   const siBtn = document.getElementById('svc-si-' + idx);
   const noBtn = document.getElementById('svc-no-' + idx);
-  if (siBtn) { siBtn.style.background = respuesta === 'si' ? '#27A06B' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
+  if (siBtn) { siBtn.style.background = respuesta === 'si' ? 'var(--verde-btn)' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
   if (noBtn) { noBtn.style.background = respuesta === 'no' ? '#E74C3C' : '#E8ECF5'; noBtn.style.color = respuesta === 'no' ? 'white' : '#6B7280'; }
   programarAutoguardadoOT();
 }
@@ -3166,7 +3170,7 @@ async function cargarCadenasAdmin() {
       btnAddSucDiv.style.cssText = 'margin-top:12px;margin-bottom:10px;';
       const btnAddSuc = document.createElement('button');
       btnAddSuc.textContent = '+ Agregar sucursal';
-      btnAddSuc.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
+      btnAddSuc.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
       btnAddSucDiv.appendChild(btnAddSuc);
       body.appendChild(btnAddSucDiv);
 
@@ -3911,7 +3915,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
     const btnPdf = document.createElement('button');
     btnPdf.textContent = 'Ver PDF';
-    btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnPdf.onclick = (function(data){ return function(){
       if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
       else { generarPDFCotizacionGuardada(data); }
@@ -6915,7 +6919,7 @@ async function cargarPreventivos() {
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Cotización';
-        btnCot.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
         btns.appendChild(btnCot);
       }

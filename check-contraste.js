@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+/**
+ * check-contraste.js — Verifica los ratios de contraste WCAG de los pares de color
+ * que EMVAL usa de verdad. Sin dependencias. Lee los tokens desde el :root de index.html.
+ *
+ *   node check-contraste.js
+ *
+ * Sale con codigo 1 si algun par de texto baja del minimo AA.
+ * Los pares con `tolerado` se reportan pero no rompen (decisiones de marca justificadas).
+ *
+ * Por que existe: DESIGN.md afirmaba cosas sobre contraste que nadie verificaba.
+ * El bug del verde (3.3:1 en botones) sobrevivio a cuatro criticas de diseno porque
+ * "se ve bien" no es un test. Esto lo convierte en un hecho medible.
+ */
+const fs = require('fs');
+const path = require('path');
+
+const ARCHIVO = path.join(__dirname, 'index.html');
+
+// --- WCAG 2.1 ---
+//   normal  = texto por debajo de 24px, o de 18.66px en negrita
+//   grande  = >= 24px, o >= 18.66px en negrita
+//   grafico = iconos, bordes y controles (SC 1.4.11)
+const MINIMOS = { normal: 4.5, grande: 3.0, grafico: 3.0 };
+
+function canal(v) {
+  const s = v / 255;
+  return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+function luminancia(hex) {
+  const h = hex.replace('#', '');
+  const n = h.length === 3 ? h.split('').map(function (c) { return c + c; }).join('') : h;
+  const r = parseInt(n.slice(0, 2), 16);
+  const g = parseInt(n.slice(2, 4), 16);
+  const b = parseInt(n.slice(4, 6), 16);
+  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+}
+function contraste(a, b) {
+  const la = luminancia(a), lb = luminancia(b);
+  const hi = Math.max(la, lb), lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// --- Tokens desde :root ---
+function leerTokens(html) {
+  const m = html.match(/:root\s*\{([\s\S]*?)\}/);
+  if (!m) { console.error('No se encontro el bloque :root en index.html'); process.exit(2); }
+  const tokens = {};
+  const re = /(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\s*;/g;
+  let t;
+  while ((t = re.exec(m[1]))) tokens[t[1]] = t[2];
+  return tokens;
+}
+
+// --- Los pares que la app usa. Cada uno apunta a donde vive en el codigo. ---
+const PARES = [
+  { nombre: 'Boton primario',       texto: '#FFFFFF',  fondo: '--azul',      tam: 'normal',  donde: '.btn-primary' },
+  { nombre: 'Boton verde (accion)', texto: '#FFFFFF',  fondo: '--verde-btn', tam: 'normal',  donde: '.btn-verde / .top-action-verde' },
+  { nombre: 'Boton secundario',     texto: '--texto',  fondo: '--gris2',     tam: 'normal',  donde: '.btn-secondary' },
+  { nombre: 'Boton destructivo',    texto: '#FFFFFF',  fondo: '--rojo',      tam: 'normal',  donde: 'botones Eliminar' },
+  { nombre: 'Boton WhatsApp',       texto: '#FFFFFF',  fondo: '#25D366',     tam: 'normal',  donde: '.btn-whatsapp',
+    tolerado: 'verde corporativo de WhatsApp; impuesto por un tercero, no es nuestra decision' },
+  { nombre: 'Texto primario',       texto: '--texto',  fondo: '--blanco',    tam: 'normal',  donde: 'body sobre card' },
+  { nombre: 'Texto secundario',     texto: '--texto2', fondo: '--blanco',    tam: 'normal',  donde: 'labels, .stat-label' },
+  { nombre: 'Texto terciario',      texto: '--texto3', fondo: '--blanco',    tam: 'normal',  donde: 'metadatos, placeholders' },
+  { nombre: 'Verde como TEXTO',     texto: '--verde',  fondo: '--blanco',    tam: 'normal',  donde: 'montos, "Firma: Si", totales' },
+  { nombre: 'Barra pendientes',     texto: '#FFFFFF',  fondo: '#D97706',     tam: 'normal',  donde: '#pending-bar / #correos-bar' },
+  { nombre: 'Barra offline/error',  texto: '#FFFFFF',  fondo: '--rojo',      tam: 'normal',  donde: '#offline-bar' },
+  { nombre: 'Icono preventivo',     texto: '#FFFFFF',  fondo: '--verde-btn', tam: 'grafico', donde: '.ot-icon (SVG, no texto)' },
+];
+
+// --- Correr ---
+const html = fs.readFileSync(ARCHIVO, 'utf8');
+const tokens = leerTokens(html);
+const resolver = function (v) { return v.indexOf('--') === 0 ? (tokens[v] || null) : v; };
+
+let fallos = 0, tolerados = 0;
+const filas = [];
+
+PARES.forEach(function (p) {
+  const fg = resolver(p.texto), bg = resolver(p.fondo);
+  if (!fg || !bg) {
+    console.error('  token ausente en :root -> ' + (!fg ? p.texto : p.fondo) + '  (' + p.nombre + ')');
+    fallos++;
+    return;
+  }
+  const ratio = contraste(fg, bg);
+  const min = MINIMOS[p.tam];
+  const pasa = ratio >= min;
+  if (!pasa) { if (p.tolerado) tolerados++; else fallos++; }
+  filas.push({ p: p, ratio: ratio, min: min, pasa: pasa });
+});
+
+const w = function (s, n) { return String(s).padEnd(n); };
+console.log('\n  Contraste WCAG AA — EMVAL\n');
+console.log('  ' + w('PAR', 22) + w('RATIO', 10) + w('MIN', 7) + w('ESTADO', 14) + 'DONDE');
+console.log('  ' + '-'.repeat(98));
+filas.forEach(function (f) {
+  const estado = f.pasa ? 'PASA' : (f.p.tolerado ? 'FALLA (tolerado)' : 'FALLA');
+  console.log('  ' + w(f.p.nombre, 22) + w(f.ratio.toFixed(2) + ':1', 10) + w(f.min.toFixed(1), 7) + w(estado, 14) + f.p.donde);
+});
+console.log('');
+filas.filter(function (f) { return !f.pasa && f.p.tolerado; }).forEach(function (f) {
+  console.log('  tolerado — ' + f.p.nombre + ': ' + f.p.tolerado);
+});
+console.log('\n  ' + filas.length + ' pares · ' + fallos + ' fallo(s) real(es) · ' + tolerados + ' tolerado(s)\n');
+process.exit(fallos ? 1 : 0);
