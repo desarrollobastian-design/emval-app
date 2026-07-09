@@ -32,7 +32,8 @@
        blanco sobre --naranja da 2.2:1, ilegible. Este hex ya se usaba en los iconos de OT. */
     --naranja-btn: #B45309;
     --fondo: #F4F6FB;
-    --blanco: #FFFFFF;
+    /* --blanco borrado: 0 usos. La superficie de card usa `white` directo, que no es una
+       decision de marca discutible. Un token que nadie usa es deuda, no abstraccion. */
     --gris1: #F8F9FC;
     --gris2: #EEF1F7;
     --gris3: #C8D0E0;
@@ -69,9 +70,12 @@
   
   /* TOPBAR */
   .topbar { background: var(--azul); color: white; padding: 14px 16px 12px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 100; }
-  .topbar .back { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; color: white; font-size: 18px; flex-shrink: 0; }
-  .topbar h2 { font-size: 15px; font-weight: 600; flex: 1; }
-  .topbar .ot-badge { background: rgba(255,255,255,0.15); border-radius:8px; padding: 3px 8px; font-size: 11px; font-family: 'DM Mono', monospace; }
+  .topbar .back { width: 32px; height: 32px; border-radius: var(--radio-sm); background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; color: white; font-size: 18px; flex-shrink: 0; }
+  /* h1 a 15px NO es un error de escala. El topbar ES el titulo de la pantalla: un segundo
+     titulo de 22px en el contenido repetiria la misma palabra dos veces. La jerarquia la dan
+     la posicion y la barra azul, no el tamano. Antes era <h2> y el documento no tenia h1. */
+  .topbar h1 { font-size: 15px; font-weight: 600; flex: 1; }
+  .topbar .ot-badge { background: rgba(255,255,255,0.15); border-radius:var(--radio-sm); padding: 3px 8px; font-size: 11px; font-family: 'DM Mono', monospace; }
   
   /* OFFLINE BAR */
   .offline-bar { background: #FFF8ED; border-bottom: 1px solid #FDDFA0; padding: 7px 16px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #7D5200; }
@@ -95,7 +99,7 @@
   
   /* STEP INDICATOR */
   .steps { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 16px; background: white; border-bottom: 1px solid var(--gris2); }
-  .step { width: 8px; height: 8px; border-radius:8px; background: var(--gris3); transition: all 0.3s; }
+  .step { width: 8px; height: 8px; border-radius:var(--radio-sm); background: var(--gris3); transition: all 0.3s; }
   .step.active { width: 24px; background: var(--azul); }
   .step.done { background: var(--verde); }
   
@@ -167,7 +171,7 @@
   /* LOCAL ITEMS */
   .local-item { background: white; border-radius: var(--radio); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s; }
   .local-item:active { transform: scale(0.99); }
-  .local-icon { width: 40px; height: 40px; border-radius:8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .local-icon { width: 40px; height: 40px; border-radius:var(--radio-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
   .local-info { flex: 1; margin-left: 12px; }
   .local-name { font-size: 15px; font-weight: 600; }
   .local-addr { font-size: 12px; color: var(--texto3); margin-top: 2px; }
@@ -176,7 +180,7 @@
   .paused-order-card {
     background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%);
     border: 2px solid #FCD34D;
-    border-radius: 18px;
+    border-radius: var(--radio-lg);
     padding: 18px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -197,7 +201,7 @@
   .paused-order-logo {
     width: 70px;
     height: 70px;
-    border-radius: 14px;
+    border-radius: var(--radio);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -250,7 +254,7 @@
     background: rgba(120, 53, 15, 0.2);
     color: #78350F;
     padding: 4px 10px;
-    border-radius:8px;
+    border-radius:var(--radio-sm);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -276,7 +280,7 @@
     gap: 4px;
     background: rgba(120, 53, 15, 0.15);
     padding: 6px 12px;
-    border-radius: 8px;
+    border-radius: var(--radio-sm);
     font-size: 12px;
     font-weight: 700;
     color: #78350F;
@@ -288,7 +292,7 @@
     color: white;
     border: none;
     padding: 12px 16px;
-    border-radius:8px;
+    border-radius:var(--radio-sm);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
@@ -320,7 +324,7 @@
   /* USUARIO LIST */
   .usuario-item { background: white; border-radius: var(--radio); padding: 18px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s; margin-bottom: 12px; }
   .usuario-item:active { transform: scale(0.99); }
-  .usuario-avatar { width: 56px; height: 56px; border-radius:18px; background: var(--azul); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: 700; flex-shrink: 0; }
+  .usuario-avatar { width: 56px; height: 56px; border-radius:var(--radio-lg); background: var(--azul); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: 700; flex-shrink: 0; }
   .usuario-info { flex: 1; min-width: 0; }
   .usuario-info .nombre { font-size: 18px; font-weight: 700; }
   .usuario-info .cargo { font-size: 13px; color: var(--texto2); margin-top: 3px; }
@@ -337,7 +341,7 @@
   .sum-val { font-size: 13px; font-weight: 600; color: var(--texto); }
   
   /* BADGES */
-  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radio-pill); }
   .badge-prev { background: #E6F4EA; color: #1A7A3C; }
   .badge-corr { background: #FEF0E6; color: #B45309; }
   .badge-pend { background: #EEF2FA; color: var(--azul); }
@@ -351,7 +355,7 @@
   .card-grid > * { margin-bottom: 0; }
   /* Estados vacios y de error ocupan todo el ancho del grid, no una sola columna */
   .card-grid > p, .card-grid > .grid-full { grid-column: 1 / -1; }
-  .ot-icon { width: 44px; height: 44px; border-radius:14px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .ot-icon { width: 44px; height: 44px; border-radius:var(--radio); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
   .ot-info { flex: 1; }
   .ot-titulo { font-size: 14px; font-weight: 600; }
   .ot-sub { font-size: 12px; color: var(--texto3); margin-top: 2px; }
@@ -370,15 +374,23 @@
   
   /* SKELETON LOADING USUARIOS */
   .usuario-skeleton { background: white; border-radius: var(--radio); padding: 14px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 10px; box-shadow: var(--sombra); }
-  .sk-avatar { width: 44px; height: 44px; border-radius:14px; background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; flex-shrink: 0; }
+  .sk-avatar { width: 44px; height: 44px; border-radius:var(--radio); background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; flex-shrink: 0; }
   .sk-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-  .sk-line { height: 10px; border-radius:8px; background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  .sk-line { height: 10px; border-radius:var(--radio-sm); background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
   .sk-l1 { width: 55%; }
   .sk-l2 { width: 35%; }
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
   /* TOAST */
-  #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--sombra-lg); }
+  #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 10px 20px; border-radius: var(--radio-pill); font-size: 13px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--sombra-lg); }
+
+  /* CAMPO RECHAZADO POR VALIDACION
+     El toast dura 2.5s y aparece abajo, justo donde el pulgar tapa la pantalla. Sin una
+     marca persistente en el campo, el tecnico tiene que adivinar cual de las 5 condiciones
+     de cerrarOT() fallo. El halo se queda hasta que toque el campo. */
+  .campo-error { outline: 2px solid var(--rojo); outline-offset: 3px; border-radius: var(--radio-sm); animation: campo-error-pulso 600ms var(--ease); }
+  @keyframes campo-error-pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  @media (prefers-reduced-motion: reduce) { .campo-error { animation: none; } }
 
   /* SUPERVISOR PANEL */
   .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -392,7 +404,7 @@
   /* CADENA CARDS */
   .cadena-card { background: white; border-radius: var(--radio); padding: 22px 18px; display: flex; align-items: center; gap: 18px; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s; margin-bottom: 14px; border: 2px solid transparent; }
   .cadena-card:active { transform: scale(0.99); }
-  .cadena-logo { width: 80px; height: 80px; border-radius:18px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .cadena-logo { width: 80px; height: 80px; border-radius:var(--radio-lg); overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .cadena-logo img { width: 100%; height: 100%; object-fit: contain; }
   .cadena-logo.fallback { font-size: 34px; font-weight: 700; color: white; }
   .cadena-info { flex: 1; }
@@ -423,7 +435,7 @@
   .voz-player { width: 100%; margin-top: 12px; border-radius: var(--radio-sm); }
   .voz-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   .voz-item { background: var(--gris1); border-radius: var(--radio-sm); padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
-  .voz-item-icon { width: 32px; height: 32px; background: var(--azul); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0; }
+  .voz-item-icon { width: 32px; height: 32px; background: var(--azul); border-radius: var(--radio-sm); display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0; }
   .voz-item-info { flex: 1; }
   .voz-item-nombre { font-size: 13px; font-weight: 600; }
   .voz-item-dur { font-size: 11px; color: var(--texto3); margin-top: 2px; }
@@ -456,12 +468,12 @@
 <!-- ============ SCREEN: PIN ============ -->
 <div class="screen" id="s-pin">
   <div class="topbar">
-    <button class="back" onclick="go('s-usuarios')">←</button>
-    <h2 id="pin-nombre-topbar">Ingresa tu PIN</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-usuarios')">←</button>
+    <h1 id="pin-nombre-topbar">Ingresa tu PIN</h1>
   </div>
   <div class="content" style="align-items: center;">
     <div style="height: 8px;"></div>
-    <div id="pin-avatar" class="usuario-avatar" style="width:64px;height:64px;font-size:26px;border-radius:18px;margin:0 auto;"></div>
+    <div id="pin-avatar" class="usuario-avatar" style="width:64px;height:64px;font-size:26px;border-radius:var(--radio-lg);margin:0 auto;"></div>
     <div style="font-size: 16px; font-weight: 600; margin-top: 10px;" id="pin-nombre-display"></div>
     <div id="pin-subtitulo" style="font-size: 13px; color: var(--texto3);">Ingresa tu PIN de 4 números</div>
     <!-- Numpad PIN (técnicos y supervisores) -->
@@ -491,12 +503,12 @@
     <div id="admin-pass-section" style="display:none; width:100%; max-width:280px; margin-top:8px;">
       <div style="position:relative;">
         <input type="password" id="admin-pass-input" placeholder="Contraseña"
-          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:14px;font-size:16px;font-family:inherit;box-sizing:border-box;transition:border-color 0.2s;"
+          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:var(--radio);font-size:16px;font-family:inherit;box-sizing:border-box;transition:border-color 0.2s;"
           onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris2)'"
           onkeydown="if(event.key==='Enter') validarPassword()" />
         <button id="btn-pass-vis" type="button" aria-label="Mostrar contraseña" onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);line-height:1;padding:6px;display:flex;align-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
-      <button onclick="validarPassword()" style="width:100%;margin-top:12px;padding:14px;background:var(--azul);color:white;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">
+      <button onclick="validarPassword()" style="width:100%;margin-top:12px;padding:14px;background:var(--azul);color:white;border:none;border-radius:var(--radio);font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">
         Ingresar
       </button>
       <div id="admin-pass-error" style="display:none;font-size:12px;color:var(--rojo);margin-top:8px;text-align:center;font-weight:500;"></div>
@@ -507,8 +519,8 @@
 <!-- ============ SCREEN: SELECCIÓN LOCAL ============ -->
 <div class="screen" id="s-cadena">
   <div class="topbar">
-    <button class="back" onclick="volverDesdeCadena()">←</button>
-    <h2>Seleccionar cadena</h2>
+    <button class="back" aria-label="Volver" onclick="volverDesdeCadena()">←</button>
+    <h1>Seleccionar cadena</h1>
     <span class="ot-badge" id="ot-num-cadena">#---</span>
   </div>
   <div class="steps">
@@ -519,10 +531,10 @@
 
     <!-- TRABAJOS PAUSADOS (ACORDEÓN) -->
     <div id="seccion-pausadas" style="display:none;margin-bottom:20px;">
-      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border:2px solid #FCD34D;border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:14px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);">
+      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border:2px solid #FCD34D;border-radius:var(--radio);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:14px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);">
         <div style="display:flex;align-items:center;gap:8px;">
           <span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> Trabajos pausados</span>
-          <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:8px;font-weight:600;" id="contador-pausadas">0</div>
+          <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:var(--radio-sm);font-weight:600;" id="contador-pausadas">0</div>
         </div>
         <span id="toggle-icon" style="transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);display:inline-flex;align-items:center;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
       </button>
@@ -539,8 +551,8 @@
 
 <div class="screen" id="s-local">
   <div class="topbar">
-    <button class="back" onclick="go('s-cadena')">←</button>
-    <h2 id="local-topbar-titulo">Seleccionar sucursal</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-cadena')">←</button>
+    <h1 id="local-topbar-titulo">Seleccionar sucursal</h1>
     <span class="ot-badge" id="ot-num-local">#---</span>
   </div>
   <div class="steps">
@@ -552,8 +564,8 @@
     <div style="margin-bottom:16px;">
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
       <div style="display:flex;gap:8px;align-items:stretch;">
-        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:8px;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
-        <button type="button" style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:8px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
+        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid var(--gris3);border-radius:var(--radio-sm);transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris3)'"/>
+        <button type="button" aria-label="Limpiar búsqueda" style="width:44px;height:44px;padding:0;border:2px solid var(--gris3);background:transparent;border-radius:var(--radio-sm);cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
       </div>
     </div>
 
@@ -564,8 +576,8 @@
 <!-- ============ SCREEN: TIPO DE TRABAJO ============ -->
 <div class="screen" id="s-tipo">
   <div class="topbar">
-    <button class="back" onclick="go('s-local')">←</button>
-    <h2>Tipo de trabajo</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-local')">←</button>
+    <h1>Tipo de trabajo</h1>
     <span class="ot-badge" id="ot-num-tipo">#---</span>
   </div>
   <div class="steps">
@@ -601,8 +613,8 @@
 <!-- ============ SCREEN: FOTOS ANTES ============ -->
 <div class="screen" id="s-fotos-antes">
   <div class="topbar">
-    <button class="back" onclick="volverASucursales()">←</button>
-    <h2>Fotos — Estado inicial</h2>
+    <button class="back" aria-label="Volver" onclick="volverASucursales()">←</button>
+    <h1>Fotos — Estado inicial</h1>
     <span class="ot-badge" id="ot-num-antes">#---</span>
   </div>
   <div class="steps">
@@ -626,8 +638,8 @@
 <!-- ============ SCREEN: EJECUCIÓN ============ -->
 <div class="screen" id="s-ejecucion">
   <div class="topbar">
-    <button class="back" onclick="volverAFotosAntes()">←</button>
-    <h2>Trabajo ejecutado</h2>
+    <button class="back" aria-label="Volver" onclick="volverAFotosAntes()">←</button>
+    <h1>Trabajo ejecutado</h1>
     <span class="ot-badge" id="ot-num-ejec">#---</span>
   </div>
   <div class="steps">
@@ -666,7 +678,7 @@
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pídele al administrador que firme con el dedo</div>
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
-        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+        <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
         <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
       </div>
@@ -692,8 +704,8 @@
 <!-- ============ SCREEN: COTIZACION ============ -->
 <div class="screen" id="s-cotizacion">
   <div class="topbar">
-    <button class="back" onclick="go(window._cotizacionOrigen||'s-supervisor')">←</button>
-    <h2>Generar cotización</h2>
+    <button class="back" aria-label="Volver" onclick="go(window._cotizacionOrigen||'s-supervisor')">←</button>
+    <h1>Generar cotización</h1>
   </div>
   <div class="content">
     <div class="card" id="cot-resumen-ot" style="background:var(--gris1);margin-bottom:4px;"></div>
@@ -723,7 +735,7 @@
 
 <!-- ============ MODAL: VISTA PREVIA COTIZACION ============ -->
 <div id="modal-preview-cot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;">
-  <div style="background:white;margin:20px auto;border-radius:18px;max-width:520px;padding:20px;position:relative;">
+  <div style="background:white;margin:20px auto;border-radius:var(--radio-lg);max-width:520px;padding:20px;position:relative;">
     <div style="font-size:16px;font-weight:700;margin-bottom:14px;color:var(--texto);">Vista previa de cotización</div>
     <div id="preview-cot-contenido"></div>
     <div style="display:flex;gap:10px;margin-top:18px;">
@@ -736,12 +748,12 @@
 <!-- ============ SCREEN: OTs POR TECNICO ============ -->
 <div class="screen" id="s-ots-tecnicos">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>OTs por técnico</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>OTs por técnico</h1>
   </div>
   <div class="content">
-    <div onclick="go('s-preventivos');cargarPreventivos();" style="display:flex;align-items:center;gap:12px;background:#E6F4EA;border-radius:14px;padding:13px 16px;cursor:pointer;margin-bottom:12px;border:1.5px solid #B7DFC9;">
-      <div style="width:42px;height:42px;border-radius:8px;background:#27A06B;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+    <div onclick="go('s-preventivos');cargarPreventivos();" style="display:flex;align-items:center;gap:12px;background:#E6F4EA;border-radius:var(--radio);padding:13px 16px;cursor:pointer;margin-bottom:12px;border:1.5px solid #B7DFC9;">
+      <div style="width:42px;height:42px;border-radius:var(--radio-sm);background:#27A06B;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
       <div style="flex:1;">
         <div style="font-size:15px;font-weight:600;color:#1A7A3C;">Preventivos</div>
         <div style="font-size:12px;color:#2D8B4A;margin-top:2px;">Ver todos los trabajos preventivos</div>
@@ -756,26 +768,26 @@
 <!-- ============ SCREEN: OTs DE UN TECNICO ============ -->
 <div class="screen" id="s-ots-tecnico-detalle">
   <div class="topbar">
-    <button class="back" onclick="go('s-ots-tecnicos')">←</button>
-    <h2 id="detalle-tecnico-nombre">OTs</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-ots-tecnicos')">←</button>
+    <h1 id="detalle-tecnico-nombre">OTs</h1>
   </div>
   <div class="content">
     <!-- FILTROS Y BÚSQUEDA OTs -->
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
-        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
+        <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
+        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
-      <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris1);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
+      <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit;">
+          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">TIPO</label>
-          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit;">
+          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
             <option value="">Todos</option>
             <option value="correctivo">Correctivo</option>
             <option value="preventivo">Preventivo</option>
@@ -783,9 +795,9 @@
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit;">
+          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
         </div>
-        <button onclick="limpiarFiltrosTecnico()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:8px;padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
+        <button onclick="limpiarFiltrosTecnico()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
       </div>
       <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="ot-contador-tecnico">0 resultados</div>
     </div>
@@ -796,34 +808,34 @@
 <!-- ============ SCREEN: PREVENTIVOS ============ -->
 <div class="screen" id="s-preventivos">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>Trabajos Preventivos</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>Trabajos Preventivos</h1>
   </div>
   <div class="content">
     <!-- FILTROS Y BÚSQUEDA PREVENTIVOS -->
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarPreventivos();">
-        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
+        <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;" onkeyup="filtrarPreventivos();">
+        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
-      <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
+      <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit;">
+          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">TÉCNICO</label>
-          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit;">
+          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit;">
+          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
         </div>
-        <button onclick="limpiarFiltrosPreventivos()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:8px;padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
+        <button onclick="limpiarFiltrosPreventivos()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
       </div>
       <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="preventivo-contador">0 resultados</div>
     </div>
@@ -834,26 +846,26 @@
 <!-- ============ SCREEN: CARPETAS COTIZACIONES ============ -->
 <div class="screen" id="s-carpetas">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>Cotizaciones guardadas</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>Cotizaciones guardadas</h1>
   </div>
   <div id="cot-acciones-bar" style="display:none;padding:10px 16px;background:white;border-bottom:1px solid var(--gris2);display:none;gap:8px;align-items:center;">
     <span id="cot-seleccionadas-count" style="font-size:13px;color:var(--texto2);flex:1;">0 seleccionadas</span>
-    <button onclick="enviarCotizacionesSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Enviar email</button>
-    <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
+    <button onclick="enviarCotizacionesSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Enviar email</button>
+    <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
   </div>
   <div class="content">
-    <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:8px;padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
+    <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
-        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
+        <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
       </div>
-      <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);margin-bottom:8px;">
+      <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
         <div id="filtro-input-cot-general" style="display:none;">
           <label id="filtro-label-cot-general" style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;"></label>
-          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris2);border-radius:8px;padding:6px 8px;font-size:12px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
         </div>
       </div>
     </div>
@@ -889,7 +901,7 @@
         <div class="voz-timer" id="voz-timer">0:00</div>
         <div class="voz-status" id="voz-status">Toca para grabar lo que gastaste y los materiales usados</div>
         <div style="height:12px;"></div>
-        <button class="voz-btn-grabar" id="voz-btn" onclick="toggleGrabacion()">●</button>
+        <button class="voz-btn-grabar" id="voz-btn" aria-label="Grabar nota de voz" onclick="toggleGrabacion()">●</button>
         <div style="height:12px;"></div>
         <div class="voz-lista" id="voz-lista"></div>
       </div>
@@ -904,7 +916,7 @@
 <!-- ============ SCREEN: SUPERVISOR ============ -->
 <div class="screen" id="s-supervisor">
   <div class="topbar" style="justify-content: space-between;">
-    <h2>Panel Supervisor</h2>
+    <h1>Panel Supervisor</h1>
     <button class="top-action" onclick="cerrarSesion()">Salir</button>
   </div>
   <div class="content">
@@ -926,7 +938,7 @@
     <div id="sup-pausadas-seccion" style="display:none;margin-bottom:14px;">
       <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
         <span style="color:#D97706;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></span> TRABAJOS PAUSADOS
-        <span id="sup-pausadas-count" style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">0</span>
+        <span id="sup-pausadas-count" style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:2px 9px;border-radius:var(--radio-pill);">0</span>
       </div>
       <div id="sup-pausadas-lista" class="card-grid"></div>
     </div>
@@ -939,8 +951,8 @@
 <!-- ============ SCREEN: ADMIN ============ -->
 <div class="screen" id="s-admin">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>Administrar</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>Administrar</h1>
   </div>
   <div class="content">
 
@@ -953,19 +965,19 @@
     <!-- PANEL PERSONAL -->
     <div id="panel-personal">
       <button class="btn btn-primary" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
-      <input type="text" id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
+      <input type="text" id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
-        <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo personal</div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
         <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
         <div class="field">
           <label>Rol</label>
-          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;">
+          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;">
             <option value="Tecnico en terreno">Técnico en terreno</option>
             <option value="Supervisor">Supervisor</option>
             <option value="Administrador">Administrador</option>
           </select>
         </div>
-        <div class="field"><label>PIN (4 números)</label><input type="number" id="tec-pin" placeholder="Ej: 1234" maxlength="4" /></div>
+        <div class="field"><label>PIN (4 números)</label><input type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" id="tec-pin" placeholder="Ej: 1234" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" /></div>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-secondary btn-sm" onclick="cancelarFormTecnico()" style="flex:1;">Cancelar</button>
           <button class="btn btn-primary btn-sm" onclick="guardarTecnico()" style="flex:1;">Guardar</button>
@@ -977,7 +989,7 @@
     <!-- PANEL CADENAS -->
     <div id="panel-cadenas" style="display:none;">
       <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="margin-bottom:12px;">+ Agregar cadena</button>
-      <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
+      <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
       <div id="form-cadena" style="display:none;" class="card">
         <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
@@ -1003,8 +1015,8 @@
 <!-- ============ SCREEN: FACTURAR ============ -->
 <div class="screen" id="s-facturar">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>Facturación</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>Facturación</h1>
   </div>
   <div class="content">
     <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un supervisor para ver sus cotizaciones</div>
@@ -1015,8 +1027,8 @@
 <!-- ============ SCREEN: COTIZACIONES SUPERVISOR (FACTURAR) ============ -->
 <div class="screen" id="s-fact-detalle">
   <div class="topbar">
-    <button class="back" onclick="go('s-facturar')">←</button>
-    <h2 id="fact-sup-titulo">Cotizaciones</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-facturar')">←</button>
+    <h1 id="fact-sup-titulo">Cotizaciones</h1>
     <button class="top-action top-action-verde" onclick="descargarExcelSupervisor()">Descargar Excel</button>
   </div>
   <div class="content">
@@ -1027,8 +1039,8 @@
 <!-- ============ SCREEN: VENTAS ============ -->
 <div class="screen" id="s-ventas">
   <div class="topbar">
-    <button class="back" onclick="go('s-supervisor')">←</button>
-    <h2>Ventas</h2>
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>Ventas</h1>
     <button class="top-action top-action-verde" onclick="descargarExcelVentas()">Descargar Excel</button>
   </div>
   <div class="content" id="ventas-content">
@@ -1036,48 +1048,48 @@
   </div>
 </div>
 
-<div id="toast"></div>
-<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
   Sin conexión — modo offline
 </div>
-<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
+<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
   <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> <span id="pending-label">OT(s) pendiente(s) — Toca para subir</span>
 </div>
 
 <!-- Avisos por correo encolados: misma visibilidad persistente que las OTs pendientes.
      Un toast se desvanece; una barra no. Se apila sobre la de OTs si ambas estan visibles. -->
-<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
+<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
   <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span> — Toca para reintentar
 </div>
 
 <!-- MODAL: Reasignar OT pausada a otro tecnico -->
 <div id="modal-reasignar" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalReasignar(event)">
-  <div style="background:white;border-radius:18px;max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+  <div style="background:white;border-radius:var(--radio-lg);max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-reasignar-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
       <div id="modal-reasignar-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Selecciona el nuevo técnico</div>
     </div>
     <div id="modal-reasignar-lista" style="overflow-y:auto;padding:10px 14px;flex:1;"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--gris2);">
-      <button onclick="cerrarModalReasignar()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+      <button onclick="cerrarModalReasignar()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
     </div>
   </div>
 </div>
 
 <!-- MODAL: enviar cotización a uno o varios correos -->
 <div id="modal-enviar-cot" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalEnviarCot(event)">
-  <div style="background:white;border-radius:18px;max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+  <div style="background:white;border-radius:var(--radio-lg);max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div style="font-size:16px;font-weight:700;color:var(--texto);">Enviar cotización</div>
       <div id="modal-enviar-cot-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Agrega uno o más correos de destino</div>
     </div>
     <div style="overflow-y:auto;padding:14px 18px;flex:1;">
       <div id="modal-enviar-cot-lista"></div>
-      <button type="button" onclick="agregarFilaEmailCot('')" style="width:100%;background:transparent;color:var(--azul);border:1.5px dashed var(--azul);border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;">+ Agregar otro correo</button>
+      <button type="button" onclick="agregarFilaEmailCot('')" style="width:100%;background:transparent;color:var(--azul);border:1.5px dashed var(--azul);border-radius:var(--radio-sm);padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;">+ Agregar otro correo</button>
     </div>
     <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;">
-      <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
-      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
+      <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
     </div>
   </div>
 </div>
@@ -1630,7 +1642,16 @@ function loginExitoso() {
 }
 
 function validarPin() {
-  if (pinActual === PINS[estado.usuario]) {
+  const esperado = PINS[estado.usuario];
+  // Sin PIN valido no se entra, pero se dice POR QUE. "PIN incorrecto" mandaria al tecnico
+  // a probar combinaciones para siempre por un problema que solo el administrador resuelve.
+  if (!esperado) {
+    toast('Este usuario no tiene PIN. Pídele al administrador que lo configure.');
+    pinActual = '';
+    actualizarDots();
+    return;
+  }
+  if (pinActual === esperado) {
     loginExitoso();
   } else {
     toast('PIN incorrecto, intenta de nuevo');
@@ -1715,8 +1736,7 @@ function nuevaOT() {
   document.getElementById('voz-timer').textContent = '0:00';
   document.getElementById('voz-status').textContent = 'Toca para grabar lo que gastaste y los materiales usados';
   document.getElementById('voz-status').style.color = 'var(--texto3)';
-  document.getElementById('voz-btn').classList.remove('grabando');
-  document.getElementById('voz-btn').textContent = '●';
+  _setVozBtn(false);
   inicializarFotos();
   limpiarFirma();
   document.getElementById('desc-problema').value = '';
@@ -2013,23 +2033,23 @@ function _menuFuenteFoto() {
   overlay.onclick = function(e){ if (e.target === overlay) cerrar(); };
 
   const modal = document.createElement('div');
-  modal.style.cssText = 'background:white;border-radius:18px;padding:18px;width:100%;max-width:420px;box-shadow:var(--sombra-lg);';
+  modal.style.cssText = 'background:white;border-radius:var(--radio-lg);padding:18px;width:100%;max-width:420px;box-shadow:var(--sombra-lg);';
   modal.onclick = function(e){ e.stopPropagation(); };
   modal.innerHTML = '<div style="font-size:15px;font-weight:700;color:var(--texto);text-align:center;margin-bottom:14px;">Agregar foto</div>';
 
   const btnCam = document.createElement('button');
   btnCam.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>  Tomar foto';
-  btnCam.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
+  btnCam.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio);padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
   btnCam.onclick = function(){ cerrar(); document.getElementById('input-foto-camara').click(); };
 
   const btnGal = document.createElement('button');
   btnGal.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>  Elegir de galería';
-  btnGal.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
+  btnGal.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio);padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
   btnGal.onclick = function(){ cerrar(); document.getElementById('input-foto-galeria').click(); };
 
   const btnCan = document.createElement('button');
   btnCan.textContent = 'Cancelar';
-  btnCan.style.cssText = 'width:100%;background:#EDF0F5;color:var(--texto2);border:none;border-radius:14px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnCan.style.cssText = 'width:100%;background:#EDF0F5;color:var(--texto2);border:none;border-radius:var(--radio);padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnCan.onclick = cerrar;
 
   modal.appendChild(btnCam);
@@ -2157,10 +2177,10 @@ function cargarEjecucionScreen() {
     }
     let html = '<div class="field">';
     html += '<label>Nº Equipos Suscritos</label>';
-    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
     html += '</div>';
     html += '<div class="field"><label>Servicios a realizar</label>';
-    html += '<div style="border:1.5px solid var(--gris2);border-radius:8px;overflow:hidden;">';
+    html += '<div style="border:1.5px solid var(--gris2);border-radius:var(--radio-sm);overflow:hidden;">';
     html += '<div style="display:flex;background:var(--azul);padding:8px 12px;align-items:center;">';
     html += '<span style="flex:1;font-size:12px;font-weight:600;color:white;text-transform:uppercase;">Servicio</span>';
     html += '<span style="font-size:12px;font-weight:600;color:white;text-transform:uppercase;min-width:90px;text-align:center;">Estado</span>';
@@ -2172,8 +2192,8 @@ function cargarEjecucionScreen() {
       html += '<div style="display:flex;padding:8px 12px;gap:8px;align-items:center;background:' + bg + ';border-bottom:1px solid #E5E7EB;">';
       html += '<span style="flex:1;font-size:13px;color:var(--texto);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
       html += '<div style="display:flex;gap:4px;min-width:90px;justify-content:center;">';
-      html += '<button id="svc-si-' + idx + '" onclick="responderServicio(' + idx + ',\'si\')" style="' + siSt + 'border:none;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Sí</button>';
-      html += '<button id="svc-no-' + idx + '" onclick="responderServicio(' + idx + ',\'no\')" style="' + noSt + 'border:none;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">No</button>';
+      html += '<button id="svc-si-' + idx + '" onclick="responderServicio(' + idx + ',\'si\')" style="' + siSt + 'border:none;border-radius:var(--radio-sm);padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Sí</button>';
+      html += '<button id="svc-no-' + idx + '" onclick="responderServicio(' + idx + ',\'no\')" style="' + noSt + 'border:none;border-radius:var(--radio-sm);padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">No</button>';
       html += '</div></div>';
     });
     html += '</div></div>';
@@ -2399,18 +2419,19 @@ function cerrarOT() {
   sincronizarCamposOTEnEstado();
   const descEl = document.getElementById('desc-trabajo');
   const desc = descEl ? descEl.value.trim() : '';
+  // Los 5 rechazos apuntan al campo culpable (_rechazar), no solo lo nombran.
   if (estado.tipo === 'preventivo') {
     const sinResponder = (estado.serviciosPreventivo || []).filter(function(s){ return s.respuesta === null; }).length;
-    if (sinResponder > 0) { toast('Responde todos los servicios (Sí / No)'); return; }
+    if (sinResponder > 0) { _rechazar('Responde todos los servicios (Sí / No)', 'ejecucion-prev-content'); return; }
     const numEqEl = document.getElementById('num-equipos');
     if (numEqEl) estado.numEquipos = numEqEl.value.trim();
   } else {
-    if (!desc) { toast('Escribe el trabajo que realizaste'); return; }
+    if (!desc) { _rechazar('Escribe el trabajo que realizaste', 'desc-trabajo'); return; }
   }
   const fotosDespues = estado.fotosDespues.filter(f => f).length;
-  if (fotosDespues === 0) { toast('Agrega al menos 1 foto del trabajo terminado'); return; }
-  if (!estado.firmada) { toast('Necesitas confirmar la firma del administrador'); return; }
-  if (!estado.fotoTimbre) { toast('Falta la foto del timbre del local'); return; }
+  if (fotosDespues === 0) { _rechazar('Agrega al menos 1 foto del trabajo terminado', 'grid-despues'); return; }
+  if (!estado.firmada) { _rechazar('Necesitas confirmar la firma del administrador', 'firma-container'); return; }
+  if (!estado.fotoTimbre) { _rechazar('Falta la foto del timbre del local', 'ftimbre'); return; }
 
   const fotosAntes = estado.fotosAntes.filter(f => f).length;
   const fecha = new Date().toLocaleDateString('es-CL');
@@ -2843,7 +2864,7 @@ function notificarSupervisor() {
   var msg = encodeURIComponent('*OT #' + (estado.otNumero || '----') + ' COMPLETADA*') +
     nl + nl +
     encodeURIComponent('Local: ' + (estado.local || '-')) + nl +
-    encodeURIComponent('Tecnico: ' + (estado.usuario || '-')) + nl +
+    encodeURIComponent('Técnico: ' + (estado.usuario || '-')) + nl +
     encodeURIComponent('Tipo: ' + (estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo')) + nl +
     encodeURIComponent('Fecha: ' + new Date().toLocaleDateString('es-CL')) + nl + nl +
     encodeURIComponent('Trabajo: ' + descCorto) + nl + nl +
@@ -2880,6 +2901,16 @@ function toggleGrabacion() {
   else detenerGrabacion();
 }
 
+// El simbolo y el nombre accesible del boton salen del MISMO sitio: si se ponen en dos
+// lugares distintos, terminan diciendo cosas distintas (fue el bug del ojo de la contrasena).
+function _setVozBtn(estaGrabando) {
+  const b = document.getElementById('voz-btn');
+  if (!b) return;
+  b.classList.toggle('grabando', estaGrabando);
+  b.textContent = estaGrabando ? '■' : '●';
+  b.setAttribute('aria-label', estaGrabando ? 'Detener grabación' : 'Grabar nota de voz');
+}
+
 async function iniciarGrabacion() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -2892,8 +2923,7 @@ async function iniciarGrabacion() {
     mediaRecorder.start();
     grabando = true;
     vozSegundos = 0;
-    document.getElementById('voz-btn').classList.add('grabando');
-    document.getElementById('voz-btn').textContent = '■';
+    _setVozBtn(true);
     document.getElementById('voz-status').textContent = 'Grabando... habla ahora';
     document.getElementById('voz-status').style.color = 'var(--rojo)';
     vozTimer = setInterval(() => {
@@ -2913,8 +2943,7 @@ function detenerGrabacion() {
     mediaRecorder.stream.getTracks().forEach(t => t.stop());
     grabando = false;
     clearInterval(vozTimer);
-    document.getElementById('voz-btn').classList.remove('grabando');
-    document.getElementById('voz-btn').textContent = '●';
+    _setVozBtn(false);
     document.getElementById('voz-status').textContent = 'Toca para grabar otra nota';
     document.getElementById('voz-status').style.color = 'var(--texto3)';
     document.getElementById('voz-timer').textContent = '0:00';
@@ -3009,7 +3038,7 @@ async function cargarCadenasAdmin() {
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;';
       const dot = document.createElement('div');
-      dot.style.cssText = 'width:32px;height:32px;border-radius:8px;background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0;overflow:hidden;';
+      dot.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0;overflow:hidden;';
       if (d.logo) {
         const limg = document.createElement('img');
         limg.src = d.logo;
@@ -3047,11 +3076,11 @@ async function cargarCadenasAdmin() {
       cadBtns.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;';
       const btnEdit = document.createElement('button');
       btnEdit.textContent = 'Editar cadena';
-      btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnEdit.onclick = (function(id, data){ return function(){ editarCadena(id, data); }; })(docId, d);
       const btnDel = document.createElement('button');
       btnDel.textContent = 'Eliminar cadena';
-      btnDel.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+      btnDel.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
       btnDel.onclick = (function(id){ return function(){ eliminarCadena(id); }; })(docId);
       cadBtns.appendChild(btnEdit); cadBtns.appendChild(btnDel);
       body.appendChild(cadBtns);
@@ -3064,14 +3093,14 @@ async function cargarCadenasAdmin() {
       const searchSubInput = document.createElement('input');
       searchSubInput.type = 'text';
       searchSubInput.placeholder = 'Buscar sucursal...';
-      searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;';
+      searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;font-family:inherit;';
 
       const btnFiltro = document.createElement('button');
       btnFiltro.innerHTML = _SVG_EMBUDO + ' Filtro';
-      btnFiltro.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+      btnFiltro.style.cssText = 'background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
       const panelFiltros = document.createElement('div');
-      panelFiltros.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);';
+      panelFiltros.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);';
 
       const filtroInputDivSub = document.createElement('div');
       filtroInputDivSub.style.cssText = 'display:none;margin-bottom:8px;';
@@ -3079,7 +3108,7 @@ async function cargarCadenasAdmin() {
       filtroInputLabelSub.style.cssText = 'font-size:11px;font-weight:600;display:block;margin-bottom:4px;';
       const filtroInputSub = document.createElement('input');
       filtroInputSub.type = 'text';
-      filtroInputSub.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:8px;padding:6px 8px;font-size:12px;font-family:inherit;';
+      filtroInputSub.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;';
       filtroInputDivSub.appendChild(filtroInputLabelSub);
       filtroInputDivSub.appendChild(filtroInputSub);
 
@@ -3094,7 +3123,7 @@ async function cargarCadenasAdmin() {
       filtroOptions.forEach(function(opt) {
         const btn = document.createElement('button');
         btn.textContent = opt.label;
-        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:8px;padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
         btn.onclick = function() {
           if (filtroActivo === opt.value) {
             filtroActivo = null;
@@ -3190,11 +3219,11 @@ async function cargarCadenasAdmin() {
         rowBtns.style.cssText = 'display:flex;gap:5px;flex-shrink:0;';
         const btnES = document.createElement('button');
         btnES.textContent = 'Editar';
-        btnES.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:3px 8px;font-size:11px;cursor:pointer;';
+        btnES.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:3px 8px;font-size:11px;cursor:pointer;';
         btnES.onclick = (function(dId, idx, sb){ return function(){ editarSucursal(dId, idx, sb); }; })(docId, i, s);
         const btnDS = document.createElement('button');
         btnDS.textContent = 'x';
-        btnDS.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:3px 7px;font-size:11px;cursor:pointer;';
+        btnDS.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:3px 7px;font-size:11px;cursor:pointer;';
         btnDS.onclick = (function(dId, idx){ return function(){ eliminarSucursal(dId, idx); }; })(docId, i);
         rowBtns.appendChild(btnES); rowBtns.appendChild(btnDS);
 
@@ -3208,7 +3237,7 @@ async function cargarCadenasAdmin() {
       btnAddSucDiv.style.cssText = 'margin-top:12px;margin-bottom:10px;';
       const btnAddSuc = document.createElement('button');
       btnAddSuc.textContent = '+ Agregar sucursal';
-      btnAddSuc.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
+      btnAddSuc.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
       btnAddSucDiv.appendChild(btnAddSuc);
       body.appendChild(btnAddSucDiv);
 
@@ -3216,32 +3245,32 @@ async function cargarCadenasAdmin() {
 
       // ---- FORMULARIO AGREGAR SUCURSAL (COLAPSABLE) ----
       const sep = document.createElement('div');
-      sep.style.cssText = 'display:none;margin-bottom:10px;padding:12px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);';
+      sep.style.cssText = 'display:none;margin-bottom:10px;padding:12px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);';
       const inpCentro = document.createElement('input');
       inpCentro.type = 'text'; inpCentro.placeholder = 'Numero de centro (Ej: 345)';
-      inpCentro.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpCentro.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpNom = document.createElement('input');
       inpNom.type = 'text'; inpNom.placeholder = 'Nombre (Ej: Unimarc Chillan)';
-      inpNom.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpNom.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpDir = document.createElement('input');
       inpDir.type = 'text'; inpDir.placeholder = 'Direccion (Ej: Av. El Roble 123)';
-      inpDir.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpDir.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpSup = document.createElement('input');
       inpSup.type = 'text'; inpSup.placeholder = 'Supervisor responsable (opcional)';
-      inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpEmailSup = document.createElement('input');
       inpEmailSup.type = 'email'; inpEmailSup.placeholder = 'Correo del supervisor (opcional)';
-      inpEmailSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpEmailSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
       const inpEmail = document.createElement('input');
       inpEmail.type = 'email'; inpEmail.placeholder = 'Correo del local (opcional)';
-      inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:8px;';
+      inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:8px;';
       const btnAdd = document.createElement('button');
       btnAdd.textContent = '✓ Agregar sucursal';
-      btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:6px;';
+      btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:6px;';
       btnAdd.onclick = (function(dId, iCentro, iNom, iDir, iSup, iEmailSup, iEmail){ return function(){ agregarSucursal(dId, iCentro, iNom, iDir, iSup, iEmailSup, iEmail); }; })(docId, inpCentro, inpNom, inpDir, inpSup, inpEmailSup, inpEmail);
       const btnCancel = document.createElement('button');
       btnCancel.textContent = 'Cancelar';
-      btnCancel.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;';
+      btnCancel.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;';
       btnCancel.onclick = function() { sep.style.display = 'none'; btnAddSuc.textContent = '+ Agregar sucursal'; };
       sep.appendChild(inpCentro); sep.appendChild(inpNom); sep.appendChild(inpDir);
       sep.appendChild(inpSup); sep.appendChild(inpEmailSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd); sep.appendChild(btnCancel);
@@ -3380,7 +3409,7 @@ function editarSucursal(docId, idx, s) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
   const modal = document.createElement('div');
-  modal.style.cssText = 'background:white;border-radius:18px;padding:20px;width:100%;max-width:380px;';
+  modal.style.cssText = 'background:white;border-radius:var(--radio-lg);padding:20px;width:100%;max-width:380px;';
   modal.innerHTML = '<div style="font-size:15px;font-weight:600;margin-bottom:16px;">Editar sucursal</div>';
 
   function mkInput(lbl, val, ph) {
@@ -3391,7 +3420,7 @@ function editarSucursal(docId, idx, s) {
     l.textContent = lbl;
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = val; inp.placeholder = ph;
-    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px;';
+    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;';
     inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
     inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
     w.appendChild(l); w.appendChild(inp);
@@ -3418,11 +3447,11 @@ function editarSucursal(docId, idx, s) {
   btns.style.cssText = 'display:flex;gap:10px;margin-top:8px;';
   const btnCan = document.createElement('button');
   btnCan.textContent = 'Cancelar';
-  btnCan.style.cssText = 'flex:1;padding:11px;border:none;background:var(--gris2);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnCan.style.cssText = 'flex:1;padding:11px;border:none;background:var(--gris2);border-radius:var(--radio-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnCan.onclick = function(){ document.body.removeChild(overlay); };
   const btnSave = document.createElement('button');
   btnSave.textContent = 'Guardar';
-  btnSave.style.cssText = 'flex:1;padding:11px;border:none;background:var(--azul);color:white;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnSave.style.cssText = 'flex:1;padding:11px;border:none;background:var(--azul);color:white;border-radius:var(--radio-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnSave.onclick = async function() {
     const nuevoNombre = fNom.inp.value.trim();
     if (!nuevoNombre) { toast('El nombre es obligatorio'); return; }
@@ -3530,14 +3559,14 @@ function renderItemsCot() {
     div.className = 'card';
     div.style.marginBottom = '8px';
     div.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-      '<input type="text" value="' + item.desc + '" placeholder="Descripcion" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:14px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
-      '<button onclick="eliminarItemCot(' + i + ')" style="background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:13px;">x</button>' +
+      '<input type="text" value="' + item.desc + '" placeholder="Descripción" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
+      '<button aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;cursor:pointer;font-size:13px;">✕</button>' +
       '</div>' +
       '<div style="display:flex;gap:8px;">' +
       '<div style="flex:1"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Cantidad</div>' +
-      '<input type="number" value="' + item.qty + '" min="1" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:14px;" onfocus="this.select()" oninput="itemsCot[' + i + '].qty=Number(this.value)||1;calcTotalCot()" /></div>' +
+      '<input type="number" value="' + item.qty + '" min="1" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;" onfocus="this.select()" oninput="itemsCot[' + i + '].qty=Number(this.value)||1;calcTotalCot()" /></div>' +
       '<div style="flex:2"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Precio unitario ($)</div>' +
-      '<input type="number" value="' + item.precio + '" min="0" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:8px;font-family:inherit;font-size:14px;" onfocus="this.select()" oninput="itemsCot[' + i + '].precio=Number(this.value)||0;calcTotalCot()" /></div>' +
+      '<input type="number" value="' + item.precio + '" min="0" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;" onfocus="this.select()" oninput="itemsCot[' + i + '].precio=Number(this.value)||0;calcTotalCot()" /></div>' +
       '</div>';
     cont.appendChild(div);
   });
@@ -3569,7 +3598,7 @@ function mostrarVistaPreviaCotizacion() {
 
   if (detalle) {
     html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:4px;">DETALLE DEL TRABAJO</div>';
-    html += '<div style="font-size:13px;color:var(--texto);background:var(--gris1);border-radius:8px;padding:10px;margin-bottom:12px;line-height:1.5;">' + detalle.replace(/\n/g,'<br>') + '</div>';
+    html += '<div style="font-size:13px;color:var(--texto);background:var(--gris1);border-radius:var(--radio-sm);padding:10px;margin-bottom:12px;line-height:1.5;">' + detalle.replace(/\n/g,'<br>') + '</div>';
   }
 
   html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:6px;">ITEMS</div>';
@@ -3654,7 +3683,7 @@ async function guardarCotizacion() {
       const docRef = await db.collection('cotizaciones').add(cotData);
       savedDocId = docRef.id;
     }
-    toast('Cotizacion guardada');
+    toast('Cotización guardada');
     // Subir PDF a Cloudinary en segundo plano
     const _cotDataPDF = Object.assign({}, cotData, { id: savedDocId });
     generarPDFCotizacionGuardada(_cotDataPDF, { modoSubir: true }).then(function(pdfUrl) {
@@ -3676,10 +3705,10 @@ async function guardarCotizacion() {
           grupo2.ots.push({ id: doc.id, ...doc.data() });
         }
       });
-      toast('Cotizacion guardada');
+      toast('Cotización guardada');
       await verOTsTecnico(nombreTec, grupo2);
     } else if (origen === 's-preventivos') {
-      toast('Cotizacion guardada');
+      toast('Cotización guardada');
       go('s-preventivos');
       cargarPreventivos();
     } else if (origen === 's-carpetas') {
@@ -3688,13 +3717,13 @@ async function guardarCotizacion() {
       go('s-carpetas');
       cargarCarpetas();
     } else {
-      toast('Cotizacion guardada');
+      toast('Cotización guardada');
       go('s-supervisor');
       cargarOTsSupervisor();
     }
   } catch(e) {
     console.error(e);
-    toast('Error guardando cotizacion');
+    toast('Error guardando cotización');
   }
 }
 
@@ -3744,21 +3773,21 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   const searchInput = document.createElement('input');
   searchInput.type = 'text';
   searchInput.placeholder = 'Buscar en esta carpeta...';
-  searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;';
+  searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;font-family:inherit;';
 
   const btnFiltoCot = document.createElement('button');
   btnFiltoCot.innerHTML = _SVG_EMBUDO + ' Filtro';
-  btnFiltoCot.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+  btnFiltoCot.style.cssText = 'background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
   const panelFiltrosCot = document.createElement('div');
-  panelFiltrosCot.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);';
+  panelFiltrosCot.style.cssText = 'display:none;margin-bottom:8px;padding:8px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);';
   const filtroInputDiv = document.createElement('div');
   filtroInputDiv.style.cssText = 'display:none;margin-bottom:8px;';
   const filtroInputLabel = document.createElement('label');
   filtroInputLabel.style.cssText = 'font-size:11px;font-weight:600;display:block;margin-bottom:4px;';
   const filtroInput = document.createElement('input');
   filtroInput.type = 'text';
-  filtroInput.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:8px;padding:6px 8px;font-size:12px;font-family:inherit;';
+  filtroInput.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;';
   filtroInputDiv.appendChild(filtroInputLabel);
   filtroInputDiv.appendChild(filtroInput);
 
@@ -3774,7 +3803,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   filtroOptionsCot.forEach(function(opt) {
     const btn = document.createElement('button');
     btn.textContent = opt.label;
-    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:8px;padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
     btn.onclick = function() {
       if (filtroActivoCot === opt.value) {
         filtroActivoCot = null;
@@ -3841,7 +3870,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   selRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
   const btnSelTodas = document.createElement('button');
   btnSelTodas.textContent = 'Seleccionar todas';
-  btnSelTodas.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
+  btnSelTodas.style.cssText = 'background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
   btnSelTodas.onclick = (function(its) { return function() {
     its.forEach(function(it) {
       const chk = document.querySelector('input[data-cot-id="' + it.id + '"]');
@@ -3884,7 +3913,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
 
     if (cadenaLogo) {
       const logoDiv = document.createElement('div');
-      logoDiv.style.cssText = 'width:32px;height:32px;border-radius:8px;background:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--gris2);overflow:hidden;';
+      logoDiv.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--gris2);overflow:hidden;';
       const logoImg = document.createElement('img');
       logoImg.src = cadenaLogo;
       logoImg.style.cssText = 'width:28px;height:28px;object-fit:contain;';
@@ -3935,7 +3964,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
       const stTag = document.createElement('span');
       const _stColors = { 'Pendiente': ['#FEF3C7','#92400E'], 'Aceptada': ['#DBEAFE','#1E40AF'], 'Realizada': ['#DCFCE7','#166534'] };
       const _c = _stColors[it.estadoCot] || ['#E5E7EB','#374151'];
-      stTag.style.cssText = 'display:inline-block;background:' + _c[0] + ';color:' + _c[1] + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;';
+      stTag.style.cssText = 'display:inline-block;background:' + _c[0] + ';color:' + _c[1] + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radio-pill);';
       stTag.textContent = 'Previa · ' + it.estadoCot + (it.tecnicoAsignado ? ' → ' + it.tecnicoAsignado : '');
       stDiv.appendChild(stTag);
       rowContent.appendChild(stDiv);
@@ -3944,7 +3973,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
       const envDiv = document.createElement('div');
       envDiv.style.cssText = 'margin-top:4px;';
       const envTag = document.createElement('span');
-      envTag.style.cssText = 'display:inline-block;background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;';
+      envTag.style.cssText = 'display:inline-block;background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--radio-pill);';
       envTag.textContent = '✓ Enviado';
       envDiv.appendChild(envTag);
       rowContent.appendChild(envDiv);
@@ -3953,28 +3982,28 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
     const btnPdf = document.createElement('button');
     btnPdf.textContent = 'Ver PDF';
-    btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnPdf.onclick = (function(data){ return function(){
       if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
       else { generarPDFCotizacionGuardada(data); }
     }; })(it);
     const btnEdit = document.createElement('button');
     btnEdit.textContent = 'Editar';
-    btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnEdit.onclick = (function(data){ return function(){ editarCotizacion(data); }; })(it);
     btnsRow.appendChild(btnPdf);
     btnsRow.appendChild(btnEdit);
     if (it.tipoCot === 'previa' && it.estadoCot === 'Pendiente') {
       const btnAcept = document.createElement('button');
       btnAcept.textContent = 'Aceptar → crear OT';
-      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
       btnAcept.onclick = (function(id){ return function(){ aceptarCotizacionPrevia(id); }; })(it.id);
       btnsRow.appendChild(btnAcept);
     }
     if (it.tipoCot === 'previa' && it.estadoCot === 'Realizada') {
       const btnVer = document.createElement('button');
       btnVer.textContent = 'Ver trabajo';
-      btnVer.style.cssText = 'flex:1.4;background:#166534;color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnVer.style.cssText = 'flex:1.4;background:#166534;color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
       btnVer.onclick = (function(id){ return function(){ verTrabajoCotizacion(id); }; })(it.id);
       btnsRow.appendChild(btnVer);
     }
@@ -4036,7 +4065,7 @@ async function cargarCarpetas() {
     lista.innerHTML = '';
     const keys = Object.keys(carpetas);
     if (keys.length === 0 && itemsEnviados.length === 0) {
-      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones guardadas aún</p>';
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Aún no hay cotizaciones guardadas</p>';
       return;
     }
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
@@ -4051,7 +4080,7 @@ async function cargarCarpetas() {
       const headerEnv = document.createElement('div');
       headerEnv.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatarEnv = document.createElement('div');
-      avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:14px;background:#1A7A3C;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
+      avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:#1A7A3C;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
       avatarEnv.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
       const headerInfoEnv = document.createElement('div');
       headerInfoEnv.style.flex = '1';
@@ -4060,7 +4089,9 @@ async function cargarCarpetas() {
       nombreEnv.textContent = 'Enviadas';
       const resumenEnv = document.createElement('div');
       resumenEnv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      resumenEnv.textContent = itemsEnviados.length + ' cotizacion' + (itemsEnviados.length !== 1 ? 'es' : '') + ' enviadas | $' + totalEnv.toLocaleString('es-CL');
+      // El plural no se forma con + 'es': "cotización" pierde la tilde al pluralizarse
+      // ("cotizaciones"). Y "enviadas" estaba fijo en plural: con una sola decia "1 enviadas".
+      resumenEnv.textContent = itemsEnviados.length + (itemsEnviados.length === 1 ? ' cotización enviada' : ' cotizaciones enviadas') + ' | $' + totalEnv.toLocaleString('es-CL');
       headerInfoEnv.appendChild(nombreEnv);
       headerInfoEnv.appendChild(resumenEnv);
       const chevronEnv = document.createElement('div');
@@ -4100,7 +4131,7 @@ async function cargarCarpetas() {
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatar = document.createElement('div');
-      avatar.style.cssText = 'width:44px;height:44px;border-radius:14px;background:' + color + ';display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:600;flex-shrink:0;';
+      avatar.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:' + color + ';display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:600;flex-shrink:0;';
       avatar.textContent = letra;
       const headerInfo = document.createElement('div');
       headerInfo.style.flex = '1';
@@ -4109,7 +4140,7 @@ async function cargarCarpetas() {
       nombreTec.textContent = grupo.supervisor || carpeta;
       const resumen = document.createElement('div');
       resumen.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      resumen.textContent = items.length + ' cotizacion' + (items.length !== 1 ? 'es' : '') + ' | $' + totalGeneral.toLocaleString('es-CL');
+      resumen.textContent = items.length + (items.length === 1 ? ' cotización' : ' cotizaciones') + ' | $' + totalGeneral.toLocaleString('es-CL');
       headerInfo.appendChild(nombreTec);
       headerInfo.appendChild(resumen);
       const chevron = document.createElement('div');
@@ -4169,7 +4200,7 @@ async function enviarCotGuardada(cotId) {
       '%0A%0ATotal: $' + (d.total||0).toLocaleString('es-CL');
     window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + d.local + '&body=' + body);
   } catch(e) {
-    toast('Error enviando cotizacion');
+    toast('Error enviando cotización');
   }
 }
 
@@ -4377,7 +4408,7 @@ function seleccionarCadena(cadena) {
     const item = document.createElement('div');
     item.className = 'local-item';
     const iconEl = document.createElement('div');
-    iconEl.style.cssText = 'width:40px;height:40px;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0;background:' + (cadena.color||'#1B3A6B') + ';';
+    iconEl.style.cssText = 'width:40px;height:40px;border-radius:var(--radio-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0;background:' + (cadena.color||'#1B3A6B') + ';';
     if (cadena.logo) {
       const logoImg = document.createElement('img');
       logoImg.src = cadena.logo;
@@ -4715,7 +4746,7 @@ function _renderPausadasEnCadena() {
           const btnDescartar = document.createElement('button');
           btnDescartar.textContent = '✕';
           btnDescartar.title = 'Descartar borrador';
-          btnDescartar.style.cssText = 'flex-shrink:0;width:44px;height:44px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;';
+          btnDescartar.style.cssText = 'flex-shrink:0;width:44px;height:44px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:var(--radio-sm);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;';
           btnDescartar.onclick = (function(numero, tecnico) {
             return function(e) {
               e.stopPropagation();
@@ -4790,19 +4821,19 @@ async function cargarTecnicosAdmin() {
       if (esAdminCargo) {
         const btnPass = document.createElement('button');
         btnPass.textContent = 'Cambiar contraseña';
-        btnPass.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;';
+        btnPass.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
         btnPass.onclick = (function(id, nombre){ return function(){ cambiarPasswordAdmin(id, nombre); }; })(doc.id, d.nombre);
         btns.appendChild(btnPass);
       } else {
         const btnEdit = document.createElement('button');
         btnEdit.textContent = 'Editar';
-        btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;';
+        btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
         btnEdit.onclick = (function(id, data){ return function(){ editarTecnico(id, data); }; })(doc.id, d);
         btns.appendChild(btnEdit);
       }
       const btnDel = document.createElement('button');
       btnDel.textContent = 'Eliminar';
-      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
       btnDel.onclick = (function(id){ return function(){ eliminarTecnico(id); }; })(doc.id);
       btns.appendChild(btnDel);
       div.appendChild(info);
@@ -4859,11 +4890,11 @@ async function cargarLocalesAdmin() {
       btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
       const btnEdit = document.createElement('button');
       btnEdit.textContent = 'Editar';
-      btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
       btnEdit.onclick = (function(id, data){ return function(){ editarLocal(id, data); }; })(doc.id, d);
       const btnDel = document.createElement('button');
       btnDel.textContent = 'Eliminar';
-      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
       btnDel.onclick = (function(id){ return function(){ eliminarLocal(id); }; })(doc.id);
       btns.appendChild(btnEdit);
       btns.appendChild(btnDel);
@@ -4881,7 +4912,7 @@ function mostrarFormTecnico() {
   document.getElementById('tec-nombre').value = '';
   document.getElementById('tec-cargo').value = 'Tecnico en terreno';
   document.getElementById('tec-pin').value = '';
-  document.getElementById('form-tecnico-titulo').textContent = 'Nuevo tecnico';
+  document.getElementById('form-tecnico-titulo').textContent = 'Nuevo técnico';
   document.getElementById('form-tecnico').style.display = 'block';
 }
 function cancelarFormTecnico() { document.getElementById('form-tecnico').style.display = 'none'; editandoTecnicoId = null; }
@@ -4900,21 +4931,25 @@ async function guardarTecnico() {
   const cargo = document.getElementById('tec-cargo').value.trim();
   const pin = document.getElementById('tec-pin').value.trim();
   if (!nombre) { toast('Ingresa el nombre'); return; }
-  if (!pin || pin.length < 4) { toast('El PIN debe tener 4 numeros'); return; }
+  // EXACTAMENTE 4 digitos: el teclado del login (pinInput) topea en 4 y valida ahi.
+  // Un PIN mas largo se guardaria sin queja y el tecnico no podria entrar NUNCA,
+  // sin ningun mensaje que se lo explique. Antes esto decia `pin.length < 4` (solo minimo)
+  // y el input era type="number", que ignora maxlength por spec HTML.
+  if (!/^\d{4}$/.test(pin)) { toast('El PIN debe ser exactamente 4 números'); return; }
   try {
     const db = window.firebase.firestore();
     const data = { nombre, cargo, pin, letra: nombre.charAt(0).toUpperCase() };
     if (editandoTecnicoId) {
       await db.collection('tecnicos').doc(editandoTecnicoId).update(data);
-      toast('Tecnico actualizado');
+      toast('Técnico actualizado');
     } else {
       await db.collection('tecnicos').add(data);
-      toast('Tecnico agregado');
+      toast('Técnico agregado');
     }
     cancelarFormTecnico();
     await cargarTecnicosAdmin();
     await cargarUsuariosApp();
-  } catch(e) { console.error(e); toast('Error guardando tecnico'); }
+  } catch(e) { console.error(e); toast('Error guardando técnico'); }
 }
 
 async function eliminarTecnico(id) {
@@ -4923,7 +4958,7 @@ async function eliminarTecnico(id) {
   if (!ok) return;
   try {
     await window.firebase.firestore().collection('tecnicos').doc(id).delete();
-    toast('Tecnico eliminado');
+    toast('Técnico eliminado');
     await cargarTecnicosAdmin();
     await cargarUsuariosApp();
   } catch(e) { toast('Error eliminando'); }
@@ -5075,7 +5110,10 @@ function _renderListaUsuarios(docs) {
   });
   sorted.forEach(function(d) {
     if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
-    PINS[d.nombre] = d.pin || '1234';
+    // Falla CERRADO. Antes era `d.pin || '1234'`: un tecnico sin PIN en Firestore recibia
+    // 1234 en silencio, y la pantalla de login lista a todos por nombre en un sitio publico.
+    // Un PIN ausente o mal formado ahora niega el acceso y lo dice (ver validarPin).
+    PINS[d.nombre] = /^\d{4}$/.test(String(d.pin || '')) ? String(d.pin) : null;
     const cargo = d.cargo || 'Tecnico en terreno';
     if (cargo === 'Administrador') {
       if (d.passwordHash) {
@@ -5191,7 +5229,7 @@ function renderComparacion() {
 
     // Antes
     const boxA = document.createElement('div');
-    boxA.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;background:var(--gris2);aspect-ratio:1;';
+    boxA.style.cssText = 'position:relative;border-radius:var(--radio-sm);overflow:hidden;background:var(--gris2);aspect-ratio:1;';
     if (antes[i]) {
       const imgA = document.createElement('img');
       imgA.src = antes[i];
@@ -5207,7 +5245,7 @@ function renderComparacion() {
 
     // Despues
     const boxD = document.createElement('div');
-    boxD.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;background:var(--gris2);aspect-ratio:1;';
+    boxD.style.cssText = 'position:relative;border-radius:var(--radio-sm);overflow:hidden;background:var(--gris2);aspect-ratio:1;';
     if (despues[i]) {
       const imgD = document.createElement('img');
       imgD.src = despues[i];
@@ -6267,8 +6305,8 @@ async function generarPDFCotizacionGuardada(cotData, options) {
 }
 
 async function generarPDFCotizacion() {
-  if (!cotizacionActual) { toast('No hay cotizacion activa'); return; }
-  toast('Generando PDF cotizacion...');
+  if (!cotizacionActual) { toast('No hay cotización activa'); return; }
+  toast('Generando PDF cotización...');
   const totales = calcTotalCot();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -6652,7 +6690,7 @@ async function generarPDFCotizacion() {
     }
   } catch(eOT) {
     console.error('Error cargando OT para PDF:', eOT);
-    toast('Cotizacion lista (sin datos de OT)');
+    toast('Cotización lista (sin datos de OT)');
   }
 
   const _servPDF2 = (document.getElementById('cot-nombre-servicio') ? document.getElementById('cot-nombre-servicio').value.trim() : '') || (cotizacionActual.nombreServicio||'');
@@ -6714,7 +6752,7 @@ async function cargarOTsTecnicos() {
       const avatar = document.createElement('div');
       avatar.className = 'usuario-avatar';
       avatar.style.background = color;
-      avatar.style.cssText += ';width:48px;height:48px;font-size:20px;border-radius:14px;flex-shrink:0;';
+      avatar.style.cssText += ';width:48px;height:48px;font-size:20px;border-radius:var(--radio);flex-shrink:0;';
       avatar.textContent = nombre.charAt(0).toUpperCase();
       const info = document.createElement('div');
       info.className = 'usuario-info';
@@ -6906,7 +6944,7 @@ async function cargarPreventivos() {
       const hdr = document.createElement('div');
       hdr.style.cssText = 'display:flex;align-items:center;gap:12px;';
       const ico = document.createElement('div');
-      ico.style.cssText = 'width:42px;height:42px;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : '#1D6B5A') + ';color:white;font-weight:700;font-size:15px;';
+      ico.style.cssText = 'width:42px;height:42px;border-radius:var(--radio-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : '#1D6B5A') + ';color:white;font-weight:700;font-size:15px;';
       if (cadena && cadena.logo) {
         const img = document.createElement('img');
         img.src = cadena.logo; img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
@@ -6933,7 +6971,7 @@ async function cargarPreventivos() {
       if (pdfCloudUrl || pdfFirestoreUrl) {
         const btnDesc = document.createElement('button');
         btnDesc.textContent = 'Ver PDF';
-        btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnDesc.onclick = (function(cUrl, fUrl){ return function(){
           var a = document.createElement('a');
           a.href = cUrl || fUrl;
@@ -6947,11 +6985,11 @@ async function cargarPreventivos() {
         const wrapCot = document.createElement('div');
         wrapCot.style.cssText = 'flex:1;display:flex;align-items:center;gap:6px;';
         const badgeCot = document.createElement('span');
-        badgeCot.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;white-space:nowrap;';
+        badgeCot.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);white-space:nowrap;';
         badgeCot.textContent = String.fromCharCode(10003) + ' Cotizada';
         const btnVerCotP = document.createElement('button');
-        btnVerCotP.textContent = 'Ver cotizacion';
-        btnVerCotP.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;';
+        btnVerCotP.textContent = 'Ver cotización';
+        btnVerCotP.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;';
         btnVerCotP.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizada);
         wrapCot.appendChild(badgeCot);
         wrapCot.appendChild(btnVerCotP);
@@ -6959,7 +6997,7 @@ async function cargarPreventivos() {
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Cotización';
-        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
         btns.appendChild(btnCot);
       }
@@ -7080,7 +7118,7 @@ async function verOTsTecnico(nombre, grupo) {
     header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
 
     const iconEl = document.createElement('div');
-    iconEl.style.cssText = 'width:48px;height:48px;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : bg) + ';';
+    iconEl.style.cssText = 'width:48px;height:48px;border-radius:var(--radio);overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (cadena ? cadena.color : bg) + ';';
     if (cadena && cadena.logo) {
       const logoImg = document.createElement('img');
       logoImg.src = cadena.logo;
@@ -7128,7 +7166,7 @@ async function verOTsTecnico(nombre, grupo) {
       const estadoDiv = document.createElement('div');
       estadoDiv.style.cssText = 'padding:8px 0;border-top:1px solid var(--gris2);';
       const estadoBadge = document.createElement('span');
-      estadoBadge.style.cssText = 'display:inline-block;background:#FEF3C7;color:#78350F;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;';
+      estadoBadge.style.cssText = 'display:inline-block;background:#FEF3C7;color:#78350F;padding:4px 10px;border-radius:var(--radio-sm);font-size:11px;font-weight:600;';
       estadoBadge.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> En Pausa - Esperando continuar';
       estadoDiv.appendChild(estadoBadge);
       card.appendChild(estadoDiv);
@@ -7144,9 +7182,9 @@ async function verOTsTecnico(nombre, grupo) {
       audioSection.appendChild(audioTitulo);
       ot.audios.forEach(function(audioUrl, ai) {
         const audioItem = document.createElement('div');
-        audioItem.style.cssText = 'background:var(--gris1);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;';
+        audioItem.style.cssText = 'background:var(--gris1);border-radius:var(--radio-sm);padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;';
         const audioIcon = document.createElement('div');
-        audioIcon.style.cssText = 'width:32px;height:32px;background:var(--azul);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0;';
+        audioIcon.style.cssText = 'width:32px;height:32px;background:var(--azul);border-radius:var(--radio-sm);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0;';
         audioIcon.textContent = String.fromCharCode(9654);
         const audioInfo = document.createElement('div');
         audioInfo.style.flex = '1';
@@ -7174,7 +7212,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (ot.estado === 'En Pausa' || ot.pausa) {
       const btnContinuar = document.createElement('button');
       btnContinuar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><path d="M5 3l14 9-14 9V3z"/></svg> Continuar OT';
-      btnContinuar.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnContinuar.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnContinuar.onclick = (function(id){ return function(){ continuarOT(id); }; })(ot.id);
       btns.appendChild(btnContinuar);
     }
@@ -7191,7 +7229,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (urlParaVer) {
       const btnPdf = document.createElement('button');
       btnPdf.textContent = 'Ver PDF';
-      btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnPdf.onclick = (function(url){ return function(){
         // Si es URL de la app (Firestore), abrir directamente
         // Si es URL de Cloudinary, forzar descarga con nombre correcto
@@ -7215,11 +7253,11 @@ async function verOTsTecnico(nombre, grupo) {
       const badgeCotT = document.createElement('div');
       badgeCotT.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
       const badgeV = document.createElement('span');
-      badgeV.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;';
+      badgeV.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);';
       badgeV.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
       const btnVerCotT = document.createElement('button');
-      btnVerCotT.textContent = 'Ver cotizacion';
-      btnVerCotT.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnVerCotT.textContent = 'Ver cotización';
+      btnVerCotT.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnVerCotT.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizadaT);
       badgeCotT.appendChild(badgeV);
       badgeCotT.appendChild(btnVerCotT);
@@ -7227,7 +7265,7 @@ async function verOTsTecnico(nombre, grupo) {
     } else {
       const btnCot = document.createElement('button');
       btnCot.textContent = '+ Cotización';
-      btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
       btns.appendChild(btnCot);
     }
@@ -7235,14 +7273,14 @@ async function verOTsTecnico(nombre, grupo) {
     if (estado.cargo === 'Administrador' && !ot.pausa && ot.estado !== 'En Pausa' && !ot.enEspera) {
       const btnEditOT = document.createElement('button');
       btnEditOT.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> Editar OT';
-      btnEditOT.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEditOT.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnEditOT.onclick = (function(otRef){ return function(){ editarOTTerminada(otRef); }; })(ot);
       btns.appendChild(btnEditOT);
     }
     if (estado.cargo === 'Administrador') {
       const btnDelOT = document.createElement('button');
       btnDelOT.textContent = 'Eliminar OT';
-      btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnDelOT.onclick = (function(id, cardRef){ return async function() {
         if (!confirm('Eliminar esta OT? Esta accion no se puede deshacer.')) return;
         const ok = await verificarPasswordAdmin();
@@ -7349,12 +7387,12 @@ function agregarFilaEmailCot(valor) {
   inp.type = 'email';
   inp.placeholder = 'correo@ejemplo.cl';
   inp.value = valor || '';
-  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:14px;font-family:inherit;';
+  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:14px;font-family:inherit;';
   const del = document.createElement('button');
   del.type = 'button';
   del.textContent = '✕';
   del.title = 'Quitar';
-  del.style.cssText = 'flex-shrink:0;width:40px;height:40px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;';
+  del.style.cssText = 'flex-shrink:0;width:40px;height:40px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:var(--radio-sm);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;';
   del.onclick = function() {
     const filas = cont.querySelectorAll('.fila-email-cot');
     if (filas.length <= 1) { inp.value = ''; return; } // siempre dejar al menos una fila
@@ -7367,7 +7405,7 @@ function agregarFilaEmailCot(valor) {
 
 async function enviarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
-  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
+  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotización'); return; }
   _cotsParaEnviar = seleccionadas;
   const cont = document.getElementById('modal-enviar-cot-lista');
   const sub = document.getElementById('modal-enviar-cot-sub');
@@ -7475,7 +7513,15 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
     }
   }
 
-  // Construir contenido HTML
+  // ── CSS-EXPORTADO: INICIO ────────────────────────────────────────────────────────────
+  // Este HTML viaja a un CLIENTE DE CORREO (EmailJS). Alli el :root de la app no existe.
+  // Una custom property sin fallback invalida la declaracion entera y el navegador computa el
+  // valor inicial: border-radius se vuelve 0. Por eso TODO aqui va con literales, incluidos los
+  // hex (#1B3A6B, #e0e0e0, #444). No es descuido: es la unica forma de que el correo se vea igual.
+  // Un sed global de radios ya rompio estas dos lineas una vez, y los 3 checks siguieron en verde.
+  // check-tokens.js INVIERTE su regla dentro de esta zona: aqui el literal es obligatorio y una
+  // custom property es un error. Ojo: no escribas una en un comentario — el script no distingue
+  // codigo de comentario, y este comentario ya se delato a si mismo una vez.
   let resumenTotal = 0;
   let itemsHtml = '';
   seleccionadas.forEach(function(it, i) {
@@ -7502,6 +7548,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
     '<p style="font-size:14px;color:#222;">Estimado/a:<br>Le compartimos <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
     itemsHtml +
     '<p style="font-size:14px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
+  // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
 
   const asunto = _asuntoCotizaciones(seleccionadas);
 
@@ -7560,7 +7607,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
 
 async function eliminarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
-  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotizacion'); return; }
+  if (seleccionadas.length === 0) { toast('Selecciona al menos una cotización'); return; }
   if (!confirm('Eliminar ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '? Esta accion no se puede deshacer.')) return;
   if (estado.cargo === 'Administrador') {
     const ok = await verificarPasswordAdmin();
@@ -7706,11 +7753,11 @@ async function cargarOTsSupervisor() {
         const badgeCot = document.createElement('div');
         badgeCot.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;';
         const badgeVerde = document.createElement('span');
-        badgeVerde.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;';
+        badgeVerde.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);';
         badgeVerde.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
         const btnVerCot = document.createElement('button');
-        btnVerCot.textContent = 'Ver cotizacion';
-        btnVerCot.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnVerCot.textContent = 'Ver cotización';
+        btnVerCot.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnVerCot.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaTieneCot);
         badgeCot.appendChild(badgeVerde);
         badgeCot.appendChild(btnVerCot);
@@ -7721,7 +7768,7 @@ async function cargarOTsSupervisor() {
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Generar cotización';
-        btnCot.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(docId);
         infoEl.appendChild(tituloEl);
         infoEl.appendChild(subEl);
@@ -7734,7 +7781,7 @@ async function cargarOTsSupervisor() {
         const btnDelSup = document.createElement('button');
         btnDelSup.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
         btnDelSup.title = 'Eliminar OT';
-        btnDelSup.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:8px 10px;font-size:15px;cursor:pointer;flex-shrink:0;align-self:center;';
+        btnDelSup.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;font-size:15px;cursor:pointer;flex-shrink:0;align-self:center;';
         btnDelSup.onclick = (function(id, c){ return async function(e) {
           e.stopPropagation();
           if (!confirm('Eliminar esta OT? Esta accion no se puede deshacer.')) return;
@@ -7913,8 +7960,8 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   meta.className = 'ot-sub';
   meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
   const pausaBadge = d.enEspera
-    ? '<span style="background:#1E40AF;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
-    : '<span style="background:var(--naranja-btn);color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
+    ? '<span style="background:#1E40AF;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radio-pill);"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
+    : '<span style="background:var(--naranja-btn);color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radio-pill);"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
   const tecnicoTxt = '<span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + (d.tecnico || 'Sin técnico') + '</span>';
   const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
   meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
@@ -7938,7 +7985,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   const btnReasignar = document.createElement('button');
   btnReasignar.className = 'sup-accion-btn';
   btnReasignar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg> Reasignar';
-  btnReasignar.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnReasignar.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnReasignar.onclick = function() { abrirModalReasignar(docId, d); };
 
   acciones.appendChild(btnReasignar);
@@ -7947,7 +7994,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
     const btnEliminar = document.createElement('button');
     btnEliminar.className = 'sup-accion-btn';
     btnEliminar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Eliminar';
-    btnEliminar.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    btnEliminar.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
     btnEliminar.onclick = function() { eliminarPausadaSup(docId, d, card); };
     acciones.appendChild(btnEliminar);
   }
@@ -7984,9 +8031,9 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
     tecnicos.forEach(function(t) {
       const esActual = currentTec && t.nombre === currentTec;
       const row = document.createElement('button');
-      row.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;background:' + (esActual ? '#F1F5F9' : 'white') + ';border:1.5px solid var(--gris2);border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:' + (esActual ? 'default' : 'pointer') + ';font-family:inherit;text-align:left;';
+      row.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;background:' + (esActual ? '#F1F5F9' : 'white') + ';border:1.5px solid var(--gris2);border-radius:var(--radio);padding:12px 14px;margin-bottom:8px;cursor:' + (esActual ? 'default' : 'pointer') + ';font-family:inherit;text-align:left;';
       const av = document.createElement('div');
-      av.style.cssText = 'width:38px;height:38px;border-radius:8px;background:var(--azul);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;';
+      av.style.cssText = 'width:38px;height:38px;border-radius:var(--radio-sm);background:var(--azul);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;';
       av.textContent = (t.nombre || '?').charAt(0).toUpperCase();
       const nom = document.createElement('div');
       nom.style.flex = '1';
@@ -8149,7 +8196,7 @@ function verTrabajoCotizacion(cotId) {
   overlay.onclick = function(e){ if (e.target === overlay) document.body.removeChild(overlay); };
 
   const panel = document.createElement('div');
-  panel.style.cssText = 'background:white;border-radius:18px;max-width:460px;width:100%;max-height:86vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+  panel.style.cssText = 'background:white;border-radius:var(--radio-lg);max-width:460px;width:100%;max-height:86vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
 
   // Header
   const head = document.createElement('div');
@@ -8162,7 +8209,7 @@ function verTrabajoCotizacion(cotId) {
     (cot.tecnicoRealizo ? ' · ' + cot.tecnicoRealizo : '') + '</div>';
   const xbtn = document.createElement('button');
   xbtn.textContent = '✕';
-  xbtn.style.cssText = 'flex-shrink:0;width:36px;height:36px;background:var(--gris2);border:none;border-radius:8px;font-size:16px;cursor:pointer;color:var(--texto2);';
+  xbtn.style.cssText = 'flex-shrink:0;width:36px;height:36px;background:var(--gris2);border:none;border-radius:var(--radio-sm);font-size:16px;cursor:pointer;color:var(--texto2);';
   xbtn.onclick = function(){ document.body.removeChild(overlay); };
   head.appendChild(htxt);
   head.appendChild(xbtn);
@@ -8191,7 +8238,7 @@ function verTrabajoCotizacion(cotId) {
         img.src = u;
         img.loading = 'lazy';
         img.alt = titulo;
-        img.style.cssText = 'width:100%;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--gris2);cursor:zoom-in;';
+        img.style.cssText = 'width:100%;height:120px;object-fit:cover;border-radius:var(--radio-sm);border:1px solid var(--gris2);cursor:zoom-in;';
         img.onclick = function(){ window.open(u, '_blank'); };
         grid.appendChild(img);
       });
@@ -8212,7 +8259,7 @@ function verTrabajoCotizacion(cotId) {
     const fimg = document.createElement('img');
     fimg.src = firma;
     fimg.alt = 'Firma';
-    fimg.style.cssText = 'width:100%;max-height:140px;object-fit:contain;border-radius:8px;border:1px solid var(--gris2);background:white;';
+    fimg.style.cssText = 'width:100%;max-height:140px;object-fit:contain;border-radius:var(--radio-sm);border:1px solid var(--gris2);background:white;';
     fwrap.appendChild(ft);
     fwrap.appendChild(fimg);
     body.appendChild(fwrap);
@@ -8362,7 +8409,7 @@ function _inicializarFiltrosCotizacionesGeneral() {
   opciones.forEach(function(opt) {
     const btn = document.createElement('button');
     btn.textContent = opt.label;
-    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:8px;padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
     btn.onclick = function() {
       if (_filtroActivoCotGeneral === opt.value) {
         _filtroActivoCotGeneral = null;
@@ -8437,7 +8484,7 @@ async function descargarExcelCotizaciones() {
     const db = window.firebase.firestore();
     // Cargar cotizaciones y supervisores
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','asc').get();
-    if (snap.empty) { toast('No hay cotizaciones guardadas'); return; }
+    if (snap.empty) { toast('No hay cotizaciones para exportar'); return; }
 
     // Obtener ano actual
     const anoActual = new Date().getFullYear();
@@ -8552,7 +8599,7 @@ async function cargarFacturacion() {
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
     lista.innerHTML = '';
     if (snap.empty) {
-      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones guardadas</p>';
+      lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Aún no hay cotizaciones guardadas</p>';
       return;
     }
     // Agrupar por supervisor
@@ -8573,7 +8620,7 @@ async function cargarFacturacion() {
       card.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;';
       card.onclick = (function(grp){ return function(){ abrirFactSupervisor(grp); }; })(g);
       const av = document.createElement('div');
-      av.style.cssText = 'width:48px;height:48px;border-radius:14px;background:' + colores[i%colores.length] + ';display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:700;flex-shrink:0;';
+      av.style.cssText = 'width:48px;height:48px;border-radius:var(--radio);background:' + colores[i%colores.length] + ';display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:700;flex-shrink:0;';
       av.textContent = sup.charAt(0).toUpperCase();
       const info = document.createElement('div');
       info.style.flex = '1';
@@ -8625,7 +8672,7 @@ function abrirFactSupervisor(grupo) {
     // Desc trabajo
     if (d.descripcionTrabajo || d.nombreServicio) {
       const desc = document.createElement('div');
-      desc.style.cssText = 'font-size:12px;color:var(--texto2);margin-bottom:10px;padding:8px;background:var(--gris1);border-radius:8px;';
+      desc.style.cssText = 'font-size:12px;color:var(--texto2);margin-bottom:10px;padding:8px;background:var(--gris1);border-radius:var(--radio-sm);';
       desc.textContent = d.nombreServicio || d.descripcionTrabajo || '';
       card.appendChild(desc);
     }
@@ -8634,7 +8681,7 @@ function abrirFactSupervisor(grupo) {
 
     // Badge estado (visible siempre en el header)
     const estadoBadge = document.createElement('div');
-    estadoBadge.style.cssText = 'display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:' +
+    estadoBadge.style.cssText = 'display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:var(--radio-pill);background:' +
       (yaFacturado ? '#E6F4EA' : '#FEF0E6') + ';color:' + (yaFacturado ? '#1A7A3C' : '#B45309') + ';';
     estadoBadge.textContent = yaFacturado ? 'Facturado' : 'Pendiente';
 
@@ -8671,7 +8718,7 @@ function abrirFactSupervisor(grupo) {
       l.textContent = lbl;
       const inp = document.createElement('input');
       inp.type = 'text'; inp.value = val || ''; inp.placeholder = lbl;
-      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;';
+      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;';
       inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
       inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
       w.appendChild(l); w.appendChild(inp);
@@ -8688,7 +8735,7 @@ function abrirFactSupervisor(grupo) {
     // Boton guardar
     const btnG = document.createElement('button');
     btnG.textContent = 'Guardar';
-    btnG.style.cssText = 'width:100%;padding:11px;border:none;background:var(--azul);color:white;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+    btnG.style.cssText = 'width:100%;padding:11px;border:none;background:var(--azul);color:white;border-radius:var(--radio-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
     btnG.onclick = (function(docId, fS, fO, fH, fF, badge, chev, cuerpoEl) { return async function() {
       try {
         const db = window.firebase.firestore();
@@ -8716,7 +8763,7 @@ function abrirFactSupervisor(grupo) {
 
 function descargarExcelSupervisor() {
   const grupo = window._factSupActual;
-  if (!grupo || !grupo.items || grupo.items.length === 0) { toast('No hay cotizaciones'); return; }
+  if (!grupo || !grupo.items || grupo.items.length === 0) { toast('No hay cotizaciones para exportar'); return; }
   toast('Generando Excel...');
   try {
     const anoActual = new Date().getFullYear();
@@ -8788,7 +8835,7 @@ async function cargarVentas() {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','asc').get();
     if (snap.empty) {
-      cont.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">No hay cotizaciones aún</p>';
+      cont.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Aún no hay cotizaciones guardadas</p>';
       return;
     }
     const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
@@ -8886,9 +8933,9 @@ async function cargarVentas() {
       monto.textContent = '$ ' + totalSup.toLocaleString('es-CL');
       top.appendChild(nombre); top.appendChild(monto);
       var bar = document.createElement('div');
-      bar.style.cssText = 'height:6px;background:var(--gris2);border-radius:8px;overflow:hidden;';
+      bar.style.cssText = 'height:6px;background:var(--gris2);border-radius:var(--radio-sm);overflow:hidden;';
       var fill = document.createElement('div');
-      fill.style.cssText = 'height:100%;background:' + COLORES_SUP[i % COLORES_SUP.length] + ';border-radius:8px;width:' + pct + '%;transition:width 0.8s ease;';
+      fill.style.cssText = 'height:100%;background:' + COLORES_SUP[i % COLORES_SUP.length] + ';border-radius:var(--radio-sm);width:' + pct + '%;transition:width 0.8s ease;';
       bar.appendChild(fill);
       var pctLabel = document.createElement('div');
       pctLabel.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:3px;';
@@ -8983,7 +9030,7 @@ async function descargarExcelVentas() {
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','asc').get();
-    if (snap.empty) { toast('No hay cotizaciones'); return; }
+    if (snap.empty) { toast('No hay cotizaciones para exportar'); return; }
 
     const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
     const anoActual = new Date().getFullYear();
@@ -9081,9 +9128,30 @@ async function descargarExcelVentas() {
 
 function toast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.style.display = 'block';
+  // Mostrar ANTES de escribir: un aria-live en display:none esta fuera del arbol de
+  // accesibilidad, asi que el lector de pantalla no ve el cambio de texto y no anuncia nada.
+  t.style.display = 'block';
+  t.textContent = msg;
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.style.display = 'none', 2500);
+}
+
+// Rechaza una validacion APUNTANDO al campo culpable.
+// Un toast solo dice que algo falto; no dice donde. En un formulario largo, al sol y con
+// una mano, eso obliga al tecnico a adivinar. El halo rojo se queda hasta que toque el campo.
+function _rechazar(msg, idCampo) {
+  toast(msg);
+  const el = document.getElementById(idCampo);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.add('campo-error');
+  const limpiar = function() {
+    el.classList.remove('campo-error');
+    el.removeEventListener('pointerdown', limpiar);
+    el.removeEventListener('input', limpiar);
+  };
+  el.addEventListener('pointerdown', limpiar);
+  el.addEventListener('input', limpiar);
 }
 
 // =========== OFFLINE / INDEXEDDB ===========
