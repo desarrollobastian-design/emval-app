@@ -2541,19 +2541,79 @@ async function _urlsABase64(arr) {
   return out;
 }
 
-function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl) {
+// =========== COLA DE CORREOS (reintento) ===========
+// Un correo puede fallar por causas ajenas a la OT: caida del proveedor (EmailJS tuvo un
+// incidente el 09-07-2026), sin señal, o el SDK que no alcanzo a bajar del CDN. Antes eso
+// perdia el correo en silencio y para siempre: la OT quedaba guardada pero nadie se enteraba
+// de que el aviso nunca salio. Ahora el envio que falla se encola y se reintenta al volver la
+// señal, al traer la app a primer plano y cada 90 s.
+const _CORREOS_KEY = 'emval_correos_pendientes';
+const _CORREOS_MAX_INTENTOS = 20;
+
+function _cargarCorreosPendientes() {
+  try { return JSON.parse(localStorage.getItem(_CORREOS_KEY) || '[]'); } catch(e) { return []; }
+}
+function _guardarCorreosPendientes(lista) {
+  try { localStorage.setItem(_CORREOS_KEY, JSON.stringify(lista)); }
+  catch(e) { console.warn('No se pudo guardar la cola de correos:', e); }
+}
+function _encolarCorreo(params) {
+  // Clave estable: mismo destinatario + misma OT no se encola dos veces.
+  const clave = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
+  const lista = _cargarCorreosPendientes();
+  if (lista.some(function(c){ return c.clave === clave; })) return;
+  lista.push({ clave: clave, intentos: 0, params: params });
+  _guardarCorreosPendientes(lista);
+  console.warn('Correo encolado para reintento:', clave);
+}
+
+// Unico punto de envio. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
+async function _enviarCorreo(params) {
+  if (typeof emailjs === 'undefined') { _encolarCorreo(params); return false; }
   try {
-    emailjs.send('service_xm6dmxl', 'template_agzfcux', {
-      email_admin: window.PEDRO_NOTIF_EMAIL,
-      ot_numero: String(numero),
-      local: String(local),
-      fecha: String(fecha),
-      tecnico: String(tecnico),
-      tipo: tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-      trabajo: '',
-      pdf_url: pdfUrl || ''
-    }).catch(function(e){ console.warn('Notif email error:', e); });
-  } catch(e) { console.warn('Notif email error:', e); }
+    await emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
+    return true;
+  } catch(e) {
+    console.warn('Error enviando correo, se encola:', e);
+    _encolarCorreo(params);
+    return false;
+  }
+}
+
+// Reintenta la cola. Sale de inmediato si no hay nada, asi que es seguro llamarla seguido.
+async function sincronizarCorreosPendientes() {
+  if (!navigator.onLine || typeof emailjs === 'undefined') return;
+  const lista = _cargarCorreosPendientes();
+  if (!lista.length) return;
+  const quedan = [];
+  let enviados = 0;
+  for (let i = 0; i < lista.length; i++) {
+    const c = lista[i];
+    try {
+      await emailjs.send('service_xm6dmxl', 'template_agzfcux', c.params);
+      enviados++;
+    } catch(e) {
+      c.intentos = (c.intentos || 0) + 1;
+      if (c.intentos < _CORREOS_MAX_INTENTOS) quedan.push(c);
+      else console.warn('Correo descartado tras', _CORREOS_MAX_INTENTOS, 'intentos:', c.clave);
+    }
+  }
+  _guardarCorreosPendientes(quedan);
+  if (enviados) toast(enviados + ' correo(s) pendiente(s) enviado(s)');
+}
+
+// nota: texto de aviso que viaja en el cuerpo (ej. "el local no tiene correo configurado").
+function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
+  _enviarCorreo({
+    email_admin: window.PEDRO_NOTIF_EMAIL,
+    ot_numero: String(numero),
+    local: String(local),
+    fecha: String(fecha),
+    tecnico: String(tecnico),
+    tipo: tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+    trabajo: String(nota || ''),
+    pdf_url: pdfUrl || ''
+  });
 }
 
 async function guardarEnFirebase(otBase, desc, fecha) {
@@ -5723,26 +5783,19 @@ async function guardarYEnviarPDF() {
   // En una edicion de OT (solo admin) NO se reenvía correo.
   const email = estado.emailSucursal || estado.emailAdmin;
   if (email && !estado.editandoOTId) {
-    try {
-      toast('Enviando email con PDF...');
-      const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
-      const nombreArchivo = _nombreArchivoPDF();
-
-      await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
-        email_admin: email,
-        ot_numero: String(estado.otNumero),
-        local: String(estado.local || ''),
-        fecha: new Date().toLocaleDateString('es-CL'),
-        tecnico: String(estado.usuario || ''),
-        tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-        trabajo: String(trabajo),
-        pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
-      });
-      toast('Email enviado con PDF');
-    } catch(e) {
-      console.error('Error email:', e);
-      toast('PDF listo (error al enviar email)');
-    }
+    toast('Enviando email con PDF...');
+    const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
+    const enviado = await _enviarCorreo({
+      email_admin: email,
+      ot_numero: String(estado.otNumero),
+      local: String(estado.local || ''),
+      fecha: new Date().toLocaleDateString('es-CL'),
+      tecnico: String(estado.usuario || ''),
+      tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+      trabajo: String(trabajo),
+      pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
+    });
+    toast(enviado ? 'Email enviado con PDF' : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
   }
 
   // --- Actualizar orden en Firestore con URL del PDF ---
@@ -5769,11 +5822,14 @@ async function guardarYEnviarPDF() {
   }
 
   // Notificacion de respaldo interno (con el link del PDF ya generado). No se envía en ediciones.
+  // Si el local no tiene correo cargado, el aviso viaja en la notificacion para que el admin
+  // se entere (antes fallaba mudo: nadie sabia que el local nunca recibio su OT).
   if (!estado.editandoOTId) {
     _notificarOTCompletada(
       estado.otNumero, estado.local, estado.usuario, estado.tipo,
       new Date().toLocaleDateString('es-CL'),
-      pdfUrlCloudinary || pdfUrlFirestore || ''
+      pdfUrlCloudinary || pdfUrlFirestore || '',
+      email ? '' : 'ATENCION: el local "' + (estado.local || '') + '" no tiene correo configurado, no se le envio la OT.'
     );
   }
 
@@ -9189,21 +9245,21 @@ async function sincronizarOTsPendientes() {
         });
       }
 
-      // Correo al local con el PDF (el que no se pudo enviar offline), ya con link
-      if (ot.emailLocal && pdfUrlSync && typeof emailjs !== 'undefined') {
-        try {
-          await emailjs.send('service_xm6dmxl', 'template_agzfcux', {
-            email_admin: ot.emailLocal, ot_numero: String(ot.numero), local: String(ot.local || ''),
-            fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || ''),
-            tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-            trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
-          });
-        } catch(e) { console.warn('Error email local (sync):', e); }
+      // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
+      // Si falla, _enviarCorreo lo encola y se reintenta solo.
+      if (ot.emailLocal && pdfUrlSync) {
+        await _enviarCorreo({
+          email_admin: ot.emailLocal, ot_numero: String(ot.numero), local: String(ot.local || ''),
+          fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || ''),
+          tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+          trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
+        });
       }
 
       await _eliminarOTPendiente(ot.id);
       toast('OT #' + ot.numero + ' sincronizada ✓');
-      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha, pdfUrlSync);
+      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha, pdfUrlSync,
+        ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.');
     } catch(err) {
       console.error('Error sincronizando OT pendiente:', err);
       toast('Error sincronizando OT #' + ot.numero + ', se reintentara');
@@ -9217,6 +9273,7 @@ window.addEventListener('online', function() {
   actualizarIndicadorPendientes();
   setTimeout(sincronizarOTsPendientes, 2000);
   setTimeout(sincronizarPausadasPendientes, 2500);
+  setTimeout(sincronizarCorreosPendientes, 3000);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -9242,6 +9299,7 @@ document.addEventListener('visibilitychange', function() {
     actualizarIndicadorPendientes();
     setTimeout(sincronizarOTsPendientes, 800);
     setTimeout(sincronizarPausadasPendientes, 1200);
+    setTimeout(sincronizarCorreosPendientes, 1600);
   }
 });
 
@@ -9287,8 +9345,10 @@ actualizarIndicadorPendientes();
 // 'online' (que nunca dispara si navigator.onLine se mantuvo en true con señal muerta).
 setTimeout(sincronizarOTsPendientes, 3500);
 setTimeout(sincronizarPausadasPendientes, 3000);
+setTimeout(sincronizarCorreosPendientes, 4000);
 setInterval(sincronizarOTsPendientes, 90000);
 setInterval(sincronizarPausadasPendientes, 90000);
+setInterval(sincronizarCorreosPendientes, 90000);
 </script>
 </body>
 </html>
