@@ -873,7 +873,7 @@
       <div id="grid-comparacion"></div>
     </div>
     <div class="field" style="margin-top:8px;">
-      <label>● Nota de voz — Materiales y gastos</label>
+      <label><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg> Nota de voz — Materiales y gastos</label>
       <div class="voz-container">
         <div class="voz-timer" id="voz-timer">0:00</div>
         <div class="voz-status" id="voz-status">Toca para grabar lo que gastaste y los materiales usados</div>
@@ -883,7 +883,8 @@
         <div class="voz-lista" id="voz-lista"></div>
       </div>
     </div>
-    <button class="btn btn-primary" onclick="nuevaOT()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><path d="M5 3l14 9-14 9V3z"/></svg> Hacer otra OT</button>
+    <!-- Un triangulo de play significa "reproducir", no "crear otra". Aqui va un mas. -->
+    <button class="btn btn-primary" onclick="nuevaOT()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-0.12em"><path d="M12 5v14M5 12h14"/></svg> Hacer otra OT</button>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Volver al inicio</button>
     <p style="font-size: 11px; color: var(--texto3); text-align: center;">OT guardada · se sincroniza automáticamente con la nube</p>
   </div>
@@ -2391,7 +2392,7 @@ function cerrarOT() {
   const fotosAntes = estado.fotosAntes.filter(f => f).length;
   const fecha = new Date().toLocaleDateString('es-CL');
   
-  document.getElementById('cierre-ot-info').textContent = 'OT #' + estado.otNumero + ' . ' + fecha;
+  document.getElementById('cierre-ot-info').textContent = 'OT #' + estado.otNumero + ' · ' + fecha;
   document.getElementById('sum-local').textContent = estado.local;
   var tipoBadge = estado.tipo === 'preventivo' ? 'badge-prev' : 'badge-corr';
   var tipoLabel = estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo';
@@ -2913,10 +2914,10 @@ function guardarGrabacion() {
   item.className = 'voz-item';
   const m = Math.floor(duracion/60), s = duracion % 60;
   item.innerHTML = `
-    <div class="voz-item-icon">●</div>
+    <div class="voz-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></div>
     <div class="voz-item-info">
       <div class="voz-item-nombre">Nota de voz ${num}</div>
-      <div class="voz-item-dur">${m}:${String(s).padStart(2,'0')} . ${new Date().toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="voz-item-dur">${m}:${String(s).padStart(2,'0')} · ${new Date().toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'})}</div>
       <audio class="voz-player" controls src="${url}"></audio>
     </div>
   `;

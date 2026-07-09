@@ -500,6 +500,33 @@ node check-contraste.js   →   17 pares · 0 fallos reales · 2 tolerados · ex
 
 Ya se puede enganchar a un hook de pre-commit sin que rompa el flujo. La regla se mantiene: **no se baja el estándar para que el script pase** — se arregla el color, o se marca tolerado con una razón que alguien pueda discutir.
 
+### QA visual del cierre de OT + cierre real de la iconografía (2026-07-09)
+
+Con screenshots reales de la pantalla "Servicio completado" tras un correctivo.
+
+**🐛 Etiquetas sobre foto: un fondo translúcido hereda el contraste de la foto.**
+`ANTES` y `DESPUÉS` usaban `rgba(...,0.75)` encima de la fotografía del técnico:
+
+| Etiqueta | Foto oscura | Foto clara |
+|----------|-------------|------------|
+| `ANTES` (azul .75) | 14.00:1 | 5.39:1 ✅ |
+| `DESPUÉS` (verde .75) | 5.45:1 | **2.41:1** ❌ |
+
+Con las fotos de prueba (oscuras) se veía perfecto. Sobre una pared blanca o un azulejo, la palabra "DESPUÉS" **desaparece**. Ahora son sólidas: `--azul` y `--verde-btn`, independientes del contenido.
+
+> **Regla:** si el fondo de un texto es contenido del usuario, el peor caso **no se puede testear** — hay que eliminar la dependencia. Nada de `rgba()` bajo texto sobre fotos. Ambos pares están ahora en `check-contraste.js` (19 pares, 0 fallos).
+
+**Cierre real de la migración emoji → SVG.** Quedaban dos residuos del bug `[mic]`:
+- `<label>● Nota de voz</label>` y el ícono de cada nota guardada usaban un **bullet genérico** donde el tool había destruido el emoji de micrófono. Ahora son SVG de micrófono (`currentColor`).
+- **El `●` del botón de grabar se queda**, y no es una omisión: el punto es el símbolo universal de "grabar" (y `■` de detener), es monocromo, y vive en `textContent` — meter un SVG ahí lo renderizaría como texto literal. Es la misma trampa de siempre.
+
+**Iconografía semántica.** "Hacer otra OT" usaba un **triángulo de play**. *Play* significa "reproducir", no "crear otra" — y era el botón más prominente de la pantalla final. Ahora es un `+`.
+
+**🐛 El separador `·` que el código se contradecía a sí mismo.**
+El placeholder estático del hero (`index.html:860`) dice `OT #--- · ---` con punto medio. Pero el JS que **realmente** lo rellena (`:2394`) escribía `' . '` con un punto normal. Lo mismo en la duración de las notas de voz (`:2919`). Otro rastro del tool que mangó los caracteres unicode. Restaurados ambos a `·`.
+
+> **Lección:** los placeholders estáticos son un test involuntario. Cuando el markup y el JS que lo reemplaza no coinciden en tipografía, uno de los dos está mal — y casi siempre es el que nadie mira.
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*
