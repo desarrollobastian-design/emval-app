@@ -74,7 +74,9 @@ pregunta: *¿un técnico apurado, con mala luz, entiende esto en dos segundos?*
 pantalla móvil. Pesos disponibles: 400 / 500 / 600.
 
 **Numeric/Code Font:** DM Mono (400 / 500) — **uso restringido** a datos que se benefician
-de alineación tabular: números de OT, CECO, badges de código, montos de cotización.
+de alineación tabular: números de OT, CECO, badges de código, montos de cotización,
+**teclado numérico del PIN** y **cronómetro de la nota de voz** (2026-07-09: el código ya los
+usaba y el documento no los contemplaba; son numéricos tabulares, así que la regla se amplía).
 **Prohibido** en métricas de dashboard o texto general (ver Anti-Slop §7).
 
 ### Hierarchy & Weights (escala canónica)
@@ -158,7 +160,11 @@ de alineación tabular: números de OT, CECO, badges de código, montos de cotiz
 
 ### Alignment
 - **Texto:** left-aligned por defecto. Centrado solo para estados vacíos, confirmaciones y el step-indicator.
-- **Touch targets:** **mínimo 48×48px** (superior al estándar de 44px). Decisión bajo incertidumbre: no se pudo confirmar si los técnicos usan guantes ni en qué condiciones de luz trabajan, así que se dimensiona para el peor caso — guantes + sol directo + una sola mano.
+- **Touch targets** (*incertidumbre resuelta el 2026-07-09: Pedro confirmó que los técnicos **no usan guantes** al operar la app*):
+  - **44×44px** en el flujo del técnico — pulgar, una sola mano (WCAG 2.5.5 / Apple HIG).
+  - **32×32px** en los controles densos del admin, que se usan con mouse.
+  - **24×24px es el piso absoluto.** WCAG 2.2 SC 2.5.8, nivel **AA**. Ningún botón puede bajar de ahí.
+  > La versión anterior de esta regla decía 48px "dimensionado para el peor caso: guantes + sol directo". Se dimensionó para una hipótesis que resultó falsa — y el código nunca la cumplió igual: `.btn-sm` medía **37px** (e incluye "Confirmar firma") y varios botones del admin, **22-30px**. Una regla que nadie verifica no protege a nadie.
 
 ---
 
@@ -236,11 +242,17 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🔴 Alta | Colapsar 8+ radios a la escala de 4 tokens | `/normalize` |
 | ✅ Hecho | 🟢 Baja | `100vh` → `100dvh` | `/polish` |
 | ✅ Hecho | 🟢 Baja | `prefers-reduced-motion` + tokens `--ease`/`--sombra-hover` | `/polish` |
-| ⏳ Pendiente | 🔴 Alta | Migrar emojis → set SVG único (76 sitios, requiere QA visual) | `/normalize` |
-| ⏳ Pendiente | 🟡 Media | Hover-glows inline → clases CSS `@media (hover: hover)` | `/polish` |
-| ⏳ Pendiente | 🟡 Media | Escala tipográfica de 7 pasos + H1 22px por pantalla | `/polish` |
-| ⏳ Pendiente | 🟡 Media | Stat-cards: romper el template hero-metric + skeleton real | `/polish` |
+| ✅ Hecho | 🔴 Alta | Migrar emojis → set SVG único · **vigilado por `check-emojis.js`** | `/normalize` |
+| ✅ Hecho | 🟡 Media | Hover-glows inline → clases CSS `@media (hover: hover)` (0 handlers inline) | `/polish` |
+| ✅ Hecho | 🔴 Alta | Contraste WCAG AA · **vigilado por `check-contraste.js`** | `/normalize` |
+| ✅ Hecho | 🔴 Alta | Objetivos táctiles (44/32px) y foco de teclado (`:focus-visible`) | `/polish` |
+| ✅ Hecho | 🟡 Media | Stat-cards: romper el template hero-metric | `/polish` |
+| ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 16 tamaños en 336 declaraciones → 7 pasos | `/normalize` |
+| ⏳ Pendiente | 🟡 Media | **Modales in-app**: 19 diálogos nativos (`confirm`×11, `prompt`×6, `alert`×2) | feature |
+| ⏳ Pendiente | 🟢 Baja | Skeleton real de carga en stat-cards | `/polish` |
 | ⏳ Pendiente | 🟢 Baja | Colores de estado seleccionado con `color-mix` | `/polish` |
+
+> **Esta tabla estuvo mintiendo durante días**: marcaba como ⏳ Pendiente la migración de emojis y los hover-glows, que llevaban hecho una semana. El source of truth no sabía su propio estado. Si una fila no tiene un script que la verifique, **asume que está desactualizada**.
 
 > **Los pendientes requieren verificación visual en navegador** (tocan tamaños de texto,
 > iconos y estados de hover en cientos de sitios). Deben ejecutarse con la app corriendo
@@ -371,6 +383,214 @@ La lista de pausadas es en vivo (`onSnapshot`) — un botón de refresh manual c
 **Estado de los pendientes:**
 - ✅ **#1 Layout 2-columnas del admin** — hecho (grid responsivo en las 3 listas planas + s-admin ancho con controles contenidos). Falta solo QA visual fino en localhost con Pedro (¿2 o 3 columnas en su monitor grande? hoy 2 por el cap de 980px).
 - ⏳ **#2 Modales in-app** para `confirm()`/`prompt()` destructivos — sigue pendiente (pasada dedicada con testing).
+
+### Fixes post-crítica del layout (2026-07-09)
+
+Auditoría del grid recién construido. Corregido:
+- 🐛 **Regresión del propio grid**: los estados vacíos y de error caían dentro de `.card-grid` y se encogían a **una sola columna** — el texto "No hay OTs registradas hoy" quedaba centrado en la mitad izquierda, y la card de error de pausadas se veía a media pantalla (el estado que existe para dar confianza transmitía descuido). Nueva regla `.card-grid > p, .card-grid > .grid-full { grid-column: 1 / -1; }` — el mismo patrón que ya usaba `.stat-card-primary`.
+- ✅ Ortografía: "**Aún** no hay OTs registradas".
+- ✅ Selector `#s-admin #panel-cadenas > .btn-primary` (hijo directo). Antes, sin el `>`, también alcanzaba el botón "Guardar" del formulario. El botón "+ Agregar cadena" se desenvolvió de su `div` para que el selector quede simétrico con el de personal.
+- ✅ Borradas 3 `.ot-card` demo muertas (`display:none` **y** eliminadas por JS al cargar) dentro de `#sup-ots-hoy-lista`.
+- ✅ El badge de conteo de pausadas ya **no inventa un `!`** en estado de error: se oculta, y reaparece con el conteo real al recuperarse.
+
+**Deuda abierta — contraste del verde (NO arreglado, decisión de marca pendiente con Pedro):**
+Texto blanco sobre `--verde` (`#27A06B`) da **≈3.3:1**. WCAG AA pide **4.5:1** para texto normal. Afecta `.btn-verde` ("Confirmar firma", "Ventas") y `.top-action-verde` ("Descargar Excel"). Es el peor caso que §1 manda optimizar: técnico con sol directo, en la acción más irreversible del flujo.
+- **Recomendación**: conservar `--verde` como color de *estado* (relleno sin texto encima — `foto-box.filled`, hero de éxito) y agregar **`--verde-btn: #1E8052`** (ya está en la paleta: es el trazo del ícono de preventivo) para botones con texto blanco → **≈4.9:1, pasa AA**. Dos verdes con semántica distinta (*estado* vs *acción*), no un color arbitrario de más.
+
+**Nota sobre el Service Worker (corrige una creencia equivocada):**
+`sw.js` sirve las navegaciones **network-first** (`sw.js:37-48`): un reload online siempre trae el `index.html` fresco de la red y lo re-cachea. Por lo tanto los bumps de `CACHE_NAME` (`v14 → v15 → v16`) **no son lo que propaga** `index.html` a los usuarios online — sirven para purgar cachés viejos. No hace falta bumpear la versión para que un cambio de HTML llegue.
+
+### Estado honesto de la cola de correos (2026-07-09)
+
+Continuación de `d915a6b`. La app promete *"nunca te deja con dudas sobre qué pasó"* (§7). La cola de correos todavía incumplía esa promesa en cuatro puntos.
+
+**1. Ya no se pierde ningún aviso en silencio.**
+- Antes: tras **20 intentos**, el correo se **borraba** con un `console.warn`. Nadie se enteraba jamás.
+- Ahora la ventana es de **tiempo (7 días), no de intentos** — con señal intermitente, 20 intentos se quemaban en minutos y el aviso moría.
+- **Invariante nueva:** `sincronizarCorreosPendientes` **nunca elimina un ítem**. O se envía, o sigue pendiente, o queda marcado `fallido` esperando reintento manual.
+
+**2. Barra persistente `#correos-bar`** (mismo patrón que `#pending-bar`).
+- Un toast se desvanece en 3 s; una barra no. Muestra `N aviso(s) pendiente(s)` en ámbar, o `N aviso(s) no se enviaron` en **rojo** si alguno agotó su ventana. Tap → `reintentarCorreosAhora()`, que le da otra ventana de 7 días.
+- Se apila en `bottom: 116px` si la barra de OTs pendientes también está visible; si no, ocupa los `70px` habituales. Se oculta sin señal (ahí manda `#offline-bar`).
+
+**3. Un solo punto de envío — de verdad.**
+- El comentario decía *"único punto de envío"* pero había **tres**: `_enviarCorreo`, la cola de reintento, y `enviarEmailAdmin` — cada uno con el `service_id`/`template_id` de EmailJS **duplicado**.
+- Ahora todo pasa por **`_emailjsSend(params)`**, la única función que conoce esos ids.
+- `enviarEmailAdmin` era **código muerto** (definido, nunca llamado ni desde HTML) y además logueaba direcciones de correo a consola → **borrado**.
+- Las cotizaciones usan otro service/template vía `window.EMAILJS_COT_*`; quedan aparte a propósito.
+
+**4. El aviso a Pedro ahora dice la verdad.**
+- `_notificarOTCompletada` descartaba el valor de retorno de `_enviarCorreo`: se encolaba, pero nadie lo decía. Ahora es `async`, espera el resultado y avisa — *"Aviso a administración pendiente — se enviará solo al recuperar la señal."* Mismo trato honesto que ya tenía el correo a la sucursal.
+
+**🐛 Bug encontrado de paso — la barra de OTs pendientes quedaba rota tras sincronizar.**
+`sincronizarOTsPendientes` hacía `pendingBar.textContent = 'Sincronizando…'`, lo que **destruye el ícono SVG y el `<span id="pending-count">`**. En la siguiente actualización `pendingCount` era `null`, el `TypeError` se lo tragaba un `catch(e) {}` vacío, y la barra quedaba con texto viejo y sin contador **hasta recargar la app**. Se agregó `<span id="pending-label">` y ahora solo se cambia esa etiqueta.
+
+> **Lección:** `textContent` sobre un contenedor con hijos es destructivo. Es el primo del bug `[mic]` (meter SVG dentro de un `textContent`): las dos caras del mismo malentendido.
+
+### Dos verdes + contraste verificable (2026-07-09)
+
+**Decisión aprobada: `--verde` se divide en dos, por semántica.**
+
+| Token | Valor | Rol | Lleva texto encima |
+|-------|-------|-----|--------------------|
+| `--verde` | `#27A06B` | **Verde de ESTADO** — `foto-box.filled`, `step.done`, `success-hero`, íconos, bordes | No |
+| `--verde-btn` | `#1E8052` | **Verde de ACCIÓN** — fondo de botones con texto blanco | Sí |
+
+Blanco sobre `--verde` da **3.3:1** (falla AA). Sobre `--verde-btn`, **4.92:1** (pasa). El `#1E8052` no es un color nuevo: ya estaba en la paleta como trazo del ícono de preventivo.
+
+Migrados 9 sitios con texto blanco: `.btn-verde`, `.top-action-verde`, el botón "Enviar" del modal de cotización, "Elegir de galería", "Agregar sucursal", "PDF", "Generar cotización", y el toggle Sí/No de servicios (que tenía `#27A06B` hardcodeado ×2). **No se tocó** ningún uso de `--verde` como relleno de estado ni como color de ícono.
+
+**Nuevo: `check-contraste.js` — el contraste deja de ser una opinión.**
+
+```
+node check-contraste.js
+```
+
+Script sin dependencias (~90 líneas) que lee los tokens del `:root` de `index.html`, calcula el ratio WCAG 2.1 de los pares de color que la app usa de verdad, e imprime una tabla. Sale con código `1` si algún par de texto baja del mínimo AA. Existe porque el bug del verde **sobrevivió a cuatro críticas de diseño**: "se ve bien" no es un test.
+
+**Resultado del primer run (2026-07-09): 12 pares · 5 fallos reales · 1 tolerado.**
+
+| Par | Ratio | Estado |
+|-----|-------|--------|
+| Botón primario (blanco / `--azul`) | 11.27:1 | ✅ |
+| **Botón verde de acción** (blanco / `--verde-btn`) | **4.92:1** | ✅ |
+| Botón secundario (`--texto` / `--gris2`) | 14.26:1 | ✅ |
+| Texto primario / secundario | 16.13:1 · 5.95:1 | ✅ |
+| Ícono preventivo (gráfico, mín 3.0) | 4.92:1 | ✅ |
+| Botón destructivo (blanco / `--rojo`) | 4.13:1 | ❌ |
+| Barra offline / error (blanco / `--rojo`) | 4.13:1 | ❌ |
+| Barra pendientes (blanco / `#D97706`) | 3.19:1 | ❌ |
+| Verde como **texto** (`--verde` / blanco) | 3.32:1 | ❌ |
+| Texto terciario (`--texto3` / blanco) | 2.54:1 | ❌ |
+| Botón WhatsApp (blanco / `#25D366`) | 1.98:1 | ⚠️ tolerado |
+
+> **`#25D366` es tolerado**: es el verde corporativo de WhatsApp, impuesto por un tercero. No es una decisión nuestra y cambiarlo rompería el reconocimiento del canal.
+
+**Deuda abierta — 4 decisiones para Pedro (NO tocadas):**
+1. **Rojo `--rojo` (#E53E3E) con blanco: 4.13:1.** Afecta botones "Eliminar" y la barra de offline/error. Un `#C7302F` lo llevaría sobre 4.5:1.
+2. **Ámbar `#D97706` con blanco: 3.19:1.** Es la barra de pendientes y la de correos — justo el feedback de estado que la app promete que nunca falle. Texto oscuro sobre ámbar, o un ámbar más oscuro.
+3. **`--verde` como color de texto: 3.32:1.** Montos, totales, "Firma: Sí". Probablemente deba usar `--verde-btn` también.
+4. **`--texto3` (#9AA3B2) sobre blanco: 2.54:1.** El más grave. Es todo el texto de metadatos. Ya se corrigió en dos lugares puntuales (`--texto3` → `--texto2`); el token entero necesita oscurecerse o restringirse a decoración.
+
+> Mientras existan estos 5 fallos, `check-contraste.js` sale con código 1 — **a propósito**. No se "arregla" el script bajando el estándar: se arreglan los colores, o se marcan como tolerados con una razón escrita.
+
+### Sistema de color accesible: ESTADO vs ACCIÓN (2026-07-09)
+
+Cerradas las 4 decisiones que quedaban abiertas arriba. El sistema tiene ahora **una regla**:
+
+> **`X`** = color de **estado** → relleno, borde o ícono. **No lleva texto encima.**
+> **`X-btn`** = color de **acción** → cualquier superficie que **lleva texto encima**.
+
+| Token | Valor | Rol | Ratio |
+|-------|-------|-----|-------|
+| `--verde` | `#27A06B` | Estado: foto lista, paso completado, check, bordes | — |
+| `--verde-btn` | `#1E8052` | Acción: botones, texto verde, hero de éxito | **4.92:1** |
+| `--naranja` | `#EF9F27` | Estado: dot de offline, ícono de correctivo | — |
+| `--naranja-btn` | `#B45309` | Acción: barras de pendientes/correos, badge EN PAUSA, Continuar/Editar OT | **5.02:1** |
+| `--rojo` | `#D32F2F` (era `#E53E3E`) | Funcional: botones, errores, barra offline | **4.98:1** |
+| `--texto3` | `#666F82` (era `#9AA3B2`) | Metadatos | **4.67:1** |
+
+**Por qué así:**
+- **`--rojo` no se parte en dos.** Todos sus usos son funcionales (botones, texto de error, barra offline); no existe una superficie roja de estado cuyo tono emocional haya que preservar. Se oscurece en el lugar.
+- **`--texto3` era 2.35:1** sobre el fondo de la app — ilegible bajo sol directo, que es el peor caso que §1 manda optimizar. Se eligió el hex **más claro** que pasa AA sobre blanco, `--gris1` **y** `--fondo`. Medir solo contra blanco habría aprobado `#6B7488` (4.69 en blanco, pero **4.34 en `--fondo`**). *Por eso el script mide contra la superficie real, no contra blanco.*
+- **`--naranja-btn` (#B45309) no es un color nuevo**: ya se usaba en los íconos de OT.
+- Los **avatares de técnico** (`colores[]`, `COLORES_SUP`) conservan sus hexes: Pedro pidió color propio por técnico y el hash debe ser estable. Cambiarlos rompería la identidad visual de cada persona.
+
+**Correcciones a decisiones previas (para que nadie las repita):**
+- El comentario del token `--verde-btn` afirmaba que el hero de éxito *"no lleva texto encima"*. **Sí lleva.** El título (20px/700) pasa como *texto grande* (3.3:1 ≥ 3.0), pero el subtítulo de 13px con `opacity: 0.8` daba **~2.6:1**. El hero pasó a `--verde-btn` y el subtítulo perdió la `opacity`.
+- **Sobre un fondo oscuro, el blanco puro es el máximo contraste posible.** No se puede "atenuar" un subtítulo con `opacity` y seguir pasando AA. La jerarquía la dan **tamaño y peso**, no la transparencia. Es el mismo principio que justificó oscurecer `--texto3`.
+
+**Tolerados — fallan a propósito, con razón escrita en el script:**
+1. **Botón WhatsApp** (`#25D366`, 1.98:1) — verde corporativo de un tercero. Cambiarlo rompería el reconocimiento del canal.
+2. **Ícono correctivo** (`--naranja` sobre card blanca, 2.17:1) — decorativo: el label "Correctivo" debajo carga el significado. **Si alguna vez queda sin label, hay que oscurecerlo.**
+
+**Estado actual:**
+
+```
+node check-contraste.js   →   17 pares · 0 fallos reales · 2 tolerados · exit 0
+```
+
+Ya se puede enganchar a un hook de pre-commit sin que rompa el flujo. La regla se mantiene: **no se baja el estándar para que el script pase** — se arregla el color, o se marca tolerado con una razón que alguien pueda discutir.
+
+### QA visual del cierre de OT + cierre real de la iconografía (2026-07-09)
+
+Con screenshots reales de la pantalla "Servicio completado" tras un correctivo.
+
+**🐛 Etiquetas sobre foto: un fondo translúcido hereda el contraste de la foto.**
+`ANTES` y `DESPUÉS` usaban `rgba(...,0.75)` encima de la fotografía del técnico:
+
+| Etiqueta | Foto oscura | Foto clara |
+|----------|-------------|------------|
+| `ANTES` (azul .75) | 14.00:1 | 5.39:1 ✅ |
+| `DESPUÉS` (verde .75) | 5.45:1 | **2.41:1** ❌ |
+
+Con las fotos de prueba (oscuras) se veía perfecto. Sobre una pared blanca o un azulejo, la palabra "DESPUÉS" **desaparece**. Ahora son sólidas: `--azul` y `--verde-btn`, independientes del contenido.
+
+> **Regla:** si el fondo de un texto es contenido del usuario, el peor caso **no se puede testear** — hay que eliminar la dependencia. Nada de `rgba()` bajo texto sobre fotos. Ambos pares están ahora en `check-contraste.js` (19 pares, 0 fallos).
+
+**Cierre real de la migración emoji → SVG.** Quedaban dos residuos del bug `[mic]`:
+- `<label>● Nota de voz</label>` y el ícono de cada nota guardada usaban un **bullet genérico** donde el tool había destruido el emoji de micrófono. Ahora son SVG de micrófono (`currentColor`).
+- **El `●` del botón de grabar se queda**, y no es una omisión: el punto es el símbolo universal de "grabar" (y `■` de detener), es monocromo, y vive en `textContent` — meter un SVG ahí lo renderizaría como texto literal. Es la misma trampa de siempre.
+
+**Iconografía semántica.** "Hacer otra OT" usaba un **triángulo de play**. *Play* significa "reproducir", no "crear otra" — y era el botón más prominente de la pantalla final. Ahora es un `+`.
+
+**🐛 El separador `·` que el código se contradecía a sí mismo.**
+El placeholder estático del hero (`index.html:860`) dice `OT #--- · ---` con punto medio. Pero el JS que **realmente** lo rellena (`:2394`) escribía `' . '` con un punto normal. Lo mismo en la duración de las notas de voz (`:2919`). Otro rastro del tool que mangó los caracteres unicode. Restaurados ambos a `·`.
+
+> **Lección:** los placeholders estáticos son un test involuntario. Cuando el markup y el JS que lo reemplaza no coinciden en tipografía, uno de los dos está mal — y casi siempre es el que nadie mira.
+
+### Cuerpo, foco e iconografía verificable (2026-07-09)
+
+Auditoría **medida**, no opinada. Tres hallazgos, uno de ellos sobre el propio proceso de auditoría.
+
+**1. Los botones eran más chicos que el mínimo que este documento exigía.**
+`.btn-sm` medía **~37px** — y es la clase de **"Confirmar firma"**, la acción irreversible del flujo. Los botones "Eliminar" del admin, **~26px**. Con la incertidumbre de los guantes resuelta (no los usan), la regla nueva de §5 es 44/32/24px, y ahora existe: `.btn-sm { min-height: 44px }` y un piso global `button { min-height: 32px }`.
+
+**2. El foco de teclado no existía en 9 sitios.** (WCAG 2.4.7)
+Nueve `outline: none` sin nada en su lugar — buscadores, el `select` de rol, los ítems de cotización. Cuatro de ellos no tenían **ningún** indicador. Ahora hay una regla global `:focus-visible { outline: 2px solid var(--azul) }` y cero `outline:none`.
+> Corrección honesta: la auditoría empezó acusando a los **botones**. Falso — ninguno mataba su outline, así que conservaban el anillo del navegador. Eran los **inputs**. Medir antes de acusar.
+
+**3. 🐛 El botón de ver contraseña era mudo.**
+`togglePassVis()` cambiaba `input.type` pero **nunca el ícono**: mostraba el mismo ojo estuviera la contraseña visible u oculta. Ahora alterna ojo ↔ ojo-tachado y actualiza su `aria-label`.
+
+---
+
+### 🔍 La lección del día: un check no puede heredar el punto ciego del fix
+
+`DESIGN.md` afirmaba **"0 emojis a color en toda la app"**. Era **falso**, y lo escribí yo, y lo comiteé **dos veces**.
+
+La causa no fue descuido. La migración emoji→SVG recorrió una **lista** (📷 🖼 ⏸ ▶ 🔧 ⚠ 🔒 ✏ 🗑 👤 ✅ ⏳ 🔄)… y la verificación usó **esa misma lista**. Un check construido con el mismo mapa que el fix **no puede encontrar el territorio que el fix no visitó**. Sobrevivieron `👁`, `⚙️`×5 y `📤`.
+
+Solo aparecieron al medir por **rango Unicode** en vez de por lista. Y al hacerlo, el nuevo script encontró **dos más que nadie había visto**: `⌫` (borrar del PIN) y `▼` (chevron de pausadas) — monocromos, pero símbolos-como-icono que `DM Sans` no incluye, así que caían a una fuente de respaldo distinta en cada dispositivo.
+
+**Nuevo: `check-emojis.js`.**
+
+```
+node check-emojis.js   →   0 emojis a color. La iconografia es un set SVG unico.
+```
+
+Escanea **todo el espacio de símbolos** y **resta** una allowlist explícita, cada entrada con su razón escrita (`✓` `✕` `●` `■` `←` `→` `›`). Falla por defecto ante cualquier símbolo nuevo. **Es lo contrario de una lista.**
+
+> **Regla:** cuando escribas un check, pregúntate qué comparte con el fix que verifica. Si comparten la fuente de verdad, el check es una repetición, no una verificación.
+
+---
+
+### Recomendación sobre la escala tipográfica (pendiente, NO ejecutado)
+
+Medido: **16 tamaños distintos en 336 declaraciones** de `font-size`. La escala canónica de §3 tiene 7 pasos. Tres usos de 10px (bajo el piso de 11px) **ya fueron corregidos**.
+
+**Recomendación: no hacer el big-bang.** Colapsar 336 sitios de una vez es una refactorización grande, riesgosa, de valor invisible para el técnico, y que exige QA pantalla por pantalla. El costo real de la deriva no es visual — es de *velocidad futura*: cada pantalla nueva reinventa sus tamaños.
+
+Estrategia propuesta, la misma que funcionó con el contraste:
+1. **Congelar la deriva con una medición.** Un `check-tipografia.js` que reporte cuántos tamaños hay fuera de la escala. No falla; informa.
+2. **Definir los 7 pasos como tokens** en `:root` y documentarlos.
+3. **Migrar oportunistamente**: cada vez que se toque una pantalla, sus tamaños se mueven a la escala. Nunca una pasada dedicada.
+
+Los 3 tamaños más usados (**11/12/13px = 225 de 336 declaraciones**) son la capa de metadatos y body. Ahí está el 67% del beneficio.
+
+### Pendiente que sigue esperando su propia pasada
+
+**19 diálogos nativos** — `confirm()`×11, `prompt()`×6, **`alert()`×2** (estos últimos ni figuraban en la deuda declarada). Es una feature que toca lógica **destructiva** (borrar personal, borrar OTs, contraseña de admin). Necesita su propia pasada con testing, no un `/polish`.
 
 ---
 

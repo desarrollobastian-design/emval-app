@@ -17,8 +17,20 @@
     --azul: #1B3A6B;
     --azul-claro: #2D5AA0;
     --verde: #27A06B;
-    --rojo: #E53E3E;
+    /* Verde de ACCION: cualquier superficie verde que lleve TEXTO encima (4.9:1, pasa AA).
+       Botones, texto verde sobre blanco, y el hero de exito. El --verde de arriba es verde
+       de ESTADO: relleno sin texto encima (foto lista, paso completado, check, bordes).
+       Blanco sobre --verde da solo 3.3:1 y no pasa AA. */
+    --verde-btn: #1E8052;
+    /* Oscurecido de #E53E3E (4.13:1) a 4.98:1. No se parte en dos como el verde
+       porque todos sus usos son funcionales (botones, texto de error, barra offline):
+       no hay una superficie roja de estado cuyo tono emocional haya que preservar. */
+    --rojo: #D32F2F;
     --naranja: #EF9F27;
+    /* Naranja de ACCION: fondo de boton/barra con texto blanco (5.0:1). El --naranja de
+       arriba es naranja de ESTADO (dot de offline, icono de correctivo, relleno pausado):
+       blanco sobre --naranja da 2.2:1, ilegible. Este hex ya se usaba en los iconos de OT. */
+    --naranja-btn: #B45309;
     --fondo: #F4F6FB;
     --blanco: #FFFFFF;
     --gris1: #F8F9FC;
@@ -26,7 +38,10 @@
     --gris3: #C8D0E0;
     --texto: #1A2035;
     --texto2: #5A6478;
-    --texto3: #9AA3B2;
+    /* Oscurecido de #9AA3B2 (2.35:1 sobre el fondo de la app: ilegible bajo sol directo).
+       #666F82 es el mas claro que pasa AA sobre blanco, --gris1 Y --fondo. La jerarquia
+       se sostiene con tamano y peso, no volviendo ilegible el texto terciario. */
+    --texto3: #666F82;
     --radio: 14px;
     --radio-sm: 8px;
     --radio-lg: 18px;
@@ -72,11 +87,11 @@
   /* Admin: contenedor ancho, pero controles/formularios contenidos (los forms anchos son incomodos) */
   #s-admin #form-tecnico, #s-admin #form-cadena,
   #s-admin #personal-buscar, #s-admin #cadenas-buscar { max-width: 480px; }
-  #s-admin #panel-personal > .btn-primary, #s-admin #panel-cadenas .btn-primary { width: auto; }
+  #s-admin #panel-personal > .btn-primary, #s-admin #panel-cadenas > .btn-primary { width: auto; }
   /* Accion compacta de topbar (reemplaza botones inline hechos a mano) */
   .top-action { background: rgba(255,255,255,0.15); border: none; color: #fff; border-radius: var(--radio-sm); padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; }
-  .top-action-verde { background: var(--verde); }
-  @media (hover: hover) { .top-action:hover { background: rgba(255,255,255,0.25); } .top-action-verde:hover { background: #218a5b; } }
+  .top-action-verde { background: var(--verde-btn); }
+  @media (hover: hover) { .top-action:hover { background: rgba(255,255,255,0.25); } .top-action-verde:hover { background: #186844; } }
   
   /* STEP INDICATOR */
   .steps { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 16px; background: white; border-bottom: 1px solid var(--gris2); }
@@ -90,7 +105,7 @@
   .field input, .field select, .field textarea {
     background: white; border: 1.5px solid var(--gris2); border-radius: var(--radio-sm);
     padding: 11px 13px; font-size: 15px; color: var(--texto); font-family: 'DM Sans', sans-serif;
-    width: 100%; outline: none; transition: border-color 0.2s;
+    width: 100%; transition: border-color 0.2s;
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--azul); }
   .field textarea { min-height: 100px; resize: none; line-height: 1.5; }
@@ -108,9 +123,20 @@
   .seg-tab.active { background: var(--azul); color: #fff; }
   .seg-tab:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   .btn-secondary { background: var(--gris2); color: var(--texto); }
-  .btn-verde { background: var(--verde); color: white; }
+  .btn-verde { background: var(--verde-btn); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
-  .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); }
+  .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); min-height: 44px; }
+
+  /* OBJETIVO TACTIL. Pedro confirmo que los tecnicos NO usan guantes, asi que el minimo
+     deja de ser el peor caso de 48px y pasa a 44px (WCAG 2.5.5 / Apple HIG) para el flujo
+     del tecnico, hecho con el pulgar y una sola mano. Los controles densos del admin (con
+     mouse) tienen un piso de 32px. El limite absoluto son 24px: WCAG 2.2 SC 2.5.8, nivel AA.
+     Antes .btn-sm medía ~37px, y eso incluye el boton de Confirmar firma. */
+  button { min-height: 32px; }
+
+  /* FOCO DE TECLADO (WCAG 2.4.7). Sin esto, quien navega con Tab no ve donde esta parado.
+     Habia 9 sitios que hacian outline:none sin poner nada en su lugar. */
+  :focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   
   /* CARDS */
   .card { background: white; border-radius: var(--radio); padding: 14px; box-shadow: var(--sombra); }
@@ -323,6 +349,8 @@
      1 col en telefono, 2+ en laptop/monitor. min(340px,100%) evita scroll horizontal en movil. */
   .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 10px; align-items: start; }
   .card-grid > * { margin-bottom: 0; }
+  /* Estados vacios y de error ocupan todo el ancho del grid, no una sola columna */
+  .card-grid > p, .card-grid > .grid-full { grid-column: 1 / -1; }
   .ot-icon { width: 44px; height: 44px; border-radius:14px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
   .ot-info { flex: 1; }
   .ot-titulo { font-size: 14px; font-weight: 600; }
@@ -336,7 +364,8 @@
   .login-sub { color: var(--texto2); font-size: 14px; margin-top: 4px; font-weight: 500; letter-spacing: 0.3px; }
   
   /* SUCCESS */
-  .success-hero { background: linear-gradient(160deg, var(--verde) 0%, #1D8A5A 100%); padding: 40px 24px; text-align: center; color: white; }
+  /* Lleva texto encima -> usa el verde de ACCION. Con --verde el subtitulo de 13px daba 2.6:1. */
+  .success-hero { background: linear-gradient(160deg, var(--verde-btn) 0%, #17603D 100%); padding: 40px 24px; text-align: center; color: white; }
   .success-icon { width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 28px; }
   
   /* SKELETON LOADING USUARIOS */
@@ -455,17 +484,17 @@
         <button class="pin-btn" onclick="pinInput('9')">9</button>
         <button class="pin-btn" style="visibility:hidden;"></button>
         <button class="pin-btn" onclick="pinInput('0')">0</button>
-        <button class="pin-btn del" onclick="pinDelete()">⌫</button>
+        <button class="pin-btn del" onclick="pinDelete()" aria-label="Borrar último dígito"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 5H9l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg></button>
       </div>
     </div>
     <!-- Campo contraseña (solo Administrador) -->
     <div id="admin-pass-section" style="display:none; width:100%; max-width:280px; margin-top:8px;">
       <div style="position:relative;">
         <input type="password" id="admin-pass-input" placeholder="Contraseña"
-          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:14px;font-size:16px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color 0.2s;"
+          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:14px;font-size:16px;font-family:inherit;box-sizing:border-box;transition:border-color 0.2s;"
           onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris2)'"
           onkeydown="if(event.key==='Enter') validarPassword()" />
-        <button onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);font-size:20px;line-height:1;">👁</button>
+        <button id="btn-pass-vis" type="button" aria-label="Mostrar contraseña" onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);line-height:1;padding:6px;display:flex;align-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
       <button onclick="validarPassword()" style="width:100%;margin-top:12px;padding:14px;background:var(--azul);color:white;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">
         Ingresar
@@ -495,7 +524,7 @@
           <span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> Trabajos pausados</span>
           <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:8px;font-weight:600;" id="contador-pausadas">0</div>
         </div>
-        <span id="toggle-icon" style="transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);">▼</span>
+        <span id="toggle-icon" style="transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);display:inline-flex;align-items:center;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
       </button>
       <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
@@ -523,7 +552,7 @@
     <div style="margin-bottom:16px;">
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
       <div style="display:flex;gap:8px;align-items:stretch;">
-        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:8px;outline:none;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
+        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:8px;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
         <button type="button" style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:8px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
       </div>
     </div>
@@ -637,8 +666,8 @@
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pídele al administrador que firme con el dedo</div>
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
-        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
-        <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde);margin-top:4px;display:none;">Email configurado automáticamente</div>
+        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+        <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
       </div>
     </div>
@@ -735,7 +764,7 @@
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
-        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
+        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris1);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
@@ -775,7 +804,7 @@
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarPreventivos();">
-        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
+        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
@@ -818,7 +847,7 @@
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
-        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;">⚙️ Filtro</button>
+        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
       </div>
       <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
@@ -837,7 +866,9 @@
   <div class="success-hero">
     <div class="success-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
     <div style="font-size: 20px; font-weight: 700;">Servicio completado!</div>
-    <div style="font-size: 13px; opacity: 0.8; margin-top: 6px;" id="cierre-ot-info">OT #--- · ---</div>
+    <!-- sin opacity: sobre verde oscuro, el blanco puro es el maximo contraste posible (4.9:1).
+         La jerarquia con el titulo la dan el tamano (13 vs 20px) y el peso, no la transparencia. -->
+    <div style="font-size: 13px; margin-top: 6px;" id="cierre-ot-info">OT #--- · ---</div>
   </div>
   <div class="content">
     <div class="card">
@@ -846,14 +877,14 @@
       <div class="summary-row"><span class="sum-label">Técnico</span><span class="sum-val" id="sum-tecnico">—</span></div>
       <div class="summary-row"><span class="sum-label">Fotos antes</span><span class="sum-val" id="sum-fotos-antes">—</span></div>
       <div class="summary-row"><span class="sum-label">Fotos después</span><span class="sum-val" id="sum-fotos-despues">—</span></div>
-      <div class="summary-row"><span class="sum-label">Firma admin</span><span class="sum-val" id="sum-firma" style="color:var(--verde)">—</span></div>
+      <div class="summary-row"><span class="sum-label">Firma admin</span><span class="sum-val" id="sum-firma" style="color:var(--verde-btn)">—</span></div>
     </div>
     <div id="comparacion-fotos" style="display:none;">
       <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;">COMPARACIÓN ANTES / DESPUÉS</div>
       <div id="grid-comparacion"></div>
     </div>
     <div class="field" style="margin-top:8px;">
-      <label>● Nota de voz — Materiales y gastos</label>
+      <label><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg> Nota de voz — Materiales y gastos</label>
       <div class="voz-container">
         <div class="voz-timer" id="voz-timer">0:00</div>
         <div class="voz-status" id="voz-status">Toca para grabar lo que gastaste y los materiales usados</div>
@@ -863,7 +894,8 @@
         <div class="voz-lista" id="voz-lista"></div>
       </div>
     </div>
-    <button class="btn btn-primary" onclick="nuevaOT()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><path d="M5 3l14 9-14 9V3z"/></svg> Hacer otra OT</button>
+    <!-- Un triangulo de play significa "reproducir", no "crear otra". Aqui va un mas. -->
+    <button class="btn btn-primary" onclick="nuevaOT()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-0.12em"><path d="M12 5v14M5 12h14"/></svg> Hacer otra OT</button>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Volver al inicio</button>
     <p style="font-size: 11px; color: var(--texto3); text-align: center;">OT guardada · se sincroniza automáticamente con la nube</p>
   </div>
@@ -900,29 +932,7 @@
     </div>
 
     <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs DE HOY</div>
-    <div id="sup-ots-hoy-lista" class="card-grid">
-    <div class="ot-card" style="display:none;">
-      <div class="ot-icon" style="background:#FEF0E6;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-      <div class="ot-info">
-        <div class="ot-titulo">Unimarc Coelemu — Nelson H.</div>
-        <div class="ot-sub">26/08/2025 · <span class="badge badge-corr">Correctivo</span></div>
-      </div>
-    </div>
-    <div class="ot-card" style="display:none;">
-      <div class="ot-icon" style="background:#E6F4EA;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E8052" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
-      <div class="ot-info">
-        <div class="ot-titulo">S10 Concepción — Pedro A.</div>
-        <div class="ot-sub">22/08/2025 · <span class="badge badge-prev">Preventivo</span></div>
-      </div>
-    </div>
-    <div class="ot-card" style="display:none;">
-      <div class="ot-icon" style="background:#FEF0E6;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-      <div class="ot-info">
-        <div class="ot-titulo">Alvi Chillán — Carlos M.</div>
-        <div class="ot-sub">20/08/2025 · <span class="badge badge-corr">Correctivo</span></div>
-      </div>
-    </div>
-    </div>
+    <div id="sup-ots-hoy-lista" class="card-grid"></div>
   </div>
 </div>
 
@@ -949,7 +959,7 @@
         <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
         <div class="field">
           <label>Rol</label>
-          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;">
+          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;">
             <option value="Tecnico en terreno">Técnico en terreno</option>
             <option value="Supervisor">Supervisor</option>
             <option value="Administrador">Administrador</option>
@@ -966,9 +976,7 @@
 
     <!-- PANEL CADENAS -->
     <div id="panel-cadenas" style="display:none;">
-      <div style="margin-bottom:12px;">
-        <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()">+ Agregar cadena</button>
-      </div>
+      <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="margin-bottom:12px;">+ Agregar cadena</button>
       <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
       <div id="form-cadena" style="display:none;" class="card">
         <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
@@ -1029,11 +1037,17 @@
 </div>
 
 <div id="toast"></div>
-<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#E53E3E;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
+<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
   Sin conexión — modo offline
 </div>
-<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
-  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> OT(s) pendiente(s) — Toca para subir
+<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> <span id="pending-label">OT(s) pendiente(s) — Toca para subir</span>
+</div>
+
+<!-- Avisos por correo encolados: misma visibilidad persistente que las OTs pendientes.
+     Un toast se desvanece; una barra no. Se apila sobre la de OTs si ambas estan visibles. -->
+<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span> — Toca para reintentar
 </div>
 
 <!-- MODAL: Reasignar OT pausada a otro tecnico -->
@@ -1063,7 +1077,7 @@
     </div>
     <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;">
       <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
-      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde);color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
+      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
     </div>
   </div>
 </div>
@@ -1335,7 +1349,7 @@ function _restaurarFirmaDesdeEstado() {
       if (firmaCont) firmaCont.classList.add('signed');
       if (firmaStatus) {
         firmaStatus.textContent = '✓ Firma confirmada';
-        firmaStatus.style.color = 'var(--verde)';
+        firmaStatus.style.color = 'var(--verde-btn)';
       }
     };
     img.src = estado.firmaImagen;
@@ -1560,9 +1574,21 @@ function seleccionarUsuario(nombre, cargo, letra) {
   go('s-pin');
 }
 
+// Iconos SVG reutilizados desde JS. Heredan currentColor, asi que se tinen con su contexto.
+const _SVG_EMBUDO = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>';
+const _SVG_OJO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _SVG_OJO_OFF = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+
 function togglePassVis() {
   const inp = document.getElementById('admin-pass-input');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
+  const btn = document.getElementById('btn-pass-vis');
+  const estabaOculta = inp.type === 'password';
+  inp.type = estabaOculta ? 'text' : 'password';
+  // El icono era mudo: mostraba siempre el mismo ojo sin importar el estado.
+  if (btn) {
+    btn.innerHTML = estabaOculta ? _SVG_OJO_OFF : _SVG_OJO;
+    btn.setAttribute('aria-label', estabaOculta ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  }
 }
 
 function pinInput(d) {
@@ -1998,7 +2024,7 @@ function _menuFuenteFoto() {
 
   const btnGal = document.createElement('button');
   btnGal.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>  Elegir de galería';
-  btnGal.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
+  btnGal.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;';
   btnGal.onclick = function(){ cerrar(); document.getElementById('input-foto-galeria').click(); };
 
   const btnCan = document.createElement('button');
@@ -2088,7 +2114,7 @@ function confirmarFirma() {
   if (!tieneFirma) { toast('Primero firma en el recuadro'); return; }
   firmaConfirmada = true; estado.firmada = true;
   document.getElementById('firma-status').textContent = '✓ Firma confirmada';
-  document.getElementById('firma-status').style.color = 'var(--verde)';
+  document.getElementById('firma-status').style.color = 'var(--verde-btn)';
   document.getElementById('firma-container').classList.add('signed');
   estado.firmaImagen = _capturarFirmaBorrador();
   programarAutoguardadoOT();
@@ -2131,7 +2157,7 @@ function cargarEjecucionScreen() {
     }
     let html = '<div class="field">';
     html += '<label>Nº Equipos Suscritos</label>';
-    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
     html += '</div>';
     html += '<div class="field"><label>Servicios a realizar</label>';
     html += '<div style="border:1.5px solid var(--gris2);border-radius:8px;overflow:hidden;">';
@@ -2141,7 +2167,7 @@ function cargarEjecucionScreen() {
     html += '</div>';
     estado.serviciosPreventivo.forEach(function(svc, idx) {
       const bg = idx % 2 === 0 ? 'white' : '#F8F9FB';
-      const siSt = svc.respuesta === 'si' ? 'background:#27A06B;color:white;' : 'background:#E8ECF5;color:#6B7280;';
+      const siSt = svc.respuesta === 'si' ? 'background:var(--verde-btn);color:white;' : 'background:#E8ECF5;color:#6B7280;';
       const noSt = svc.respuesta === 'no' ? 'background:#E74C3C;color:white;' : 'background:#E8ECF5;color:#6B7280;';
       html += '<div style="display:flex;padding:8px 12px;gap:8px;align-items:center;background:' + bg + ';border-bottom:1px solid #E5E7EB;">';
       html += '<span style="flex:1;font-size:13px;color:var(--texto);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
@@ -2183,7 +2209,7 @@ function responderServicio(idx, respuesta) {
   estado.serviciosPreventivo[idx].respuesta = respuesta;
   const siBtn = document.getElementById('svc-si-' + idx);
   const noBtn = document.getElementById('svc-no-' + idx);
-  if (siBtn) { siBtn.style.background = respuesta === 'si' ? '#27A06B' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
+  if (siBtn) { siBtn.style.background = respuesta === 'si' ? 'var(--verde-btn)' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
   if (noBtn) { noBtn.style.background = respuesta === 'no' ? '#E74C3C' : '#E8ECF5'; noBtn.style.color = respuesta === 'no' ? 'white' : '#6B7280'; }
   programarAutoguardadoOT();
 }
@@ -2389,7 +2415,7 @@ function cerrarOT() {
   const fotosAntes = estado.fotosAntes.filter(f => f).length;
   const fecha = new Date().toLocaleDateString('es-CL');
   
-  document.getElementById('cierre-ot-info').textContent = 'OT #' + estado.otNumero + ' . ' + fecha;
+  document.getElementById('cierre-ot-info').textContent = 'OT #' + estado.otNumero + ' · ' + fecha;
   document.getElementById('sum-local').textContent = estado.local;
   var tipoBadge = estado.tipo === 'preventivo' ? 'badge-prev' : 'badge-corr';
   var tipoLabel = estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo';
@@ -2548,7 +2574,16 @@ async function _urlsABase64(arr) {
 // de que el aviso nunca salio. Ahora el envio que falla se encola y se reintenta al volver la
 // señal, al traer la app a primer plano y cada 90 s.
 const _CORREOS_KEY = 'emval_correos_pendientes';
-const _CORREOS_MAX_INTENTOS = 20;
+// Ventana de reintento: un aviso se sigue intentando durante 7 dias. Al vencer NO se descarta:
+// se marca `fallido` y queda visible en la barra para reintentarlo a mano.
+// (Antes se borraba tras 20 intentos con un console.warn — es decir, se perdia en silencio.)
+const _CORREOS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Unica funcion que conoce el service/template de EmailJS. Todo envio pasa por aqui,
+// incluida la cola de reintento (antes duplicaba los ids y se saltaba _enviarCorreo).
+function _emailjsSend(params) {
+  return emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
+}
 
 function _cargarCorreosPendientes() {
   try { return JSON.parse(localStorage.getItem(_CORREOS_KEY) || '[]'); } catch(e) { return []; }
@@ -2562,16 +2597,17 @@ function _encolarCorreo(params) {
   const clave = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
   const lista = _cargarCorreosPendientes();
   if (lista.some(function(c){ return c.clave === clave; })) return;
-  lista.push({ clave: clave, intentos: 0, params: params });
+  lista.push({ clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false, params: params });
   _guardarCorreosPendientes(lista);
   console.warn('Correo encolado para reintento:', clave);
+  actualizarIndicadorPendientes();
 }
 
-// Unico punto de envio. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
+// Envia. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
 async function _enviarCorreo(params) {
   if (typeof emailjs === 'undefined') { _encolarCorreo(params); return false; }
   try {
-    await emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
+    await _emailjsSend(params);
     return true;
   } catch(e) {
     console.warn('Error enviando correo, se encola:', e);
@@ -2581,30 +2617,46 @@ async function _enviarCorreo(params) {
 }
 
 // Reintenta la cola. Sale de inmediato si no hay nada, asi que es seguro llamarla seguido.
+// Invariante: NUNCA se borra un aviso. O se envia, o sigue pendiente, o queda `fallido` y visible.
 async function sincronizarCorreosPendientes() {
   if (!navigator.onLine || typeof emailjs === 'undefined') return;
   const lista = _cargarCorreosPendientes();
   if (!lista.length) return;
   const quedan = [];
-  let enviados = 0;
+  let enviados = 0, vencidos = 0;
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];
+    if (!c.creadoEn) c.creadoEn = Date.now(); // migracion de items encolados antes del TTL
+    if (c.fallido) { quedan.push(c); continue; } // ya se rindio; espera reintento manual
     try {
-      await emailjs.send('service_xm6dmxl', 'template_agzfcux', c.params);
+      await _emailjsSend(c.params);
       enviados++;
     } catch(e) {
       c.intentos = (c.intentos || 0) + 1;
-      if (c.intentos < _CORREOS_MAX_INTENTOS) quedan.push(c);
-      else console.warn('Correo descartado tras', _CORREOS_MAX_INTENTOS, 'intentos:', c.clave);
+      if (Date.now() - c.creadoEn > _CORREOS_TTL_MS) { c.fallido = true; vencidos++; }
+      quedan.push(c);
     }
   }
   _guardarCorreosPendientes(quedan);
-  if (enviados) toast(enviados + ' correo(s) pendiente(s) enviado(s)');
+  if (enviados) toast(enviados + ' aviso(s) pendiente(s) enviado(s)');
+  if (vencidos) toast(vencidos + ' aviso(s) no se pudieron enviar. Quedan en la barra para reintentar.');
+  actualizarIndicadorPendientes();
+}
+
+// Reintento manual desde la barra: da otra ventana de 7 dias a los avisos que se rindieron.
+async function reintentarCorreosAhora() {
+  const lista = _cargarCorreosPendientes();
+  if (!lista.length) return;
+  lista.forEach(function(c) { c.fallido = false; c.creadoEn = Date.now(); c.intentos = 0; });
+  _guardarCorreosPendientes(lista);
+  toast('Reintentando ' + lista.length + ' aviso(s)...');
+  await sincronizarCorreosPendientes();
 }
 
 // nota: texto de aviso que viaja en el cuerpo (ej. "el local no tiene correo configurado").
-function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
-  _enviarCorreo({
+// Igual que el correo a la sucursal, este aviso dice la verdad cuando no logra salir.
+async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
+  const ok = await _enviarCorreo({
     email_admin: window.PEDRO_NOTIF_EMAIL,
     ot_numero: String(numero),
     local: String(local),
@@ -2614,6 +2666,8 @@ function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, not
     trabajo: String(nota || ''),
     pdf_url: pdfUrl || ''
   });
+  if (!ok) toast('Aviso a administración pendiente — se enviará solo al recuperar la señal.');
+  return ok;
 }
 
 async function guardarEnFirebase(otBase, desc, fecha) {
@@ -2883,10 +2937,10 @@ function guardarGrabacion() {
   item.className = 'voz-item';
   const m = Math.floor(duracion/60), s = duracion % 60;
   item.innerHTML = `
-    <div class="voz-item-icon">●</div>
+    <div class="voz-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></div>
     <div class="voz-item-info">
       <div class="voz-item-nombre">Nota de voz ${num}</div>
-      <div class="voz-item-dur">${m}:${String(s).padStart(2,'0')} . ${new Date().toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="voz-item-dur">${m}:${String(s).padStart(2,'0')} · ${new Date().toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'})}</div>
       <audio class="voz-player" controls src="${url}"></audio>
     </div>
   `;
@@ -3013,7 +3067,7 @@ async function cargarCadenasAdmin() {
       searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;';
 
       const btnFiltro = document.createElement('button');
-      btnFiltro.textContent = '⚙️ Filtro';
+      btnFiltro.innerHTML = _SVG_EMBUDO + ' Filtro';
       btnFiltro.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
       const panelFiltros = document.createElement('div');
@@ -3154,7 +3208,7 @@ async function cargarCadenasAdmin() {
       btnAddSucDiv.style.cssText = 'margin-top:12px;margin-bottom:10px;';
       const btnAddSuc = document.createElement('button');
       btnAddSuc.textContent = '+ Agregar sucursal';
-      btnAddSuc.style.cssText = 'width:100%;background:var(--verde);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
+      btnAddSuc.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
       btnAddSucDiv.appendChild(btnAddSuc);
       body.appendChild(btnAddSucDiv);
 
@@ -3337,7 +3391,7 @@ function editarSucursal(docId, idx, s) {
     l.textContent = lbl;
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = val; inp.placeholder = ph;
-    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px;outline:none;';
+    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px;';
     inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
     inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
     w.appendChild(l); w.appendChild(inp);
@@ -3389,33 +3443,6 @@ function editarSucursal(docId, idx, s) {
   modal.appendChild(btns);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-}
-
-// =========== EMAIL ADMIN ===========
-async function enviarEmailAdmin() {
-  // Use sucursal email first, then manual input, then skip
-  const email = estado.emailSucursal || estado.emailAdmin;
-  if (!email) return;
-  try {
-    toast('Enviando email...');
-    console.log('Enviando a:', email);
-    const params = {
-      email_admin: email,
-      ot_numero: String(estado.otNumero),
-      local: String(estado.local),
-      fecha: new Date().toLocaleDateString('es-CL'),
-      tecnico: String(estado.usuario),
-      tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-      trabajo: String(document.getElementById('desc-trabajo').value || '')
-    };
-    console.log('Params:', JSON.stringify(params));
-    const result = await emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
-    console.log('EmailJS result:', result.status, result.text);
-    toast('Email enviado correctamente');
-  } catch(e) {
-    console.error('EmailJS error completo:', JSON.stringify(e));
-    toast('Error email: ' + (e.text || e.message || 'desconocido'));
-  }
 }
 
 // =========== COTIZACION ===========
@@ -3720,7 +3747,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;';
 
   const btnFiltoCot = document.createElement('button');
-  btnFiltoCot.textContent = '⚙️ Filtro';
+  btnFiltoCot.innerHTML = _SVG_EMBUDO + ' Filtro';
   btnFiltoCot.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
   const panelFiltrosCot = document.createElement('div');
@@ -3884,7 +3911,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     fechaDiv.textContent = it.fecha || '';
     rowHeader.appendChild(fechaDiv);
     const totalDiv = document.createElement('div');
-    totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
+    totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde-btn);margin-top:3px;';
     totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
     const descDiv = document.createElement('div');
     descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
@@ -3926,7 +3953,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
     const btnPdf = document.createElement('button');
     btnPdf.textContent = 'Ver PDF';
-    btnPdf.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnPdf.onclick = (function(data){ return function(){
       if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
       else { generarPDFCotizacionGuardada(data); }
@@ -3940,7 +3967,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     if (it.tipoCot === 'previa' && it.estadoCot === 'Pendiente') {
       const btnAcept = document.createElement('button');
       btnAcept.textContent = 'Aceptar → crear OT';
-      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
       btnAcept.onclick = (function(id){ return function(){ aceptarCotizacionPrevia(id); }; })(it.id);
       btnsRow.appendChild(btnAcept);
     }
@@ -4025,7 +4052,7 @@ async function cargarCarpetas() {
       headerEnv.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatarEnv = document.createElement('div');
       avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:14px;background:#1A7A3C;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
-      avatarEnv.textContent = '📤';
+      avatarEnv.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
       const headerInfoEnv = document.createElement('div');
       headerInfoEnv.style.flex = '1';
       const nombreEnv = document.createElement('div');
@@ -5172,7 +5199,9 @@ function renderComparacion() {
       boxA.appendChild(imgA);
     }
     const labelA = document.createElement('div');
-    labelA.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(27,58,107,0.75);color:white;font-size:11px;font-weight:500;text-align:center;padding:4px;';
+    // Solido, no rgba(): una etiqueta translucida hereda el contraste de la FOTO.
+    // Con foto clara, DESPUES caia a 2.41:1 (invisible). El fondo no puede depender del contenido.
+    labelA.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:var(--azul);color:white;font-size:11px;font-weight:500;text-align:center;padding:4px;';
     labelA.textContent = 'ANTES';
     boxA.appendChild(labelA);
 
@@ -5186,7 +5215,7 @@ function renderComparacion() {
       boxD.appendChild(imgD);
     }
     const labelD = document.createElement('div');
-    labelD.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(39,160,107,0.75);color:white;font-size:11px;font-weight:500;text-align:center;padding:4px;';
+    labelD.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:var(--verde-btn);color:white;font-size:11px;font-weight:500;text-align:center;padding:4px;';
     labelD.textContent = 'DESPUÉS';
     boxD.appendChild(labelD);
 
@@ -6930,7 +6959,7 @@ async function cargarPreventivos() {
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Cotización';
-        btnCot.style.cssText = 'flex:1;background:var(--verde);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
         btns.appendChild(btnCot);
       }
@@ -7091,7 +7120,7 @@ async function verOTsTecnico(nombre, grupo) {
     statsDiv.style.cssText = 'display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto3);';
     const fa = (ot.fotosAntes && ot.fotosAntes.length) ? ot.fotosAntes.length : 0;
     const fd = (ot.fotosDespues && ot.fotosDespues.length) ? ot.fotosDespues.length : 0;
-    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
+    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde-btn)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
     card.appendChild(statsDiv);
 
     // Badge de estado (En Pausa)
@@ -7145,7 +7174,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (ot.estado === 'En Pausa' || ot.pausa) {
       const btnContinuar = document.createElement('button');
       btnContinuar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><path d="M5 3l14 9-14 9V3z"/></svg> Continuar OT';
-      btnContinuar.style.cssText = 'flex:1;background:var(--naranja);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnContinuar.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnContinuar.onclick = (function(id){ return function(){ continuarOT(id); }; })(ot.id);
       btns.appendChild(btnContinuar);
     }
@@ -7206,7 +7235,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (estado.cargo === 'Administrador' && !ot.pausa && ot.estado !== 'En Pausa' && !ot.enEspera) {
       const btnEditOT = document.createElement('button');
       btnEditOT.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> Editar OT';
-      btnEditOT.style.cssText = 'flex:1;background:var(--naranja);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEditOT.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnEditOT.onclick = (function(otRef){ return function(){ editarOTTerminada(otRef); }; })(ot);
       btns.appendChild(btnEditOT);
     }
@@ -7320,7 +7349,7 @@ function agregarFilaEmailCot(valor) {
   inp.type = 'email';
   inp.placeholder = 'correo@ejemplo.cl';
   inp.value = valor || '';
-  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:14px;font-family:inherit;outline:none;';
+  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:14px;font-family:inherit;';
   const del = document.createElement('button');
   del.type = 'button';
   del.textContent = '✕';
@@ -7566,7 +7595,7 @@ async function cargarOTsSupervisor() {
     if (snap.empty) { 
       const p = document.createElement('p');
       p.style = 'font-size:13px;color:var(--texto3);text-align:center;padding:20px';
-      p.textContent = 'Aun no hay OTs registradas';
+      p.textContent = 'Aún no hay OTs registradas';
       lista.appendChild(p);
       return;
     }
@@ -7784,8 +7813,8 @@ function detenerPausadasSupervisor() {
 function _mostrarErrorPausadasSup(seccion, listaEl, countEl) {
   if (!seccion || !listaEl) return;
   seccion.style.display = 'block';
-  if (countEl) countEl.textContent = '!';
-  listaEl.innerHTML = '<div class="card" style="border:1.5px solid #FCD34D;background:#FEF9E7;">'
+  if (countEl) countEl.style.display = 'none';
+  listaEl.innerHTML = '<div class="card grid-full" style="border:1.5px solid #FCD34D;background:#FEF9E7;">'
     + '<div style="font-size:14px;font-weight:600;color:var(--texto);margin-bottom:2px;">No se pudo cargar la lista en vivo</div>'
     + '<div style="font-size:12px;color:var(--texto2);margin-bottom:10px;">Revisa la conexion. La lista se actualiza sola al reconectar.</div>'
     + '<button class="btn btn-secondary btn-sm" style="width:auto;" onclick="cargarPausadasSupervisor()">Reintentar</button>'
@@ -7805,7 +7834,7 @@ function _renderPausadasSup(snap, seccion, listaEl, countEl) {
     });
 
     seccion.style.display = 'block';
-    if (countEl) countEl.textContent = docs.length;
+    if (countEl) { countEl.style.display = ''; countEl.textContent = docs.length; }
     listaEl.innerHTML = '';
 
     docs.forEach(function(doc, idx) {
@@ -7843,7 +7872,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   const esAdmin = estado.cargo === 'Administrador';
   const cad = cadenaMap[d.cadena] || cadenaMap[d.local] || null;
   const logoUrl = d.cadenaLogo || (cad && cad.logo) || '';
-  const logoColor = d.cadenaColor || (cad && cad.color) || '#D97706';
+  const logoColor = d.cadenaColor || (cad && cad.color) || '#B45309';
   const logoLetra = d.cadenaLetra || (cad && cad.letra) || (d.local ? d.local.charAt(0) : 'P');
 
   const card = document.createElement('div');
@@ -7884,8 +7913,8 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   meta.className = 'ot-sub';
   meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
   const pausaBadge = d.enEspera
-    ? '<span style="background:#1E40AF;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
-    : '<span style="background:#D97706;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
+    ? '<span style="background:#1E40AF;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
+    : '<span style="background:var(--naranja-btn);color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
   const tecnicoTxt = '<span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + (d.tecnico || 'Sin técnico') + '</span>';
   const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
   meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
@@ -7969,7 +7998,7 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
       } else {
         const chk = document.createElement('span');
         chk.textContent = '✓';
-        chk.style.cssText = 'color:var(--verde);font-weight:700;';
+        chk.style.cssText = 'color:var(--verde-btn);font-weight:700;';
         row.appendChild(chk);
       }
       lista.appendChild(row);
@@ -8555,7 +8584,7 @@ async function cargarFacturacion() {
       det.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
       det.textContent = g.items.length + ' cotizaciones | $' + g.total.toLocaleString('es-CL');
       const pend = document.createElement('div');
-      pend.style.cssText = 'font-size:11px;margin-top:2px;font-weight:600;color:' + (g.pendientes > 0 ? 'var(--naranja)' : 'var(--verde)') + ';';
+      pend.style.cssText = 'font-size:11px;margin-top:2px;font-weight:600;color:' + (g.pendientes > 0 ? 'var(--naranja-btn)' : 'var(--verde-btn)') + ';';
       pend.textContent = g.pendientes > 0 ? g.pendientes + ' sin factura' : 'Al dia';
       info.appendChild(nom); info.appendChild(det); info.appendChild(pend);
       const arr = document.createElement('div');
@@ -8589,7 +8618,7 @@ function abrirFactSupervisor(grupo) {
     hDet.textContent = (d.fecha||'') + (d.otNumero ? ' | OT #' + d.otNumero : '');
     hInfo.appendChild(hLocal); hInfo.appendChild(hDet);
     const hMonto = document.createElement('div');
-    hMonto.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde);';
+    hMonto.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde-btn);';
     hMonto.textContent = '$' + (d.total||0).toLocaleString('es-CL');
     hdr.appendChild(hInfo); hdr.appendChild(hMonto);
     card.appendChild(hdr);
@@ -8638,11 +8667,11 @@ function abrirFactSupervisor(grupo) {
     function mkF(lbl, val) {
       const w = document.createElement('div');
       const l = document.createElement('div');
-      l.style.cssText = 'font-size:10px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
+      l.style.cssText = 'font-size:11px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
       l.textContent = lbl;
       const inp = document.createElement('input');
       inp.type = 'text'; inp.value = val || ''; inp.placeholder = lbl;
-      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;outline:none;';
+      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;';
       inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
       inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
       w.appendChild(l); w.appendChild(inp);
@@ -8853,7 +8882,7 @@ async function cargarVentas() {
       nombre.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
       nombre.textContent = sup;
       var monto = document.createElement('div');
-      monto.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);';
+      monto.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde-btn);';
       monto.textContent = '$ ' + totalSup.toLocaleString('es-CL');
       top.appendChild(nombre); top.appendChild(monto);
       var bar = document.createElement('div');
@@ -9149,23 +9178,47 @@ function _blobToBase64(blob) {
 }
 
 async function actualizarIndicadorPendientes() {
+  var mostrandoOTs = false;
   try {
     var pendientes = await _obtenerOTsPendientes();
     var offlineBar = document.getElementById('offline-bar');
     var pendingBar = document.getElementById('pending-bar');
     var pendingCount = document.getElementById('pending-count');
+    var pendingLabel = document.getElementById('pending-label');
     if (!navigator.onLine) {
       if (offlineBar) offlineBar.style.display = 'block';
       if (pendingBar) pendingBar.style.display = 'none';
     } else {
       if (offlineBar) offlineBar.style.display = 'none';
       if (pendientes.length > 0) {
-        if (pendingBar) { pendingBar.style.display = 'block'; pendingCount.textContent = pendientes.length; }
+        if (pendingBar) pendingBar.style.display = 'block';
+        if (pendingCount) pendingCount.textContent = pendientes.length;
+        if (pendingLabel) pendingLabel.textContent = 'OT(s) pendiente(s) — Toca para subir';
+        mostrandoOTs = true;
       } else {
         if (pendingBar) pendingBar.style.display = 'none';
       }
     }
   } catch(e) {}
+  _actualizarBarraCorreos(mostrandoOTs);
+}
+
+// Los avisos encolados merecen la misma visibilidad persistente que las OTs pendientes:
+// un toast se desvanece, una barra no. Rojo si alguno agoto su ventana de reintento
+// (nunca se borra en silencio: queda ahi hasta que alguien lo reintente).
+function _actualizarBarraCorreos(hayBarraDeOTs) {
+  var bar = document.getElementById('correos-bar');
+  var texto = document.getElementById('correos-texto');
+  if (!bar || !texto) return;
+  var correos = _cargarCorreosPendientes();
+  if (!navigator.onLine || correos.length === 0) { bar.style.display = 'none'; return; }
+  var fallidos = correos.filter(function(c) { return c.fallido; }).length;
+  bar.style.display = 'block';
+  bar.style.bottom = hayBarraDeOTs ? '116px' : '70px';
+  bar.style.background = fallidos ? 'var(--rojo)' : 'var(--naranja-btn)';
+  texto.textContent = fallidos
+    ? fallidos + ' aviso(s) no se enviaron'
+    : correos.length + ' aviso(s) pendiente(s)';
 }
 
 async function sincronizarOTsPendientes() {
@@ -9174,8 +9227,10 @@ async function sincronizarOTsPendientes() {
   try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
   if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
 
-  var pendingBar = document.getElementById('pending-bar');
-  if (pendingBar) pendingBar.textContent = 'Sincronizando ' + pendientes.length + ' OT(s)...';
+  // OJO: no usar pendingBar.textContent — borraria el icono y el <span id="pending-count">,
+  // dejando la barra rota (sin contador) hasta recargar. Solo se cambia la etiqueta.
+  var pendingLabel = document.getElementById('pending-label');
+  if (pendingLabel) pendingLabel.textContent = 'OT(s) sincronizando...';
 
   for (var pi = 0; pi < pendientes.length; pi++) {
     var ot = pendientes[pi];
