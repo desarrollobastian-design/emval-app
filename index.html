@@ -105,7 +105,7 @@
   .field input, .field select, .field textarea {
     background: white; border: 1.5px solid var(--gris2); border-radius: var(--radio-sm);
     padding: 11px 13px; font-size: 15px; color: var(--texto); font-family: 'DM Sans', sans-serif;
-    width: 100%; outline: none; transition: border-color 0.2s;
+    width: 100%; transition: border-color 0.2s;
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--azul); }
   .field textarea { min-height: 100px; resize: none; line-height: 1.5; }
@@ -125,7 +125,18 @@
   .btn-secondary { background: var(--gris2); color: var(--texto); }
   .btn-verde { background: var(--verde-btn); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
-  .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); }
+  .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); min-height: 44px; }
+
+  /* OBJETIVO TACTIL. Pedro confirmo que los tecnicos NO usan guantes, asi que el minimo
+     deja de ser el peor caso de 48px y pasa a 44px (WCAG 2.5.5 / Apple HIG) para el flujo
+     del tecnico, hecho con el pulgar y una sola mano. Los controles densos del admin (con
+     mouse) tienen un piso de 32px. El limite absoluto son 24px: WCAG 2.2 SC 2.5.8, nivel AA.
+     Antes .btn-sm medía ~37px, y eso incluye el boton de Confirmar firma. */
+  button { min-height: 32px; }
+
+  /* FOCO DE TECLADO (WCAG 2.4.7). Sin esto, quien navega con Tab no ve donde esta parado.
+     Habia 9 sitios que hacian outline:none sin poner nada en su lugar. */
+  :focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   
   /* CARDS */
   .card { background: white; border-radius: var(--radio); padding: 14px; box-shadow: var(--sombra); }
@@ -473,17 +484,17 @@
         <button class="pin-btn" onclick="pinInput('9')">9</button>
         <button class="pin-btn" style="visibility:hidden;"></button>
         <button class="pin-btn" onclick="pinInput('0')">0</button>
-        <button class="pin-btn del" onclick="pinDelete()">⌫</button>
+        <button class="pin-btn del" onclick="pinDelete()" aria-label="Borrar último dígito"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 5H9l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg></button>
       </div>
     </div>
     <!-- Campo contraseña (solo Administrador) -->
     <div id="admin-pass-section" style="display:none; width:100%; max-width:280px; margin-top:8px;">
       <div style="position:relative;">
         <input type="password" id="admin-pass-input" placeholder="Contraseña"
-          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:14px;font-size:16px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color 0.2s;"
+          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:14px;font-size:16px;font-family:inherit;box-sizing:border-box;transition:border-color 0.2s;"
           onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris2)'"
           onkeydown="if(event.key==='Enter') validarPassword()" />
-        <button onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);font-size:20px;line-height:1;">👁</button>
+        <button id="btn-pass-vis" type="button" aria-label="Mostrar contraseña" onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);line-height:1;padding:6px;display:flex;align-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
       <button onclick="validarPassword()" style="width:100%;margin-top:12px;padding:14px;background:var(--azul);color:white;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">
         Ingresar
@@ -513,7 +524,7 @@
           <span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> Trabajos pausados</span>
           <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:8px;font-weight:600;" id="contador-pausadas">0</div>
         </div>
-        <span id="toggle-icon" style="transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);">▼</span>
+        <span id="toggle-icon" style="transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);display:inline-flex;align-items:center;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
       </button>
       <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
@@ -541,7 +552,7 @@
     <div style="margin-bottom:16px;">
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
       <div style="display:flex;gap:8px;align-items:stretch;">
-        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:8px;outline:none;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
+        <input type="text" id="search-sucursales" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid #D0D5DD;border-radius:8px;transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='#D0D5DD'"/>
         <button type="button" style="width:44px;height:44px;padding:0;border:2px solid #D0D5DD;background:transparent;border-radius:8px;cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
       </div>
     </div>
@@ -655,7 +666,7 @@
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pídele al administrador que firme con el dedo</div>
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
-        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+        <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
         <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
       </div>
@@ -753,7 +764,7 @@
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
-        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
+        <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris1);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
@@ -793,7 +804,7 @@
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarPreventivos();">
-        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;">⚙️ Filtros</button>
+        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:8px;padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
@@ -836,7 +847,7 @@
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
-        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;">⚙️ Filtro</button>
+        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
       </div>
       <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:8px;border:1px solid var(--gris2);margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
@@ -948,7 +959,7 @@
         <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
         <div class="field">
           <label>Rol</label>
-          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;">
+          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;">
             <option value="Tecnico en terreno">Técnico en terreno</option>
             <option value="Supervisor">Supervisor</option>
             <option value="Administrador">Administrador</option>
@@ -1563,9 +1574,21 @@ function seleccionarUsuario(nombre, cargo, letra) {
   go('s-pin');
 }
 
+// Iconos SVG reutilizados desde JS. Heredan currentColor, asi que se tinen con su contexto.
+const _SVG_EMBUDO = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>';
+const _SVG_OJO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _SVG_OJO_OFF = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+
 function togglePassVis() {
   const inp = document.getElementById('admin-pass-input');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
+  const btn = document.getElementById('btn-pass-vis');
+  const estabaOculta = inp.type === 'password';
+  inp.type = estabaOculta ? 'text' : 'password';
+  // El icono era mudo: mostraba siempre el mismo ojo sin importar el estado.
+  if (btn) {
+    btn.innerHTML = estabaOculta ? _SVG_OJO_OFF : _SVG_OJO;
+    btn.setAttribute('aria-label', estabaOculta ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  }
 }
 
 function pinInput(d) {
@@ -2134,7 +2157,7 @@ function cargarEjecucionScreen() {
     }
     let html = '<div class="field">';
     html += '<label>Nº Equipos Suscritos</label>';
-    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
     html += '</div>';
     html += '<div class="field"><label>Servicios a realizar</label>';
     html += '<div style="border:1.5px solid var(--gris2);border-radius:8px;overflow:hidden;">';
@@ -3044,7 +3067,7 @@ async function cargarCadenasAdmin() {
       searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;';
 
       const btnFiltro = document.createElement('button');
-      btnFiltro.textContent = '⚙️ Filtro';
+      btnFiltro.innerHTML = _SVG_EMBUDO + ' Filtro';
       btnFiltro.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
       const panelFiltros = document.createElement('div');
@@ -3368,7 +3391,7 @@ function editarSucursal(docId, idx, s) {
     l.textContent = lbl;
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = val; inp.placeholder = ph;
-    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px;outline:none;';
+    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px;';
     inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
     inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
     w.appendChild(l); w.appendChild(inp);
@@ -3724,7 +3747,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;';
 
   const btnFiltoCot = document.createElement('button');
-  btnFiltoCot.textContent = '⚙️ Filtro';
+  btnFiltoCot.innerHTML = _SVG_EMBUDO + ' Filtro';
   btnFiltoCot.style.cssText = 'background:var(--gris2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;';
 
   const panelFiltrosCot = document.createElement('div');
@@ -4029,7 +4052,7 @@ async function cargarCarpetas() {
       headerEnv.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatarEnv = document.createElement('div');
       avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:14px;background:#1A7A3C;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
-      avatarEnv.textContent = '📤';
+      avatarEnv.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
       const headerInfoEnv = document.createElement('div');
       headerInfoEnv.style.flex = '1';
       const nombreEnv = document.createElement('div');
@@ -7326,7 +7349,7 @@ function agregarFilaEmailCot(valor) {
   inp.type = 'email';
   inp.placeholder = 'correo@ejemplo.cl';
   inp.value = valor || '';
-  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:14px;font-family:inherit;outline:none;';
+  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:14px;font-family:inherit;';
   const del = document.createElement('button');
   del.type = 'button';
   del.textContent = '✕';
@@ -7890,8 +7913,8 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   meta.className = 'ot-sub';
   meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
   const pausaBadge = d.enEspera
-    ? '<span style="background:#1E40AF;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
-    : '<span style="background:var(--naranja-btn);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
+    ? '<span style="background:#1E40AF;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
+    : '<span style="background:var(--naranja-btn);color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
   const tecnicoTxt = '<span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + (d.tecnico || 'Sin técnico') + '</span>';
   const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
   meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
@@ -8644,11 +8667,11 @@ function abrirFactSupervisor(grupo) {
     function mkF(lbl, val) {
       const w = document.createElement('div');
       const l = document.createElement('div');
-      l.style.cssText = 'font-size:10px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
+      l.style.cssText = 'font-size:11px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
       l.textContent = lbl;
       const inp = document.createElement('input');
       inp.type = 'text'; inp.value = val || ''; inp.placeholder = lbl;
-      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;outline:none;';
+      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;';
       inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
       inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
       w.appendChild(l); w.appendChild(inp);

@@ -74,7 +74,9 @@ pregunta: *¿un técnico apurado, con mala luz, entiende esto en dos segundos?*
 pantalla móvil. Pesos disponibles: 400 / 500 / 600.
 
 **Numeric/Code Font:** DM Mono (400 / 500) — **uso restringido** a datos que se benefician
-de alineación tabular: números de OT, CECO, badges de código, montos de cotización.
+de alineación tabular: números de OT, CECO, badges de código, montos de cotización,
+**teclado numérico del PIN** y **cronómetro de la nota de voz** (2026-07-09: el código ya los
+usaba y el documento no los contemplaba; son numéricos tabulares, así que la regla se amplía).
 **Prohibido** en métricas de dashboard o texto general (ver Anti-Slop §7).
 
 ### Hierarchy & Weights (escala canónica)
@@ -158,7 +160,11 @@ de alineación tabular: números de OT, CECO, badges de código, montos de cotiz
 
 ### Alignment
 - **Texto:** left-aligned por defecto. Centrado solo para estados vacíos, confirmaciones y el step-indicator.
-- **Touch targets:** **mínimo 48×48px** (superior al estándar de 44px). Decisión bajo incertidumbre: no se pudo confirmar si los técnicos usan guantes ni en qué condiciones de luz trabajan, así que se dimensiona para el peor caso — guantes + sol directo + una sola mano.
+- **Touch targets** (*incertidumbre resuelta el 2026-07-09: Pedro confirmó que los técnicos **no usan guantes** al operar la app*):
+  - **44×44px** en el flujo del técnico — pulgar, una sola mano (WCAG 2.5.5 / Apple HIG).
+  - **32×32px** en los controles densos del admin, que se usan con mouse.
+  - **24×24px es el piso absoluto.** WCAG 2.2 SC 2.5.8, nivel **AA**. Ningún botón puede bajar de ahí.
+  > La versión anterior de esta regla decía 48px "dimensionado para el peor caso: guantes + sol directo". Se dimensionó para una hipótesis que resultó falsa — y el código nunca la cumplió igual: `.btn-sm` medía **37px** (e incluye "Confirmar firma") y varios botones del admin, **22-30px**. Una regla que nadie verifica no protege a nadie.
 
 ---
 
@@ -236,11 +242,17 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🔴 Alta | Colapsar 8+ radios a la escala de 4 tokens | `/normalize` |
 | ✅ Hecho | 🟢 Baja | `100vh` → `100dvh` | `/polish` |
 | ✅ Hecho | 🟢 Baja | `prefers-reduced-motion` + tokens `--ease`/`--sombra-hover` | `/polish` |
-| ⏳ Pendiente | 🔴 Alta | Migrar emojis → set SVG único (76 sitios, requiere QA visual) | `/normalize` |
-| ⏳ Pendiente | 🟡 Media | Hover-glows inline → clases CSS `@media (hover: hover)` | `/polish` |
-| ⏳ Pendiente | 🟡 Media | Escala tipográfica de 7 pasos + H1 22px por pantalla | `/polish` |
-| ⏳ Pendiente | 🟡 Media | Stat-cards: romper el template hero-metric + skeleton real | `/polish` |
+| ✅ Hecho | 🔴 Alta | Migrar emojis → set SVG único · **vigilado por `check-emojis.js`** | `/normalize` |
+| ✅ Hecho | 🟡 Media | Hover-glows inline → clases CSS `@media (hover: hover)` (0 handlers inline) | `/polish` |
+| ✅ Hecho | 🔴 Alta | Contraste WCAG AA · **vigilado por `check-contraste.js`** | `/normalize` |
+| ✅ Hecho | 🔴 Alta | Objetivos táctiles (44/32px) y foco de teclado (`:focus-visible`) | `/polish` |
+| ✅ Hecho | 🟡 Media | Stat-cards: romper el template hero-metric | `/polish` |
+| ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 16 tamaños en 336 declaraciones → 7 pasos | `/normalize` |
+| ⏳ Pendiente | 🟡 Media | **Modales in-app**: 19 diálogos nativos (`confirm`×11, `prompt`×6, `alert`×2) | feature |
+| ⏳ Pendiente | 🟢 Baja | Skeleton real de carga en stat-cards | `/polish` |
 | ⏳ Pendiente | 🟢 Baja | Colores de estado seleccionado con `color-mix` | `/polish` |
+
+> **Esta tabla estuvo mintiendo durante días**: marcaba como ⏳ Pendiente la migración de emojis y los hover-glows, que llevaban hecho una semana. El source of truth no sabía su propio estado. Si una fila no tiene un script que la verifique, **asume que está desactualizada**.
 
 > **Los pendientes requieren verificación visual en navegador** (tocan tamaños de texto,
 > iconos y estados de hover en cientos de sitios). Deben ejecutarse con la app corriendo
@@ -526,6 +538,59 @@ Con las fotos de prueba (oscuras) se veía perfecto. Sobre una pared blanca o un
 El placeholder estático del hero (`index.html:860`) dice `OT #--- · ---` con punto medio. Pero el JS que **realmente** lo rellena (`:2394`) escribía `' . '` con un punto normal. Lo mismo en la duración de las notas de voz (`:2919`). Otro rastro del tool que mangó los caracteres unicode. Restaurados ambos a `·`.
 
 > **Lección:** los placeholders estáticos son un test involuntario. Cuando el markup y el JS que lo reemplaza no coinciden en tipografía, uno de los dos está mal — y casi siempre es el que nadie mira.
+
+### Cuerpo, foco e iconografía verificable (2026-07-09)
+
+Auditoría **medida**, no opinada. Tres hallazgos, uno de ellos sobre el propio proceso de auditoría.
+
+**1. Los botones eran más chicos que el mínimo que este documento exigía.**
+`.btn-sm` medía **~37px** — y es la clase de **"Confirmar firma"**, la acción irreversible del flujo. Los botones "Eliminar" del admin, **~26px**. Con la incertidumbre de los guantes resuelta (no los usan), la regla nueva de §5 es 44/32/24px, y ahora existe: `.btn-sm { min-height: 44px }` y un piso global `button { min-height: 32px }`.
+
+**2. El foco de teclado no existía en 9 sitios.** (WCAG 2.4.7)
+Nueve `outline: none` sin nada en su lugar — buscadores, el `select` de rol, los ítems de cotización. Cuatro de ellos no tenían **ningún** indicador. Ahora hay una regla global `:focus-visible { outline: 2px solid var(--azul) }` y cero `outline:none`.
+> Corrección honesta: la auditoría empezó acusando a los **botones**. Falso — ninguno mataba su outline, así que conservaban el anillo del navegador. Eran los **inputs**. Medir antes de acusar.
+
+**3. 🐛 El botón de ver contraseña era mudo.**
+`togglePassVis()` cambiaba `input.type` pero **nunca el ícono**: mostraba el mismo ojo estuviera la contraseña visible u oculta. Ahora alterna ojo ↔ ojo-tachado y actualiza su `aria-label`.
+
+---
+
+### 🔍 La lección del día: un check no puede heredar el punto ciego del fix
+
+`DESIGN.md` afirmaba **"0 emojis a color en toda la app"**. Era **falso**, y lo escribí yo, y lo comiteé **dos veces**.
+
+La causa no fue descuido. La migración emoji→SVG recorrió una **lista** (📷 🖼 ⏸ ▶ 🔧 ⚠ 🔒 ✏ 🗑 👤 ✅ ⏳ 🔄)… y la verificación usó **esa misma lista**. Un check construido con el mismo mapa que el fix **no puede encontrar el territorio que el fix no visitó**. Sobrevivieron `👁`, `⚙️`×5 y `📤`.
+
+Solo aparecieron al medir por **rango Unicode** en vez de por lista. Y al hacerlo, el nuevo script encontró **dos más que nadie había visto**: `⌫` (borrar del PIN) y `▼` (chevron de pausadas) — monocromos, pero símbolos-como-icono que `DM Sans` no incluye, así que caían a una fuente de respaldo distinta en cada dispositivo.
+
+**Nuevo: `check-emojis.js`.**
+
+```
+node check-emojis.js   →   0 emojis a color. La iconografia es un set SVG unico.
+```
+
+Escanea **todo el espacio de símbolos** y **resta** una allowlist explícita, cada entrada con su razón escrita (`✓` `✕` `●` `■` `←` `→` `›`). Falla por defecto ante cualquier símbolo nuevo. **Es lo contrario de una lista.**
+
+> **Regla:** cuando escribas un check, pregúntate qué comparte con el fix que verifica. Si comparten la fuente de verdad, el check es una repetición, no una verificación.
+
+---
+
+### Recomendación sobre la escala tipográfica (pendiente, NO ejecutado)
+
+Medido: **16 tamaños distintos en 336 declaraciones** de `font-size`. La escala canónica de §3 tiene 7 pasos. Tres usos de 10px (bajo el piso de 11px) **ya fueron corregidos**.
+
+**Recomendación: no hacer el big-bang.** Colapsar 336 sitios de una vez es una refactorización grande, riesgosa, de valor invisible para el técnico, y que exige QA pantalla por pantalla. El costo real de la deriva no es visual — es de *velocidad futura*: cada pantalla nueva reinventa sus tamaños.
+
+Estrategia propuesta, la misma que funcionó con el contraste:
+1. **Congelar la deriva con una medición.** Un `check-tipografia.js` que reporte cuántos tamaños hay fuera de la escala. No falla; informa.
+2. **Definir los 7 pasos como tokens** en `:root` y documentarlos.
+3. **Migrar oportunistamente**: cada vez que se toque una pantalla, sus tamaños se mueven a la escala. Nunca una pasada dedicada.
+
+Los 3 tamaños más usados (**11/12/13px = 225 de 336 declaraciones**) son la capa de metadatos y body. Ahí está el 67% del beneficio.
+
+### Pendiente que sigue esperando su propia pasada
+
+**19 diálogos nativos** — `confirm()`×11, `prompt()`×6, **`alert()`×2** (estos últimos ni figuraban en la deuda declarada). Es una feature que toca lógica **destructiva** (borrar personal, borrar OTs, contraseña de admin). Necesita su propia pasada con testing, no un `/polish`.
 
 ---
 
