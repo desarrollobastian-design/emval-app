@@ -296,6 +296,53 @@ Post-crítica con render real. Aplicado:
 > **Aprendizaje:** los tokens fantasma son deuda invisible — "casi funciona" oculta el bug. Un barrido
 > `var(--x)` vs `:root` debería correrse periódicamente (o en un hook pre-commit).
 
+### Nota de robustez — el manejo de errores es INTENCIONAL (no tocar) (2026-07-08)
+
+Una auditoría de estados/errores marcó como bugs varios `catch` "silenciosos". **Falso positivo — verificado leyendo el código.** El patrón es deliberado y correcto:
+- **`cerrarOT` → `guardarEnFirebase`** hace **write-ahead a IndexedDB ANTES de tocar la nube** (escritura idempotente por `clientId`, timeout contra el SDK colgado). La OT terminada **no se pierde jamás**; se encola y sincroniza sola. Por eso navegar a "Servicio completado" tras el guardado es correcto.
+- El `catch(e){}` vacío en `cerrarOT` (localStorage) es solo **caché de display best-effort** — no el guardado. **No agregar un toast ahí** (sería falsa alarma).
+- `procesarFoto` y `guardarCotizacion` **sí** avisan al usuario en fallo (toast tras el `catch`); el `console.*` es logging adicional.
+
+> **Lección:** contar "catches que solo hacen `console.*`" NO es un proxy válido de "falla silenciosa".
+> En esta app los catches silenciosos son best-effort legítimos (caché, compresión con fallback, PDF en
+> background). Verificar la ruta real antes de "arreglar".
+
+### Pasada tras QA visual del flujo del técnico (2026-07-08)
+
+Con screenshots reales del flujo correctivo. Aplicado:
+- ✅ **Ortografía "Después"** en etiquetas visibles (foto-box "Después N", label comparación "DESPUÉS"). **Sin tocar** el identificador de datos `fotosDespues` ni el key `'despues'` — solo display.
+- ✅ **Tipo-cards emoji→SVG**: 🔧→llave (SVG `var(--azul)`, preventivo=programado), ⚠️→triángulo (SVG `var(--naranja)`, correctivo=emergencia). Color semántico (§8).
+
+**Migración emoji→SVG — clasificación para el trabajo restante:** los emojis del flujo (📷 🖼️ ⏸ ▶) se dividen en dos contextos, y la distinción es CRÍTICA:
+- **Markup estático / `innerHTML`** → seguro inyectar SVG directo. Ej: botones "Agregar foto", "Pausar", "Hacer otra OT".
+- **`textContent`** → un SVG se vería como **texto literal** (el bug `[mic]`). Requiere convertir `textContent`→`innerHTML` primero. Sitios: action-sheet ("📷 Tomar foto", "🖼️ Elegir de galería"), badges/botones dinámicos de OT pausada ("⏸ En Pausa", "▶ Continuar OT").
+
+> **Regla:** nunca reemplazar un emoji por SVG sin verificar si el sitio usa `textContent` o `innerHTML`.
+
+**Migración completada (flujo del técnico):** 📷→cámara, 🖼️→imagen, ⏸→pausa, ▶→play, 🔧→llave, ⚠️→triángulo.
+- Iconos **inline** (botones, spans, action-sheet, badges dinámicos): SVG `width="1em"` + `currentColor` → se tiñen con el contexto y escalan con la fuente.
+- Iconos **badge** (ot-icon 44px, link preventivos): SVG 22px con color propio (correctivo=`#D97706`, preventivo=`#1E8052`, link verde=blanco).
+- 6 sitios `textContent` convertidos a `innerHTML` (action-sheet, badges/botones de OT pausada) — verificado que ningún SVG quedó dentro de un `textContent`.
+
+**Cierre de la migración (2026-07-08):** ✅ y ⏳ también migrados.
+- `✅` del success-hero (cierre) → **check SVG blanco** 32px.
+- `✅` en toasts (`textContent`) → **`✓` tipográfico** (ya usado 15× en la app; seguro en texto, no requiere SVG).
+- `⏳` ("En espera", barra de pendientes) → **reloj SVG** inline; el badge de 'En espera' se convirtió `textContent`→`innerHTML`.
+
+**Resultado: 0 emojis a color en el flujo del técnico.** Los símbolos tipográficos ✓ → ← ✕ se **conservan** (monocromos, renderizan igual en todo dispositivo).
+
+### Pasada sobre el mundo del admin — QA visual desktop (2026-07-09)
+
+Con screenshots del panel supervisor/admin en desktop. Aplicado:
+- ✅ **Ortografía**: "+ Cotización", "+ Generar cotización", "Técnico" (resumen cot + lista personal), "Editar técnico", "eliminar este técnico". La lista de personal y el detalle de OTs por técnico ahora usan `_cargoLabel` (display), sin tocar el dato `'Tecnico en terreno'`.
+- ✅ **Emojis admin → SVG**: 🔒 candado, ✏️ lápiz, 🗑 papelera, 👤 persona, ↔ flechas. 5 sitios `textContent` convertidos a `innerHTML`. **0 emojis a color en toda la app** (flujo + admin).
+- ✅ **Color de avatar estable por nombre** (APROBADO por el cliente): se quitó el verde-por-rol de los técnicos; ahora cada técnico tiene su **color propio (hash por nombre), igual en login Y en "OTs por técnico"**. Admin/Supervisor siguen fijos (azul). **Decisión de negocio**: Pedro (cliente/admin) pidió explícitamente que cada técnico tenga su color propio — NO revertir al verde uniforme.
+- 🟡 **Layout desktop (parcial)**: las pantallas de lista/dashboard (supervisor, OTs por técnico, preventivos, carpetas, ventas, facturación) ahora usan hasta **980px** en desktop. Las **form-heavy** (s-admin, s-cotizacion) quedan en 640px.
+
+> **Pendiente (feature, no polish):**
+> 1. **Layout 2-columnas del admin** — el ensanche solo reduce el margen; el fix real es grid de 2 columnas en las listas + formularios contenidos + tabla de sucursales ancha. Requiere iteración por pantalla con QA visual. `s-admin` (145 sucursales) es el que más lo necesita.
+> 2. **Modales in-app para acciones destructivas** — hoy borrar personal usa `confirm()`/`prompt()` nativos (imposibles de estilar). Reemplazar por modal on-brand. Toca lógica destructiva → pasada dedicada con testing.
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*
