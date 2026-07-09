@@ -9175,7 +9175,18 @@ window.addEventListener('beforeunload', function() {
 });
 
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'hidden') guardarBorradorOTActual();
+  if (document.visibilityState === 'hidden') {
+    guardarBorradorOTActual();
+  } else if (document.visibilityState === 'visible') {
+    // Al volver a primer plano (p. ej. el técnico saca el teléfono del bolsillo despues
+    // de recuperar señal en terreno): reintentar subir de inmediato lo que quedó pendiente
+    // offline, sin esperar los 90 s del intervalo ni depender del evento 'online' (que en
+    // iOS/Safari no dispara si la app estuvo congelada en segundo plano). Las dos funciones
+    // salen al instante si no hay pendientes, así que es seguro llamarlas cada vez.
+    actualizarIndicadorPendientes();
+    setTimeout(sincronizarOTsPendientes, 800);
+    setTimeout(sincronizarPausadasPendientes, 1200);
+  }
 });
 
 // =========== CACHE OFFLINE CADENAS/USUARIOS ===========
