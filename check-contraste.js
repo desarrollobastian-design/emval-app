@@ -53,20 +53,35 @@ function leerTokens(html) {
 }
 
 // --- Los pares que la app usa. Cada uno apunta a donde vive en el codigo. ---
+// Regla del sistema: `X` = color de ESTADO (relleno/icono, sin texto encima).
+//                    `X-btn` = color de ACCION (siempre lleva texto encima).
+// El texto terciario se mide contra --fondo, que es la superficie mas oscura donde aparece
+// (y por lo tanto el peor caso). Medir solo contra blanco deja pasar colores que fallan.
 const PARES = [
-  { nombre: 'Boton primario',       texto: '#FFFFFF',  fondo: '--azul',      tam: 'normal',  donde: '.btn-primary' },
-  { nombre: 'Boton verde (accion)', texto: '#FFFFFF',  fondo: '--verde-btn', tam: 'normal',  donde: '.btn-verde / .top-action-verde' },
-  { nombre: 'Boton secundario',     texto: '--texto',  fondo: '--gris2',     tam: 'normal',  donde: '.btn-secondary' },
-  { nombre: 'Boton destructivo',    texto: '#FFFFFF',  fondo: '--rojo',      tam: 'normal',  donde: 'botones Eliminar' },
-  { nombre: 'Boton WhatsApp',       texto: '#FFFFFF',  fondo: '#25D366',     tam: 'normal',  donde: '.btn-whatsapp',
+  // --- Botones y barras (texto blanco encima) ---
+  { nombre: 'Boton primario',       texto: '#FFFFFF',  fondo: '--azul',       tam: 'normal',  donde: '.btn-primary' },
+  { nombre: 'Boton verde',          texto: '#FFFFFF',  fondo: '--verde-btn',  tam: 'normal',  donde: '.btn-verde / .top-action-verde' },
+  { nombre: 'Boton naranja',        texto: '#FFFFFF',  fondo: '--naranja-btn',tam: 'normal',  donde: 'Continuar OT / Editar OT / Aceptar' },
+  { nombre: 'Boton destructivo',    texto: '#FFFFFF',  fondo: '--rojo',       tam: 'normal',  donde: 'botones Eliminar' },
+  { nombre: 'Boton secundario',     texto: '--texto',  fondo: '--gris2',      tam: 'normal',  donde: '.btn-secondary' },
+  { nombre: 'Barra pendientes',     texto: '#FFFFFF',  fondo: '--naranja-btn',tam: 'normal',  donde: '#pending-bar / #correos-bar / badge EN PAUSA' },
+  { nombre: 'Barra offline/error',  texto: '#FFFFFF',  fondo: '--rojo',       tam: 'normal',  donde: '#offline-bar' },
+  { nombre: 'Hero de exito (sub)',  texto: '#FFFFFF',  fondo: '--verde-btn',  tam: 'normal',  donde: '.success-hero, subtitulo 13px' },
+  { nombre: 'Boton WhatsApp',       texto: '#FFFFFF',  fondo: '#25D366',      tam: 'normal',  donde: '.btn-whatsapp',
     tolerado: 'verde corporativo de WhatsApp; impuesto por un tercero, no es nuestra decision' },
-  { nombre: 'Texto primario',       texto: '--texto',  fondo: '--blanco',    tam: 'normal',  donde: 'body sobre card' },
-  { nombre: 'Texto secundario',     texto: '--texto2', fondo: '--blanco',    tam: 'normal',  donde: 'labels, .stat-label' },
-  { nombre: 'Texto terciario',      texto: '--texto3', fondo: '--blanco',    tam: 'normal',  donde: 'metadatos, placeholders' },
-  { nombre: 'Verde como TEXTO',     texto: '--verde',  fondo: '--blanco',    tam: 'normal',  donde: 'montos, "Firma: Si", totales' },
-  { nombre: 'Barra pendientes',     texto: '#FFFFFF',  fondo: '#D97706',     tam: 'normal',  donde: '#pending-bar / #correos-bar' },
-  { nombre: 'Barra offline/error',  texto: '#FFFFFF',  fondo: '--rojo',      tam: 'normal',  donde: '#offline-bar' },
-  { nombre: 'Icono preventivo',     texto: '#FFFFFF',  fondo: '--verde-btn', tam: 'grafico', donde: '.ot-icon (SVG, no texto)' },
+
+  // --- Texto sobre superficies claras (--fondo es el peor caso) ---
+  { nombre: 'Texto primario',       texto: '--texto',  fondo: '--fondo',      tam: 'normal',  donde: 'body' },
+  { nombre: 'Texto secundario',     texto: '--texto2', fondo: '--fondo',      tam: 'normal',  donde: 'labels, .stat-label' },
+  { nombre: 'Texto terciario',      texto: '--texto3', fondo: '--fondo',      tam: 'normal',  donde: 'metadatos' },
+  { nombre: 'Verde como texto',     texto: '--verde-btn',  fondo: '--fondo',  tam: 'normal',  donde: 'montos, totales, Firma: Si' },
+  { nombre: 'Naranja como texto',   texto: '--naranja-btn',fondo: '--fondo',  tam: 'normal',  donde: 'contador de pendientes por grupo' },
+  { nombre: 'Rojo como texto',      texto: '--rojo',   fondo: '--fondo',      tam: 'normal',  donde: 'mensajes de error' },
+
+  // --- Graficos (SC 1.4.11, min 3:1). No se cambian sin decidir el lenguaje visual. ---
+  { nombre: 'Icono preventivo',     texto: '--verde-btn', fondo: '--blanco',  tam: 'grafico', donde: '.ot-icon (SVG)' },
+  { nombre: 'Icono correctivo',     texto: '--naranja',   fondo: '--blanco',  tam: 'grafico', donde: '.tipo-card .icon (SVG naranja sobre card blanca)',
+    tolerado: 'decorativo: el label "Correctivo" debajo carga el significado. Revisar si alguna vez queda sin label' },
 ];
 
 // --- Correr ---

@@ -462,6 +462,44 @@ Script sin dependencias (~90 líneas) que lee los tokens del `:root` de `index.h
 
 > Mientras existan estos 5 fallos, `check-contraste.js` sale con código 1 — **a propósito**. No se "arregla" el script bajando el estándar: se arreglan los colores, o se marcan como tolerados con una razón escrita.
 
+### Sistema de color accesible: ESTADO vs ACCIÓN (2026-07-09)
+
+Cerradas las 4 decisiones que quedaban abiertas arriba. El sistema tiene ahora **una regla**:
+
+> **`X`** = color de **estado** → relleno, borde o ícono. **No lleva texto encima.**
+> **`X-btn`** = color de **acción** → cualquier superficie que **lleva texto encima**.
+
+| Token | Valor | Rol | Ratio |
+|-------|-------|-----|-------|
+| `--verde` | `#27A06B` | Estado: foto lista, paso completado, check, bordes | — |
+| `--verde-btn` | `#1E8052` | Acción: botones, texto verde, hero de éxito | **4.92:1** |
+| `--naranja` | `#EF9F27` | Estado: dot de offline, ícono de correctivo | — |
+| `--naranja-btn` | `#B45309` | Acción: barras de pendientes/correos, badge EN PAUSA, Continuar/Editar OT | **5.02:1** |
+| `--rojo` | `#D32F2F` (era `#E53E3E`) | Funcional: botones, errores, barra offline | **4.98:1** |
+| `--texto3` | `#666F82` (era `#9AA3B2`) | Metadatos | **4.67:1** |
+
+**Por qué así:**
+- **`--rojo` no se parte en dos.** Todos sus usos son funcionales (botones, texto de error, barra offline); no existe una superficie roja de estado cuyo tono emocional haya que preservar. Se oscurece en el lugar.
+- **`--texto3` era 2.35:1** sobre el fondo de la app — ilegible bajo sol directo, que es el peor caso que §1 manda optimizar. Se eligió el hex **más claro** que pasa AA sobre blanco, `--gris1` **y** `--fondo`. Medir solo contra blanco habría aprobado `#6B7488` (4.69 en blanco, pero **4.34 en `--fondo`**). *Por eso el script mide contra la superficie real, no contra blanco.*
+- **`--naranja-btn` (#B45309) no es un color nuevo**: ya se usaba en los íconos de OT.
+- Los **avatares de técnico** (`colores[]`, `COLORES_SUP`) conservan sus hexes: Pedro pidió color propio por técnico y el hash debe ser estable. Cambiarlos rompería la identidad visual de cada persona.
+
+**Correcciones a decisiones previas (para que nadie las repita):**
+- El comentario del token `--verde-btn` afirmaba que el hero de éxito *"no lleva texto encima"*. **Sí lleva.** El título (20px/700) pasa como *texto grande* (3.3:1 ≥ 3.0), pero el subtítulo de 13px con `opacity: 0.8` daba **~2.6:1**. El hero pasó a `--verde-btn` y el subtítulo perdió la `opacity`.
+- **Sobre un fondo oscuro, el blanco puro es el máximo contraste posible.** No se puede "atenuar" un subtítulo con `opacity` y seguir pasando AA. La jerarquía la dan **tamaño y peso**, no la transparencia. Es el mismo principio que justificó oscurecer `--texto3`.
+
+**Tolerados — fallan a propósito, con razón escrita en el script:**
+1. **Botón WhatsApp** (`#25D366`, 1.98:1) — verde corporativo de un tercero. Cambiarlo rompería el reconocimiento del canal.
+2. **Ícono correctivo** (`--naranja` sobre card blanca, 2.17:1) — decorativo: el label "Correctivo" debajo carga el significado. **Si alguna vez queda sin label, hay que oscurecerlo.**
+
+**Estado actual:**
+
+```
+node check-contraste.js   →   17 pares · 0 fallos reales · 2 tolerados · exit 0
+```
+
+Ya se puede enganchar a un hook de pre-commit sin que rompa el flujo. La regla se mantiene: **no se baja el estándar para que el script pase** — se arregla el color, o se marca tolerado con una razón que alguien pueda discutir.
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*

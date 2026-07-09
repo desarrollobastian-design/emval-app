@@ -17,12 +17,20 @@
     --azul: #1B3A6B;
     --azul-claro: #2D5AA0;
     --verde: #27A06B;
-    /* Verde de ACCION: fondo de botones con texto blanco (4.9:1, cumple WCAG AA).
-       El --verde de arriba es verde de ESTADO (relleno sin texto encima: foto lista,
-       paso completado, hero de exito). Blanco sobre --verde da 3.3:1 y no pasa AA. */
+    /* Verde de ACCION: cualquier superficie verde que lleve TEXTO encima (4.9:1, pasa AA).
+       Botones, texto verde sobre blanco, y el hero de exito. El --verde de arriba es verde
+       de ESTADO: relleno sin texto encima (foto lista, paso completado, check, bordes).
+       Blanco sobre --verde da solo 3.3:1 y no pasa AA. */
     --verde-btn: #1E8052;
-    --rojo: #E53E3E;
+    /* Oscurecido de #E53E3E (4.13:1) a 4.98:1. No se parte en dos como el verde
+       porque todos sus usos son funcionales (botones, texto de error, barra offline):
+       no hay una superficie roja de estado cuyo tono emocional haya que preservar. */
+    --rojo: #D32F2F;
     --naranja: #EF9F27;
+    /* Naranja de ACCION: fondo de boton/barra con texto blanco (5.0:1). El --naranja de
+       arriba es naranja de ESTADO (dot de offline, icono de correctivo, relleno pausado):
+       blanco sobre --naranja da 2.2:1, ilegible. Este hex ya se usaba en los iconos de OT. */
+    --naranja-btn: #B45309;
     --fondo: #F4F6FB;
     --blanco: #FFFFFF;
     --gris1: #F8F9FC;
@@ -30,7 +38,10 @@
     --gris3: #C8D0E0;
     --texto: #1A2035;
     --texto2: #5A6478;
-    --texto3: #9AA3B2;
+    /* Oscurecido de #9AA3B2 (2.35:1 sobre el fondo de la app: ilegible bajo sol directo).
+       #666F82 es el mas claro que pasa AA sobre blanco, --gris1 Y --fondo. La jerarquia
+       se sostiene con tamano y peso, no volviendo ilegible el texto terciario. */
+    --texto3: #666F82;
     --radio: 14px;
     --radio-sm: 8px;
     --radio-lg: 18px;
@@ -342,7 +353,8 @@
   .login-sub { color: var(--texto2); font-size: 14px; margin-top: 4px; font-weight: 500; letter-spacing: 0.3px; }
   
   /* SUCCESS */
-  .success-hero { background: linear-gradient(160deg, var(--verde) 0%, #1D8A5A 100%); padding: 40px 24px; text-align: center; color: white; }
+  /* Lleva texto encima -> usa el verde de ACCION. Con --verde el subtitulo de 13px daba 2.6:1. */
+  .success-hero { background: linear-gradient(160deg, var(--verde-btn) 0%, #17603D 100%); padding: 40px 24px; text-align: center; color: white; }
   .success-icon { width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 28px; }
   
   /* SKELETON LOADING USUARIOS */
@@ -644,7 +656,7 @@
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
         <input type="email" id="email-admin" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:8px;font-size:15px;font-family:inherit;outline:none;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
-        <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde);margin-top:4px;display:none;">Email configurado automáticamente</div>
+        <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
       </div>
     </div>
@@ -843,7 +855,9 @@
   <div class="success-hero">
     <div class="success-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
     <div style="font-size: 20px; font-weight: 700;">Servicio completado!</div>
-    <div style="font-size: 13px; opacity: 0.8; margin-top: 6px;" id="cierre-ot-info">OT #--- · ---</div>
+    <!-- sin opacity: sobre verde oscuro, el blanco puro es el maximo contraste posible (4.9:1).
+         La jerarquia con el titulo la dan el tamano (13 vs 20px) y el peso, no la transparencia. -->
+    <div style="font-size: 13px; margin-top: 6px;" id="cierre-ot-info">OT #--- · ---</div>
   </div>
   <div class="content">
     <div class="card">
@@ -852,7 +866,7 @@
       <div class="summary-row"><span class="sum-label">Técnico</span><span class="sum-val" id="sum-tecnico">—</span></div>
       <div class="summary-row"><span class="sum-label">Fotos antes</span><span class="sum-val" id="sum-fotos-antes">—</span></div>
       <div class="summary-row"><span class="sum-label">Fotos después</span><span class="sum-val" id="sum-fotos-despues">—</span></div>
-      <div class="summary-row"><span class="sum-label">Firma admin</span><span class="sum-val" id="sum-firma" style="color:var(--verde)">—</span></div>
+      <div class="summary-row"><span class="sum-label">Firma admin</span><span class="sum-val" id="sum-firma" style="color:var(--verde-btn)">—</span></div>
     </div>
     <div id="comparacion-fotos" style="display:none;">
       <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;">COMPARACIÓN ANTES / DESPUÉS</div>
@@ -1011,16 +1025,16 @@
 </div>
 
 <div id="toast"></div>
-<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#E53E3E;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
+<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
   Sin conexión — modo offline
 </div>
-<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
+<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
   <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> <span id="pending-label">OT(s) pendiente(s) — Toca para subir</span>
 </div>
 
 <!-- Avisos por correo encolados: misma visibilidad persistente que las OTs pendientes.
      Un toast se desvanece; una barra no. Se apila sobre la de OTs si ambas estan visibles. -->
-<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
+<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
   <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span> — Toca para reintentar
 </div>
 
@@ -1323,7 +1337,7 @@ function _restaurarFirmaDesdeEstado() {
       if (firmaCont) firmaCont.classList.add('signed');
       if (firmaStatus) {
         firmaStatus.textContent = '✓ Firma confirmada';
-        firmaStatus.style.color = 'var(--verde)';
+        firmaStatus.style.color = 'var(--verde-btn)';
       }
     };
     img.src = estado.firmaImagen;
@@ -2076,7 +2090,7 @@ function confirmarFirma() {
   if (!tieneFirma) { toast('Primero firma en el recuadro'); return; }
   firmaConfirmada = true; estado.firmada = true;
   document.getElementById('firma-status').textContent = '✓ Firma confirmada';
-  document.getElementById('firma-status').style.color = 'var(--verde)';
+  document.getElementById('firma-status').style.color = 'var(--verde-btn)';
   document.getElementById('firma-container').classList.add('signed');
   estado.firmaImagen = _capturarFirmaBorrador();
   programarAutoguardadoOT();
@@ -3873,7 +3887,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     fechaDiv.textContent = it.fecha || '';
     rowHeader.appendChild(fechaDiv);
     const totalDiv = document.createElement('div');
-    totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);margin-top:3px;';
+    totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde-btn);margin-top:3px;';
     totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
     const descDiv = document.createElement('div');
     descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
@@ -3929,7 +3943,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     if (it.tipoCot === 'previa' && it.estadoCot === 'Pendiente') {
       const btnAcept = document.createElement('button');
       btnAcept.textContent = 'Aceptar → crear OT';
-      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
+      btnAcept.style.cssText = 'flex:1.6;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;';
       btnAcept.onclick = (function(id){ return function(){ aceptarCotizacionPrevia(id); }; })(it.id);
       btnsRow.appendChild(btnAcept);
     }
@@ -7080,7 +7094,7 @@ async function verOTsTecnico(nombre, grupo) {
     statsDiv.style.cssText = 'display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto3);';
     const fa = (ot.fotosAntes && ot.fotosAntes.length) ? ot.fotosAntes.length : 0;
     const fd = (ot.fotosDespues && ot.fotosDespues.length) ? ot.fotosDespues.length : 0;
-    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
+    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde-btn)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
     card.appendChild(statsDiv);
 
     // Badge de estado (En Pausa)
@@ -7134,7 +7148,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (ot.estado === 'En Pausa' || ot.pausa) {
       const btnContinuar = document.createElement('button');
       btnContinuar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><path d="M5 3l14 9-14 9V3z"/></svg> Continuar OT';
-      btnContinuar.style.cssText = 'flex:1;background:var(--naranja);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnContinuar.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnContinuar.onclick = (function(id){ return function(){ continuarOT(id); }; })(ot.id);
       btns.appendChild(btnContinuar);
     }
@@ -7195,7 +7209,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (estado.cargo === 'Administrador' && !ot.pausa && ot.estado !== 'En Pausa' && !ot.enEspera) {
       const btnEditOT = document.createElement('button');
       btnEditOT.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> Editar OT';
-      btnEditOT.style.cssText = 'flex:1;background:var(--naranja);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEditOT.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnEditOT.onclick = (function(otRef){ return function(){ editarOTTerminada(otRef); }; })(ot);
       btns.appendChild(btnEditOT);
     }
@@ -7832,7 +7846,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   const esAdmin = estado.cargo === 'Administrador';
   const cad = cadenaMap[d.cadena] || cadenaMap[d.local] || null;
   const logoUrl = d.cadenaLogo || (cad && cad.logo) || '';
-  const logoColor = d.cadenaColor || (cad && cad.color) || '#D97706';
+  const logoColor = d.cadenaColor || (cad && cad.color) || '#B45309';
   const logoLetra = d.cadenaLetra || (cad && cad.letra) || (d.local ? d.local.charAt(0) : 'P');
 
   const card = document.createElement('div');
@@ -7874,7 +7888,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
   const pausaBadge = d.enEspera
     ? '<span style="background:#1E40AF;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
-    : '<span style="background:#D97706;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
+    : '<span style="background:var(--naranja-btn);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
   const tecnicoTxt = '<span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + (d.tecnico || 'Sin técnico') + '</span>';
   const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
   meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
@@ -7958,7 +7972,7 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
       } else {
         const chk = document.createElement('span');
         chk.textContent = '✓';
-        chk.style.cssText = 'color:var(--verde);font-weight:700;';
+        chk.style.cssText = 'color:var(--verde-btn);font-weight:700;';
         row.appendChild(chk);
       }
       lista.appendChild(row);
@@ -8544,7 +8558,7 @@ async function cargarFacturacion() {
       det.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
       det.textContent = g.items.length + ' cotizaciones | $' + g.total.toLocaleString('es-CL');
       const pend = document.createElement('div');
-      pend.style.cssText = 'font-size:11px;margin-top:2px;font-weight:600;color:' + (g.pendientes > 0 ? 'var(--naranja)' : 'var(--verde)') + ';';
+      pend.style.cssText = 'font-size:11px;margin-top:2px;font-weight:600;color:' + (g.pendientes > 0 ? 'var(--naranja-btn)' : 'var(--verde-btn)') + ';';
       pend.textContent = g.pendientes > 0 ? g.pendientes + ' sin factura' : 'Al dia';
       info.appendChild(nom); info.appendChild(det); info.appendChild(pend);
       const arr = document.createElement('div');
@@ -8578,7 +8592,7 @@ function abrirFactSupervisor(grupo) {
     hDet.textContent = (d.fecha||'') + (d.otNumero ? ' | OT #' + d.otNumero : '');
     hInfo.appendChild(hLocal); hInfo.appendChild(hDet);
     const hMonto = document.createElement('div');
-    hMonto.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde);';
+    hMonto.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde-btn);';
     hMonto.textContent = '$' + (d.total||0).toLocaleString('es-CL');
     hdr.appendChild(hInfo); hdr.appendChild(hMonto);
     card.appendChild(hdr);
@@ -8842,7 +8856,7 @@ async function cargarVentas() {
       nombre.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
       nombre.textContent = sup;
       var monto = document.createElement('div');
-      monto.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde);';
+      monto.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde-btn);';
       monto.textContent = '$ ' + totalSup.toLocaleString('es-CL');
       top.appendChild(nombre); top.appendChild(monto);
       var bar = document.createElement('div');
@@ -9175,7 +9189,7 @@ function _actualizarBarraCorreos(hayBarraDeOTs) {
   var fallidos = correos.filter(function(c) { return c.fallido; }).length;
   bar.style.display = 'block';
   bar.style.bottom = hayBarraDeOTs ? '116px' : '70px';
-  bar.style.background = fallidos ? '#E53E3E' : '#D97706';
+  bar.style.background = fallidos ? 'var(--rojo)' : 'var(--naranja-btn)';
   texto.textContent = fallidos
     ? fallidos + ' aviso(s) no se enviaron'
     : correos.length + ' aviso(s) pendiente(s)';
