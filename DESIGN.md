@@ -343,6 +343,35 @@ Con screenshots del panel supervisor/admin en desktop. Aplicado:
 > 1. **Layout 2-columnas del admin** — el ensanche solo reduce el margen; el fix real es grid de 2 columnas en las listas + formularios contenidos + tabla de sucursales ancha. Requiere iteración por pantalla con QA visual. `s-admin` (145 sucursales) es el que más lo necesita.
 > 2. **Modales in-app para acciones destructivas** — hoy borrar personal usa `confirm()`/`prompt()` nativos (imposibles de estilar). Reemplazar por modal on-brand. Toca lógica destructiva → pasada dedicada con testing.
 
+### Pasada layout desktop del admin + robustez de pausadas (2026-07-09)
+
+Con las respuestas de Pedro (usa **monitor + laptop + teléfono**) y su análisis del botón "Actualizar".
+
+**Layout responsivo — utility `.card-grid`:**
+- Nueva clase `.card-grid` = `grid` con `repeat(auto-fill, minmax(min(340px, 100%), 1fr))`. Colapsa sola: **1 columna en teléfono, 2+ en laptop/monitor**. El `min(340px, 100%)` evita scroll horizontal en móvil (requisito §5). Sin media queries.
+- Aplicada a las **listas de cards planas**: personal (`#lista-tecnicos-admin`), pausadas (`#sup-pausadas-lista`) y OTs de hoy del supervisor (nuevo wrapper `#sup-ots-hoy-lista`). El `margin-bottom` de las cards se neutraliza dentro del grid (el `gap` maneja el espaciado).
+- **Cadenas se quedan en 1 columna a propósito**: son acordeones con hasta 145 sucursales al expandir; en grid de 2-col, expandir una desbalancearía las columnas. Solo se benefician del contenedor más ancho.
+
+**`s-admin` sale de los 640px:**
+- `#s-admin .content` ahora llega a **980px** (antes atrapado en 640 → columna flaca en un mar de blanco).
+- Pero los **controles se contienen**: formularios (`#form-tecnico`/`#form-cadena`) y buscadores a `max-width: 480px`; botones "+ Agregar" a `width: auto`. La distinción del critique: *el form angosto, la lista ancha.* Corrige la nota previa que dejaba s-admin en 640 "por form-heavy" — conflacía form con lista.
+
+**Componente `.top-action` (topbar):**
+- Los botones hechos a mano de la topbar ("Salir", "Descargar Excel" ×2) pasaron de `style="..."` inline a la clase `.top-action` (+ variante `.top-action-verde`). Un solo lugar define el look de las acciones de topbar. (No usan `.btn` porque esa clase es full-width para CTAs de formulario; la topbar necesita acción compacta — contexto distinto.)
+
+**Migración emoji — cierre real:**
+- Sobrevivían **2 `🔄`** (firma "Limpiar", refresh de pausadas) que contradecían el claim "0 emojis". El de firma → **SVG rotar** (`currentColor`); el de pausadas se fue con el botón. **Ahora sí: 0 emojis a color en toda la app.**
+
+**Botón "Actualizar" pausadas: eliminado + los 2 bugs que tapaba (corrección de datos, no cosmética):**
+La lista de pausadas es en vivo (`onSnapshot`) — un botón de refresh manual comunicaba lo contrario ("esta lista puede estar vieja"), rompiendo el principio de *estado honesto*. Se eliminó. Pero antes tapaba dos huecos reales, ahora arreglados:
+1. **Firebase no listo → lista muerta para siempre.** `cargarPausadasSupervisor` hacía `if (!window._firebaseReady) return;` sin reintento. Ahora `setTimeout(cargarPausadasSupervisor, 800)` — espeja el patrón que ya usaba `cargarOTsSupervisor`.
+2. **Listener falla en silencio.** El callback de error solo hacía `console.error` → una lista congelada se veía idéntica a "sin pausadas" (el tipo de "trabajo que desaparece" que venimos cazando). Ahora `_mostrarErrorPausadasSup` muestra un estado honesto ("No se pudo cargar la lista en vivo") con botón **Reintentar** — que solo aparece cuando hay error real, no permanentemente.
+- De paso: el fallback stale `var(--gris3, #D0D5DD)` (no coincidía con el token real `#C8D0E0`) se fue con el botón.
+
+**Estado de los pendientes:**
+- ✅ **#1 Layout 2-columnas del admin** — hecho (grid responsivo en las 3 listas planas + s-admin ancho con controles contenidos). Falta solo QA visual fino en localhost con Pedro (¿2 o 3 columnas en su monitor grande? hoy 2 por el cap de 980px).
+- ⏳ **#2 Modales in-app** para `confirm()`/`prompt()` destructivos — sigue pendiente (pasada dedicada con testing).
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*
