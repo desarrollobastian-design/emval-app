@@ -388,6 +388,33 @@ Texto blanco sobre `--verde` (`#27A06B`) da **≈3.3:1**. WCAG AA pide **4.5:1**
 **Nota sobre el Service Worker (corrige una creencia equivocada):**
 `sw.js` sirve las navegaciones **network-first** (`sw.js:37-48`): un reload online siempre trae el `index.html` fresco de la red y lo re-cachea. Por lo tanto los bumps de `CACHE_NAME` (`v14 → v15 → v16`) **no son lo que propaga** `index.html` a los usuarios online — sirven para purgar cachés viejos. No hace falta bumpear la versión para que un cambio de HTML llegue.
 
+### Estado honesto de la cola de correos (2026-07-09)
+
+Continuación de `d915a6b`. La app promete *"nunca te deja con dudas sobre qué pasó"* (§7). La cola de correos todavía incumplía esa promesa en cuatro puntos.
+
+**1. Ya no se pierde ningún aviso en silencio.**
+- Antes: tras **20 intentos**, el correo se **borraba** con un `console.warn`. Nadie se enteraba jamás.
+- Ahora la ventana es de **tiempo (7 días), no de intentos** — con señal intermitente, 20 intentos se quemaban en minutos y el aviso moría.
+- **Invariante nueva:** `sincronizarCorreosPendientes` **nunca elimina un ítem**. O se envía, o sigue pendiente, o queda marcado `fallido` esperando reintento manual.
+
+**2. Barra persistente `#correos-bar`** (mismo patrón que `#pending-bar`).
+- Un toast se desvanece en 3 s; una barra no. Muestra `N aviso(s) pendiente(s)` en ámbar, o `N aviso(s) no se enviaron` en **rojo** si alguno agotó su ventana. Tap → `reintentarCorreosAhora()`, que le da otra ventana de 7 días.
+- Se apila en `bottom: 116px` si la barra de OTs pendientes también está visible; si no, ocupa los `70px` habituales. Se oculta sin señal (ahí manda `#offline-bar`).
+
+**3. Un solo punto de envío — de verdad.**
+- El comentario decía *"único punto de envío"* pero había **tres**: `_enviarCorreo`, la cola de reintento, y `enviarEmailAdmin` — cada uno con el `service_id`/`template_id` de EmailJS **duplicado**.
+- Ahora todo pasa por **`_emailjsSend(params)`**, la única función que conoce esos ids.
+- `enviarEmailAdmin` era **código muerto** (definido, nunca llamado ni desde HTML) y además logueaba direcciones de correo a consola → **borrado**.
+- Las cotizaciones usan otro service/template vía `window.EMAILJS_COT_*`; quedan aparte a propósito.
+
+**4. El aviso a Pedro ahora dice la verdad.**
+- `_notificarOTCompletada` descartaba el valor de retorno de `_enviarCorreo`: se encolaba, pero nadie lo decía. Ahora es `async`, espera el resultado y avisa — *"Aviso a administración pendiente — se enviará solo al recuperar la señal."* Mismo trato honesto que ya tenía el correo a la sucursal.
+
+**🐛 Bug encontrado de paso — la barra de OTs pendientes quedaba rota tras sincronizar.**
+`sincronizarOTsPendientes` hacía `pendingBar.textContent = 'Sincronizando…'`, lo que **destruye el ícono SVG y el `<span id="pending-count">`**. En la siguiente actualización `pendingCount` era `null`, el `TypeError` se lo tragaba un `catch(e) {}` vacío, y la barra quedaba con texto viejo y sin contador **hasta recargar la app**. Se agregó `<span id="pending-label">` y ahora solo se cambia esa etiqueta.
+
+> **Lección:** `textContent` sobre un contenedor con hijos es destructivo. Es el primo del bug `[mic]` (meter SVG dentro de un `textContent`): las dos caras del mismo malentendido.
+
 ---
 
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*

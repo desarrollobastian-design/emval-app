@@ -1011,7 +1011,13 @@
   Sin conexión — modo offline
 </div>
 <div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
-  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> OT(s) pendiente(s) — Toca para subir
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> <span id="pending-label">OT(s) pendiente(s) — Toca para subir</span>
+</div>
+
+<!-- Avisos por correo encolados: misma visibilidad persistente que las OTs pendientes.
+     Un toast se desvanece; una barra no. Se apila sobre la de OTs si ambas estan visibles. -->
+<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:#D97706;color:white;padding:7px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span> — Toca para reintentar
 </div>
 
 <!-- MODAL: Reasignar OT pausada a otro tecnico -->
@@ -2526,7 +2532,16 @@ async function _urlsABase64(arr) {
 // de que el aviso nunca salio. Ahora el envio que falla se encola y se reintenta al volver la
 // señal, al traer la app a primer plano y cada 90 s.
 const _CORREOS_KEY = 'emval_correos_pendientes';
-const _CORREOS_MAX_INTENTOS = 20;
+// Ventana de reintento: un aviso se sigue intentando durante 7 dias. Al vencer NO se descarta:
+// se marca `fallido` y queda visible en la barra para reintentarlo a mano.
+// (Antes se borraba tras 20 intentos con un console.warn — es decir, se perdia en silencio.)
+const _CORREOS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Unica funcion que conoce el service/template de EmailJS. Todo envio pasa por aqui,
+// incluida la cola de reintento (antes duplicaba los ids y se saltaba _enviarCorreo).
+function _emailjsSend(params) {
+  return emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
+}
 
 function _cargarCorreosPendientes() {
   try { return JSON.parse(localStorage.getItem(_CORREOS_KEY) || '[]'); } catch(e) { return []; }
@@ -2540,16 +2555,17 @@ function _encolarCorreo(params) {
   const clave = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
   const lista = _cargarCorreosPendientes();
   if (lista.some(function(c){ return c.clave === clave; })) return;
-  lista.push({ clave: clave, intentos: 0, params: params });
+  lista.push({ clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false, params: params });
   _guardarCorreosPendientes(lista);
   console.warn('Correo encolado para reintento:', clave);
+  actualizarIndicadorPendientes();
 }
 
-// Unico punto de envio. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
+// Envia. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
 async function _enviarCorreo(params) {
   if (typeof emailjs === 'undefined') { _encolarCorreo(params); return false; }
   try {
-    await emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
+    await _emailjsSend(params);
     return true;
   } catch(e) {
     console.warn('Error enviando correo, se encola:', e);
@@ -2559,30 +2575,46 @@ async function _enviarCorreo(params) {
 }
 
 // Reintenta la cola. Sale de inmediato si no hay nada, asi que es seguro llamarla seguido.
+// Invariante: NUNCA se borra un aviso. O se envia, o sigue pendiente, o queda `fallido` y visible.
 async function sincronizarCorreosPendientes() {
   if (!navigator.onLine || typeof emailjs === 'undefined') return;
   const lista = _cargarCorreosPendientes();
   if (!lista.length) return;
   const quedan = [];
-  let enviados = 0;
+  let enviados = 0, vencidos = 0;
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];
+    if (!c.creadoEn) c.creadoEn = Date.now(); // migracion de items encolados antes del TTL
+    if (c.fallido) { quedan.push(c); continue; } // ya se rindio; espera reintento manual
     try {
-      await emailjs.send('service_xm6dmxl', 'template_agzfcux', c.params);
+      await _emailjsSend(c.params);
       enviados++;
     } catch(e) {
       c.intentos = (c.intentos || 0) + 1;
-      if (c.intentos < _CORREOS_MAX_INTENTOS) quedan.push(c);
-      else console.warn('Correo descartado tras', _CORREOS_MAX_INTENTOS, 'intentos:', c.clave);
+      if (Date.now() - c.creadoEn > _CORREOS_TTL_MS) { c.fallido = true; vencidos++; }
+      quedan.push(c);
     }
   }
   _guardarCorreosPendientes(quedan);
-  if (enviados) toast(enviados + ' correo(s) pendiente(s) enviado(s)');
+  if (enviados) toast(enviados + ' aviso(s) pendiente(s) enviado(s)');
+  if (vencidos) toast(vencidos + ' aviso(s) no se pudieron enviar. Quedan en la barra para reintentar.');
+  actualizarIndicadorPendientes();
+}
+
+// Reintento manual desde la barra: da otra ventana de 7 dias a los avisos que se rindieron.
+async function reintentarCorreosAhora() {
+  const lista = _cargarCorreosPendientes();
+  if (!lista.length) return;
+  lista.forEach(function(c) { c.fallido = false; c.creadoEn = Date.now(); c.intentos = 0; });
+  _guardarCorreosPendientes(lista);
+  toast('Reintentando ' + lista.length + ' aviso(s)...');
+  await sincronizarCorreosPendientes();
 }
 
 // nota: texto de aviso que viaja en el cuerpo (ej. "el local no tiene correo configurado").
-function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
-  _enviarCorreo({
+// Igual que el correo a la sucursal, este aviso dice la verdad cuando no logra salir.
+async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
+  const ok = await _enviarCorreo({
     email_admin: window.PEDRO_NOTIF_EMAIL,
     ot_numero: String(numero),
     local: String(local),
@@ -2592,6 +2624,8 @@ function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, not
     trabajo: String(nota || ''),
     pdf_url: pdfUrl || ''
   });
+  if (!ok) toast('Aviso a administración pendiente — se enviará solo al recuperar la señal.');
+  return ok;
 }
 
 async function guardarEnFirebase(otBase, desc, fecha) {
@@ -3367,33 +3401,6 @@ function editarSucursal(docId, idx, s) {
   modal.appendChild(btns);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-}
-
-// =========== EMAIL ADMIN ===========
-async function enviarEmailAdmin() {
-  // Use sucursal email first, then manual input, then skip
-  const email = estado.emailSucursal || estado.emailAdmin;
-  if (!email) return;
-  try {
-    toast('Enviando email...');
-    console.log('Enviando a:', email);
-    const params = {
-      email_admin: email,
-      ot_numero: String(estado.otNumero),
-      local: String(estado.local),
-      fecha: new Date().toLocaleDateString('es-CL'),
-      tecnico: String(estado.usuario),
-      tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-      trabajo: String(document.getElementById('desc-trabajo').value || '')
-    };
-    console.log('Params:', JSON.stringify(params));
-    const result = await emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
-    console.log('EmailJS result:', result.status, result.text);
-    toast('Email enviado correctamente');
-  } catch(e) {
-    console.error('EmailJS error completo:', JSON.stringify(e));
-    toast('Error email: ' + (e.text || e.message || 'desconocido'));
-  }
 }
 
 // =========== COTIZACION ===========
@@ -9127,23 +9134,47 @@ function _blobToBase64(blob) {
 }
 
 async function actualizarIndicadorPendientes() {
+  var mostrandoOTs = false;
   try {
     var pendientes = await _obtenerOTsPendientes();
     var offlineBar = document.getElementById('offline-bar');
     var pendingBar = document.getElementById('pending-bar');
     var pendingCount = document.getElementById('pending-count');
+    var pendingLabel = document.getElementById('pending-label');
     if (!navigator.onLine) {
       if (offlineBar) offlineBar.style.display = 'block';
       if (pendingBar) pendingBar.style.display = 'none';
     } else {
       if (offlineBar) offlineBar.style.display = 'none';
       if (pendientes.length > 0) {
-        if (pendingBar) { pendingBar.style.display = 'block'; pendingCount.textContent = pendientes.length; }
+        if (pendingBar) pendingBar.style.display = 'block';
+        if (pendingCount) pendingCount.textContent = pendientes.length;
+        if (pendingLabel) pendingLabel.textContent = 'OT(s) pendiente(s) — Toca para subir';
+        mostrandoOTs = true;
       } else {
         if (pendingBar) pendingBar.style.display = 'none';
       }
     }
   } catch(e) {}
+  _actualizarBarraCorreos(mostrandoOTs);
+}
+
+// Los avisos encolados merecen la misma visibilidad persistente que las OTs pendientes:
+// un toast se desvanece, una barra no. Rojo si alguno agoto su ventana de reintento
+// (nunca se borra en silencio: queda ahi hasta que alguien lo reintente).
+function _actualizarBarraCorreos(hayBarraDeOTs) {
+  var bar = document.getElementById('correos-bar');
+  var texto = document.getElementById('correos-texto');
+  if (!bar || !texto) return;
+  var correos = _cargarCorreosPendientes();
+  if (!navigator.onLine || correos.length === 0) { bar.style.display = 'none'; return; }
+  var fallidos = correos.filter(function(c) { return c.fallido; }).length;
+  bar.style.display = 'block';
+  bar.style.bottom = hayBarraDeOTs ? '116px' : '70px';
+  bar.style.background = fallidos ? '#E53E3E' : '#D97706';
+  texto.textContent = fallidos
+    ? fallidos + ' aviso(s) no se enviaron'
+    : correos.length + ' aviso(s) pendiente(s)';
 }
 
 async function sincronizarOTsPendientes() {
@@ -9152,8 +9183,10 @@ async function sincronizarOTsPendientes() {
   try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
   if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
 
-  var pendingBar = document.getElementById('pending-bar');
-  if (pendingBar) pendingBar.textContent = 'Sincronizando ' + pendientes.length + ' OT(s)...';
+  // OJO: no usar pendingBar.textContent — borraria el icono y el <span id="pending-count">,
+  // dejando la barra rota (sin contador) hasta recargar. Solo se cambia la etiqueta.
+  var pendingLabel = document.getElementById('pending-label');
+  if (pendingLabel) pendingLabel.textContent = 'OT(s) sincronizando...';
 
   for (var pi = 0; pi < pendientes.length; pi++) {
     var ot = pendientes[pi];
