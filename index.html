@@ -2,7 +2,10 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- NO agregar maximum-scale ni user-scalable=no: desactivan el pinch-zoom (WCAG 2.1 SC 1.4.4, AA).
+     Android Chrome los respeta. Esta app la usan tecnicos de tercera edad, bajo sol directo:
+     el zoom es su unica herramienta para leer. Vigilado por check-a11y.js. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EMVAL">
@@ -108,7 +111,7 @@
   .field label { font-size: 12px; font-weight: 600; color: var(--texto2); text-transform: uppercase; letter-spacing: 0.5px; }
   .field input, .field select, .field textarea {
     background: white; border: 1.5px solid var(--gris2); border-radius: var(--radio-sm);
-    padding: 11px 13px; font-size: 15px; color: var(--texto); font-family: 'DM Sans', sans-serif;
+    padding: 11px 13px; font-size: 16px; color: var(--texto); font-family: 'DM Sans', sans-serif;
     width: 100%; transition: border-color 0.2s;
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--azul); }
@@ -128,6 +131,8 @@
   .seg-tab:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   .btn-secondary { background: var(--gris2); color: var(--texto); }
   .btn-verde { background: var(--verde-btn); color: white; }
+  /* Accion destructiva del dialogo. --rojo con blanco da 4.98:1 (check-contraste.js). */
+  .btn-peligro { background: var(--rojo); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
   .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); min-height: 44px; }
 
@@ -163,7 +168,7 @@
   /* TYPE CARDS */
   .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .tipo-card { background: white; border: 2px solid var(--gris2); border-radius: var(--radio); padding: 18px 12px; text-align: center; cursor: pointer; transition: all 0.2s; }
-  .tipo-card.selected { border-color: var(--azul); background: #EEF2FA; }
+  .tipo-card.selected { border-color: var(--azul); background: var(--gris2); }
   .tipo-card .icon { font-size: 28px; margin-bottom: 8px; }
   .tipo-card .label { font-size: 14px; font-weight: 600; color: var(--texto); }
   .tipo-card .desc { font-size: 12px; color: var(--texto3); margin-top: 3px; }
@@ -344,7 +349,7 @@
   .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radio-pill); }
   .badge-prev { background: #E6F4EA; color: #1A7A3C; }
   .badge-corr { background: #FEF0E6; color: #B45309; }
-  .badge-pend { background: #EEF2FA; color: var(--azul); }
+  .badge-pend { background: var(--gris2); color: var(--azul); }
   
   /* OT CARD */
   .ot-card { background: white; border-radius: var(--radio); padding: 14px; box-shadow: var(--sombra); display: flex; align-items: center; gap: 12px; cursor: pointer; transition: transform 0.1s; margin-bottom: 10px; }
@@ -381,8 +386,39 @@
   .sk-l2 { width: 35%; }
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
-  /* TOAST */
-  #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 10px 20px; border-radius: var(--radio-pill); font-size: 13px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--sombra-lg); }
+  /* DIALOGO ACCESIBLE — reemplaza confirm() / prompt() / alert()
+     Los nativos no se pueden estilar, bloquean el hilo, y prompt() NO puede enmascarar una
+     contrasena: la del administrador se veia en pantalla, en un local, delante de quien pasara.
+     Este componente: role="dialog", aria-modal, foco atrapado, Escape, y devuelve el foco al
+     boton que lo abrio. Vigilado por check-a11y.js. */
+  /* El overlay DEBE poder scrollear y el dialogo DEBE tener max-height. Sin eso, al enfocar el
+     campo de contrasena en un telefono el teclado se come medio viewport, el dialogo queda
+     centrado y recortado, y el boton "Confirmar" es inalcanzable. Los 3 modales viejos ya tenian
+     max-height (80/84/86vh); este, escrito para "arreglar la accesibilidad", no lo tenia.
+     `align-items: flex-start` + `margin: auto` centra cuando cabe y deja scrollear cuando no. */
+  .dlg-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 10000; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; overscroll-behavior: contain; }
+  .dlg-overlay[hidden] { display: none; }
+  .dlg { background: white; border-radius: var(--radio); padding: 20px; width: 100%; max-width: 420px; max-height: calc(100dvh - 48px); overflow-y: auto; margin: auto; box-shadow: var(--sombra-lg); }
+  .dlg-titulo { font-size: 16px; font-weight: 700; color: var(--texto); margin-bottom: 6px; }
+  /* pre-line respeta los \n de los mensajes ("...\nEsta accion no se puede deshacer.") */
+  .dlg-msg { font-size: 15px; color: var(--texto2); line-height: 1.5; white-space: pre-line; }
+  .dlg-campo { margin-top: 14px; position: relative; }
+  .dlg-input { width: 100%; background: white; border: 1.5px solid var(--gris2); border-radius: var(--radio-sm); padding: 11px 44px 11px 13px; font-size: 16px; font-family: 'DM Sans', sans-serif; color: var(--texto); }
+  .dlg-input:focus { border-color: var(--azul); }
+  .dlg-ojo { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--texto3); padding: 8px; display: flex; align-items: center; min-height: 40px; }
+  .dlg-acciones { display: flex; gap: 8px; margin-top: 18px; }
+  .dlg-acciones .btn { flex: 1; margin: 0; }
+
+  /* Un boton ocupado no debe verse igual que uno listo. */
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  /* TOAST
+     Es el UNICO canal de feedback de la app. Tenia `white-space: nowrap` y ningun `max-width`:
+     6 de sus 99 mensajes distintos pasaban de 360px y, al estar centrado con translateX(-50%),
+     se cortaban por AMBOS lados. Entre ellos "OT guardada. Se subira sola al mejorar la senal.",
+     que sostiene toda la confianza offline de la app. Vigilado por check-a11y.js.
+     El radio deja de ser pill: dos lineas con esquinas de 99px se ven deformes. */
+  #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 12px 20px; border-radius: var(--radio); font-size: 13px; font-weight: 500; z-index: 9999; max-width: calc(100vw - 32px); white-space: normal; text-align: center; line-height: 1.4; box-shadow: var(--sombra-lg); }
 
   /* CAMPO RECHAZADO POR VALIDACION
      El toast dura 2.5s y aparece abajo, justo donde el pulgar tapa la pantalla. Sin una
@@ -390,7 +426,9 @@
      de cerrarOT() fallo. El halo se queda hasta que toque el campo. */
   .campo-error { outline: 2px solid var(--rojo); outline-offset: 3px; border-radius: var(--radio-sm); animation: campo-error-pulso 600ms var(--ease); }
   @keyframes campo-error-pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-  @media (prefers-reduced-motion: reduce) { .campo-error { animation: none; } }
+  /* No hace falta desactivar esta animacion aparte: la regla global `*` de
+     prefers-reduced-motion (mas arriba) ya la anula. Aqui hubo una regla duplicada, escrita
+     sin comprobar lo que ya existia. */
 
   /* SUPERVISOR PANEL */
   .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -678,7 +716,7 @@
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pídele al administrador que firme con el dedo</div>
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
-        <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+        <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
         <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
       </div>
@@ -735,12 +773,12 @@
 
 <!-- ============ MODAL: VISTA PREVIA COTIZACION ============ -->
 <div id="modal-preview-cot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;">
-  <div style="background:white;margin:20px auto;border-radius:var(--radio-lg);max-width:520px;padding:20px;position:relative;">
-    <div style="font-size:16px;font-weight:700;margin-bottom:14px;color:var(--texto);">Vista previa de cotización</div>
+  <div role="dialog" aria-modal="true" aria-labelledby="modal-preview-cot-titulo" style="background:white;margin:20px auto;border-radius:var(--radio-lg);max-width:520px;padding:20px;position:relative;">
+    <div id="modal-preview-cot-titulo" style="font-size:16px;font-weight:700;margin-bottom:14px;color:var(--texto);">Vista previa de cotización</div>
     <div id="preview-cot-contenido"></div>
     <div style="display:flex;gap:10px;margin-top:18px;">
       <button onclick="cerrarVistaPreviaCotizacion()" class="btn btn-secondary" style="flex:1;">Corregir</button>
-      <button onclick="guardarCotizacion();cerrarVistaPreviaCotizacion();" class="btn btn-verde" style="flex:1;">Guardar</button>
+      <button id="btn-guardar-cot" onclick="guardarCotizacion();cerrarVistaPreviaCotizacion();" class="btn btn-verde" style="flex:1;">Guardar</button>
     </div>
   </div>
 </div>
@@ -775,19 +813,19 @@
     <!-- FILTROS Y BÚSQUEDA OTs -->
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
+        <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
         <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
+          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">TIPO</label>
-          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
+          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
             <option value="correctivo">Correctivo</option>
             <option value="preventivo">Preventivo</option>
@@ -795,7 +833,7 @@
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
+          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
         </div>
         <button onclick="limpiarFiltrosTecnico()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
       </div>
@@ -815,25 +853,25 @@
     <!-- FILTROS Y BÚSQUEDA PREVENTIVOS -->
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;" onkeyup="filtrarPreventivos();">
+        <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarPreventivos();">
         <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
+          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">TÉCNICO</label>
-          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
+          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;">
+          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
         </div>
         <button onclick="limpiarFiltrosPreventivos()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
       </div>
@@ -858,14 +896,14 @@
     <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+        <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
         <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
       </div>
       <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
         <div id="filtro-input-cot-general" style="display:none;">
           <label id="filtro-label-cot-general" style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;"></label>
-          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
         </div>
       </div>
     </div>
@@ -965,13 +1003,13 @@
     <!-- PANEL PERSONAL -->
     <div id="panel-personal">
       <button class="btn btn-primary" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
-      <input type="text" id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
+      <input type="text" id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
         <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
         <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
         <div class="field">
           <label>Rol</label>
-          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;">
+          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="Tecnico en terreno">Técnico en terreno</option>
             <option value="Supervisor">Supervisor</option>
             <option value="Administrador">Administrador</option>
@@ -980,7 +1018,7 @@
         <div class="field"><label>PIN (4 números)</label><input type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" id="tec-pin" placeholder="Ej: 1234" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" /></div>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-secondary btn-sm" onclick="cancelarFormTecnico()" style="flex:1;">Cancelar</button>
-          <button class="btn btn-primary btn-sm" onclick="guardarTecnico()" style="flex:1;">Guardar</button>
+          <button id="btn-guardar-tecnico" class="btn btn-primary btn-sm" onclick="guardarTecnico()" style="flex:1;">Guardar</button>
         </div>
       </div>
       <div id="lista-tecnicos-admin" class="card-grid"></div>
@@ -989,7 +1027,7 @@
     <!-- PANEL CADENAS -->
     <div id="panel-cadenas" style="display:none;">
       <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="margin-bottom:12px;">+ Agregar cadena</button>
-      <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
+      <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
       <div id="form-cadena" style="display:none;" class="card">
         <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
@@ -997,7 +1035,7 @@
         <div class="field"><label>URL del logo</label><input type="text" id="cad-logo" placeholder="https://..." /></div>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('form-cadena').style.display='none'" style="flex:1;">Cancelar</button>
-          <button class="btn btn-primary btn-sm" onclick="guardarCadena()" style="flex:1;">Guardar</button>
+          <button id="btn-guardar-cadena" class="btn btn-primary btn-sm" onclick="guardarCadena()" style="flex:1;">Guardar</button>
         </div>
       </div>
       <div id="lista-cadenas-admin"></div>
@@ -1049,6 +1087,24 @@
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>
+
+<!-- Dialogo unico: reemplaza confirm() / prompt() / alert(). Ver _confirmar / _pedirTexto / _avisar.
+     El titulo NO es un <h1>: cada pantalla ya tiene el suyo en el topbar. Se anuncia con
+     aria-labelledby, que no altera la jerarquia de encabezados del documento. -->
+<div id="dlg-overlay" class="dlg-overlay" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-titulo" aria-describedby="dlg-msg">
+    <div class="dlg-titulo" id="dlg-titulo"></div>
+    <div class="dlg-msg" id="dlg-msg"></div>
+    <div class="dlg-campo" id="dlg-campo" hidden>
+      <input class="dlg-input" id="dlg-input" type="text" autocomplete="off" />
+      <button type="button" class="dlg-ojo" id="dlg-ojo" hidden aria-label="Mostrar contraseña" onclick="_dlgToggleOjo()"></button>
+    </div>
+    <div class="dlg-acciones">
+      <button type="button" class="btn btn-secondary btn-sm" id="dlg-cancelar">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="dlg-ok">Aceptar</button>
+    </div>
+  </div>
+</div>
 <div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
   Sin conexión — modo offline
 </div>
@@ -1064,7 +1120,7 @@
 
 <!-- MODAL: Reasignar OT pausada a otro tecnico -->
 <div id="modal-reasignar" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalReasignar(event)">
-  <div style="background:white;border-radius:var(--radio-lg);max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+  <div role="dialog" aria-modal="true" aria-labelledby="modal-reasignar-titulo" aria-describedby="modal-reasignar-sub" style="background:white;border-radius:var(--radio-lg);max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-reasignar-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
       <div id="modal-reasignar-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Selecciona el nuevo técnico</div>
@@ -1078,9 +1134,9 @@
 
 <!-- MODAL: enviar cotización a uno o varios correos -->
 <div id="modal-enviar-cot" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalEnviarCot(event)">
-  <div style="background:white;border-radius:var(--radio-lg);max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+  <div role="dialog" aria-modal="true" aria-labelledby="modal-enviar-cot-titulo" aria-describedby="modal-enviar-cot-sub" style="background:white;border-radius:var(--radio-lg);max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
-      <div style="font-size:16px;font-weight:700;color:var(--texto);">Enviar cotización</div>
+      <div id="modal-enviar-cot-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Enviar cotización</div>
       <div id="modal-enviar-cot-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Agrega uno o más correos de destino</div>
     </div>
     <div style="overflow-y:auto;padding:14px 18px;flex:1;">
@@ -1425,17 +1481,6 @@ function _ultimoBorradorTecnico() {
   return borradores[0] || null;
 }
 
-function restaurarBorradorPendienteTecnico() {
-  const borrador = _ultimoBorradorTecnico();
-  if (!borrador) return false;
-  const local = borrador.local ? (' en ' + borrador.local) : '';
-  const msg = 'Tienes una OT autoguardada #' + borrador.numero + local + '.\n\nQuieres continuar donde quedaste?';
-  if (!confirm(msg)) return false;
-  abrirOTGuardada(borrador);
-  toast('OT autoguardada restaurada');
-  return true;
-}
-
 // Elimina una OT de la lista de pausadas (al completarla)
 // Compara nombres de técnico de forma robusta: ignora diferencias de tilde (NFC vs NFD),
 // espacios sobrantes y mayúsculas. Evita que una OT "desaparezca" de la lista del técnico
@@ -1541,8 +1586,14 @@ async function sha256(text) {
 }
 
 async function verificarPasswordAdmin() {
-  const pass = prompt('Ingresa la contraseña de administrador para confirmar:');
-  if (pass === null) return false;
+  // Antes esto era un prompt() nativo: la contrasena del administrador se veia en pantalla,
+  // en un local, delante de quien pasara. Ahora es un campo type="password" con boton de ojo.
+  const pass = await _pedirTexto('Escribe tu contraseña para confirmar esta acción.', {
+    titulo: 'Confirmar como administrador',
+    password: true,
+    okTexto: 'Confirmar',
+  });
+  if (pass === null) return false;   // cancelado; `null` no es lo mismo que ''
   const hash = await sha256(pass);
   if (hash === ADMIN_HASHES[estado.usuario]) return true;
   toast('Contraseña incorrecta');
@@ -1559,6 +1610,15 @@ function go(id) {
   const screen = document.getElementById(id);
   if (screen) screen.classList.add('active');
   window.scrollTo(0,0);
+  // Las 16 pantallas viven en el mismo DOM. Al cambiar, el boton que tocaste desaparece y el foco
+  // cae al <body>: con teclado hay que volver a tabular desde arriba en cada paso del wizard, y un
+  // lector de pantalla no anuncia que cambio nada. Mover el foco al titulo es el patron estandar.
+  // tabindex="-1" no lo mete en el orden de tabulacion, y al ser foco programatico no dispara
+  // :focus-visible, asi que no aparece ningun anillo azul.
+  if (screen) {
+    const titulo = screen.querySelector('.topbar h1');
+    if (titulo) { titulo.setAttribute('tabindex', '-1'); titulo.focus({ preventScroll: true }); }
+  }
 }
 
 // =========== LOGIN ===========
@@ -1911,6 +1971,7 @@ function renderizarFotosScreen() {
       if (foto !== null) {
         let img = document.createElement('img');
         img.src = foto;
+        img.alt = 'Foto del estado inicial ' + (idx+1);
         box.appendChild(img);
         let chk = document.createElement('div');
         chk.className = 'foto-check';
@@ -1943,6 +2004,7 @@ function renderizarFotosScreen() {
         if (foto !== null) {
           let img = document.createElement('img');
           img.src = foto;
+          img.alt = 'Foto del trabajo terminado ' + (idx+1);
           box.appendChild(img);
           let chk = document.createElement('div');
           chk.className = 'foto-check';
@@ -1975,6 +2037,7 @@ function renderizarFotosDespuesEjecucion() {
     grid.appendChild(box);
     if (foto) {
       const img = document.createElement('img'); img.src = foto; box.appendChild(img);
+      img.alt = 'Foto del trabajo terminado ' + (idx+1);
       const chk = document.createElement('div'); chk.className = 'foto-check';
       chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
       box.appendChild(chk);
@@ -2049,7 +2112,7 @@ function _menuFuenteFoto() {
 
   const btnCan = document.createElement('button');
   btnCan.textContent = 'Cancelar';
-  btnCan.style.cssText = 'width:100%;background:#EDF0F5;color:var(--texto2);border:none;border-radius:var(--radio);padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnCan.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto2);border:none;border-radius:var(--radio);padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnCan.onclick = cerrar;
 
   modal.appendChild(btnCam);
@@ -2083,6 +2146,7 @@ async function procesarFoto(e) {
     let img = box.querySelector('img');
     if (!img) { img = document.createElement('img'); box.appendChild(img); }
     img.src = data;
+    img.alt = tipo === 'timbre' ? 'Foto del timbre del local' : 'Foto ' + (tipo === 'antes' ? 'del estado inicial ' : 'del trabajo terminado ') + (idx+1);
     let chk = box.querySelector('.foto-check');
     if (!chk) { chk = document.createElement('div'); chk.className = 'foto-check'; chk.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; box.appendChild(chk); }
   }
@@ -2177,7 +2241,7 @@ function cargarEjecucionScreen() {
     }
     let html = '<div class="field">';
     html += '<label>Nº Equipos Suscritos</label>';
-    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
     html += '</div>';
     html += '<div class="field"><label>Servicios a realizar</label>';
     html += '<div style="border:1.5px solid var(--gris2);border-radius:var(--radio-sm);overflow:hidden;">';
@@ -2186,9 +2250,12 @@ function cargarEjecucionScreen() {
     html += '<span style="font-size:12px;font-weight:600;color:white;text-transform:uppercase;min-width:90px;text-align:center;">Estado</span>';
     html += '</div>';
     estado.serviciosPreventivo.forEach(function(svc, idx) {
-      const bg = idx % 2 === 0 ? 'white' : '#F8F9FB';
-      const siSt = svc.respuesta === 'si' ? 'background:var(--verde-btn);color:white;' : 'background:#E8ECF5;color:#6B7280;';
-      const noSt = svc.respuesta === 'no' ? 'background:#E74C3C;color:white;' : 'background:#E8ECF5;color:#6B7280;';
+      const bg = idx % 2 === 0 ? 'white' : 'var(--gris1)';
+      // El "Si" ya usaba var(--verde-btn); el "No" y el estado sin responder se habian quedado
+      // con hexes sueltos: blanco/#E74C3C daba 3.82:1 y #6B7280/#E8ECF5 daba 4.09:1. La migracion
+      // de color habia recorrido una LISTA de verdes. Vigilado por el escaneo de check-contraste.js.
+      const siSt = svc.respuesta === 'si' ? 'background:var(--verde-btn);color:white;' : 'background:var(--gris2);color:var(--texto2);';
+      const noSt = svc.respuesta === 'no' ? 'background:var(--rojo);color:white;' : 'background:var(--gris2);color:var(--texto2);';
       html += '<div style="display:flex;padding:8px 12px;gap:8px;align-items:center;background:' + bg + ';border-bottom:1px solid #E5E7EB;">';
       html += '<span style="flex:1;font-size:13px;color:var(--texto);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
       html += '<div style="display:flex;gap:4px;min-width:90px;justify-content:center;">';
@@ -2221,6 +2288,7 @@ function cargarEjecucionScreen() {
     let timg = timbreBox.querySelector('img');
     if (!timg) { timg = document.createElement('img'); timbreBox.appendChild(timg); }
     timg.src = estado.fotoTimbre;
+    timg.alt = 'Foto del timbre del local';
   }
 }
 
@@ -2229,8 +2297,8 @@ function responderServicio(idx, respuesta) {
   estado.serviciosPreventivo[idx].respuesta = respuesta;
   const siBtn = document.getElementById('svc-si-' + idx);
   const noBtn = document.getElementById('svc-no-' + idx);
-  if (siBtn) { siBtn.style.background = respuesta === 'si' ? 'var(--verde-btn)' : '#E8ECF5'; siBtn.style.color = respuesta === 'si' ? 'white' : '#6B7280'; }
-  if (noBtn) { noBtn.style.background = respuesta === 'no' ? '#E74C3C' : '#E8ECF5'; noBtn.style.color = respuesta === 'no' ? 'white' : '#6B7280'; }
+  if (siBtn) { siBtn.style.background = respuesta === 'si' ? 'var(--verde-btn)' : 'var(--gris2)'; siBtn.style.color = respuesta === 'si' ? 'white' : 'var(--texto2)'; }
+  if (noBtn) { noBtn.style.background = respuesta === 'no' ? 'var(--rojo)' : 'var(--gris2)'; noBtn.style.color = respuesta === 'no' ? 'white' : 'var(--texto2)'; }
   programarAutoguardadoOT();
 }
 
@@ -3042,6 +3110,7 @@ async function cargarCadenasAdmin() {
       if (d.logo) {
         const limg = document.createElement('img');
         limg.src = d.logo;
+        limg.alt = '';
         limg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
         limg.onerror = function(){ dot.removeChild(limg); dot.textContent = d.letra||d.nombre.charAt(0); };
         dot.appendChild(limg);
@@ -3295,7 +3364,7 @@ async function guardarCadena() {
 }
 
 async function eliminarCadena(id) {
-  if (!confirm('Eliminar esta cadena y todas sus sucursales?')) return;
+  if (!await _confirmar('Se eliminarán también todas sus sucursales. Esta acción no se puede deshacer.', { titulo: 'Eliminar cadena', okTexto: 'Eliminar', peligro: true })) return;
   try {
     await window.firebase.firestore().collection('cadenas').doc(id).delete();
     toast('Cadena eliminada');
@@ -3372,6 +3441,7 @@ async function guardarCadenaEdicion() {
   const color = document.getElementById('cad-color').value.trim() || '#1B3A6B';
   const logo = document.getElementById('cad-logo').value.trim();
   if (!nombre) { toast('Ingresa el nombre'); return; }
+  const soltar = _bloquear(document.getElementById('btn-guardar-cadena'));
   try {
     const db = window.firebase.firestore();
     const snapAll = await db.collection('cadenas').get();
@@ -3394,6 +3464,7 @@ async function guardarCadenaEdicion() {
     await cargarCadenasAdmin();
     await cargarCadenasApp();
   } catch(e) { console.error(e); toast('Error guardando'); }
+  finally { soltar(); }   // tambien corre en el `return` temprano de "ya existe una cadena"
 }
 
 // Modal para editar sucursal
@@ -3559,14 +3630,14 @@ function renderItemsCot() {
     div.className = 'card';
     div.style.marginBottom = '8px';
     div.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-      '<input type="text" value="' + item.desc + '" placeholder="Descripción" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
+      '<input type="text" value="' + item.desc + '" placeholder="Descripción" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
       '<button aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;cursor:pointer;font-size:13px;">✕</button>' +
       '</div>' +
       '<div style="display:flex;gap:8px;">' +
       '<div style="flex:1"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Cantidad</div>' +
-      '<input type="number" value="' + item.qty + '" min="1" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;" onfocus="this.select()" oninput="itemsCot[' + i + '].qty=Number(this.value)||1;calcTotalCot()" /></div>' +
+      '<input type="number" value="' + item.qty + '" min="1" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" onfocus="this.select()" oninput="itemsCot[' + i + '].qty=Number(this.value)||1;calcTotalCot()" /></div>' +
       '<div style="flex:2"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Precio unitario ($)</div>' +
-      '<input type="number" value="' + item.precio + '" min="0" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;" onfocus="this.select()" oninput="itemsCot[' + i + '].precio=Number(this.value)||0;calcTotalCot()" /></div>' +
+      '<input type="number" value="' + item.precio + '" min="0" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" onfocus="this.select()" oninput="itemsCot[' + i + '].precio=Number(this.value)||0;calcTotalCot()" /></div>' +
       '</div>';
     cont.appendChild(div);
   });
@@ -3622,11 +3693,11 @@ function mostrarVistaPreviaCotizacion() {
   }
 
   document.getElementById('preview-cot-contenido').innerHTML = html;
-  document.getElementById('modal-preview-cot').style.display = 'block';
+  _modalMostrar('modal-preview-cot', 'block', cerrarVistaPreviaCotizacion);
 }
 
 function cerrarVistaPreviaCotizacion() {
-  document.getElementById('modal-preview-cot').style.display = 'none';
+  _modalOcultar('modal-preview-cot');
 }
 
 function calcTotalCot() {
@@ -3641,6 +3712,7 @@ async function guardarCotizacion() {
   const supervisorCarpeta = carpeta;
   const nombreServicio = document.getElementById('cot-nombre-servicio').value.trim();
   const totales = calcTotalCot();
+  const soltar = _bloquear(document.getElementById('btn-guardar-cot'));
   try {
     const db = window.firebase.firestore();
     const cotData = {
@@ -3724,7 +3796,7 @@ async function guardarCotizacion() {
   } catch(e) {
     console.error(e);
     toast('Error guardando cotización');
-  }
+  } finally { soltar(); }
 }
 
 async function editarCotizacion(cotData) {
@@ -3752,18 +3824,6 @@ async function editarCotizacion(cotData) {
   document.getElementById('cot-carpeta').value = cotData.supervisor || cotData.carpeta || '';
   renderItemsCot();
   go('s-cotizacion');
-}
-
-async function enviarCotizacion() {
-  await guardarCotizacion();
-  const email = prompt('Email del cliente:');
-  if (!email) return;
-  const totales = calcTotalCot();
-  const itemsTexto = itemsCot.map(it => it.desc + ' x' + it.qty + ' = $' + (it.qty*it.precio).toLocaleString('es-CL')).join('%0A');
-  const body = 'Cotizacion EMVAL%0A%0ALocal: ' + cotizacionActual.local + '%0AFecha: ' + cotizacionActual.fecha +
-    '%0ATrabajo: ' + (cotizacionActual.descripcionTrabajo||'') + '%0A%0A' + itemsTexto +
-    '%0A%0ATotal: $' + totales.total.toLocaleString('es-CL');
-  window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + cotizacionActual.local + '&body=' + body);
 }
 
 function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
@@ -3916,6 +3976,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
       logoDiv.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--gris2);overflow:hidden;';
       const logoImg = document.createElement('img');
       logoImg.src = cadenaLogo;
+      logoImg.alt = '';
       logoImg.style.cssText = 'width:28px;height:28px;object-fit:contain;';
       logoImg.onerror = function() { logoDiv.textContent = (it.local || '').charAt(0).toUpperCase(); };
       logoDiv.appendChild(logoImg);
@@ -4174,36 +4235,6 @@ async function cargarCarpetas() {
   }
 }
 
-function enviarCotGuardadaData(it) {
-  const email = prompt('Email del cliente:');
-  if (!email) return;
-  const itemsTexto = (it.items||[]).map(function(i) {
-    return i.desc + ' x' + i.qty + ' = $' + (i.qty*i.precio).toLocaleString('es-CL');
-  }).join('%0A');
-  const body = 'Cotizacion EMVAL%0A%0ALocal: ' + it.local + '%0AFecha: ' + it.fecha +
-    '%0ATrabajo: ' + (it.descripcionTrabajo||'') + '%0A%0A' + itemsTexto +
-    '%0A%0ATotal: $' + (it.total||0).toLocaleString('es-CL');
-  window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + it.local + '&body=' + body);
-}
-
-async function enviarCotGuardada(cotId) {
-  try {
-    const db = window.firebase.firestore();
-    const doc = await db.collection('cotizaciones').doc(cotId).get();
-    if (!doc.exists) return;
-    const d = doc.data();
-    const email = prompt('Email del cliente:');
-    if (!email) return;
-    const itemsTexto = (d.items||[]).map(it => it.desc + ' x' + it.qty + ' = $' + (it.qty*it.precio).toLocaleString('es-CL')).join('%0A');
-    const body = 'Cotizacion EMVAL%0A%0ALocal: ' + d.local + '%0AFecha: ' + d.fecha +
-      '%0ATrabajo: ' + (d.descripcionTrabajo||'') + '%0A%0A' + itemsTexto +
-      '%0A%0ATotal: $' + (d.total||0).toLocaleString('es-CL');
-    window.open('mailto:' + email + '?subject=Cotizacion EMVAL - ' + d.local + '&body=' + body);
-  } catch(e) {
-    toast('Error enviando cotización');
-  }
-}
-
 // =========== CADENAS Y SUCURSALES ===========
 const CADENAS_DEFAULT = [
   { nombre: 'Unimarc', color: '#E31837', letra: 'U',
@@ -4252,6 +4283,7 @@ function _renderCadenasDesdeCache(lista) {
     logoDiv.style.background = c.color || '#1B3A6B';
     if (c.logo) {
       var img = document.createElement('img'); img.src = c.logo;
+      img.alt = '';
       img.onerror = function(){ logoDiv.innerHTML=''; logoDiv.textContent = c.letra || c.nombre.charAt(0); };
       logoDiv.innerHTML = ''; logoDiv.appendChild(img); logoDiv.classList.remove('fallback');
     } else { logoDiv.textContent = c.letra || c.nombre.charAt(0); }
@@ -4324,6 +4356,7 @@ async function cargarCadenasApp(_intento) {
       logoDiv.style.background = c.color || '#1B3A6B';
       const img = document.createElement('img');
       img.src = c.logo || '';
+      img.alt = '';
       img.onerror = function() {
         logoDiv.innerHTML = '';
         logoDiv.classList.add('fallback');
@@ -4412,6 +4445,7 @@ function seleccionarCadena(cadena) {
     if (cadena.logo) {
       const logoImg = document.createElement('img');
       logoImg.src = cadena.logo;
+      logoImg.alt = '';
       logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
       logoImg.onerror = function(){ iconEl.removeChild(logoImg); iconEl.textContent = cadena.letra||cadena.nombre.charAt(0); };
       iconEl.appendChild(logoImg);
@@ -4655,6 +4689,7 @@ function _renderPausadasEnCadena() {
         if (logoUrl) {
           const img = document.createElement('img');
           img.src = logoUrl;
+          img.alt = '';
           img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
           img.onerror = function() {
             logo.innerHTML = '';
@@ -4748,9 +4783,9 @@ function _renderPausadasEnCadena() {
           btnDescartar.title = 'Descartar borrador';
           btnDescartar.style.cssText = 'flex-shrink:0;width:44px;height:44px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:var(--radio-sm);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;';
           btnDescartar.onclick = (function(numero, tecnico) {
-            return function(e) {
+            return async function(e) {
               e.stopPropagation();
-              if (!confirm('¿Descartar este borrador autoguardado? No se puede deshacer.')) return;
+              if (!await _confirmar('Perderás el trabajo autoguardado de esta OT.', { titulo: 'Descartar borrador', okTexto: 'Descartar', peligro: true })) return;
               eliminarOTPausada(numero, tecnico);
               cargarOTsPausadasEnCadena();
               toast('Borrador descartado');
@@ -4846,12 +4881,19 @@ async function cargarTecnicosAdmin() {
 }
 
 async function cambiarPasswordAdmin(docId, nombre) {
-  const nueva = prompt('Nueva contraseña para ' + nombre + ':');
-  if (!nueva || nueva.trim().length < 6) {
-    if (nueva !== null) toast('La contraseña debe tener al menos 6 caracteres');
-    return;
-  }
-  const confirmar = prompt('Confirma la nueva contraseña:');
+  const nueva = await _pedirTexto('Mínimo 6 caracteres.', {
+    titulo: 'Nueva contraseña para ' + nombre,
+    password: true,
+    okTexto: 'Continuar',
+  });
+  if (nueva === null) return;   // cancelado: no molestar con un toast
+  if (nueva.trim().length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
+  const confirmar = await _pedirTexto('Escríbela otra vez para confirmar.', {
+    titulo: 'Confirma la nueva contraseña',
+    password: true,
+    okTexto: 'Guardar',
+  });
+  if (confirmar === null) return;
   if (nueva !== confirmar) { toast('Las contraseñas no coinciden'); return; }
   try {
     const h = await sha256(nueva.trim());
@@ -4936,6 +4978,8 @@ async function guardarTecnico() {
   // sin ningun mensaje que se lo explique. Antes esto decia `pin.length < 4` (solo minimo)
   // y el input era type="number", que ignora maxlength por spec HTML.
   if (!/^\d{4}$/.test(pin)) { toast('El PIN debe ser exactamente 4 números'); return; }
+  // El formulario seguia vivo durante el await: un doble toque creaba DOS tecnicos.
+  const soltar = _bloquear(document.getElementById('btn-guardar-tecnico'));
   try {
     const db = window.firebase.firestore();
     const data = { nombre, cargo, pin, letra: nombre.charAt(0).toUpperCase() };
@@ -4950,10 +4994,11 @@ async function guardarTecnico() {
     await cargarTecnicosAdmin();
     await cargarUsuariosApp();
   } catch(e) { console.error(e); toast('Error guardando técnico'); }
+  finally { soltar(); }
 }
 
 async function eliminarTecnico(id) {
-  if (!confirm('Seguro que quieres eliminar este técnico?')) return;
+  if (!await _confirmar('El técnico dejará de aparecer en la pantalla de inicio y no podrá entrar a la app.', { titulo: 'Eliminar técnico', okTexto: 'Eliminar', peligro: true })) return;
   const ok = await verificarPasswordAdmin();
   if (!ok) return;
   try {
@@ -4988,6 +5033,10 @@ async function guardarLocal() {
   const direccion = document.getElementById('loc-dir').value.trim();
   const tipo = document.getElementById('loc-tipo').value;
   if (!nombre) { toast('Ingresa el nombre del local'); return; }
+  // Sin boton estable: esta funcion hoy NO la alcanza nadie (ver DESIGN.md). La guarda
+  // queda puesta para cuando se vuelva a cablear el formulario de locales.
+  if (_ocupado('guardar-local')) return;
+  const soltar = _tomar('guardar-local');
   try {
     const db = window.firebase.firestore();
     const data = { nombre, direccion, tipo };
@@ -5002,10 +5051,11 @@ async function guardarLocal() {
     await cargarLocalesAdmin();
     await cargarLocalesApp();
   } catch(e) { console.error(e); toast('Error guardando local'); }
+  finally { soltar(); }
 }
 
 async function eliminarLocal(id) {
-  if (!confirm('Seguro que quieres eliminar este local?')) return;
+  if (!await _confirmar('El local dejará de estar disponible para nuevas OTs.', { titulo: 'Eliminar local', okTexto: 'Eliminar', peligro: true })) return;
   try {
     await window.firebase.firestore().collection('locales').doc(id).delete();
     toast('Local eliminado');
@@ -5176,7 +5226,7 @@ async function cargarLocalesApp() {
     const contenedor = document.querySelector('#s-local .content');
     // Remove existing local items
     contenedor.querySelectorAll('.local-item').forEach(function(el) { el.parentElement.removeChild(el); });
-    const coloresTipo = { 'Unimarc':'#EEF2FA', 'S10':'#FEF0E6', 'Alvi':'#E6F4EA', 'Otro':'#F5F5F5' };
+    const coloresTipo = { 'Unimarc':'var(--gris2)', 'S10':'#FEF0E6', 'Alvi':'#E6F4EA', 'Otro':'var(--gris1)' };
     const iconosTipo = { 'Unimarc':'store', 'S10':'shopping-cart', 'Alvi':'building-store', 'Otro':'map-pin' };
     snap.docs.forEach(function(doc) {
       const d = doc.data();
@@ -5186,7 +5236,7 @@ async function cargarLocalesApp() {
       item.className = 'local-item';
       const iconEl = document.createElement('div');
       iconEl.className = 'local-icon';
-      iconEl.style.background = coloresTipo[d.tipo] || '#EEF2FA';
+      iconEl.style.background = coloresTipo[d.tipo] || 'var(--gris2)';
       iconEl.innerHTML = '<i class="ti ti-' + (iconosTipo[d.tipo]||'map-pin') + '" style="font-size:18px;color:var(--azul-claro);"></i>';
       const info = document.createElement('div');
       info.className = 'local-info';
@@ -5233,6 +5283,7 @@ function renderComparacion() {
     if (antes[i]) {
       const imgA = document.createElement('img');
       imgA.src = antes[i];
+      imgA.alt = 'Antes — punto ' + (i+1);
       imgA.style.cssText = 'width:100%;height:100%;object-fit:cover;';
       boxA.appendChild(imgA);
     }
@@ -5249,6 +5300,7 @@ function renderComparacion() {
     if (despues[i]) {
       const imgD = document.createElement('img');
       imgD.src = despues[i];
+      imgD.alt = 'Después — punto ' + (i+1);
       imgD.style.cssText = 'width:100%;height:100%;object-fit:cover;';
       boxD.appendChild(imgD);
     }
@@ -5585,7 +5637,7 @@ async function verPDFById(pdfId) {
     if (!window._firebaseReady) { setTimeout(function(){ verPDFById(pdfId); }, 1000); return; }
     const db = window.firebase.firestore();
     const doc = await db.collection('pdfs').doc(pdfId).get();
-    if (!doc.exists) { alert('PDF no encontrado'); return; }
+    if (!doc.exists) { await _avisar('No encontramos el PDF de esta OT. Puede que aún no se haya subido.', { titulo: 'PDF no encontrado' }); return; }
     const data = doc.data();
     // Si tiene URL de Cloudinary usar esa, sino usar pdfData base64
     if (data.pdfUrl && data.pdfUrl.includes('cloudinary')) {
@@ -5593,7 +5645,9 @@ async function verPDFById(pdfId) {
       return;
     }
     const win = window.open('', '_blank');
-    if (!win) { alert('Permite ventanas emergentes para ver el PDF'); return; }
+    // El aviso anterior decia "Permite ventanas emergentes" — una instruccion que no se puede
+    // ejecutar desde el propio dialogo. Ahora dice DONDE esta el permiso.
+    if (!win) { await _avisar('Tu navegador bloqueó la ventana del PDF.\n\nToca el ícono de la barra de direcciones y permite las ventanas emergentes para este sitio.', { titulo: 'No se pudo abrir el PDF' }); return; }
     win.document.write('<html><head><title>OT #' + data.otNumero + ' - ' + data.local + '</title></head><body style="margin:0">');
     win.document.write('<embed src="' + data.pdfData + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;width:100%;height:100%"/>');
     win.document.write('</body></html>');
@@ -6522,7 +6576,7 @@ async function generarPDFCotizacion() {
         const otData = otDoc.data();
 
         // Pagina 2: Recepcion de Obra
-        toast('Generando recepcion de obra...');
+        toast('Generando recepción de obra...');
         doc.addPage();
         const W2 = 210, m2 = 15;
 
@@ -6948,6 +7002,7 @@ async function cargarPreventivos() {
       if (cadena && cadena.logo) {
         const img = document.createElement('img');
         img.src = cadena.logo; img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        img.alt = '';
         img.onerror = function(){ ico.removeChild(img); ico.textContent = (ot.local||'?').charAt(0); };
         ico.appendChild(img);
       } else { ico.textContent = (ot.local||'?').charAt(0); }
@@ -7122,6 +7177,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (cadena && cadena.logo) {
       const logoImg = document.createElement('img');
       logoImg.src = cadena.logo;
+      logoImg.alt = '';
       logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
       logoImg.onerror = function(){ iconEl.removeChild(logoImg); iconEl.textContent = (ot.local||'?').charAt(0); iconEl.style.cssText += ';color:white;font-weight:700;font-size:16px;'; };
       iconEl.appendChild(logoImg);
@@ -7282,7 +7338,7 @@ async function verOTsTecnico(nombre, grupo) {
       btnDelOT.textContent = 'Eliminar OT';
       btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnDelOT.onclick = (function(id, cardRef){ return async function() {
-        if (!confirm('Eliminar esta OT? Esta accion no se puede deshacer.')) return;
+        if (!await _confirmar('Esta acción no se puede deshacer.', { titulo: 'Eliminar OT', okTexto: 'Eliminar', peligro: true })) return;
         const ok = await verificarPasswordAdmin();
         if (!ok) return;
         try {
@@ -7419,13 +7475,12 @@ async function enviarCotizacionesSeleccionadas() {
   });
   if (prefill.length === 0) prefill.push('');
   prefill.forEach(function(em){ agregarFilaEmailCot(em); });
-  document.getElementById('modal-enviar-cot').style.display = 'flex';
+  _modalMostrar('modal-enviar-cot', 'flex', cerrarModalEnviarCot);
 }
 
 function cerrarModalEnviarCot(ev) {
   if (ev && ev.target !== ev.currentTarget) return;
-  const m = document.getElementById('modal-enviar-cot');
-  if (m) m.style.display = 'none';
+  _modalOcultar('modal-enviar-cot');
 }
 
 // Valida los correos del modal y dispara el envío
@@ -7608,7 +7663,9 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
 async function eliminarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotización'); return; }
-  if (!confirm('Eliminar ' + seleccionadas.length + ' cotizacion' + (seleccionadas.length !== 1 ? 'es' : '') + '? Esta accion no se puede deshacer.')) return;
+  // El plural mueve la tilde: "cotización" la lleva, "cotizaciones" no. Nunca  + 'es'.
+  const cuantas = seleccionadas.length === 1 ? '1 cotización' : seleccionadas.length + ' cotizaciones';
+  if (!await _confirmar('Se eliminarán ' + cuantas + '. Esta acción no se puede deshacer.', { titulo: 'Eliminar cotizaciones', okTexto: 'Eliminar', peligro: true })) return;
   if (estado.cargo === 'Administrador') {
     const ok = await verificarPasswordAdmin();
     if (!ok) return;
@@ -7717,6 +7774,7 @@ async function cargarOTsSupervisor() {
         iconEl.style.background = cadena.color || bg;
         const logoImg = document.createElement('img');
         logoImg.src = cadena.logo;
+        logoImg.alt = '';
         logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
         logoImg.onerror = function() {
           iconEl.removeChild(logoImg);
@@ -7784,7 +7842,7 @@ async function cargarOTsSupervisor() {
         btnDelSup.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;font-size:15px;cursor:pointer;flex-shrink:0;align-self:center;';
         btnDelSup.onclick = (function(id, c){ return async function(e) {
           e.stopPropagation();
-          if (!confirm('Eliminar esta OT? Esta accion no se puede deshacer.')) return;
+          if (!await _confirmar('Esta acción no se puede deshacer.', { titulo: 'Eliminar OT', okTexto: 'Eliminar', peligro: true })) return;
           const ok = await verificarPasswordAdmin();
           if (!ok) return;
           try {
@@ -7933,6 +7991,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   if (logoUrl) {
     const img = document.createElement('img');
     img.src = logoUrl;
+    img.alt = '';
     img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
     img.onerror = function() { iconEl.removeChild(img); iconEl.textContent = logoLetra; };
     iconEl.appendChild(img);
@@ -8031,7 +8090,7 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
     tecnicos.forEach(function(t) {
       const esActual = currentTec && t.nombre === currentTec;
       const row = document.createElement('button');
-      row.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;background:' + (esActual ? '#F1F5F9' : 'white') + ';border:1.5px solid var(--gris2);border-radius:var(--radio);padding:12px 14px;margin-bottom:8px;cursor:' + (esActual ? 'default' : 'pointer') + ';font-family:inherit;text-align:left;';
+      row.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;background:' + (esActual ? 'var(--gris2)' : 'white') + ';border:1.5px solid var(--gris2);border-radius:var(--radio);padding:12px 14px;margin-bottom:8px;cursor:' + (esActual ? 'default' : 'pointer') + ';font-family:inherit;text-align:left;';
       const av = document.createElement('div');
       av.style.cssText = 'width:38px;height:38px;border-radius:var(--radio-sm);background:var(--azul);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;';
       av.textContent = (t.nombre || '?').charAt(0).toUpperCase();
@@ -8059,19 +8118,18 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
 async function abrirModalReasignar(docId, d) {
   _reasignarDocId = docId;
   _reasignarOT = d;
-  const modal = document.getElementById('modal-reasignar');
   const lista = document.getElementById('modal-reasignar-lista');
   const sub = document.getElementById('modal-reasignar-sub');
   const tit = document.getElementById('modal-reasignar-titulo');
   if (tit) tit.textContent = 'Reasignar OT';
   sub.textContent = 'OT #' + (d.numero || '----') + ' · ' + (d.local || '') + ' · actual: ' + (d.tecnico || 'Sin técnico');
-  modal.style.display = 'flex';
+  _modalMostrar('modal-reasignar', 'flex', cerrarModalReasignar);
   _cargarListaTecnicosEnModal(lista, d.tecnico, function(nombre){ confirmarReasignar(nombre); });
 }
 
 async function confirmarReasignar(nuevoTecnico) {
   if (!_reasignarDocId) return;
-  if (!confirm('¿Reasignar la OT #' + (_reasignarOT.numero||'') + ' a ' + nuevoTecnico + '?')) return;
+  if (!await _confirmar('La OT #' + (_reasignarOT.numero||'') + ' pasará a ' + nuevoTecnico + '.', { titulo: 'Reasignar OT', okTexto: 'Reasignar' })) return;
   try {
     const db = window.firebase.firestore();
     await db.collection('ordenes').doc(_reasignarDocId).update({ tecnico: nuevoTecnico });
@@ -8086,7 +8144,7 @@ async function confirmarReasignar(nuevoTecnico) {
 
 function cerrarModalReasignar(ev) {
   if (ev && ev.target && ev.target.id !== 'modal-reasignar') return;
-  document.getElementById('modal-reasignar').style.display = 'none';
+  _modalOcultar('modal-reasignar');
   _reasignarDocId = null;
   _reasignarOT = null;
 }
@@ -8109,7 +8167,11 @@ function aceptarCotizacionPrevia(cotId) {
 async function confirmarAceptarCotizacion(cotId, tecnico) {
   const cot = (window._todasCotizaciones && window._todasCotizaciones[cotId]) || null;
   if (!cot) { toast('Cotización no encontrada'); return; }
-  if (!confirm('¿Aceptar la cotización de ' + (cot.local || '') + ' y crear la OT en espera para ' + tecnico + '?')) return;
+  if (!await _confirmar('Se creará una OT en espera para ' + tecnico + '.', { titulo: 'Aceptar cotización de ' + (cot.local || ''), okTexto: 'Aceptar y crear OT' })) return;
+  // El modal de tecnicos sigue abierto mientras se escribe: sin esto, tocar otro nombre
+  // (o el mismo) creaba una segunda OT en espera.
+  if (_ocupado('aceptar-cot')) return;
+  const soltar = _tomar('aceptar-cot');
   try {
     const db = window.firebase.firestore();
     const ahora = new Date();
@@ -8156,7 +8218,7 @@ async function confirmarAceptarCotizacion(cotId, tecnico) {
   } catch(e) {
     console.error('Error aceptando cotización:', e);
     toast('Error al aceptar la cotización');
-  }
+  } finally { soltar(); }
 }
 
 // --- Unión: vincula el recibo de obra (OT completada) a la cotización previa ---
@@ -8272,7 +8334,7 @@ function verTrabajoCotizacion(cotId) {
 
 // --- Eliminar OT pausada (solo admin) ---
 async function eliminarPausadaSup(docId, d, card) {
-  if (!confirm('¿Eliminar la OT pausada #' + (d.numero||'') + ' de ' + (d.local||'') + '?\nEsta acción no se puede deshacer.')) return;
+  if (!await _confirmar('OT #' + (d.numero||'') + ' de ' + (d.local||'') + '.\nEsta acción no se puede deshacer.', { titulo: 'Eliminar OT pausada', okTexto: 'Eliminar', peligro: true })) return;
   const ok = await verificarPasswordAdmin();
   if (!ok) return;
   try {
@@ -8774,7 +8836,7 @@ function descargarExcelSupervisor() {
     html += 'table{border-collapse:collapse;}';
     html += '.cab{background:#1B3A6B;color:#FFFFFF;font-weight:bold;text-align:center;border:1px solid #8A9BBE;padding:6px 8px;white-space:nowrap;}';
     html += '.par{background:#FFFFFF;color:#1A2035;border:1px solid #C8D0E0;padding:5px 8px;}';
-    html += '.imp{background:#EEF2FA;color:#1A2035;border:1px solid #C8D0E0;padding:5px 8px;}';
+    html += '.imp{background:#EEF1F7;color:#1A2035;border:1px solid #C8D0E0;padding:5px 8px;}';
     html += '.cen{text-align:center;}';
     html += '.verde{color:#1A7A3C;font-weight:600;}';
     html += '</style></head><body><table>';
@@ -8898,7 +8960,7 @@ async function cargarVentas() {
     // ---- GRAFICO DONA: por supervisor ----
     const tituloDona = document.createElement('div');
     tituloDona.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
-    tituloDona.textContent = 'DISTRIBUCION POR SUPERVISOR';
+    tituloDona.textContent = 'DISTRIBUCIÓN POR SUPERVISOR';
     cont.appendChild(tituloDona);
     const canvasDona = document.createElement('canvas');
     canvasDona.id = 'chart-dona-ventas';
@@ -8991,7 +9053,7 @@ function _renderCharts(canvasBar, canvasDona, MESES, supervisores, porSup, total
           ticks: {
             callback: function(v) { return '$ ' + (v/1000000).toFixed(1) + 'M'; }
           },
-          grid: { color: '#EEF2FA' }
+          grid: { color: '#EEF1F7' }
         },
         x: { grid: { display: false } }
       }
@@ -9063,11 +9125,14 @@ async function descargarExcelVentas() {
     html += 'body{font-family:Calibri,sans-serif;font-size:11pt;}';
     html += 'table{border-collapse:collapse;}';
     html += '.cab{background:#1B3A6B;color:#FFFFFF;font-weight:bold;text-align:center;border:1px solid #8A9BBE;padding:6px 8px;white-space:nowrap;}';
-    html += '.sup{background:#EEF2FA;color:#1A2035;font-weight:600;border:1px solid #C8D0E0;padding:5px 8px;}';
+    html += '.sup{background:#EEF1F7;color:#1A2035;font-weight:600;border:1px solid #C8D0E0;padding:5px 8px;}';
     html += '.val{background:#FFFFFF;color:#1A2035;text-align:right;border:1px solid #C8D0E0;padding:5px 8px;}';
-    html += '.val2{background:#EEF2FA;color:#1A2035;text-align:right;border:1px solid #C8D0E0;padding:5px 8px;}';
+    html += '.val2{background:#EEF1F7;color:#1A2035;text-align:right;border:1px solid #C8D0E0;padding:5px 8px;}';
     html += '.totmes{background:#2D5AA0;color:#FFFFFF;font-weight:bold;text-align:right;border:1px solid #8A9BBE;padding:5px 8px;}';
-    html += '.totanio{background:#27A06B;color:#FFFFFF;font-weight:bold;text-align:right;border:1px solid #1A7A3C;padding:5px 8px;}';
+    // #27A06B es el verde de ESTADO: blanco encima da 3.32:1 y no pasa AA. El de ACCION
+    // (--verde-btn = #1E8052) da 4.92:1. Aqui va el hex literal a proposito: el :root de la
+    // app no viaja dentro de un archivo de Excel. La regla de color si viaja.
+    html += '.totanio{background:#1E8052;color:#FFFFFF;font-weight:bold;text-align:right;border:1px solid #17603D;padding:5px 8px;}';
     html += '.lbl{background:#2D5AA0;color:#FFFFFF;font-weight:bold;border:1px solid #8A9BBE;padding:5px 8px;}';
     html += '</style></head><body><table>';
 
@@ -9152,6 +9217,217 @@ function _rechazar(msg, idCampo) {
   };
   el.addEventListener('pointerdown', limpiar);
   el.addEventListener('input', limpiar);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DIALOGO ACCESIBLE — el unico. Reemplaza confirm() / prompt() / alert().
+
+   Por que existe: prompt() NO puede enmascarar lo que se escribe. La contrasena del
+   administrador aparecia en pantalla, en un local comercial. Ademas los tres nativos
+   bloquean el hilo, no se pueden estilar, y no anuncian nada a un lector de pantalla.
+
+   Invariante: SIEMPRE resuelve. El valor de cancelacion NO es el mismo en los tres casos
+   (false / null / undefined) porque prompt() devolvia null y mas de un sitio lo confundia
+   con la cadena vacia. Cada API declara el suyo.
+   ───────────────────────────────────────────────────────────────────────────── */
+var _dlgResolver = null;
+var _dlgFocoPrevio = null;
+var _dlgValorCancelar = null;
+
+function _dlgVisibles() {
+  var ov = document.getElementById('dlg-overlay');
+  return Array.prototype.filter.call(
+    ov.querySelectorAll('button, input'),
+    function(el) { return !el.hidden && el.offsetParent !== null && !el.disabled; }
+  );
+}
+
+function _dlgToggleOjo() {
+  var inp = document.getElementById('dlg-input');
+  var ojo = document.getElementById('dlg-ojo');
+  var oculta = inp.type === 'password';
+  inp.type = oculta ? 'text' : 'password';
+  ojo.innerHTML = oculta ? _SVG_OJO_OFF : _SVG_OJO;
+  ojo.setAttribute('aria-label', oculta ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  inp.focus();
+}
+
+function _dlgCerrar(valor) {
+  document.getElementById('dlg-overlay').hidden = true;
+  document.removeEventListener('keydown', _dlgTeclado, true);
+  var r = _dlgResolver; _dlgResolver = null;
+  var f = _dlgFocoPrevio; _dlgFocoPrevio = null;
+  // Devolver el foco a quien abrio el dialogo. Sin esto, el teclado vuelve al <body>.
+  if (f && typeof f.focus === 'function') { try { f.focus(); } catch(e) {} }
+  if (r) r(valor);
+}
+
+function _dlgTeclado(e) {
+  if (!_dlgResolver) return;
+  if (e.key === 'Escape') { e.preventDefault(); _dlgCerrar(_dlgValorCancelar); return; }
+  if (e.key === 'Enter' && e.target && e.target.id === 'dlg-input') {
+    e.preventDefault(); document.getElementById('dlg-ok').click(); return;
+  }
+  if (e.key !== 'Tab') return;
+  // Trampa de foco: sin esto el Tab se va detras del modal, a la pantalla que sigue viva.
+  var f = _dlgVisibles();
+  if (!f.length) return;
+  var primero = f[0], ultimo = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+  else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+}
+
+function _dlgAbrir(cfg) {
+  return new Promise(function(resolve) {
+    // Dos dialogos a la vez romperian el foco previo. El segundo se cancela solo.
+    if (_dlgResolver) { resolve(cfg.valorCancelar); return; }
+    _dlgResolver = resolve;
+    _dlgValorCancelar = cfg.valorCancelar;
+    _dlgFocoPrevio = document.activeElement;
+
+    var ov = document.getElementById('dlg-overlay');
+    var tit = document.getElementById('dlg-titulo');
+    var msg = document.getElementById('dlg-msg');
+    var campo = document.getElementById('dlg-campo');
+    var input = document.getElementById('dlg-input');
+    var ojo = document.getElementById('dlg-ojo');
+    var ok = document.getElementById('dlg-ok');
+    var cancelar = document.getElementById('dlg-cancelar');
+
+    tit.textContent = cfg.titulo || '';
+    tit.hidden = !cfg.titulo;
+    msg.textContent = cfg.mensaje || '';
+
+    campo.hidden = !cfg.input;
+    ojo.hidden = !cfg.password;
+    if (cfg.input) {
+      input.type = cfg.password ? 'password' : (cfg.email ? 'email' : 'text');
+      input.value = '';
+      input.placeholder = cfg.placeholder || '';
+      input.setAttribute('autocomplete', cfg.password ? 'off' : (cfg.email ? 'email' : 'off'));
+      if (cfg.password) { ojo.innerHTML = _SVG_OJO; ojo.setAttribute('aria-label', 'Mostrar contraseña'); }
+    }
+
+    ok.textContent = cfg.okTexto || 'Aceptar';
+    ok.className = 'btn btn-sm ' + (cfg.peligro ? 'btn-peligro' : 'btn-primary');
+    cancelar.hidden = !!cfg.soloAceptar;
+    ok.onclick = function() { _dlgCerrar(cfg.input ? input.value : true); };
+    cancelar.onclick = function() { _dlgCerrar(cfg.valorCancelar); };
+    ov.onclick = function(ev) { if (ev.target === ov) _dlgCerrar(cfg.valorCancelar); };
+
+    ov.hidden = false;
+    document.addEventListener('keydown', _dlgTeclado, true);
+    setTimeout(function() { (cfg.input ? input : ok).focus(); }, 30);
+  });
+}
+
+// Devuelve true / false. Nunca lanza.
+function _confirmar(mensaje, opts) {
+  opts = opts || {};
+  return _dlgAbrir({
+    titulo: opts.titulo || 'Confirmar',
+    mensaje: mensaje,
+    okTexto: opts.okTexto || 'Aceptar',
+    peligro: !!opts.peligro,
+    valorCancelar: false,
+  });
+}
+
+// Devuelve el texto escrito, o null si se cancela. `null` != `''` — el codigo debe distinguirlos.
+function _pedirTexto(mensaje, opts) {
+  opts = opts || {};
+  return _dlgAbrir({
+    titulo: opts.titulo || '',
+    mensaje: mensaje,
+    input: true,
+    password: !!opts.password,
+    email: !!opts.email,
+    placeholder: opts.placeholder || '',
+    okTexto: opts.okTexto || 'Aceptar',
+    valorCancelar: null,
+  });
+}
+
+// Un solo boton. Reemplaza alert().
+function _avisar(mensaje, opts) {
+  opts = opts || {};
+  return _dlgAbrir({
+    titulo: opts.titulo || 'Aviso',
+    mensaje: mensaje,
+    okTexto: opts.okTexto || 'Entendido',
+    soloAceptar: true,
+    valorCancelar: undefined,
+  });
+}
+
+/* ─── Guardas contra el doble toque ───────────────────────────────────────────
+   `disabled` no aparecia NI UNA VEZ en 9.300 lineas. Con mala senal, un segundo toque
+   sobre "Guardar" llamaba a collection().add() otra vez: dos tecnicos con el mismo nombre,
+   y en PINS[nombre] el segundo pisaba al primero.
+   Ojo: cerrarOT() NO necesita esto — memoiza estado.otClientId y escribe con
+   doc(clientId).set({merge:true}). Ya era idempotente. Medir antes de "arreglar". */
+
+// Para acciones con un boton identificable: se ve deshabilitado mientras escribe.
+function _bloquear(btn) {
+  if (!btn) return function() {};
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  return function() { btn.disabled = false; btn.removeAttribute('aria-busy'); };
+}
+
+// Para acciones disparadas desde botones creados en JS, sin id estable.
+var _accionesEnCurso = {};
+function _ocupado(clave) { return !!_accionesEnCurso[clave]; }
+function _tomar(clave) {
+  _accionesEnCurso[clave] = true;
+  return function() { delete _accionesEnCurso[clave]; };
+}
+
+/* ─── Escape + trampa de foco para los 3 modales propios ──────────────────────
+   Eran <div> con display:block. El Tab se iba DETRAS del modal, a la pantalla que
+   seguia viva; Escape no hacia nada; y al cerrar, el foco caia al <body>.
+   El dialogo nuevo (_dlgAbrir) trae lo suyo; esto es para los que ya existian. */
+var _modalActivo = null;
+var _modalFocoPrevio = null;
+
+function _modalFocusables(el) {
+  return Array.prototype.filter.call(
+    el.querySelectorAll('button, input, select, textarea, a[href]'),
+    function(e) { return !e.disabled && e.offsetParent !== null; }
+  );
+}
+
+function _modalTeclado(e) {
+  if (!_modalActivo) return;
+  if (e.key === 'Escape') { e.preventDefault(); _modalActivo.cerrar(); return; }
+  if (e.key !== 'Tab') return;
+  var f = _modalFocusables(_modalActivo.el);
+  if (!f.length) return;
+  var primero = f[0], ultimo = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+  else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+}
+
+function _modalMostrar(id, display, cerrar) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  _modalFocoPrevio = document.activeElement;
+  el.style.display = display;
+  _modalActivo = { el: el, cerrar: cerrar };
+  document.addEventListener('keydown', _modalTeclado, true);
+  setTimeout(function() {
+    var f = _modalFocusables(el);
+    if (f.length) f[0].focus();
+  }, 30);
+}
+
+function _modalOcultar(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+  document.removeEventListener('keydown', _modalTeclado, true);
+  _modalActivo = null;
+  var f = _modalFocoPrevio; _modalFocoPrevio = null;
+  if (f && typeof f.focus === 'function') { try { f.focus(); } catch(e) {} }
 }
 
 // =========== OFFLINE / INDEXEDDB ===========

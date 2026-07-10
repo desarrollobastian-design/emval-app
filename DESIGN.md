@@ -63,9 +63,25 @@ pregunta: *¿un técnico apurado, con mala luz, entiende esto en dos segundos?*
 - **Info:** Azul Institucional (`#1B3A6B`)
 
 > **Regla:** Neutrales tintados hacia el azul de marca (ya cumplido). NO usar negro puro
-> (`#000`) ni blanco puro en texto. Los fondos de estado seleccionado (ej. `#EEF2FA` en
-> `tipo-card.selected`, `#F0FAF5` en `foto-box.filled`) deben **derivarse** de su color de
-> marca con `color-mix(in oklch, var(--azul) 8%, white)` en vez de hardcodearse.
+> (`#000`) ni blanco puro en texto.
+
+### La segunda paleta (documentada el 2026-07-09)
+
+Fuera de `:root` viven **60 hexes**. No son deuda: son tres familias con razón de ser. Lo que las
+protege no es un token, es el **escaneo de contraste** de `check-contraste.js`, que mide cualquier
+par `background`/`color` que aparezca en el código.
+
+1. **Avatares por técnico** (`colores[]`, `COLORES_SUP`) — Pedro pidió un color propio por persona y
+   el hash debe ser estable. **No se tocan.**
+2. **Marcas de terceros** — `#F7941D` (cadena S10), `#25D366` (WhatsApp). No son decisión nuestra.
+3. **Tintes de estado** — pares fondo-pálido / texto-oscuro que ningún token cubría:
+   `#E6F4EA`+`#1A7A3C` (preventivo), `#FEF0E6`+`#B45309` (correctivo), `#FEF3C7`+`#78350F` (pausada),
+   `#DBEAFE`+`#1E40AF` (aceptada), `#FEE2E2`+`#B91C1C` (destructivo suave). Todos pasan AA.
+
+> **Lo que sí está prohibido:** un hex a distancia ≤ 6 de un token **neutro**. A esa distancia es el
+> mismo color escrito dos veces. Había 13 (`#EEF2FA`, `#EDF0F5`, `#F8F9FB`, `#F5F5F5`, `#F1F5F9`).
+> **Vigilado por `check-tokens.js`.** En zonas exportadas (Excel, correo) se usa el **hex exacto** del
+> token, porque el `:root` no viaja fuera del documento.
 
 ---
 
@@ -274,10 +290,20 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🟡 Media | Radios → tokens (187, 0 literales) · **vigilado por `check-tokens.js`** | `/normalize` |
 | ✅ Hecho | 🟡 Media | Estructura de encabezados: 16 `h2` de topbar → `h1` | `/normalize` |
 | ✅ Hecho | 🟡 Media | `aria-label` en los 18 botones sin nombre accesible | `/polish` |
+| ✅ Hecho | 🔴 Alta | **Zoom permitido** (WCAG 1.4.4) + controles ≥16px · **vigilado por `check-a11y.js`** | `/polish` |
+| ✅ Hecho | 🔴 Alta | **Contraseña de admin enmascarada** (era un `prompt()` en texto plano) | seguridad |
+| ✅ Hecho | 🔴 Alta | **Modal in-app único**: 19 diálogos nativos → **0** (4 estaban en código muerto) | feature |
+| ✅ Hecho | 🟡 Media | Guardas de doble toque en las 5 acciones que crean documentos | `/polish` |
+| ✅ Hecho | 🟡 Media | Toast que no se trunca (6 de 99 mensajes se cortaban) | `/polish` |
+| ✅ Hecho | 🟡 Media | `role="dialog"` + `aria-modal` + Escape + foco atrapado en los 3 modales propios | feature |
 | ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 15 tamaños en 335 declaraciones → 5 · **medida por `check-tokens.js`** | `/normalize` |
-| ⏳ Pendiente | 🟡 Media | **Modales in-app**: 19 diálogos nativos (`confirm`×11, `prompt`×6, `alert`×2) | feature |
+| ⏳ Pendiente | 🟡 Media | **`#form-local` sin cablear**: `guardarLocal`/`mostrarFormLocal` tienen 0 llamadas. Decisión de Pedro | feature |
+| ✅ Hecho | 🔴 Alta | **Contraste por escaneo, no por lista** · 3 fallos reales corregidos | `/normalize` |
+| ✅ Hecho | 🔴 Alta | El diálogo scrollea con el teclado abierto (`max-height` + overlay) | `/polish` |
+| ✅ Hecho | 🟡 Media | 13 grises casi-idénticos → tokens · **vigilado por `check-tokens.js`** | `/normalize` |
+| ✅ Hecho | 🟡 Media | `alt` en las 19 imágenes · `go()` mueve el foco al `h1` | `/polish` |
+| ⏳ Pendiente | 🟢 Baja | Estados vacíos que enseñen (de 14, solo 1 guía) | `/polish` |
 | ⏳ Pendiente | 🟢 Baja | Skeleton real de carga en stat-cards | `/polish` |
-| ⏳ Pendiente | 🟢 Baja | Colores de estado seleccionado con `color-mix` | `/polish` |
 
 > **Esta tabla estuvo mintiendo durante días**: marcaba como ⏳ Pendiente la migración de emojis y los hover-glows, que llevaban hecho una semana. El source of truth no sabía su propio estado. Si una fila no tiene un script que la verifique, **asume que está desactualizada**.
 
@@ -615,9 +641,10 @@ Estrategia propuesta, la misma que funcionó con el contraste:
 
 Los 3 tamaños más usados (**11/12/13px = 225 de 336 declaraciones**) son la capa de metadatos y body. Ahí está el 67% del beneficio.
 
-### Pendiente que sigue esperando su propia pasada
+### Los 19 diálogos nativos — cerrado el 2026-07-09
 
-**19 diálogos nativos** — `confirm()`×11, `prompt()`×6, **`alert()`×2** (estos últimos ni figuraban en la deuda declarada). Es una feature que toca lógica **destructiva** (borrar personal, borrar OTs, contraseña de admin). Necesita su propia pasada con testing, no un `/polish`.
+Eran `confirm()`×11, `prompt()`×6, `alert()`×2. **Cuatro vivían en código muerto.** Los 15 restantes
+se reemplazaron por un componente único. Ver la crítica de la noche del 2026-07-09, más abajo.
 
 ---
 
@@ -884,6 +911,313 @@ documento ya había dado por eliminado y seguía vivo en el buscador de sucursal
 `--gris3` (`#C8D0E0`). Y los 6 estados vacíos de cotizaciones, que decían la misma cosa de 4 formas
 distintas, ahora distinguen **lista vacía** ("Aún no hay cotizaciones guardadas") de **acción sin
 datos** ("No hay cotizaciones para exportar") — que no son el mismo mensaje.
+
+---
+
+## Crítica del 2026-07-09 (noche) — el zoom, la contraseña y el check escrito primero
+
+Esta vez **el verificador se escribió antes que los arreglos**, a propósito. `check-a11y.js` nació en
+rojo con **7 categorías**, y el trabajo terminó cuando se puso verde. Es la primera vez en este
+proyecto que la medición precede al fix, y encontró cosas que ninguna revisión manual vio.
+
+### 🔴 1. La app le prohibía hacer zoom a técnicos de tercera edad
+
+```html
+<meta name="viewport" content="... maximum-scale=1.0, user-scalable=no">
+```
+
+Fallo de **WCAG 2.1 SC 1.4.4 (Resize Text, AA)**. Android Chrome lo respeta: no hay pinch-zoom.
+(Safari lo ignora desde iOS 10, así que el daño era sobre todo en Android.)
+
+§1 de este documento dice que la app se usa **bajo sol directo**, y que **algunos técnicos son de
+tercera edad** — la misma frase que justificó el PIN de 4 dígitos. El HTML desactivaba la única
+herramienta que el usuario tenía para leer.
+
+**La huella del problema:** de 20 controles con `font-size` explícito, **exactamente dos** estaban a
+16px (`admin-pass-input` y `search-sucursales`). iOS hace zoom automático al enfocar un campo bajo
+16px. Alguien lo notó **dos veces** y lo arregló **dos veces**, donde le molestó. Los otros 18
+seguían entre 12px y 15px, incluido todo el flujo del técnico.
+
+**Regla nueva:** ningún control de formulario baja de **16px**. Sin allowlist para el admin: Pedro
+usa el panel también en su teléfono.
+
+### 🔒 2. La contraseña del administrador se escribía en texto plano, a la vista
+
+Tres `prompt()` pedían contraseñas. **Un `prompt()` no puede enmascarar la entrada.** La contraseña
+de Pedro aparecía en pantalla, en un local comercial, delante de quien pasara.
+
+Lo irónico: la app **ya tenía** la solución. El login usa `<input type="password">` con un botón de
+ojo. El flujo de confirmación destructiva lo ignoraba.
+
+Esto **reencuadra** la deuda "19 diálogos nativos": no era una tarea cosmética, era de seguridad.
+
+### 🐛 3. `disabled` no aparecía ni una vez en 9.300 líneas
+
+`guardarTecnico()` hacía `await collection('tecnicos').add(data)` con el formulario **vivo**. Un
+segundo toque con mala señal creaba **dos técnicos con el mismo nombre**, y en `PINS[nombre]` el
+segundo pisaba al primero.
+
+**Pero `cerrarOT()` NO tenía el bug**, ni `confirmarEnviarCot()`. El primero memoiza
+`estado.otClientId` y escribe con `doc(clientId).set({merge:true})`; el segundo cierra el modal antes
+de disparar el envío. **Medir antes de acusar.** El check señala a la función que *escribe*, no al
+handler que la invoca — y tiene una lista de rutas de background con su razón escrita.
+
+### 🐛 4. El único canal de feedback de la app se cortaba en un teléfono
+
+`#toast` tenía `white-space: nowrap` y ningún `max-width`. Centrado con `translateX(-50%)`, **6 de
+sus 99 mensajes** se cortaban por **ambos lados** a 360px. Entre ellos:
+
+- *"✓ OT guardada. Se subirá sola al mejorar la señal."* — el mensaje que sostiene toda la
+  confianza offline de la app.
+- *"Este usuario no tiene PIN. Pídele al administrador que lo configure."* — que **escribí yo, hoy**,
+  en el mismo commit donde presumí de feedback honesto.
+
+### 🐛 5. Los tres modales propios no eran modales
+
+`role="dialog"`: 0. `aria-modal`: 0. `Escape`: 0. Foco atrapado: 0. El Tab se iba **detrás** del
+modal, a la pantalla que seguía en `display:flex`.
+
+**El fix real no era "reemplazar `confirm()` por un modal bonito"**: los modales que ya existían
+tampoco funcionaban. Ahora hay **un solo componente** (`_confirmar` / `_pedirTexto` / `_avisar`) con
+`role="dialog"`, `aria-modal`, Escape, foco atrapado y **devolución del foco** al botón que lo abrió;
+y los 3 modales viejos comparten `_modalMostrar` / `_modalOcultar`.
+
+> **Invariante:** el valor de cancelación **no es el mismo** en los tres: `false` / `null` /
+> `undefined`. `prompt()` devolvía `null` y más de un sitio lo confundía con `''`.
+
+### 🧹 Seis funciones muertas
+
+`restaurarBorradorPendienteTecnico`, `enviarCotizacion`, `enviarCotGuardadaData` y
+`enviarCotGuardada` — emisores legacy vía `mailto:` (`%0A` en el cuerpo), reemplazados por el flujo
+de EmailJS. Entre las cuatro contenían **4 de los 19 diálogos**. Borradas: la cuenta bajó a 15 sin
+tocar una sola línea viva.
+
+> ⚠️ **Dos más, NO borradas:** `guardarLocal` y `mostrarFormLocal` tienen **0 llamadas**. El markup
+> `#form-local` existe en el HTML pero **nada lo abre**: el admin puede listar y borrar locales, no
+> crearlos ni editarlos. Es una feature a medio cablear, no basura. **Decisión de Pedro**, no mía.
+
+---
+
+### 🔍 Tres puntos ciegos de mis propios verificadores, y cómo aparecieron
+
+**a) El comentario que explicaba la regla la violaba.** `check-a11y.js` contó **13 "diálogos
+nativos"** que eran las palabras `confirm()` / `prompt()` / `alert()` **dentro de los comentarios que
+documentan su reemplazo**. Es la segunda vez hoy: a `check-tokens.js` le pasó con una custom property
+de ejemplo. Los scripts escanean texto, no AST.
+
+**b) Y limpiar los comentarios con un regex fue peor.** El atributo `accept="image/*"` abre un
+comentario de bloque **falso** que se come **337.000 caracteres**. El script encontró **cero
+problemas** y dijo que todo estaba bien.
+
+> **Un falso negativo silencioso es el peor resultado posible.** Ahora hay un escáner que respeta las
+> comillas, **y un guardián que verifica al escáner**: si pierde más del 30% del archivo, avisa y
+> analiza el texto crudo. Errar hacia el falso positivo, nunca hacia el falso negativo.
+
+**c) `check-tildes.js` era una LISTA, y las listas se pudren.** Pasó su propio control con `0`
+hallazgos… y un mutante demostró que no veía `'Esta accion no se puede deshacer'`, **porque `accion`
+no estaba en la lista**. Es literalmente el mismo fallo que la migración de emojis y la de radios,
+por quinta vez.
+
+Reescrito como **regla**: en español, toda palabra aguda terminada en `-ion` lleva tilde
+(`accion→acción`, `camion→camión`); el plural la pierde (`acciones`). La lista queda solo para
+irregulares (`tecnico`, `numero`, `aqui`…), y hay un `EXCEPCIONES_ION` para los monosílabos que la
+RAE escribe sin tilde desde 2010 (`guion`, `ion`).
+
+Al correrla, la regla encontró **dos** que la lista jamás habría visto: `recepcion` y `DISTRIBUCION`
+(en mayúsculas la tilde también se escribe).
+
+---
+
+### `check-mutantes.sh` — el verificador de los verificadores
+
+```
+bash check-mutantes.sh   →   17 mutantes · 0 puntos ciegos
+```
+
+Inyecta un defecto real y exige que el check correspondiente **falle**. Si un mutante sobrevive, el
+punto ciego está en el check, y **se arregla el check, no el mutante**.
+
+| Mutante | Check | exit |
+|---|---|---|
+| `user-scalable=no` en el viewport | a11y | 1 ✅ |
+| un input a 13px | a11y | 1 ✅ |
+| reintroducir un `confirm()` nativo | a11y | 1 ✅ |
+| quitar `aria-modal` de un modal | a11y | 1 ✅ |
+| `white-space: nowrap` en el toast | a11y | 1 ✅ |
+| quitar la guarda de `guardarTecnico` | a11y | 1 ✅ |
+| mensaje de diálogo sin tilde | tildes | 1 ✅ |
+| palabra `-ion` que ninguna lista tendría | tildes | 1 ✅ |
+| `var()` dentro del correo exportado | tokens | 1 ✅ |
+| radio hardcodeado / token fantasma | tokens | 1 ✅ |
+| emoji a color reintroducido | emojis | 1 ✅ |
+| **controles sin mutar** | los 4 | **0** ✅ |
+
+### Los 6 verificadores del repo
+
+| Script | Vigila | Nació de |
+|---|---|---|
+| `check-contraste.js` | WCAG AA sobre la superficie real | el verde que pasó 4 críticas |
+| `check-emojis.js` | iconografía SVG única (por rango unicode) | emojis que la migración no visitó |
+| `check-tokens.js` | tokens reales + zona de CSS exportado | radios que el doc daba por normalizados |
+| `check-tildes.js` | ortografía visible (por **regla**, no lista) | 16 tildes que 4 pasadas no vieron |
+| `check-a11y.js` | zoom · 16px · 0 diálogos · modales · toast · doble envío | **se escribió antes del fix** |
+| `check-mutantes.sh` | **a los otros cinco** | 3 checks que mintieron en verde |
+
+### Verificación
+
+```
+node check-contraste.js  →  22 pares · 0 fallos · 2 tolerados        exit 0
+node check-emojis.js     →  0 emojis a color                         exit 0
+node check-tokens.js     →  185 radios por token · 1 zona exportada  exit 0
+node check-tildes.js     →  0 palabras sin tilde                     exit 0
+node check-a11y.js       →  las 6 reglas en verde                    exit 0
+bash check-mutantes.sh   →  17 mutantes · 0 puntos ciegos            exit 0
+sintaxis                 →  0 errores en los 3 bloques <script>
+```
+
+> **La lección, ya en su sexta forma:** *lo que revisas a ojo es lo que ya sabías mirar.* Y su
+> corolario nuevo: **un check también revisa a ojo, si su fuente de verdad es una lista.** La única
+> defensa es una regla, y la única prueba de que la regla funciona es verla fallar.
+
+---
+
+## El último check que recitaba una lista (2026-07-09, madrugada)
+
+`check-contraste.js` salía **exit 0** durante semanas. Y había **tres fallos de contraste reales**
+en el código. No era un bug del script: era su **diseño**. Enumeraba **22 pares de tokens**, y los
+fallos vivían en los **hexes que no son tokens**.
+
+### 🔴 Los tres fallos que la lista no podía ver
+
+| Ratio | Mín | Dónde |
+|---|---|---|
+| **3.82:1** | 4.5 | blanco sobre `#E74C3C` — botón **"No"** del toggle preventivo |
+| **4.09:1** | 4.5 | `#6B7280` sobre `#E8ECF5` — ese mismo toggle, **sin responder** |
+| **3.32:1** | 4.5 | blanco sobre `#27A06B` — fila **"Total año"** del Excel que lee el administrador |
+
+Los dos primeros están en la pantalla donde el técnico marca **cada servicio Sí o No**, al sol, con
+una mano. El estado "sin responder" es justo el que tiene que leer para saber qué le falta.
+
+Y la línea que lo explica todo:
+
+```js
+const siSt = svc.respuesta === 'si' ? 'background:var(--verde-btn);color:white;' : '...';
+const noSt = svc.respuesta === 'no' ? 'background:#E74C3C;color:white;'         : '...';
+```
+
+**El "Sí" estaba migrado a token. El "No" no.** En la misma línea, con la misma forma. No fue
+descuido: **la tarea era "migrar los verdes"**, y la lista de verdes no incluía al rojo.
+
+`#E74C3C` era además un **quinto rojo** que ningún documento mencionaba (`--rojo` es `#D32F2F`).
+
+### ✅ `check-contraste.js` ahora tiene dos partes
+
+1. **Pares curados** (22): los que solo se ven leyendo el CSS por clases — `.btn-primary` define su
+   fondo, el blanco viene de otra regla. Un escáner no los puede emparejar.
+2. **Escaneo por regla**: busca **cualquier** `background: X; color: Y` en todo el archivo —CSS,
+   atributo `style=`, fragmento construido en JS, plantilla de Excel— resuelve `var()` y mide.
+
+```
+node check-contraste.js  →  Parte 1: 22 pares · 0 fallos · 2 tolerados
+                            Parte 2: 26 pares · 0 fallos · 1 tolerado
+```
+
+> Era el último de los cinco que recitaba. `check-emojis` pasó de lista a **rango unicode**,
+> `check-tokens` a **escaneo del `:root`**, `check-tildes` a la **regla del `-ion`**. Cada conversión
+> encontró algo que la lista no veía: `⌫`, `▼`, `recepcion`, `DISTRIBUCION`. Ésta encontró tres.
+
+### 🐛 El diálogo que escribí para "arreglar la accesibilidad" se rompía con el teclado
+
+`.dlg` no tenía `max-height`. `.dlg-overlay` no tenía `overflow-y`. Los **tres modales viejos** sí:
+`max-height: 80vh / 84vh / 86vh` con scroll interno.
+
+En un teléfono, al enfocar el campo de contraseña, el teclado se come ~55% del viewport. El diálogo
+está centrado y **no scrollea**: el botón **"Confirmar"** queda fuera de la pantalla, inalcanzable.
+
+Es el diálogo de la **contraseña de administrador**. Lo escribí ayer, en el commit donde arreglé la
+accesibilidad. Introduje el único bug que los modales viejos no tenían.
+
+> **Y `check-a11y.js` no lo vio**, porque la regla que escribí verificaba que el modal *tuviera*
+> `role="dialog"` — no que se pudiera **usar**. Regla nueva: *todo overlay scrollea y todo diálogo
+> declara `max-height`*.
+
+### 🎨 La segunda paleta: mi propia propuesta era demasiado burda
+
+En la crítica escribí: *"extender `check-tokens.js`: todo hex fuera de `:root` es un fallo"*.
+**Estaba equivocado.** Al medir los 60 hexes sueltos aparecieron tres categorías **legítimas**:
+
+- **La paleta de avatares** (`colores[]`, `COLORES_SUP`). Este documento ya dice que **no se toca**:
+  Pedro pidió un color propio por técnico y el hash debe ser estable.
+- **Colores de marca de terceros**: `#F7941D` es de la cadena **S10**, `#25D366` de WhatsApp.
+- **Tintes de estado** (`#E6F4EA` + `#1A7A3C`, `#FEF3C7` + `#78350F`…): pares fondo-pálido/texto-oscuro
+  que **pasan AA** y cumplen un rol que ningún token cubría.
+
+Forzarlos a tokens habría roto identidades que el cliente pidió. La distancia RGB tampoco sirve como
+regla general: `#E6F4EA` (verde pálido) queda "cerca" de `--gris2` sin serlo.
+
+**Lo que sí era un accidente**: **13 usos** de grises a distancia **1-6** de un token neutro —
+`#EEF2FA`, `#EDF0F5`, `#F8F9FB`, `#F5F5F5`, `#F1F5F9`. A esa distancia no hay ambigüedad de tono: es
+el mismo color, escrito dos veces. Migrados. Los del Excel usan ahora el **hex exacto** del token,
+porque ahí el `:root` no viaja.
+
+**Regla nueva en `check-tokens.js`:** hex a distancia `0 < d ≤ 6` de un token **neutro** → error.
+Distancia 0 se permite (ese hex *es* el token). Nada de listas.
+
+### ♿ Fotos, foco y una regla duplicada
+
+- **17 imágenes sin `alt`.** *(Mi crítica dijo 19: dos ya lo tenían, y mi grep buscaba `alt=` en HTML
+  sin ver `img.alt =` en JS. Medí lo que no era.)* Las fotos del trabajo llevan alt descriptivo
+  (*"Foto del estado inicial 2"*); los logos de cadena llevan `alt=""` porque son decorativos —
+  el nombre de la cadena va siempre al lado.
+- **`go()` no movía el foco.** Las 16 pantallas viven en el mismo DOM: al cambiar, el botón que
+  tocaste desaparece y el foco cae al `<body>`. Ahora enfoca el `<h1>` del topbar con `tabindex="-1"`
+  (foco programático → no dispara `:focus-visible`, así que no aparece ningún anillo).
+- **Mi regla `@media (prefers-reduced-motion) { .campo-error { animation: none } }` era redundante:**
+  ya existía una regla global `*` con `animation-duration: 0.01ms !important`. La escribí sin
+  comprobar lo que había.
+
+### Lo que fui a buscar y NO era un problema
+
+- **Objetivos táctiles.** 46 botones creados en JS. La regla global `button { min-height: 32px }` los
+  rescata a todos, y los tres del flujo del técnico miden **51/51/46px**. Medí antes de acusar.
+- **`prefers-reduced-motion`.** 5 `@keyframes`, todos cubiertos por la regla global.
+- **El verde de `index.html:794`.** Es el relleno de un ícono de 42×42 **sin texto encima**:
+  `--verde` de estado es correcto ahí.
+
+### Verificación
+
+```
+node check-contraste.js  →  48 pares (22 curados + 26 escaneados) · 0 fallos   exit 0
+node check-emojis.js     →  0 emojis a color                                   exit 0
+node check-tokens.js     →  0 fantasmas · 0 muertos · 0 grises duplicados      exit 0
+node check-tildes.js     →  0 palabras sin tilde                               exit 0
+node check-a11y.js       →  7 reglas en verde (zoom, 16px, dialogos, modales,
+                            scroll de modal, toast, doble envio)               exit 0
+bash check-mutantes.sh   →  24 mutantes · 0 puntos ciegos                      exit 0
+sintaxis                 →  0 errores en los 3 bloques <script>
+```
+
+---
+
+### La lección, en su forma final
+
+Seis veces seguidas, en este proyecto, el mismo error tomó una forma nueva:
+
+| Qué se arregló | Con qué mapa | Qué sobrevivió |
+|---|---|---|
+| Emojis → SVG | una lista de emojis | `👁` `⚙️` `📤` `⌫` `▼` |
+| Radios → tokens | "los valores ya son 4" | 163 literales sin token |
+| Ortografía | pantalla por pantalla | 16 tildes |
+| `check-tildes` | un diccionario de 20 palabras | `accion`, `recepcion`, `DISTRIBUCION` |
+| Colores → tokens | **la lista de verdes** | el rojo del "No", en la misma línea |
+| `check-contraste` | 22 pares curados | los 3 fallos que no eran tokens |
+
+> **Un check con una lista no verifica: repite.** Y su punto ciego es siempre el mismo que el del
+> fix que lo acompañó, porque los dos se escribieron mirando el mismo mapa.
+>
+> La única salida es una **regla** — un rango unicode, un escaneo del `:root`, la terminación `-ion`,
+> `background` junto a `color`. Y la única prueba de que la regla funciona es **verla fallar**:
+> `check-mutantes.sh`.
 
 ---
 

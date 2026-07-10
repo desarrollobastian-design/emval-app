@@ -86,7 +86,45 @@ lineas.forEach((l, i) => {
   }
 });
 
-// --- 4. Deriva tipografica (solo informa) -----------------------------------------
+// --- 3b. Grises casi identicos a un token neutro ----------------------------------
+// Habia 13 usos de #EEF2FA / #EDF0F5 / #F8F9FB / #F5F5F5 / #F1F5F9: a distancia 1-6 de
+// --gris1 / --gris2 / --fondo. Ojo humano: el mismo color. Sistema de diseno: cinco grises.
+//
+// Se comparan SOLO contra los tokens neutros y con umbral <= 6. Mas arriba, la distancia RGB
+// deja de significar nada: #E6F4EA (verde palido) queda "cerca" de --gris2 sin serlo, y una
+// regla que forzara todos los hexes a tokens romperia cosas que DESIGN.md manda conservar:
+// la paleta de avatares (Pedro pidio un color propio por tecnico) y los colores de marca de
+// terceros (#F7941D es de la cadena S10, #25D366 de WhatsApp).
+//
+// Distancia 0 se permite: ese hex ES el valor del token, y en las zonas exportadas (Excel,
+// correo) el literal es obligatorio porque el :root no viaja.
+const NEUTROS = ['--fondo', '--gris1', '--gris2', '--gris3', '--texto', '--texto2', '--texto3'];
+const rgbDe = (x) => [1, 3, 5].map((i) => parseInt(x.substr(i, 2), 16));
+const distancia = (a, b) => {
+  const A = rgbDe(a), B = rgbDe(b);
+  return Math.round(Math.sqrt((A[0]-B[0])**2 + (A[1]-B[1])**2 + (A[2]-B[2])**2));
+};
+const valoresToken = new Set();
+for (const m of rootM[1].matchAll(/--[\w-]+\s*:\s*(#[0-9a-fA-F]{6})/g)) valoresToken.add(m[1].toUpperCase());
+const hexToken = {};
+for (const m of rootM[1].matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) hexToken[m[1]] = m[2].toUpperCase();
+
+const grisesDup = [];
+lineas.forEach((l, i) => {
+  const t = l.trim();
+  // Linea a linea: un comentario que MENCIONA un hex no es un uso.
+  // (Estripar /* */ con un regex es peor: accept="image/*" abre un comentario falso.)
+  if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+  for (const m of l.matchAll(/#[0-9a-fA-F]{6}\b/g)) {
+    const hex = m[0].toUpperCase();
+    if (valoresToken.has(hex)) continue;           // ES un token
+    for (const tk of NEUTROS) {
+      if (!hexToken[tk]) continue;
+      const d = distancia(hex, hexToken[tk]);
+      if (d > 0 && d <= 6) grisesDup.push({ ln: i + 1, hex, tk, d });
+    }
+  }
+});
 const ESCALA = [11, 12, 15, 16, 22]; // §3: micro, small, body/h3/cta, h2, h1
 const tam = {};
 for (const m of html.matchAll(/font-size:\s*(\d+)px/g)) {
@@ -116,6 +154,13 @@ if (muertos.length) {
   console.log('  Un token que nadie usa no es abstraccion, es deuda. Usalo o borralo.\n');
   muertos.forEach(t => console.log('    ' + t));
   console.log('');
+}
+
+if (grisesDup.length) {
+  fallos += grisesDup.length;
+  console.log('  ' + grisesDup.length + ' hex(es) visualmente IDENTICOS a un token neutro:\n');
+  grisesDup.slice(0, 12).forEach(g => console.log('    index.html:' + String(g.ln).padEnd(6) + g.hex + '  ≈  ' + g.tk + ' (' + hexToken[g.tk] + ')   distancia ' + g.d));
+  console.log('\n  Usa var(' + grisesDup[0].tk + '). Si es una zona exportada (Excel/correo), usa el hex EXACTO del token.\n');
 }
 
 if (varsEnExport.length) {

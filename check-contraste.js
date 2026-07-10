@@ -1,16 +1,31 @@
 #!/usr/bin/env node
 /**
- * check-contraste.js — Verifica los ratios de contraste WCAG de los pares de color
- * que EMVAL usa de verdad. Sin dependencias. Lee los tokens desde el :root de index.html.
+ * check-contraste.js — Contraste WCAG AA de EMVAL. Sin dependencias.
  *
  *   node check-contraste.js
  *
- * Sale con codigo 1 si algun par de texto baja del minimo AA.
- * Los pares con `tolerado` se reportan pero no rompen (decisiones de marca justificadas).
+ * DOS PARTES, y la segunda existe porque la primera no bastaba:
  *
- * Por que existe: DESIGN.md afirmaba cosas sobre contraste que nadie verificaba.
- * El bug del verde (3.3:1 en botones) sobrevivio a cuatro criticas de diseno porque
- * "se ve bien" no es un test. Esto lo convierte en un hecho medible.
+ *  1. PARES CURADOS: pares que solo se ven leyendo el CSS por clases (`.btn-primary` define
+ *     su fondo, el texto blanco viene de otra regla). Un escaner no los puede emparejar.
+ *
+ *  2. ESCANEO POR REGLA: busca CUALQUIER `background: X; color: Y` en todo el archivo y lo
+ *     mide. Sin lista.
+ *
+ * POR QUE EXISTE LA PARTE 2:
+ * Durante semanas este script salio en verde con 22 pares curados... y habia TRES fallos
+ * reales fuera de esa lista, porque los pares que fallaban usaban hexes sueltos, no tokens:
+ *   · blanco sobre #E74C3C (3.82:1) — el boton "No" del toggle preventivo del tecnico
+ *   · #6B7280 sobre #E8ECF5 (4.09:1) — ese mismo toggle, sin responder
+ *   · blanco sobre #27A06B (3.32:1) — la fila "Total ano" del Excel que lee el administrador
+ *
+ * El "Si" del toggle SI estaba migrado a var(--verde-btn). El "No" no. La migracion habia
+ * recorrido una LISTA de verdes. Es la sexta vez que este proyecto tropieza con lo mismo:
+ * check-emojis paso de lista a rango, check-tokens a escaneo del :root, check-tildes a la
+ * regla del -ion. Este era el ultimo que quedaba recitando.
+ *
+ * Sale con codigo 1 si algun par de texto baja del minimo AA.
+ * Los `tolerado` se reportan pero no rompen (decisiones de marca justificadas por escrito).
  */
 const fs = require('fs');
 const path = require('path');
@@ -97,6 +112,54 @@ const PARES = [
     tolerado: 'decorativo: el label "Correctivo" debajo carga el significado. Revisar si alguna vez queda sin label' },
 ];
 
+// ─── PARTE 2: escaneo por regla ──────────────────────────────────────────────────
+// Cualquier `background: X ... color: Y` en el archivo, venga de CSS, de un atributo
+// style= o de un fragmento de estilo construido en JS.
+//
+// Tolerados del escaneo: pares que fallan a proposito, cada uno con su razon.
+const TOLERADOS_ESCANEO = {
+  '#FFFFFF|#25D366': 'verde corporativo de WhatsApp; impuesto por un tercero',
+};
+
+const NOMBRADOS = { white: '#FFFFFF', black: '#000000' };
+const COLOR = "(#[0-9a-fA-F]{3,6}|var\\(--[a-z0-9-]+\\)|white|black)";
+// Sin cruzar llaves ni comillas: una regla CSS, un atributo style, o un fragmento JS.
+const VENTANA = "[^{}'\"]{0,200}?";
+
+function normalizar(v, tokens) {
+  if (!v) return null;
+  v = v.trim();
+  if (NOMBRADOS[v.toLowerCase()]) return NOMBRADOS[v.toLowerCase()];
+  const t = v.match(/^var\((--[a-z0-9-]+)\)$/);
+  if (t) return tokens[t[1]] || null;
+  if (/^#[0-9a-fA-F]{3}$/.test(v)) return ('#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3]).toUpperCase();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toUpperCase();
+  return null;   // rgba(), transparent, gradientes: no medibles aqui
+}
+
+function escanear(html, tokens) {
+  const hallados = new Map();
+  const patrones = [
+    new RegExp('background(?:-color)?:\\s*' + COLOR + VENTANA + '(?:^|[;\\s])color:\\s*' + COLOR, 'gi'),
+    new RegExp('(?:^|[;\\s"\'])color:\\s*' + COLOR + VENTANA + 'background(?:-color)?:\\s*' + COLOR, 'gi'),
+  ];
+  patrones.forEach(function (re, i) {
+    let m;
+    while ((m = re.exec(html))) {
+      const bg = normalizar(i === 0 ? m[1] : m[2], tokens);
+      const fg = normalizar(i === 0 ? m[2] : m[1], tokens);
+      if (!bg || !fg || bg === fg) continue;
+      const ventana = m[0];
+      const fz = parseFloat((ventana.match(/font-size:\s*([\d.]+)px/) || [])[1] || 14);
+      const fw = parseInt((ventana.match(/font-weight:\s*(\d+|bold)/) || [])[1] || 400, 10) || 700;
+      const ln = html.slice(0, m.index).split('\n').length;
+      const clave = fg + '|' + bg + '|' + fz;
+      if (!hallados.has(clave)) hallados.set(clave, { fg: fg, bg: bg, fz: fz, fw: fw, ln: ln });
+    }
+  });
+  return [...hallados.values()];
+}
+
 // --- Correr ---
 const html = fs.readFileSync(ARCHIVO, 'utf8');
 const tokens = leerTokens(html);
@@ -131,5 +194,34 @@ console.log('');
 filas.filter(function (f) { return !f.pasa && f.p.tolerado; }).forEach(function (f) {
   console.log('  tolerado — ' + f.p.nombre + ': ' + f.p.tolerado);
 });
-console.log('\n  ' + filas.length + ' pares · ' + fallos + ' fallo(s) real(es) · ' + tolerados + ' tolerado(s)\n');
-process.exit(fallos ? 1 : 0);
+console.log('\n  Parte 1 (curados): ' + filas.length + ' pares · ' + fallos + ' fallo(s) · ' + tolerados + ' tolerado(s)');
+
+// ─── Parte 2: lo que el escaneo encuentra por su cuenta ───────────────────────────
+const encontrados = escanear(html, tokens);
+let fallos2 = 0, tolerados2 = 0;
+const malos = [];
+encontrados.forEach(function (p) {
+  const ratio = contraste(p.fg, p.bg);
+  const grande = p.fz >= 24 || (p.fz >= 18.66 && p.fw >= 700);
+  const min = grande ? MINIMOS.grande : MINIMOS.normal;
+  if (ratio >= min) return;
+  const razon = TOLERADOS_ESCANEO[p.fg + '|' + p.bg];
+  if (razon) { tolerados2++; return; }
+  fallos2++;
+  malos.push({ p: p, ratio: ratio, min: min });
+});
+
+console.log('  Parte 2 (escaneo):  ' + encontrados.length + ' pares · ' + fallos2 + ' fallo(s) · ' + tolerados2 + ' tolerado(s)\n');
+
+if (malos.length) {
+  console.log('  PARES QUE FALLAN AA, hallados por escaneo (ninguno estaba en la lista curada):\n');
+  console.log('  ' + w('RATIO', 10) + w('MIN', 6) + w('TEXTO', 10) + w('FONDO', 10) + w('TAM', 7) + 'DONDE');
+  malos.sort(function (a, b) { return a.ratio - b.ratio; }).forEach(function (f) {
+    console.log('  ' + w(f.ratio.toFixed(2) + ':1', 10) + w(f.min.toFixed(1), 6) + w(f.p.fg, 10) + w(f.p.bg, 10) + w(f.p.fz + 'px', 7) + 'index.html:' + f.p.ln);
+  });
+  console.log('\n  Usa un token que pase AA, o agrega el par a TOLERADOS_ESCANEO con una razon escrita.\n');
+}
+
+const total = fallos + fallos2;
+console.log('  ' + (total ? total + ' fallo(s) real(es) en total.' : 'Todos los pares pasan AA.') + '\n');
+process.exit(total ? 1 : 0);

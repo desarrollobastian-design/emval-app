@@ -26,38 +26,53 @@
 const fs = require('fs');
 const L = fs.readFileSync(process.argv[2] || 'index.html', 'utf8').split(/\r?\n/);
 
-// palabra_sin_tilde -> con_tilde
-const PALABRAS = {
-  cotizacion: 'cotización', Cotizacion: 'Cotización',
-  tecnico: 'técnico', Tecnico: 'Técnico',
-  numero: 'número', Numero: 'Número',
-  sesion: 'sesión', Sesion: 'Sesión',
-  conexion: 'conexión', Conexion: 'Conexión',
-  direccion: 'dirección', Direccion: 'Dirección',
-  descripcion: 'descripción', Descripcion: 'Descripción',
-  informacion: 'información', Informacion: 'Información',
-  administracion: 'administración', Administracion: 'Administración',
-  facturacion: 'facturación', Facturacion: 'Facturación',
-  comparacion: 'comparación', Comparacion: 'Comparación',
-  fotografia: 'fotografía', Fotografia: 'Fotografía',
-  aqui: 'aquí', Aqui: 'Aquí',
+/* REGLA, no lista.
+ * La primera version de este script era un diccionario de ~20 palabras. Fallo exactamente como
+ * fallaron la migracion de emojis y la de radios: `accion` no estaba en la lista, asi que
+ * "Esta accion no se puede deshacer" paso limpio dos veces. Un mutante lo destapo.
+ *
+ * En espanol, TODA palabra aguda terminada en -ion lleva tilde: accion->acción, camion->camión,
+ * region->región. El plural la pierde: acciones, camiones. Eso es una regla, y no envejece.
+ *
+ * La lista queda solo para los irregulares que ninguna regla simple cubre. */
+const REGLA_ION = /^[a-zñáéíóú]{2,}[ct]?ion$/i;   // termina en -ion (singular)
+
+// Monosilabos: la RAE los escribe SIN tilde desde 2010. La regla no aplica.
+const EXCEPCIONES_ION = new Set(['ion', 'guion', 'pion', 'muon']);
+
+// Irregulares: palabras que llevan tilde y no terminan en -ion.
+const IRREGULARES = {
+  tecnico: 'técnico',
+  numero: 'número',
+  fotografia: 'fotografía',
+  aqui: 'aquí',
   mas: 'más',
-  despues: 'después', Despues: 'Después',
-  telefono: 'teléfono', Telefono: 'Teléfono',
-  codigo: 'código', Codigo: 'Código',
-  ultima: 'última', Ultima: 'Última', ultimo: 'último', Ultimo: 'Último',
-  pagina: 'página', Pagina: 'Página',
+  despues: 'después',
+  telefono: 'teléfono',
+  codigo: 'código',
+  ultima: 'última', ultimo: 'último',
+  pagina: 'página',
+  sesion: 'sesión',   // termina en -ion, pero lo dejamos explicito por claridad
 };
+
+// Sugiere la forma correcta. En MAYUSCULAS la tilde tambien se escribe (RAE): DISTRIBUCIÓN.
+const acentuarIon = (p) => p.slice(0, -3) + (p === p.toUpperCase() ? 'IÓN' : 'ión');
 
 // El VALOR de datos que NO se traduce (documentado en DESIGN.md).
 const DATOS_INTOCABLES = [/'Tecnico en terreno'/, /"Tecnico en terreno"/, /cargo === 'Tecnico/];
 
 // Contextos donde el string es VISIBLE.
+// Los tres ultimos entraron cuando confirm()/prompt()/alert() se reemplazaron por el dialogo
+// propio: sus textos pasaron a ser visibles y este script no los miraba. Ahi vivian, entre
+// otros, "Esta accion no se puede deshacer" x2 y "Eliminar N cotizacion".
 const VISIBLE = [
   /toast\('([^']*)'\)/g,
   /textContent\s*=\s*'([^']*)'/g,
   /placeholder="([^"]*)"/g,
   /encodeURIComponent\('([^']*)'/g,
+  /_(?:confirmar|pedirTexto|avisar)\('([^']*)'/g,   // el mensaje
+  /titulo:\s*'([^']*)'/g,                            // el titulo del dialogo
+  /okTexto:\s*'([^']*)'/g,                           // la etiqueta del boton
 ];
 
 const hits = [];
@@ -68,11 +83,20 @@ L.forEach((linea, i) => {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(linea))) {
-      const txt = m[1];
-      for (const [malo, bueno] of Object.entries(PALABRAS)) {
-        // \b no funciona bien con acentos; usamos limites explicitos
-        const rx = new RegExp('(^|[^A-Za-zÁÉÍÓÚáéíóúñÑ])' + malo + '($|[^A-Za-zÁÉÍÓÚáéíóúñÑ])');
-        if (rx.test(txt)) hits.push({ ln: i + 1, txt, malo, bueno });
+      // Tokenizar en palabras. \b no respeta acentos, asi que partimos por lo que NO es letra.
+      const palabras = m[1].split(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/).filter(Boolean);
+      for (const p of palabras) {
+        const min = p.toLowerCase();
+        // 1) La REGLA: aguda terminada en -ion. Los plurales (-iones) no matchean.
+        if (REGLA_ION.test(min) && !EXCEPCIONES_ION.has(min)) {
+          hits.push({ ln: i + 1, txt: m[1], malo: p, bueno: acentuarIon(p) });
+          continue;
+        }
+        // 2) Los irregulares.
+        if (IRREGULARES[min]) {
+          const bueno = IRREGULARES[min];
+          hits.push({ ln: i + 1, txt: m[1], malo: p, bueno: p[0] === p[0].toUpperCase() ? bueno[0].toUpperCase() + bueno.slice(1) : bueno });
+        }
       }
     }
   });
