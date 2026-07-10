@@ -159,6 +159,14 @@
   .btn-peligro { background: var(--rojo); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
   .btn-sm { padding: 10px; font-size: 12px; border-radius: var(--radio-sm); min-height: 44px; }
+  /* Quitar un item de la cotizacion es una accion menor y reversible (borrador sin guardar).
+     Discreto por defecto; el rojo aparece solo al hover/focus. El rojo pleno se reserva para
+     destruir algo ya guardado (borrar una OT firmada), no una linea de borrador. */
+  /* Fondo transparente (no --gris2): sobre el blanco de la card el ✕ en --texto3 pasa AA;
+     sobre --gris2 daba 4.46:1, justo bajo el minimo (check-contraste.js). */
+  .item-quitar { background: transparent; color: var(--texto3); border: none; border-radius: var(--radio-sm); padding: 8px 10px; cursor: pointer; font-size: 12px; font-family: inherit; transition: background 0.15s var(--ease), color 0.15s var(--ease); }
+  @media (hover: hover) { .item-quitar:hover { background: var(--rojo); color: white; } }
+  .item-quitar:focus-visible { background: var(--rojo); color: white; }
 
   /* OBJETIVO TACTIL. Pedro confirmo que los tecnicos NO usan guantes, asi que el minimo
      deja de ser el peor caso de 48px y pasa a 44px (WCAG 2.5.5 / Apple HIG) para el flujo
@@ -808,7 +816,7 @@
   <div class="content">
     <div class="card" id="cot-resumen-ot" style="background:var(--gris1);margin-bottom:4px;"></div>
     <div class="field">
-      <label for="cot-detalle-trabajo">Descripción que verá el cliente en el PDF</label>
+      <label for="cot-detalle-trabajo">Descripción para el cliente</label>
       <textarea id="cot-detalle-trabajo" placeholder="Describe los trabajos que aparecerán en el PDF..." style="min-height:80px;resize:vertical;"></textarea>
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--texto2);">ÍTEMS A COTIZAR</div>
@@ -3739,7 +3747,7 @@ function renderItemsCot() {
     div.style.marginBottom = '8px';
     div.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
       '<input type="text" value="' + item.desc + '" placeholder="Descripción" aria-label="Descripción del ítem ' + (i + 1) + '" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
-      '<button aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;cursor:pointer;font-size:12px;">✕</button>' +
+      '<button class="item-quitar" aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')">✕</button>' +
       '</div>' +
       '<div style="display:flex;gap:8px;">' +
       '<div style="flex:1"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Cantidad</div>' +
