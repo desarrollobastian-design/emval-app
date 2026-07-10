@@ -231,10 +231,27 @@ de campo debe sentirse **rápida y sólida**, no juguetona. Sin reveals coreogra
 - **Easing estándar:** `cubic-bezier(0.4, 0, 0.2, 1)` (ya el easing dominante — canonizarlo como `--ease`).
 
 ### Rules
-- Solo animar `transform` y `opacity` (60fps). No animar `width/height/padding/margin`.
+- **Nunca `transition: all`.** Anima también lo que hoy no existe y mañana sí. Lista explícita
+  de propiedades, como hace `.btn`. Había **7** reglas con `all`. **Vigilado por `check-tokens.js`.**
+- Animar `transform` y `opacity` (60fps). **Una sola excepción declarada**, con su razón:
+  `.step` interpola su `width` de 8px a 24px — son 8px en un elemento de 8px, no hay reflow
+  relevante, y es el step-indicator que §4 manda conservar.
 - Respetar `prefers-reduced-motion: reduce` → desactivar transiciones no esenciales.
 - **Sin bounce ni elastic easing.**
-- La `pulse` de la offline-dot es la única animación en loop permitida (comunica estado).
+- **Animaciones en loop: exactamente tres, cada una comunica un estado.** Toda otra falla.
+
+| Animación | Dónde | Qué comunica |
+|---|---|---|
+| `pulse` | dot de `#offline-bar` | sin señal |
+| `grabar-pulse` | botón de nota de voz | grabando |
+| `shimmer` | skeleton de `_cargando()` | estoy trabajando |
+
+> **Esta sección decía dos cosas y las dos eran falsas** (corregido el 2026-07-09). Afirmaba
+> *"solo transform y opacity"* con 7 `transition: all` en el código, y *"la `pulse` es la única
+> animación en loop permitida"* habiendo tres. Peor: **§4 llama al step-indicator "patrón
+> excelente — mantener" mientras §6 prohibía animar su `width`.** Una regla que el diseño
+> contradice a propósito no es una regla: es ruido, y hace que las demás pesen menos.
+> Ahora las excepciones están escritas, y `check-tokens.js` falla ante cualquier otra.
 
 ---
 
@@ -323,6 +340,11 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🟠 Alta | El toast tapaba `#pending-bar`, que es tappable (regresión propia) | bug |
 | ✅ Hecho | 🟠 Alta | **Dos botones verdes idénticos** en la pantalla que cierra la OT | `/polish` |
 | ✅ Hecho | 🟡 Media | **Skeleton de carga en las 11 listas** (`_cargando`) · antes 9 de 15 en blanco | `/polish` |
+| ✅ Hecho | 🔴 Alta | **`check-tildes.js` tenía un falso negativo**: excluía la línea, no la expresión | bug |
+| ✅ Hecho | 🔴 Alta | El skeleton parpadeaba sobre datos correctos en 12 refrescos (regresión propia) | bug |
+| ✅ Hecho | 🟠 Alta | **Una sola voz para los 29 errores** (`_error`) · 6 filtraban el `e.message` del SDK | `/polish` |
+| ✅ Hecho | 🟠 Alta | **Región `#anuncios`**: el error era visible pero no perceptible | `/polish` |
+| ✅ Hecho | 🟡 Media | §6 era falso: 7 `transition: all` y 3 loops · **vigilado por `check-tokens.js`** | `/normalize` |
 | ⏳ Pendiente | 🟢 Baja | Skeleton real en las **stat-cards** del supervisor (números, no listas) | `/polish` |
 
 > **Esta tabla estuvo mintiendo durante días**: marcaba como ⏳ Pendiente la migración de emojis y los hover-glows, que llevaban hecho una semana. El source of truth no sabía su propio estado. Si una fila no tiene un script que la verifique, **asume que está desactualizada**.
@@ -1617,6 +1639,158 @@ en el archivo que se supone que sabe.
 > **Cuando un comentario explica por qué algo no se puede hacer, ese comentario es una hipótesis.**
 > Y las hipótesis se miden. Ésta tardó veinte minutos en caerse, y debajo había el borde invisible
 > de todos los controles que un técnico de tercera edad toca bajo el sol.
+
+---
+
+## Crítica del 2026-07-09 (mediodía) — el check que decía cero teniendo uno
+
+### 🔴 1. `check-tildes.js` tenía un falso negativo. La unidad de la exclusión era la línea.
+
+```js
+if (/console\.(log|warn|error)/.test(linea)) return; // logs: no los ve el usuario
+```
+
+El comentario es correcto: nadie lee los `console.*`. Pero **la línea no es la unidad**. El patrón
+de manejo de errores dominante del archivo cabe entero en una:
+
+```js
+} catch(e) { console.error(e); toast('Error cargando facturacion'); }
+```
+
+El `toast()` **visible** se iba al cubo junto con el `console.error`. **98 líneas** del archivo
+tienen un `console.*`; **seis** llevan además texto que el usuario lee. Reportaba `0` teniendo `1`.
+
+**Y `check-a11y.js` declara, en su propia cabecera, la doctrina de este repo:**
+
+> *"Un falso negativo silencioso es el peor resultado posible. Errar hacia el falso positivo,
+> nunca hacia el falso negativo."*
+
+**Los 41 mutantes no lo vieron**, porque todos inyectaban el defecto en líneas **sin** `console`.
+Un mutante prueba que la regla funciona *donde el check mira*. No prueba dónde deja de mirar.
+
+**Fix:** se vacía la **expresión** (paréntesis balanceados, comillas respetadas), no la línea.
+Lo mismo con `DATOS_INTOCABLES`, que también excluía la línea entera. Y un mutante nuevo:
+*"tilde escondida tras un `console.error`"*.
+
+> **Regla:** al escribir una exclusión, pregunta cuál es su unidad. Casi nunca es la línea.
+
+### 🔴 2. El skeleton que añadí por la mañana parpadeaba sobre datos correctos
+
+`_cargando()` reemplazaba **siempre** el contenido. Pero estos cargadores no solo se llaman al
+entrar a una pantalla: se llaman **después de cada mutación**, para refrescar. `cargarCadenasAdmin`
+cinco veces, `cargarCarpetas` cuatro, `cargarTecnicosAdmin` tras guardar y tras borrar,
+`cargarOTsSupervisor` tras guardar una cotización. **Doce sitios.**
+
+Pedro guardaba un técnico, la lista **se borraba**, aparecían tres esqueletos grises, y volvía.
+Arreglé *"el panel en blanco"* y creé *"el panel que titila"*.
+
+**Fix:** el skeleton solo se pinta si no hay nada que preservar, o si lo único que hay es un
+estado vacío o de error (ahí sí es la respuesta correcta a un *"Reintentar"*).
+
+> Y **la regla que escribí para vigilarlo tenía el mismo defecto que el código**: comprobaba que
+> las palabras `children.length` y `estado-vacio` estuvieran *escritas*, no que el `return`
+> hiciera algo. Un mutante que borraba solo el `return` sobrevivió. Ahora la regla exige el
+> **orden**: `children.length` … `return` … `innerHTML`.
+
+### 🟠 3. Veintiuno de veintinueve errores no decían qué hacer, y seis filtraban el SDK
+
+```
+"Error"                        "Error: "                    "Error eliminando"
+"Error al pausar"              "Error cargando facturacion"
+```
+
+Y seis mostraban el string interno que Firebase le devolvió al SDK:
+`toast('Error: ' + e.message)`.
+
+§7 promete que la app *"nunca te deja con dudas sobre qué pasó"*. Un toast que dice **"Error"**
+hace exactamente lo contrario, y encima suena a culpa. Los ocho buenos eran los ocho que se
+habían escrito dos días antes para el timeout: **se arregló el bug, no la voz.**
+
+**Fix:** `_error(accion, e, queHacer)`. Una sola forma: *"No se pudo {acción}. {qué hacer}."*
+El `e.message` va a la **consola**, nunca a la pantalla. 30 sitios migrados, 11 `console.error`
+duplicados eliminados (el helper ya loguea).
+
+```
+toast que empiezan por "Error":  0
+toast con e.message:             0
+```
+
+### 🟠 4. El error era visible, pero no perceptible
+
+`#toast` era la **única** región `aria-live` de toda la app. `_listaConError()`, `_vacio()`,
+`_cargando()` y `_mostrarErrorPausadasSup()` escriben en el DOM y **no anunciaban nada**. Un
+administrador con lector de pantalla tocaba "Personal", fallaba la red, y oía **silencio**: la app
+pintaba un recuadro ámbar con un botón "Reintentar" que él no sabía que existía.
+
+**Fix:** región `#anuncios` (`.solo-lector`, `aria-live="polite"`, `aria-atomic`) y `_anunciar()`,
+llamado por los dos componentes de error. **Los estados vacíos no se anuncian a propósito**: viven
+en el flujo del documento y el lector los encuentra al navegar; anunciarlos sería ruido.
+
+> No se usa `display:none` para ocultarla: un `aria-live` oculto así está **fuera del árbol de
+> accesibilidad**. Es exactamente la trampa que ya tuvo `toast()`. Se oculta visualmente
+> (`clip: rect(0 0 0 0)`), no semánticamente.
+
+### 🟡 5. §6 era falso en sus dos afirmaciones
+
+Ver §6, reescrito. Siete `transition: all` sustituidas por su lista explícita; las tres
+animaciones en loop declaradas con lo que comunican; la `width` del step-indicator declarada como
+la única excepción de layout, con su razón. **`check-tokens.js` falla ante cualquier otra.**
+
+---
+
+### 🔍 El helper nuevo que cegó a la regla vieja
+
+Al migrar los `catch` de `toast('Error…')` a `_error(accion, e)`, la **regla 10** (`cargador-mudo`)
+se puso roja de golpe en **seis cargadores que sí avisaban**. Su expresión `AVISA` conocía
+`toast(`, `_listaConError(`, `_avisar(` — y no `_error(`, que acababa de nacer.
+
+**Que se pusiera roja es la prueba de que la regla sirve.** Si hubiera seguido verde, no habríamos
+sabido que dejó de mirar.
+
+> **Regla:** cada helper nuevo que produce una salida de usuario es una superficie nueva. Búscala
+> en todos los checks que la vigilaban bajo otro nombre. `check-tildes` lo aprendió con `_vacio()`;
+> `check-a11y` lo aprendió hoy con `_error()`.
+
+---
+
+### Los 6 verificadores, hoy
+
+| Script | Vigila | Nació de |
+|---|---|---|
+| `check-contraste.js` | 4 partes: curados · escaneo · herencia · **SC 1.4.11** | el verde que pasó 4 críticas, y una cabecera que mentía |
+| `check-emojis.js` | iconografía SVG única · y que todo icono **pueda dibujarse** | emojis, y un `<i>` sin su fuente |
+| `check-tokens.js` | tokens · CSS exportado · **motion (§6)** | radios que el doc daba por normalizados |
+| `check-tildes.js` | ortografía visible · **excluye la expresión, no la línea** | 16 tildes que 4 pasadas no vieron, y una que él mismo escondía |
+| `check-a11y.js` | **17 reglas** (ver cabecera) | se escribió antes del fix |
+| `check-mutantes.sh` | **a los otros cinco** | 3 checks que mintieron en verde |
+
+```
+node check-contraste.js  →  22 + 26 + 6 pares · 52 limites · 0 fallos     exit 0
+node check-emojis.js     →  0 emojis · 0 iconos que no puedan dibujarse   exit 0
+node check-tokens.js     →  0 fantasmas · 0 transition:all · 3 loops      exit 0
+node check-tildes.js     →  0 palabras sin tilde (por expresion)          exit 0
+node check-a11y.js       →  17 reglas en verde                           exit 0
+bash check-mutantes.sh   →  50 mutantes · 0 puntos ciegos                exit 0
+```
+
+---
+
+### La lección, novena forma: el punto ciego estaba en la exclusión
+
+Las ocho anteriores estaban en lo que el check **incluía**: una lista de emojis, una lista de
+verdes, un diccionario de veinte palabras, una lista de 22 pares. Ésta estaba en lo que **excluía**.
+
+| Qué se verificaba | Qué se excluía | Qué se escondía ahí |
+|---|---|---|
+| ortografía visible | la **línea** con `console.*` | `"Error cargando facturacion"` |
+| doble envío | funciones con razón escrita | *(nada — la allowlist era correcta)* |
+| contraste | pares "que un escáner no puede emparejar" | 52 controles sin borde visible |
+
+> Una regla se lee entera: lo que afirma **y** lo que se calla. Y los mutantes solo prueban la
+> primera mitad — todos los nuestros inyectaban el defecto donde el check ya estaba mirando.
+>
+> **La pregunta que ningún `check-mutantes.sh` responde solo:** *¿dónde decidí no mirar, y por qué
+> creí que ahí no había nada?*
 
 ---
 

@@ -105,7 +105,7 @@
   
   /* STEP INDICATOR */
   .steps { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 16px; background: white; border-bottom: 1px solid var(--gris2); }
-  .step { width: 8px; height: 8px; border-radius:var(--radio-sm); background: var(--gris3); transition: all 0.3s; }
+  .step { width: 8px; height: 8px; border-radius:var(--radio-sm); background: var(--gris3); transition: width 0.3s, background-color 0.3s; }
   .step.active { width: 24px; background: var(--azul); }
   .step.done { background: var(--verde); }
   
@@ -170,7 +170,7 @@
   
   /* TYPE CARDS */
   .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .tipo-card { background: white; border: 2px solid var(--gris3); border-radius: var(--radio); padding: 18px 12px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .tipo-card { background: white; border: 2px solid var(--gris3); border-radius: var(--radio); padding: 18px 12px; text-align: center; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
   .tipo-card.selected { border-color: var(--azul); background: var(--gris2); }
   .tipo-card .icon { font-size: 28px; margin-bottom: 8px; }
   .tipo-card .label { font-size: 14px; font-weight: 600; color: var(--texto); }
@@ -190,7 +190,7 @@
     border-radius: var(--radio-lg);
     padding: 18px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 2px 12px rgba(252, 211, 77, 0.25);
     position: relative;
     display: flex;
@@ -303,7 +303,7 @@
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     font-family: 'DM Sans', sans-serif;
     box-shadow: 0 2px 8px rgba(239, 159, 39, 0.2);
   }
@@ -321,10 +321,10 @@
   
   /* PIN SCREEN */
   .pin-display { display: flex; gap: 12px; justify-content: center; margin: 20px 0; }
-  .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--gris3); transition: all 0.2s; }
+  .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--gris3); transition: background-color 0.2s, border-color 0.2s; }
   .pin-dot.filled { background: var(--azul); border-color: var(--azul); }
   .pin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .pin-btn { background: white; border: none; border-radius: var(--radio); padding: 18px; font-size: 22px; font-weight: 500; cursor: pointer; box-shadow: var(--sombra); transition: all 0.1s; font-family: 'DM Mono', monospace; }
+  .pin-btn { background: white; border: none; border-radius: var(--radio); padding: 18px; font-size: 22px; font-weight: 500; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s, background-color 0.1s; font-family: 'DM Mono', monospace; }
   .pin-btn:active { transform: scale(0.95); background: var(--gris2); }
   .pin-btn.del { font-size: 16px; color: var(--texto2); }
   
@@ -366,6 +366,9 @@
   .estado-vacio { text-align: center; padding: 24px 16px; }
   .estado-vacio-titulo { font-size: 15px; font-weight: 600; color: var(--texto2); }
   .estado-vacio-ayuda { font-size: 12px; color: var(--texto3); margin-top: 6px; line-height: 1.5; max-width: 44ch; margin-left: auto; margin-right: auto; }
+  /* Oculto para el ojo, presente para el lector de pantalla. `display:none` lo sacaria del
+     arbol de accesibilidad y el aria-live no anunciaria nada. */
+  .solo-lector { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   /* Fallo de carga: NUNCA se confunde con un estado vacio. Ver _listaConError(). */
   .lista-error { background: #FEF9E7; border: 1.5px solid #FCD34D; border-radius: var(--radio); padding: 14px; text-align: center; }
   .lista-error-titulo { font-size: 15px; font-weight: 600; color: var(--texto); }
@@ -474,7 +477,7 @@
     width: 72px; height: 72px; border-radius: 50%; border: none;
     background: var(--azul); color: white; font-size: 28px;
     display: flex; align-items: center; justify-content: center;
-    margin: 0 auto; cursor: pointer; transition: all 0.2s;
+    margin: 0 auto; cursor: pointer; transition: background-color 0.2s, box-shadow 0.2s;
     box-shadow: 0 4px 16px rgba(27,58,107,0.3);
   }
   .voz-btn-grabar.grabando {
@@ -1102,6 +1105,13 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
+<!-- Region que anuncia lo que se escribe en el DOM y no pasa por el toast: el fallo de una
+     lista, por ejemplo. Antes, #toast era la UNICA region aria-live de la app y un
+     administrador con lector de pantalla no oia nada cuando "Personal" fallaba al cargar.
+     NO se usa display:none: un aria-live oculto asi esta fuera del arbol de accesibilidad
+     (es la misma trampa que ya tuvo toast()). Se oculta visualmente, no semanticamente. -->
+<div id="anuncios" class="solo-lector" role="status" aria-live="polite" aria-atomic="true"></div>
+
 <!-- Dialogo unico: reemplaza confirm() / prompt() / alert(). Ver _confirmar / _pedirTexto / _avisar.
      El titulo NO es un <h1>: cada pantalla ya tiene el suyo en el topbar. Se anuncia con
      aria-labelledby, que no altera la jerarquia de encabezados del documento. -->
@@ -1477,7 +1487,7 @@ function _esUrlSubida(foto) {
 // mismo documento y se regenera el PDF SIN reenviar correo (ver estado.editandoOTId).
 function editarOTTerminada(ot) {
   if (estado.cargo !== 'Administrador') { toast('Solo el administrador puede editar OTs'); return; }
-  if (!ot || !ot.id) { toast('No se pudo abrir la OT para editar'); return; }
+  if (!ot || !ot.id) { _error('abrir la OT para editar', null, 'Vuelve a la lista y ábrela de nuevo.'); return; }
   estado.editandoOTId = ot.id;
   estado.editandoTecnico = ot.tecnico || '';
   estado.editandoFecha = ot.fecha || '';
@@ -2488,7 +2498,7 @@ function pausarOT() {
     setTimeout(function() { _verInicioTecnico(); }, 500);
   } catch(e) {
     console.error('Error en pausarOT:', e);
-    toast('Error al pausar');
+    _error('pausar la OT', null, 'Reintenta en unos segundos.');
   }
 }
 
@@ -3023,7 +3033,7 @@ async function iniciarGrabacion() {
       document.getElementById('voz-timer').textContent = m + ':' + String(s).padStart(2,'0');
     }, 1000);
   } catch(e) {
-    toast('No se pudo acceder al microfono');
+    _error('acceder al micrófono', null, 'Revisa los permisos del navegador.');
   }
 }
 
@@ -3396,7 +3406,7 @@ async function eliminarCadena(id) {
     toast('Cadena eliminada');
     await cargarCadenasAdmin();
     await cargarCadenasApp();
-  } catch(e) { toast('Error eliminando'); }
+  } catch(e) { _error('eliminar la cadena', e); }
 }
 
 async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputSup, inputEmailSup, inputEmail) {
@@ -3427,7 +3437,7 @@ async function agregarSucursal(docId, inputCentro, inputNombre, inputDir, inputS
     toast('Sucursal agregada');
     await cargarCadenasAdmin();
     await cargarCadenasApp();
-  } catch(e) { toast('Error: ' + e.message); }
+  } catch(e) { _error('agregar la sucursal', e); }
 }
 
 async function eliminarSucursal(docId, idx) {
@@ -3440,7 +3450,7 @@ async function eliminarSucursal(docId, idx) {
     toast('Sucursal eliminada');
     await cargarCadenasAdmin();
     await cargarCadenasApp();
-  } catch(e) { toast('Error'); }
+  } catch(e) { _error('eliminar la sucursal', e); }
 }
 
 function mostrarFormCadena() {
@@ -3568,7 +3578,7 @@ function editarSucursal(docId, idx, s) {
       document.body.removeChild(overlay);
       await cargarCadenasAdmin();
       await cargarCadenasApp();
-    } catch(e) { toast('Error: ' + e.message); }
+    } catch(e) { _error('guardar la sucursal', e); }
   };
   btns.appendChild(btnCan); btns.appendChild(btnSave);
   modal.appendChild(btns);
@@ -3648,8 +3658,7 @@ async function abrirCotizacion(docId) {
     renderItemsCot();
     go('s-cotizacion');
   } catch(e) {
-    console.error(e);
-    toast('Error abriendo OT');
+    _error('abrir la OT', e, 'Vuelve a la lista e intenta de nuevo.');
   }
 }
 
@@ -4264,8 +4273,7 @@ async function cargarCarpetas() {
     });
     _inicializarFiltrosCotizacionesGeneral();
   } catch(e) {
-    console.error(e);
-    toast('Error cargando cotizaciones');
+    _error('cargar las cotizaciones', e);
   }
 }
 
@@ -4949,7 +4957,7 @@ async function cambiarPasswordAdmin(docId, nombre) {
     await window.firebase.firestore().collection('tecnicos').doc(docId).update({ passwordHash: h });
     ADMIN_HASHES[nombre] = h;
     toast('Contraseña actualizada correctamente');
-  } catch(e) { console.error(e); toast('Error al actualizar contraseña'); }
+  } catch(e) { _error('actualizar la contraseña', e); }
 }
 
 
@@ -5016,7 +5024,7 @@ async function eliminarTecnico(id) {
     toast('Técnico eliminado');
     await cargarTecnicosAdmin();
     await cargarUsuariosApp();
-  } catch(e) { toast('Error eliminando'); }
+  } catch(e) { _error('eliminar el técnico', e); }
 }
 
 
@@ -5758,7 +5766,7 @@ function _nombreArchivoPDF() {
 async function guardarYEnviarPDF() {
   toast('Generando PDF...');
   const doc = await generarPDFRecepcionObra();
-  if (!doc) { toast('Error generando PDF'); return; }
+  if (!doc) { _error('generar el PDF', null, 'Reintenta con buena señal.'); return; }
 
   // Agregar pagina de fotos al PDF
   await agregarFotosAlPDF(doc);
@@ -5893,8 +5901,7 @@ async function verCotizacionDirecta(cotId) {
     if (!snap.exists) { toast('Cotización no encontrada'); return; }
     await generarPDFCotizacionGuardada(snap.data());
   } catch(e) {
-    console.error(e);
-    toast('Error al cargar cotización');
+    _error('cargar la cotización', e);
   }
 }
 
@@ -6281,7 +6288,7 @@ async function generarPDFCotizacionGuardada(cotData, options) {
     toast('Abriendo PDF...');
   } catch(e) {
     console.error('Error PDF cotizacion guardada:', e);
-    toast('Error generando PDF');
+    _error('generar el PDF', null, 'Reintenta con buena señal.');
   }
 }
 
@@ -6755,8 +6762,7 @@ async function cargarOTsTecnicos() {
       lista.appendChild(card);
     });
   } catch(e) {
-    console.error('Error cargando tecnicos:', e);
-    toast('Error cargando OTs');
+    _error('cargar las OTs', e);
   }
 }
 
@@ -6846,12 +6852,10 @@ function continuarOT(otId) {
       cargarEjecucionScreen();
       toast('OT cargada. Continúa donde la dejaste.');
     }).catch(function(e) {
-      console.error('Error cargando OT:', e);
-      toast('Error cargando la OT');
+      _error('cargar la OT', e);
     });
   } catch(e) {
-    console.error('Error en continuarOT:', e);
-    toast('Error. Intenta de nuevo.');
+    _error('continuar la OT', e, 'Vuelve a la lista de pausadas e intenta de nuevo.');
   }
 }
 
@@ -7025,8 +7029,7 @@ async function cargarPreventivos() {
       contador.textContent = prevOTs.length + ' resultado' + (prevOTs.length !== 1 ? 's' : '');
     }
   } catch(e) {
-    console.error('Error cargando preventivos:', e);
-    toast('Error cargando OTs preventivas');
+    _error('cargar las OTs preventivas', e);
   }
 }
 
@@ -7285,7 +7288,7 @@ async function verOTsTecnico(nombre, grupo) {
           await window.firebase.firestore().collection('ordenes').doc(id).delete();
           toast('OT eliminada');
           cardRef.remove();
-        } catch(e) { console.error(e); toast('Error eliminando OT'); }
+        } catch(e) { _error('eliminar la OT', e); }
       }; })(ot.id, card);
       btns.appendChild(btnDelOT);
     }
@@ -7596,7 +7599,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
   } else if (enviados > 0) {
     toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
   } else {
-    toast('Error al enviar. Revisa los correos e intenta de nuevo.');
+    _error('enviar los correos', e, 'Revisa las direcciones e inténtalo de nuevo.');
   }
 }
 
@@ -7619,8 +7622,7 @@ async function eliminarCotizacionesSeleccionadas() {
     document.getElementById('cot-acciones-bar').style.display = 'none';
     await cargarCarpetas();
   } catch(e) {
-    console.error(e);
-    toast('Error eliminando cotizaciones');
+    _error('eliminar las cotizaciones', e);
   }
 }
 
@@ -7795,7 +7797,7 @@ async function cargarOTsSupervisor() {
             await window.firebase.firestore().collection('ordenes').doc(id).delete();
             toast('OT eliminada');
             c.remove();
-          } catch(er) { console.error(er); toast('Error eliminando OT'); }
+          } catch(er) { _error('eliminar la OT', er); }
         }; })(docId, card);
         card.appendChild(btnDelSup);
       }
@@ -7864,6 +7866,7 @@ function detenerPausadasSupervisor() {
 // (indistinguible de "sin pausadas"), avisa a Pedro y ofrece reintentar.
 function _mostrarErrorPausadasSup(seccion, listaEl, countEl) {
   if (!seccion || !listaEl) return;
+  _anunciar('No se pudo cargar la lista de trabajos pausados. Hay un botón para reintentar.');
   seccion.style.display = 'block';
   if (countEl) countEl.style.display = 'none';
   listaEl.innerHTML = '<div class="card grid-full" style="border:1.5px solid #FCD34D;background:#FEF9E7;">'
@@ -8085,8 +8088,7 @@ async function confirmarReasignar(nuevoTecnico) {
     cerrarModalReasignar();
     cargarPausadasSupervisor();
   } catch(e) {
-    console.error('Error reasignando:', e);
-    toast('Error al reasignar');
+    _error('reasignar la OT', e);
   }
 }
 
@@ -8300,8 +8302,7 @@ async function eliminarPausadaSup(docId, d, card) {
     if (countEl) countEl.textContent = restantes;
     if (restantes === 0 && seccion) seccion.style.display = 'none';
   } catch(e) {
-    console.error('Error eliminando pausada:', e);
-    toast('Error al eliminar');
+    _error('eliminar la OT pausada', e);
   }
 }
 
@@ -8597,8 +8598,7 @@ async function descargarExcelCotizaciones() {
     XLSX.writeFile(wb, 'EMVAL_Cotizaciones_' + anoActual + '.xlsx');
     toast('Excel descargado!');
   } catch(e) {
-    console.error(e);
-    toast('Error generando Excel: ' + e.message);
+    _error('generar el Excel', e);
   }
 }
 
@@ -8654,7 +8654,7 @@ async function cargarFacturacion() {
       card.appendChild(av); card.appendChild(info); card.appendChild(arr);
       lista.appendChild(card);
     });
-  } catch(e) { console.error(e); toast('Error cargando facturacion'); }
+  } catch(e) { _error('cargar la facturación', e); }
 }
 
 function abrirFactSupervisor(grupo) {
@@ -8767,7 +8767,7 @@ function abrirFactSupervisor(grupo) {
         cuerpoEl.style.display = 'none';
         chev.textContent = 'Editar >';
         toast('Guardado');
-      } catch(e) { toast('Error: ' + e.message); }
+      } catch(e) { _error('abrir la facturación del supervisor', e); }
     }; })(d.id, fSolped.inp, fOc.inp, fHes.inp, fFactura.inp, estadoBadge, chevFact, cuerpo);
     cuerpo.appendChild(btnG);
     card.appendChild(cuerpo);
@@ -8839,7 +8839,7 @@ function descargarExcelSupervisor() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast('Excel descargado!');
-  } catch(e) { console.error(e); toast('Error: ' + e.message); }
+  } catch(e) { _error('generar el Excel', e); }
 }
 
 async function cargarVentas() {
@@ -9141,7 +9141,7 @@ async function descargarExcelVentas() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast('Excel ventas descargado!');
-  } catch(e) { console.error(e); toast('Error: ' + e.message); }
+  } catch(e) { _error('generar el Excel de ventas', e); }
 }
 
 /* LA DURACION DEL TOAST SE CALCULA CON EL MENSAJE.
@@ -9248,6 +9248,20 @@ function _vacio(mensaje, ayuda) {
 function _cargando(contenedor, filas) {
   if (!contenedor) return;
   contenedor.setAttribute('aria-busy', 'true');
+
+  /* NO BORRES LO QUE YA ESTABA.
+     Doce sitios llaman a estos cargadores DESPUES de guardar o de borrar: cargarTecnicosAdmin
+     tras guardarTecnico y tras eliminarTecnico, cargarCadenasAdmin cinco veces mas... La
+     primera version de este helper reemplazaba siempre, asi que cada mutacion borraba la lista
+     y pintaba tres esqueletos grises antes de repintarla.
+     Un skeleton encima de datos correctos no es un estado de carga: es un parpadeo.
+     Solo se pinta si no hay nada que preservar, o si lo unico que hay es un estado vacio o de
+     error (ahi el skeleton SI es la respuesta correcta a un "Reintentar"). */
+  var hijos = contenedor.children.length;
+  var soloEstado = hijos === 1 && contenedor.firstElementChild.matches
+    && contenedor.firstElementChild.matches('.estado-vacio, .lista-error');
+  if (hijos && !soloEstado) return;
+
   var html = '';
   for (var i = 0; i < (filas || 3); i++) {
     html += '<div class="sk-fila grid-full"><div class="sk-avatar"></div>'
@@ -9259,6 +9273,37 @@ function _cargado(contenedor) {
   if (contenedor) contenedor.removeAttribute('aria-busy');
 }
 
+/* LO QUE SE ESCRIBE EN EL DOM TAMBIEN SE ANUNCIA.
+   #toast era la UNICA region aria-live de toda la app. Un administrador con lector de pantalla
+   tocaba "Personal", fallaba la red, y no oia nada: la app pintaba un recuadro ambar con un
+   boton "Reintentar" que el no sabia que existia. Hacer el error VISIBLE no basta; hay que
+   hacerlo PERCEPTIBLE.
+   Los estados vacios no se anuncian a proposito: viven en el flujo del documento y el lector
+   los encuentra al navegar. Anunciarlos seria ruido. */
+function _anunciar(texto) {
+  var r = document.getElementById('anuncios');
+  if (!r) return;
+  r.textContent = '';          // forzar el cambio aunque el texto sea el mismo
+  setTimeout(function() { r.textContent = texto; }, 60);
+}
+
+/* UNA SOLA VOZ PARA LOS ERRORES.
+   29 de los 117 mensajes de la app eran de error. VEINTIUNO no decian que hacer ("Error",
+   "Error: ", "Error eliminando", "Error al pausar"), y SEIS le mostraban al tecnico el string
+   interno que Firebase le devolvio al SDK. §7 promete que la app "nunca te deja con dudas sobre
+   que paso": un toast que dice "Error" hace exactamente lo contrario, y ademas suena a culpa.
+
+   `accion` es un infinitivo en minuscula: "guardar el tecnico", "cargar la facturacion".
+   `queHacer` es la salida; si no se da, la deduce de si fue un timeout.
+   El e.message va a la CONSOLA, nunca a la pantalla. Vigilado por check-a11y (regla 16). */
+function _error(accion, e, queHacer) {
+  if (e) console.error(accion + ':', e);
+  var salida = queHacer || (_esTimeout(e)
+    ? 'Revisa la señal e inténtalo de nuevo.'
+    : 'Inténtalo de nuevo.');
+  toast('No se pudo ' + accion + '. ' + salida);
+}
+
 /* UNA LISTA VACIA POR FALTA DE RED SE VE IGUAL QUE UNA LISTA SIN DATOS.
    Y entonces Pedro concluye que no tiene tecnicos. Esto ya se habia arreglado UNA vez, para
    `cargarPausadasSupervisor`, con _mostrarErrorPausadasSup. El arreglo visito una funcion:
@@ -9267,6 +9312,7 @@ function _cargado(contenedor) {
 function _listaConError(contenedor, alReintentar) {
   if (!contenedor) return;
   _cargado(contenedor);   // un aria-busy pegado anunciaria "cargando" para siempre
+  _anunciar('No se pudo cargar la lista. Hay un botón para reintentar.');
   contenedor.innerHTML = '';
   var caja = document.createElement('div');
   caja.className = 'lista-error grid-full';
@@ -9783,7 +9829,7 @@ async function sincronizarOTsPendientes() {
         ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.');
     } catch(err) {
       console.error('Error sincronizando OT pendiente:', err);
-      toast('Error sincronizando OT #' + ot.numero + ', se reintentara');
+      _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');
       break;
     }
   }

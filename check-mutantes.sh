@@ -74,6 +74,13 @@ probar "toast encima de la barra de pendientes" check-a11y.js 1 's|t.style.botto
 probar "dos primarios en la misma pantalla"     check-a11y.js 1 's|<button class="btn btn-secondary btn-sm" onclick="confirmarFirma()"|<button class="btn btn-verde btn-sm" onclick="confirmarFirma()"|'
 probar "cargador sin estado de carga"           check-a11y.js 1 's|^  _cargando(lista, 3);          // el skeleton va ANTES del await, o no se ve nunca$||'
 probar "_cargando sin su _cargado"              check-a11y.js 1 's|^    _cargado(lista);$||'
+
+# ── Mutantes de la critica del 2026-07-09 (mediodia) ──
+probar "skeleton encima de datos correctos"     check-a11y.js 1 's|^  if (hijos \&\& !soloEstado) return;$||'
+probar "toast que expone e.message"             check-a11y.js 1 "s|_error('generar el Excel de ventas', e);|toast('Error: ' + e.message);|"
+probar "error que no dice que hacer"            check-a11y.js 1 "s|_error('reasignar la OT', e);|toast('Error al reasignar');|"
+probar "error en el DOM sin anunciar"           check-a11y.js 1 "s|  _anunciar('No se pudo cargar la lista. Hay un botón para reintentar.');||"
+probar "sin region #anuncios"                   check-a11y.js 1 's|<div id="anuncios" class="solo-lector"|<div id="anuncios-roto" class="solo-lector"|'
 probar "CONTROL (sin mutar)"                    check-a11y.js 0 CONTROL
 
 echo ""
@@ -99,6 +106,12 @@ probar "palabra -ion que ninguna lista tendria" check-tildes.js 1 "s|toast('Foto
 probar "irregular en PLURAL (tecnicos)"         check-tildes.js 1 "s|_vacio('Aún no hay técnicos'|_vacio('Aun no hay tecnicos'|"
 # El 2o argumento de _vacio() tambien es texto visible. Si el check no lo mira, no lo vigila.
 probar "la ayuda de _vacio() sin tilde"         check-tildes.js 1 "s|'Agrégalos en Administración → Personal.'|'Agregalos en Administracion → Personal.'|"
+# EL MUTANTE QUE FALTABA. Los 41 anteriores inyectaban el defecto en lineas SIN console.*, y
+# el check descartaba la LINEA entera al ver un console. Reporto CERO durante dias teniendo un
+# hallazgo real ("Error cargando facturacion"). Un mutante prueba que la regla funciona donde
+# el check mira; este prueba que el check mira donde debe.
+probar "tilde escondida tras un console.error"  check-tildes.js 1 "s|} catch(e) { _error('cargar la facturación', e); }|} catch(e) { console.error(e); toast('Error cargando facturacion'); }|"
+probar "la accion de _error() sin tilde"        check-tildes.js 1 "s|_error('cargar la facturación', e)|_error('cargar la facturacion', e)|"
 probar "el DATO 'Tecnico en terreno' no se toca" check-tildes.js 0 CONTROL
 
 echo ""
@@ -107,6 +120,10 @@ probar "radio hardcodeado fuera de zona"        check-tokens.js 1 's|\.stat-card
 probar "var() dentro del correo exportado"      check-tokens.js 1 's|border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px|border:1px solid #e0e0e0;border-radius:var(--radio-sm);padding:14px 16px|'
 probar "token fantasma"                         check-tokens.js 1 's|var(--texto3)|var(--noexiste)|'
 probar "gris casi identico a --gris2"           check-tokens.js 1 's|\.badge-pend { background: var(--gris2)|.badge-pend { background: #EEF2FA|'
+# §6 decia "solo transform y opacity" y "la pulse es la unica animacion en loop". Las dos eran
+# falsas y nadie las verificaba: 7 `transition: all` y tres loops.
+probar "transition: all reintroducida"          check-tokens.js 1 's|transition: width 0.3s, background-color 0.3s;|transition: all 0.3s;|'
+probar "animacion en loop sin razon escrita"    check-tokens.js 1 's|animation: pulse 2s infinite|animation: parpadeo 2s infinite|'
 probar "CONTROL (sin mutar)"                    check-tokens.js 0 CONTROL
 
 echo ""

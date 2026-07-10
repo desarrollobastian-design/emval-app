@@ -12,8 +12,13 @@
  * encuentra lo que miras; no encuentra lo que no abriste.
  *
  * ALCANCE: solo index.html, y solo los contextos donde el string es VISIBLE
- * (toast(), textContent=, placeholder=, encodeURIComponent para WhatsApp).
+ * (toast(), textContent=, placeholder=, encodeURIComponent para WhatsApp, _vacio()).
  * NO revisa console.* (nadie los lee) ni claves de datos.
+ *
+ * OJO CON LA UNIDAD DE LA EXCLUSION. Durante dias este script reporto CERO teniendo un
+ * hallazgo real, porque descartaba la LINEA entera al ver un console.*. Y el patron de error
+ * mas comun del archivo mete el console y el toast en la misma linea. Ahora se vacia la
+ * EXPRESION (parentesis balanceados, comillas respetadas) y se sigue mirando el resto.
  *
  * CUIDADO — la distincion critica de este proyecto:
  * 'Tecnico en terreno' es el VALOR guardado en Firestore, no un texto de pantalla. Ponerle tilde
@@ -80,12 +85,59 @@ const VISIBLE = [
   /okTexto:\s*'([^']*)'/g,                           // la etiqueta del boton
   /_vacio\('([^']*)'/g,                              // estado vacio: lo que constata
   /_vacio\('[^']*',\s*'([^']*)'/g,                   // estado vacio: lo que enseña
+  /_error\('([^']*)'/g,                              // error: la accion ("cargar la facturación")
+  /_error\([^;]*?,\s*'([^']*)'\s*\)/g,               // error: la salida ("Inténtalo de nuevo.")
+  /_anunciar\('([^']*)'/g,                           // lo que oye un lector de pantalla
 ];
 
+/* SE EXCLUYE LA EXPRESION, NO LA LINEA.
+   La version anterior hacia `if (/console\.(log|warn|error)/.test(linea)) return;` y reportaba
+   CERO durante dias. En este codebase el patron dominante de error cabe en una sola linea:
+
+       } catch(e) { console.error(e); toast('Error cargando facturacion'); }
+
+   El toast VISIBLE se iba al cubo junto con el console.error. 98 lineas del archivo tienen un
+   console.*; seis de ellas llevan ademas texto que el usuario lee. Ese era el agujero.
+
+   check-a11y.js declara la doctrina de este repo: "un falso negativo silencioso es el peor
+   resultado posible; errar hacia el falso positivo, nunca hacia el falso negativo". Este script
+   hacia justo lo contrario. Y los 41 mutantes no lo vieron porque todos inyectaban el defecto
+   en lineas SIN console: un mutante prueba que la regla funciona DONDE EL CHECK MIRA.
+
+   Leccion, novena forma: el punto ciego no estaba en lo que el check incluia, sino en lo que
+   excluia. Al escribir una exclusion, pregunta cual es su unidad. Casi nunca es la linea. */
+function sinConsole(l) {
+  const re = /console\.(log|warn|error|info|debug)\s*\(/g;
+  let out = '', last = 0, m;
+  while ((m = re.exec(l))) {
+    out += l.slice(last, m.index);
+    let j = m.index + m[0].length, prof = 1, comilla = null;
+    for (; j < l.length; j++) {
+      const c = l[j];
+      if (comilla) {
+        if (c === '\\') { j++; continue; }
+        if (c === comilla) comilla = null;
+        continue;
+      }
+      if (c === "'" || c === '"' || c === '`') { comilla = c; continue; }
+      if (c === '(') prof++;
+      else if (c === ')') { prof--; if (!prof) break; }
+    }
+    last = Math.min(j + 1, l.length);
+    re.lastIndex = last;
+  }
+  return out + l.slice(last);
+}
+
+// Los DATOS de Firestore tampoco son "la linea": son el literal. Se vacia el literal y se sigue
+// mirando el resto de la linea, que puede llevar un toast perfectamente visible.
+function sinIntocables(l) {
+  return l.replace(/(['"])Tecnico en terreno\1/g, '$1$1');
+}
+
 const hits = [];
-L.forEach((linea, i) => {
-  if (DATOS_INTOCABLES.some((r) => r.test(linea))) return;
-  if (/console\.(log|warn|error)/.test(linea)) return; // logs: no los ve el usuario
+L.forEach((linea_, i) => {
+  const linea = sinIntocables(sinConsole(linea_));
   VISIBLE.forEach((re) => {
     re.lastIndex = 0;
     let m;

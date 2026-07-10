@@ -52,6 +52,17 @@
  * 14. Todo cargador muestra que esta trabajando. Nueve de quince pintaban un panel en blanco:
  *     Pedro no sabia si cargaba, si estaba vacio, o si la app se habia colgado. Y todo
  *     _cargando() tiene su _cargado(): un aria-busy pegado miente para siempre.
+ *
+ * ── Reglas nacidas de la critica del 2026-07-09 (mediodia) ──
+ * 15. _cargando() NO borra contenido existente. Doce sitios llaman a los cargadores DESPUES
+ *     de guardar o borrar: un skeleton encima de datos correctos no es un estado de carga,
+ *     es un parpadeo. Arreglar "el panel en blanco" creo "el panel que titila".
+ * 16. Ningun toast() concatena e.message. Seis le mostraban al tecnico el string interno que
+ *     Firebase le devolvio al SDK. Y todo error visible pasa por _error(accion, e, queHacer):
+ *     21 de 29 mensajes no decian que hacer, y varios empezaban por "Error" a secas.
+ * 17. Lo que se escribe en el DOM tambien se anuncia. #toast era la UNICA region aria-live de
+ *     la app: un administrador con lector de pantalla tocaba "Personal", fallaba la red, y no
+ *     oia nada. Hacer el error visible no basta; hay que hacerlo perceptible.
  */
 const fs = require('fs');
 const path = require('path');
@@ -380,7 +391,11 @@ function rangosAnidados(cuerpo, abreCuerpo) {
 const dentroDe = (rangos, i) => rangos.some(([a, b]) => i > a && i < b);
 
 const LEE_FIRESTORE = /\.collection\([^)]*\)[\s\S]{0,300}?\.(get|onSnapshot)\(/g;
-const AVISA = /_listaConError\(|toast\(|_avisar\(|innerHTML/;
+// `_error(` entro aqui el dia que nacio: al migrar los catch de `toast('Error…')` a
+// `_error(accion, e)`, esta regla se puso roja de golpe en seis cargadores que SI avisaban.
+// Un helper nuevo ciega a la regla vieja que no lo conoce. Que se pusiera roja es la prueba
+// de que la regla sirve; si hubiera seguido verde, no habriamos sabido que dejo de mirar.
+const AVISA = /_listaConError\(|_error\(|toast\(|_avisar\(|innerHTML/;
 const mudos = [];
 for (const f of fns) {
   const cuerpo = cuerpoLimpio(f);
@@ -552,6 +567,77 @@ if (sinCarga.length) {
     msg: sinCarga.length + ' cargador(es) que no dicen que estan trabajando. Un panel en blanco no es un estado.',
     items: sinCarga.map((s) => 'index.html:' + String(s.ln).padEnd(6) + s.fn.padEnd(30) + s.por),
   });
+}
+
+// ─── 15. _cargando() no borra lo que ya estaba ──────────────────────────────────
+// `cargarTecnicosAdmin()` se llama despues de guardarTecnico y de eliminarTecnico;
+// `cargarCadenasAdmin()` cinco veces mas. Doce sitios en total. Sin esta guarda, cada
+// mutacion borraba la lista y pintaba tres esqueletos grises antes de repintarla.
+// La primera version de esta regla buscaba las PALABRAS `children.length` y `estado-vacio`
+// en el cuerpo. Un mutante que borraba el `return` las dejaba intactas y sobrevivio: la regla
+// comprobaba que el guardia estuviera ESCRITO, no que hiciera algo. Ahora se exige el orden:
+//     children.length  ...  return  ...  innerHTML
+// Si no hay un `return` entre la cuenta de hijos y la escritura, no hay guardia.
+{
+  const f = fns.find((x) => x.nombre === '_cargando');
+  if (!f) fallos.push({ regla: 'skeleton-parpadeo', msg: 'No existe _cargando()' });
+  else {
+    const cuerpo = cuerpoLimpio(f);
+    const iHijos = cuerpo.indexOf('children.length');
+    const iEscribe = cuerpo.indexOf('.innerHTML');
+    const iVuelve = iHijos < 0 ? -1 : cuerpo.indexOf('return', iHijos);
+    const bien = iHijos >= 0 && iEscribe > 0 && iVuelve > iHijos && iVuelve < iEscribe
+              && /estado-vacio|lista-error/.test(cuerpo);
+    if (!bien) {
+      fallos.push({
+        regla: 'skeleton-parpadeo',
+        ln: linea(f.ini),
+        msg: '_cargando() reemplaza contenido existente. Un skeleton sobre datos correctos es un parpadeo, no un estado.',
+      });
+    }
+  }
+}
+
+// ─── 16. La voz del error ───────────────────────────────────────────────────────
+// `toast('Error: ' + e.message)` le muestra al tecnico el string que Firebase le devolvio al
+// SDK. Y `toast('Error')` a secas no dice que paso ni que hacer: DESIGN.md §7 promete que la
+// app "nunca te deja con dudas sobre que paso".
+const errosFeos = [];
+for (const m of codigo.matchAll(/toast\([^;]*e\.message/g)) {
+  errosFeos.push({ ln: linea(m.index), frag: m[0].trim().slice(0, 56), por: 'expone el mensaje interno del SDK' });
+}
+// Un error visible que no pasa por _error() ni ofrece salida.
+const RECUPERA = /\b(reintenta|inténtalo|intenta|revisa|verifica|espera|vuelve|pídele|usa|se reintentará)\b/i;
+for (const m of codigo.matchAll(/toast\('((?:[^'\\]|\\.)*)'\)/g)) {
+  const t = m[1];
+  if (!/^(Error|Fall)/i.test(t)) continue;
+  if (RECUPERA.test(t)) continue;
+  errosFeos.push({ ln: linea(m.index), frag: JSON.stringify(t.slice(0, 44)), por: 'empieza por "Error" y no dice que hacer' });
+}
+if (errosFeos.length) {
+  fallos.push({
+    regla: 'voz-del-error',
+    msg: errosFeos.length + ' mensaje(s) de error que no ayudan. Usa _error(accion, e, queHacer).',
+    items: errosFeos.map((e) => 'index.html:' + String(e.ln).padEnd(6) + e.frag.padEnd(58) + e.por),
+  });
+}
+
+// ─── 17. Lo que se escribe en el DOM tambien se anuncia ─────────────────────────
+// Un administrador con lector de pantalla toca "Personal", falla la red, y no oye nada:
+// la app pinta un recuadro ambar con un boton "Reintentar" que el no sabe que existe.
+{
+  const problemas = [];
+  if (!/id="anuncios"/.test(html) || !/id="anuncios"[^>]*aria-live/.test(html)) {
+    problemas.push('no existe la region #anuncios con aria-live');
+  }
+  for (const nombre of ['_listaConError', '_mostrarErrorPausadasSup']) {
+    const f = fns.find((x) => x.nombre === nombre);
+    if (!f) { problemas.push('no existe ' + nombre + '()'); continue; }
+    if (!/_anunciar\(/.test(cuerpoLimpio(f))) problemas.push(nombre + '() escribe un error en el DOM y no lo anuncia');
+  }
+  if (problemas.length) {
+    fallos.push({ regla: 'errores-no-anunciados', msg: 'El error es visible pero no perceptible.', items: problemas });
+  }
 }
 
 // ─── Reporte ────────────────────────────────────────────────────────────────────

@@ -135,6 +135,49 @@ const total = Object.values(tam).reduce((a, b) => a + b, 0);
 const fuera = Object.entries(tam).filter(([n]) => !ESCALA.includes(+n));
 const nFuera = fuera.reduce((a, [, n]) => a + n, 0);
 
+// --- 4. Motion (DESIGN.md §6) ------------------------------------------------------
+// §6 decia dos cosas y las dos eran falsas, y nadie las verificaba:
+//   "Solo animar transform y opacity"       -> habia 7 reglas con `transition: all`.
+//   "La pulse es la unica animacion en loop" -> habia tres (pulse, grabar-pulse, shimmer).
+// Peor: el propio §4 llama al step-indicator "patron excelente" mientras §6 prohibe animar
+// su `width`. Una regla que el diseno contradice a proposito no es una regla, es ruido.
+//
+// Ahora la regla es explicita y las excepciones estan escritas:
+//  · `transition: all` prohibido siempre (anima lo que hoy no existe y manana si).
+//  · animar layout: solo lo declarado abajo, con su razon.
+//  · animacion en loop: solo la declarada abajo, con su razon.
+const cssBloque = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/i) || [])[1] || '';
+
+const LAYOUT_TOLERADO = {
+  '.step': 'width 8px->24px en un elemento de 8px: no hay reflow relevante y es el indicador de paso que DESIGN.md §4 manda conservar',
+  '.pin-btn.del': 'font-size del glifo de borrar; el boton mide 60px y no cambia de caja',
+};
+const LOOPS_TOLERADOS = {
+  pulse: 'dot de la barra offline: comunica "sin senal" de forma continua',
+  'grabar-pulse': 'boton de grabar nota de voz: comunica "grabando"',
+  shimmer: 'skeleton de carga: comunica "estoy trabajando"',
+};
+
+const PROP_LAYOUT = /^(width|height|padding|margin|top|left|right|bottom|max-height|min-height|font-size|flex|border-width)$/;
+const motion = [];
+for (const m of cssBloque.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+  const sel = m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim().replace(/\s+/g, ' ');
+  if (!sel || sel.startsWith('@')) continue;
+  const tr = (m[2].match(/(?:^|;)\s*transition:\s*([^;]+)/) || [])[1];
+  if (!tr) continue;
+  const props = tr.split(',').map((p) => p.trim().split(/\s+/)[0]);
+  for (const p of props) {
+    if (p === 'all') { motion.push({ sel, p, por: '`transition: all` anima tambien lo que hoy no existe' }); continue; }
+    if (!PROP_LAYOUT.test(p)) continue;
+    if (LAYOUT_TOLERADO[sel]) continue;
+    motion.push({ sel, p, por: 'anima una propiedad de layout (no es 60fps)' });
+  }
+}
+const loops = [];
+for (const m of cssBloque.matchAll(/animation:\s*([\w-]+)[^;]*infinite/g)) {
+  if (!LOOPS_TOLERADOS[m[1]]) loops.push(m[1]);
+}
+
 // --- Reporte ----------------------------------------------------------------------
 console.log('\n  Design tokens — EMVAL\n');
 
@@ -180,6 +223,21 @@ if (radios.length) {
     console.log('    ' + v.padEnd(14) + lns.length + ' uso(s)   primera: index.html:' + lns[0]);
   });
   console.log('\n  Escala canonica: 8px=--radio-sm  14px=--radio  18px=--radio-lg  99px=--radio-pill\n');
+}
+
+if (motion.length) {
+  fallos += motion.length;
+  console.log('  ' + motion.length + ' TRANSICION(ES) QUE NO CUMPLEN §6 (solo transform y opacity):\n');
+  motion.forEach(m => console.log('    ' + m.sel.padEnd(24) + m.p.padEnd(12) + m.por));
+  console.log('\n  Sustituye `transition: all` por la lista explicita de propiedades (como hace .btn).');
+  console.log('  Si la excepcion es intencional, declarala en LAYOUT_TOLERADO con su razon.\n');
+}
+
+if (loops.length) {
+  fallos += loops.length;
+  console.log('  ' + loops.length + ' ANIMACION(ES) EN LOOP sin razon escrita: ' + loops.join(', '));
+  console.log('  Una animacion infinita compite por la atencion para siempre. Declarala en');
+  console.log('  LOOPS_TOLERADOS con lo que comunica, o quitala.\n');
 }
 
 if (!fallos) {
