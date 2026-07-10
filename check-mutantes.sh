@@ -50,12 +50,24 @@ echo ""
 echo "  ── check-a11y.js ──"
 probar "viewport con user-scalable=no"          check-a11y.js 1 's|content="width=device-width, initial-scale=1, viewport-fit=cover"|content="width=device-width, initial-scale=1, user-scalable=no"|'
 probar "un input a 13px"                        check-a11y.js 1 's|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px|'
-probar "reintroducir un confirm() nativo"       check-a11y.js 1 "s|if (!await _confirmar('El local dejará|if (!confirm('El local dejara|"
+probar "reintroducir un confirm() nativo"       check-a11y.js 1 "s|if (!await _confirmar('El técnico dejará|if (!confirm('El tecnico dejara|"
 probar "quitar aria-modal de un modal"          check-a11y.js 1 's|role="dialog" aria-modal="true" aria-labelledby="modal-reasignar-titulo"|role="dialog" aria-labelledby="modal-reasignar-titulo"|'
 probar "toast con white-space: nowrap"          check-a11y.js 1 's|max-width: calc(100vw - 32px); white-space: normal|max-width: calc(100vw - 32px); white-space: nowrap|'
 probar "quitar la guarda de guardarTecnico"     check-a11y.js 1 "s|const soltar = _bloquear(document.getElementById('btn-guardar-tecnico'));||"
 probar "dialogo sin max-height"                 check-a11y.js 1 's|max-width: 420px; max-height: calc(100dvh - 48px); overflow-y: auto; margin: auto;|max-width: 420px;|'
 probar "overlay del dialogo sin scroll"         check-a11y.js 1 's|padding: 24px 16px; overflow-y: auto; overscroll-behavior: contain;|padding: 24px 16px;|'
+
+# ── Mutantes de la critica del 2026-07-09 (madrugada) ──
+# El bug: _bloquear() apagaba el boton y lo reactivaba en un `finally` que, con la promesa
+# de Firestore colgada offline, NO CORRE NUNCA. Lo introduje yo, en el commit que arreglaba
+# la accesibilidad. Estos seis mutantes existen para que no vuelva a entrar.
+probar "await a Firestore sin _conTimeout"      check-a11y.js 1 "s|await _conTimeout(db.collection('tecnicos').add(data), 25000, 'add tecnico')|await db.collection('tecnicos').add(data)|"
+probar "_bloquear sin guardia de tiempo"        check-a11y.js 1 's|var guardia = setTimeout(function() { liberar(true); }, _MAX_BLOQUEO_MS);|var guardia = 0;|'
+probar "_tomar sin guardia de tiempo"           check-a11y.js 1 's|^  }, _MAX_BLOQUEO_MS);$|  }, 0);|'
+probar "cargador que falla en silencio"         check-a11y.js 1 "s|_listaConError(document.getElementById('lista-tecnicos-admin'), cargarTecnicosAdmin);||"
+probar "toast con duracion constante"           check-a11y.js 1 's|t._ms = _toastDuracion(msg);|t._ms = 2500;|'
+probar "toast que no se puede cerrar"           check-a11y.js 1 "s|t.addEventListener('click', ocultar);||"
+probar "estado vacio escrito a mano"            check-a11y.js 1 "s|lista.innerHTML = _vacio('Aún no hay cadenas', 'Agrega la primera con el botón + Agregar cadena.');|lista.innerHTML = '<p>No hay cadenas</p>';|"
 probar "CONTROL (sin mutar)"                    check-a11y.js 0 CONTROL
 
 echo ""
@@ -70,6 +82,11 @@ echo "  ── check-tildes.js ──"
 probar "mensaje de _confirmar sin tilde"        check-tildes.js 1 "s|'Esta acción no se puede deshacer.'|'Esta accion no se puede deshacer.'|"
 probar "titulo de dialogo sin tilde"            check-tildes.js 1 "s|titulo: 'Eliminar técnico'|titulo: 'Eliminar tecnico'|"
 probar "palabra -ion que ninguna lista tendria" check-tildes.js 1 "s|toast('Foto guardada')|toast('Revisa la conexion y la presion')|"
+# El diccionario guardaba solo el singular: "No hay tecnicos registrados" pasaba limpio.
+# Una esdrujula conserva la tilde al pluralizar; una aguda en -ion la pierde.
+probar "irregular en PLURAL (tecnicos)"         check-tildes.js 1 "s|_vacio('Aún no hay técnicos'|_vacio('Aun no hay tecnicos'|"
+# El 2o argumento de _vacio() tambien es texto visible. Si el check no lo mira, no lo vigila.
+probar "la ayuda de _vacio() sin tilde"         check-tildes.js 1 "s|'Agrégalos en Administración → Personal.'|'Agregalos en Administracion → Personal.'|"
 probar "el DATO 'Tecnico en terreno' no se toca" check-tildes.js 0 CONTROL
 
 echo ""
@@ -83,6 +100,9 @@ probar "CONTROL (sin mutar)"                    check-tokens.js 0 CONTROL
 echo ""
 echo "  ── check-emojis.js ──"
 probar "emoji a color reintroducido"            check-emojis.js 1 "s|toast('Foto guardada')|toast('Foto guardada 📷')|"
+# El script verificaba "no hay emojis". No verificaba "todo icono se dibuja". Sobrevivio un
+# <i class=\"ti ti-store\"> cuya hoja de estilos no se carga en ninguna parte: una caja vacia.
+probar "icono de fuente sin su hoja cargada"    check-emojis.js 1 's|<div id="lista-sucursales"></div>|<div id="lista-sucursales"><i class="ti ti-store"></i></div>|'
 probar "CONTROL (sin mutar)"                    check-emojis.js 0 CONTROL
 
 echo ""

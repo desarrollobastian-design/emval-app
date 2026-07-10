@@ -12,7 +12,7 @@
  *
  * ALCANCE: solo index.html.
  *
- * LAS 6 REGLAS
+ * LAS 12 REGLAS
  *  1. El viewport no puede desactivar el zoom (WCAG 2.1 SC 1.4.4, nivel AA).
  *     La app la usan tecnicos de tercera edad bajo sol directo. Ver DESIGN.md §1.
  *  2. Ningun control de formulario baja de 16px. Bajo 16px, iOS hace zoom al enfocar,
@@ -21,11 +21,27 @@
  *     y prompt() NO puede enmascarar una contrasena: la de Pedro se veia en pantalla.
  *  4. Todo modal declara role="dialog" y aria-modal="true", o no es un modal: es un div
  *     encima de una pantalla que sigue siendo tabulable por detras.
+ * 4b. Todo overlay scrollea y todo dialogo declara max-height, o con el teclado abierto
+ *     el boton de confirmar queda fuera de la pantalla.
  *  5. Existe manejo de Escape. Un modal sin Escape es una trampa de teclado.
  *  6. El toast no puede truncarse: es el unico canal de feedback de la app.
  *     Con white-space:nowrap y sin max-width, 6 de sus 99 mensajes se cortaban a 360px.
  *  7. Toda accion que CREA un documento y cuelga de un onclick debe deshabilitar su boton
  *     mientras escribe. Sin eso, un doble toque con mala senal duplica el documento.
+ *
+ * ── Reglas nacidas de la critica del 2026-07-09 (madrugada) ──
+ *  8. Toda funcion que bloquea un boton (_bloquear/_tomar) pasa sus escrituras a Firestore
+ *     por _conTimeout(). El SDK, offline, deja el add()/set() colgado SIN resolver ni
+ *     rechazar: el `finally` no corre y el boton se queda apagado para siempre.
+ *  9. _bloquear() y _tomar() tienen un guardia de tiempo propio. La regla 8 es una lista de
+ *     sitios; esta es la red que atrapa el sitio que nadie visito. Pase lo que pase, el
+ *     boton vuelve.
+ * 10. Toda funcion que lee Firestore y pinta una lista distingue "vacio" de "fallo".
+ *     Una lista vacia por falta de red se ve IDENTICA a una lista sin datos, y el admin
+ *     concluye que no tiene tecnicos. Se mira el catch de nivel superior, no los anidados.
+ * 11. La duracion del toast se calcula con el largo del mensaje, y el toast se puede cerrar.
+ *     2500ms fijos para mensajes de 6 a 73 caracteres: 43 de 117 no se alcanzaban a leer.
+ * 12. Todo estado vacio pasa por _vacio(). Habia cinco maneras de decir "no hay OTs".
  */
 const fs = require('fs');
 const path = require('path');
@@ -275,12 +291,170 @@ if (sinGuarda.length) {
   });
 }
 
+// `sinComentarios` preserva la longitud (cada char borrado se sustituye por un espacio),
+// asi que los indices de `fns`, calculados sobre `html`, valen tambien sobre `codigo`.
+const cuerpoLimpio = (f) => codigo.slice(f.ini, f.fin);
+
+// ─── 8. Escrituras a Firestore sin timeout dentro de una accion que bloquea ─────
+// El comentario de _conTimeout, escrito antes que este check, ya lo decia:
+//   "el SDK de Firestore, con mala senal y sin persistencia, deja el add()/set()
+//    colgado sin resolver ni rechazar"
+// Un await que no vuelve nunca deja el `finally` sin correr. Y el `finally` es donde
+// vive soltar(). El boton queda deshabilitado hasta que el usuario recargue la app,
+// sin un solo mensaje que se lo explique. Es peor que el duplicado que la guarda evita.
+const sinTimeout = [];
+for (const f of fns) {
+  const cuerpo = cuerpoLimpio(f);
+  if (!/_bloquear\(|_tomar\(/.test(cuerpo)) continue;
+  for (const m of cuerpo.matchAll(/await\s+[^;\n]*?\.collection\(/g)) {
+    if (/_conTimeout\(/.test(m[0])) continue;
+    sinTimeout.push({ fn: f.nombre, ln: linea(f.ini + m.index), frag: m[0].trim().slice(0, 52) });
+  }
+}
+if (sinTimeout.length) {
+  fallos.push({
+    regla: 'await-sin-timeout',
+    msg: sinTimeout.length + ' escritura(s) a Firestore sin _conTimeout dentro de una accion que bloquea su boton.',
+    items: sinTimeout.map((s) => 'index.html:' + String(s.ln).padEnd(6) + s.fn.padEnd(28) + s.frag),
+  });
+}
+
+// ─── 9. El guardia de las guardas ───────────────────────────────────────────────
+// La regla 8 recorre sitios. Esta es la red: aunque alguien agregue manana un await sin
+// timeout, el boton se libera solo. "Un check con una lista no verifica: repite."
+for (const nombre of ['_bloquear', '_tomar']) {
+  const f = fns.find((x) => x.nombre === nombre);
+  if (!f) { fallos.push({ regla: 'guardia-bloqueo', msg: 'No existe ' + nombre + '()' }); continue; }
+  const cuerpo = cuerpoLimpio(f);
+  if (!/setTimeout\(/.test(cuerpo) || !/_MAX_BLOQUEO_MS/.test(cuerpo)) {
+    fallos.push({
+      regla: 'guardia-bloqueo',
+      ln: linea(f.ini),
+      msg: nombre + '() no tiene guardia de tiempo. Si el await nunca vuelve, el boton muere para siempre.',
+    });
+  }
+}
+
+// ─── 10. Un cargador que falla en silencio miente ───────────────────────────────
+// "Cargador" no es una lista de nombres: es una FORMA. Una funcion que lee Firestore en su
+// propio cuerpo (no dentro de un callback) y pinta una lista. Esa distincion estructural es
+// la que separa a cargarTecnicosAdmin de editarSucursal, que solo construye un modal cuyo
+// boton de guardar escribira mas tarde, dentro de su propio handler con su propio catch.
+//
+// Del mismo modo, se mira SOLO el catch del propio cuerpo. Un catch anidado en un callback
+// ("Error eliminando OT") no dice nada sobre el fallo de la CARGA: contarlo dejaba pasar a
+// cargarOTsSupervisor, uno de los tres culpables.
+//
+// ALCANCE declarado: esto no prueba que el mensaje sea bueno, solo que existe.
+function cierreDe(s, abre) {
+  let n = 0;
+  for (let j = abre; j < s.length; j++) {
+    if (s[j] === '{') n++;
+    else if (s[j] === '}') { n--; if (!n) return j; }
+  }
+  return -1;
+}
+// Rangos de las funciones ANIDADAS (callbacks, handlers) dentro de un cuerpo.
+function rangosAnidados(cuerpo, abreCuerpo) {
+  const rangos = [];
+  const re = /(?:function\s*[\w$]*\s*\([^)]*\)|\([^)]*\)\s*=>|[\w$]+\s*=>)\s*\{/g;
+  let m;
+  while ((m = re.exec(cuerpo))) {
+    const abre = m.index + m[0].length - 1;
+    if (abre === abreCuerpo) continue;           // es la propia funcion, no un callback
+    const fin = cierreDe(cuerpo, abre);
+    if (fin > 0) rangos.push([abre, fin]);
+  }
+  return rangos;
+}
+const dentroDe = (rangos, i) => rangos.some(([a, b]) => i > a && i < b);
+
+const LEE_FIRESTORE = /\.collection\([^)]*\)[\s\S]{0,300}?\.(get|onSnapshot)\(/g;
+const AVISA = /_listaConError\(|toast\(|_avisar\(|innerHTML/;
+const mudos = [];
+for (const f of fns) {
+  const cuerpo = cuerpoLimpio(f);
+  if (!/innerHTML|appendChild/.test(cuerpo)) continue;
+  const abreCuerpo = cuerpo.indexOf('{');
+  if (abreCuerpo < 0) continue;
+  const anidadas = rangosAnidados(cuerpo, abreCuerpo);
+
+  // ¿lee Firestore en su PROPIO cuerpo?
+  let leeAqui = false;
+  for (const m of cuerpo.matchAll(LEE_FIRESTORE)) {
+    if (!dentroDe(anidadas, m.index)) { leeAqui = true; break; }
+  }
+  if (!leeAqui) continue;
+
+  // catches del propio cuerpo, no los de sus callbacks.
+  const propios = [];
+  for (const m of cuerpo.matchAll(/catch\s*\([^)]*\)\s*\{/g)) {
+    if (dentroDe(anidadas, m.index)) continue;
+    const abre = m.index + m[0].length - 1;
+    const fin = cierreDe(cuerpo, abre);
+    if (fin > 0) propios.push(cuerpo.slice(abre, fin + 1));
+  }
+  if (!propios.length) {
+    mudos.push({ fn: f.nombre, ln: linea(f.ini), por: 'lee Firestore sin ningun catch propio' });
+  } else if (!propios.some((c) => AVISA.test(c))) {
+    mudos.push({ fn: f.nombre, ln: linea(f.ini), por: 'su catch solo hace console.*' });
+  }
+}
+if (mudos.length) {
+  fallos.push({
+    regla: 'cargador-mudo',
+    msg: mudos.length + ' cargador(es) que no distinguen "vacio" de "fallo". Una lista vacia por falta de red miente.',
+    items: mudos.map((m) => 'index.html:' + String(m.ln).padEnd(6) + m.fn.padEnd(30) + m.por),
+  });
+}
+
+// ─── 11. El toast: duracion proporcional y descartable ──────────────────────────
+// 2500ms fijos para 117 mensajes de 6 a 73 caracteres. La frase que sostiene toda la
+// confianza offline de la app, "OT guardada. Se subira sola al mejorar la senal", necesita
+// 4133ms para leerse. Ya se habia truncado por ancho una vez. Dos veces la misma causa:
+// una constante elegida sin mirar el contenido que iba a contener.
+{
+  const f = fns.find((x) => x.nombre === 'toast');
+  if (!f) fallos.push({ regla: 'toast-tiempo', msg: 'No existe toast()' });
+  else {
+    const cuerpo = cuerpoLimpio(f);
+    const problemas = [];
+    if (!/_toastDuracion\(/.test(cuerpo)) problemas.push('la duracion no depende del largo del mensaje');
+    if (!/addEventListener\(\s*['"]click['"]/.test(codigo)) problemas.push('no se puede cerrar tocandolo (WCAG 2.2.1)');
+    if (problemas.length) {
+      fallos.push({ regla: 'toast-tiempo', ln: linea(f.ini), msg: problemas.join(' · '), });
+    }
+  }
+}
+
+// ─── 12. Una sola voz para los estados vacios ───────────────────────────────────
+// Habia cinco maneras de decir "no hay OTs" y dos de decir "no hay sucursales". Para un
+// tecnico apurado, dos nombres para una cosa son dos cosas. Y de ~15 estados vacios, solo
+// 2 enseñaban que hacer. Todos pasan ahora por _vacio(mensaje, ayuda).
+const VACIO_TXT = /(no hay |aún no hay |aun no hay |sin \w+ (aún|aun|registrad))/i;
+const vaciosSueltos = [];
+codigo.split(/\r?\n/).forEach((l, i) => {
+  if (!/(innerHTML|textContent)\s*=/.test(l)) return;
+  if (/_vacio\(/.test(l)) return;                 // ya pasa por el helper
+  if (!VACIO_TXT.test(l)) return;
+  vaciosSueltos.push({ ln: i + 1, frag: l.trim().slice(0, 74) });
+});
+if (vaciosSueltos.length) {
+  fallos.push({
+    regla: 'estados-vacios',
+    msg: vaciosSueltos.length + ' estado(s) vacio(s) escritos a mano. Deben pasar por _vacio(mensaje, ayuda).',
+    items: vaciosSueltos.map((v) => 'index.html:' + String(v.ln).padEnd(6) + v.frag),
+  });
+}
+
 // ─── Reporte ────────────────────────────────────────────────────────────────────
 console.log('\n  Accesibilidad verificable — EMVAL\n');
 
 if (!fallos.length) {
   console.log('  Viewport permite zoom · controles >= 16px · 0 dialogos nativos');
-  console.log('  modales con role/aria-modal/Escape · toast que no se trunca · acciones sin doble envio\n');
+  console.log('  modales con role/aria-modal/Escape · toast que no se trunca · acciones sin doble envio');
+  console.log('  awaits con timeout · guardas con guardia · cargadores que avisan');
+  console.log('  toast proporcional y descartable · una sola voz para los estados vacios\n');
   process.exit(0);
 }
 

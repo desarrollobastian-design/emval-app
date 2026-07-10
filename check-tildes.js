@@ -65,6 +65,11 @@ const DATOS_INTOCABLES = [/'Tecnico en terreno'/, /"Tecnico en terreno"/, /cargo
 // Los tres ultimos entraron cuando confirm()/prompt()/alert() se reemplazaron por el dialogo
 // propio: sus textos pasaron a ser visibles y este script no los miraba. Ahi vivian, entre
 // otros, "Esta accion no se puede deshacer" x2 y "Eliminar N cotizacion".
+//
+// REGLA: cada vez que nace una superficie de texto visible, este array crece con ella.
+// _vacio() nacio el 2026-07-09 y se llevo 14 estados vacios fuera de `textContent =`.
+// Sin las dos ultimas lineas, este script habria seguido diciendo "0 sin tilde" mientras
+// dejaba de mirar catorce mensajes. Un check que no declara donde busca no se puede evaluar.
 const VISIBLE = [
   /toast\('([^']*)'\)/g,
   /textContent\s*=\s*'([^']*)'/g,
@@ -73,6 +78,8 @@ const VISIBLE = [
   /_(?:confirmar|pedirTexto|avisar)\('([^']*)'/g,   // el mensaje
   /titulo:\s*'([^']*)'/g,                            // el titulo del dialogo
   /okTexto:\s*'([^']*)'/g,                           // la etiqueta del boton
+  /_vacio\('([^']*)'/g,                              // estado vacio: lo que constata
+  /_vacio\('[^']*',\s*'([^']*)'/g,                   // estado vacio: lo que enseña
 ];
 
 const hits = [];
@@ -92,10 +99,17 @@ L.forEach((linea, i) => {
           hits.push({ ln: i + 1, txt: m[1], malo: p, bueno: acentuarIon(p) });
           continue;
         }
-        // 2) Los irregulares.
-        if (IRREGULARES[min]) {
-          const bueno = IRREGULARES[min];
-          hits.push({ ln: i + 1, txt: m[1], malo: p, bueno: p[0] === p[0].toUpperCase() ? bueno[0].toUpperCase() + bueno.slice(1) : bueno });
+        // 2) Los irregulares, y su PLURAL. Una esdrujula conserva la tilde al pluralizar
+        //    (tecnico->tecnicos, numero->numeros), al reves que las agudas en -ion, que la
+        //    pierden (accion->acciones). El diccionario guardaba solo el singular: "No hay
+        //    tecnicos registrados" pasaba limpio. Otra lista con el borde mal dibujado.
+        const raiz = IRREGULARES[min] ? min
+                   : (min.endsWith('s') && IRREGULARES[min.slice(0, -1)]) ? min.slice(0, -1)
+                   : null;
+        if (raiz) {
+          let bueno = IRREGULARES[raiz] + (raiz === min ? '' : 's');
+          if (p[0] === p[0].toUpperCase()) bueno = bueno[0].toUpperCase() + bueno.slice(1);
+          hits.push({ ln: i + 1, txt: m[1], malo: p, bueno });
         }
       }
     }

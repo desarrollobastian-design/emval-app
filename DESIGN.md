@@ -297,12 +297,16 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🟡 Media | Toast que no se trunca (6 de 99 mensajes se cortaban) | `/polish` |
 | ✅ Hecho | 🟡 Media | `role="dialog"` + `aria-modal` + Escape + foco atrapado en los 3 modales propios | feature |
 | ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 15 tamaños en 335 declaraciones → 5 · **medida por `check-tokens.js`** | `/normalize` |
-| ⏳ Pendiente | 🟡 Media | **`#form-local` sin cablear**: `guardarLocal`/`mostrarFormLocal` tienen 0 llamadas. Decisión de Pedro | feature |
+| ✅ Hecho | 🟡 Media | **`locales` era un cementerio**, no una feature a medio cablear. 7 funciones borradas | borrar |
 | ✅ Hecho | 🔴 Alta | **Contraste por escaneo, no por lista** · 3 fallos reales corregidos | `/normalize` |
 | ✅ Hecho | 🔴 Alta | El diálogo scrollea con el teclado abierto (`max-height` + overlay) | `/polish` |
 | ✅ Hecho | 🟡 Media | 13 grises casi-idénticos → tokens · **vigilado por `check-tokens.js`** | `/normalize` |
 | ✅ Hecho | 🟡 Media | `alt` en las 19 imágenes · `go()` mueve el foco al `h1` | `/polish` |
-| ⏳ Pendiente | 🟢 Baja | Estados vacíos que enseñen (de 14, solo 1 guía) | `/polish` |
+| ✅ Hecho | 🔴 Alta | **`_bloquear()` podía dejar 4 botones muertos para siempre** (regresión propia) | bug |
+| ✅ Hecho | 🔴 Alta | **Toast de duración proporcional**, descartable · 43 de 117 mensajes no se leían | `/polish` |
+| ✅ Hecho | 🟠 Alta | **5 cargadores mudos**: una lista vacía por falta de red mentía | bug |
+| ✅ Hecho | 🟡 Media | **Una sola voz para los 14 estados vacíos** (`_vacio`) · antes 5 formas de decir "no hay OTs" | `/polish` |
+| ✅ Hecho | 🟡 Media | **Icono de fuente sin su hoja** (`<i class="ti">`): no podía dibujarse jamás | bug |
 | ⏳ Pendiente | 🟢 Baja | Skeleton real de carga en stat-cards | `/polish` |
 
 > **Esta tabla estuvo mintiendo durante días**: marcaba como ⏳ Pendiente la migración de emojis y los hover-glows, que llevaban hecho una semana. El source of truth no sabía su propio estado. Si una fila no tiene un script que la verifique, **asume que está desactualizada**.
@@ -992,9 +996,17 @@ y los 3 modales viejos comparten `_modalMostrar` / `_modalOcultar`.
 de EmailJS. Entre las cuatro contenían **4 de los 19 diálogos**. Borradas: la cuenta bajó a 15 sin
 tocar una sola línea viva.
 
-> ⚠️ **Dos más, NO borradas:** `guardarLocal` y `mostrarFormLocal` tienen **0 llamadas**. El markup
+> ⚠️ ~~**Dos más, NO borradas:** `guardarLocal` y `mostrarFormLocal` tienen **0 llamadas**. El markup
 > `#form-local` existe en el HTML pero **nada lo abre**: el admin puede listar y borrar locales, no
-> crearlos ni editarlos. Es una feature a medio cablear, no basura. **Decisión de Pedro**, no mía.
+> crearlos ni editarlos. Es una feature a medio cablear, no basura. **Decisión de Pedro**, no mía.~~
+>
+> **Corregido el 2026-07-09 (madrugada): esto era falso.** El admin **tampoco** podía listarlas ni
+> borrarlas. `#form-local` y `#lista-locales-admin` viven dentro de un `<div style="display:none;">`
+> rotulado por su propio autor *"Campos ocultos para compatibilidad con locales"*. `editarLocal` y
+> `eliminarLocal` solo existen en botones que crea `cargarLocalesAdmin`, y a `cargarLocalesAdmin`
+> solo la llaman `guardarLocal` (muerta) y `eliminarLocal`: **un ciclo cerrado sin puerta de
+> entrada.** No había ninguna decisión que tomar. Las **7 funciones** se borraron (~97 líneas).
+> Ver la crítica de la madrugada, más abajo.
 
 ---
 
@@ -1218,6 +1230,236 @@ Seis veces seguidas, en este proyecto, el mismo error tomó una forma nueva:
 > La única salida es una **regla** — un rango unicode, un escaneo del `:root`, la terminación `-ion`,
 > `background` junto a `color`. Y la única prueba de que la regla funciona es **verla fallar**:
 > `check-mutantes.sh`.
+
+---
+
+## Crítica del 2026-07-09 (madrugada) — el botón que maté al arreglarlo
+
+El hallazgo más grave de esta pasada **lo introduje yo**, la noche anterior, en el commit
+`00815d3`, que arreglaba la accesibilidad. No llegó a ningún técnico: se encontró antes del push.
+
+### 🔴 1. `_bloquear()` cambió un bug ruidoso por uno silencioso
+
+La guarda de doble toque apagaba el botón, corría el `await`, y lo reactivaba en un `finally`.
+Pero si la promesa **nunca se resuelve**, el `finally` no corre. Y esa promesa no se resuelve
+offline — lo decía el comentario de `_conTimeout`, escrito **antes** que mi guarda:
+
+> *"el SDK de Firestore, con mala señal y sin persistencia, deja el `add()`/`set()` colgado sin
+> resolver ni rechazar"*
+
+`_conTimeout` existía. Se aplicaba a `ordenes` (25 s). **No se aplicaba a `tecnicos`, `cadenas`
+ni `cotizaciones`.** Pedro tocaba "Guardar" en su teléfono, el botón se atenuaba al 55%, y se
+quedaba así hasta recargar la app. Sin toast, sin error, sin reintento.
+
+| Sitio | Guarda | Síntoma |
+|---|---|---|
+| `guardarTecnico` | `#btn-guardar-tecnico` | botón atenuado para siempre |
+| `guardarCadenaEdicion` | `#btn-guardar-cadena` | ídem |
+| `guardarCotizacion` | `#btn-guardar-cot` | ídem |
+| `confirmarAceptarCotizacion` | `_ocupado('aceptar-cot')` | **peor: el botón se veía normal y no hacía nada** |
+
+**Antes de mi commit, el bug era un duplicado. Después, un botón muerto.** Un fallo ruidoso por
+uno silencioso, que es la dirección equivocada.
+
+**El fix tiene dos capas, y solo una es una regla:**
+1. `_conTimeout(…, 25000)` en las 12 escrituras. Eso es recorrer una **lista de sitios**.
+2. Un **guardia de tiempo dentro de `_bloquear()` y `_tomar()`** (30 s). Pase lo que pase —un
+   `await` nuevo que nadie envolvió, un cargador colgado— el botón vuelve y el usuario se entera.
+   Eso es la **regla**, y es la que atrapa el sitio que nadie visitó.
+
+Los 25 s del `_conTimeout` van *por debajo* de los 30 s del guardia a propósito: el camino normal
+de error gana, y el guardia es la red.
+
+### 🔴 2. Un timeout no es un fallo: es no saber
+
+Envolver los `await` en `_conTimeout` abre un agujero nuevo. Firestore **encola** la escritura y
+la manda al reconectar. Decirle a Pedro *"Error guardando técnico"* tras un timeout haría que
+volviera a tocar Guardar — y crearía **el duplicado que la guarda existía para evitar**.
+
+`_esTimeout(e)` distingue los dos casos. El mensaje honesto es:
+
+> *"Sin respuesta del servidor. Revisa la lista antes de volver a guardar: el técnico puede
+> haberse creado igual."*
+
+> **Regla:** un arreglo que produce un mensaje falso no está terminado. El mensaje es parte del fix.
+
+### 🔴 3. El toast: 2.500 ms fijos para mensajes de 6 a 73 caracteres
+
+Un solo `setTimeout(…, 2500)` servía a **117 mensajes distintos**, y es el **único canal de
+feedback de la app**. Medido a 15 car/s (tercera edad, pantalla al sol) + 800 ms para *notar* que
+algo apareció abajo: **43 de 117 no alcanzaban a leerse.** El peor necesitaba **2,3×** su tiempo.
+
+Entre ellos, la frase sobre la que descansa toda la confianza offline de la app:
+
+> *"✓ OT guardada. Se subirá sola al mejorar la señal."* — 50 car, necesita 4.133 ms, tenía 2.500.
+
+**Esa misma frase ya había fallado una vez**, por ancho (`white-space: nowrap` sin `max-width`).
+Las dos veces por la misma causa: **una constante elegida sin mirar el contenido que iba a
+contener.**
+
+También es un fallo de **WCAG 2.2.1 (Timing Adjustable, nivel A)** — más severo que los AA ya
+corregidos: el contenido impone un límite de tiempo que el usuario no puede ajustar, y la
+información no está en ningún otro lado.
+
+**Fix:** `_toastDuracion(msg) = clamp(2500, 800 + largo/15 × 1000, 9000)`. Se cierra al tocarlo.
+Se pausa bajo el puntero — **solo donde hay puntero**: en un teléfono `mouseenter` se emula al
+tocar pero `mouseleave` puede no llegar nunca, y el toast se quedaría en pantalla con su
+temporizador ya cancelado. Misma razón por la que los hovers viven bajo `@media (hover: hover)`.
+
+> `Math.ceil`, no `Math.round`: redondear hacia abajo deja el mensaje 0,3 ms corto. Da igual en la
+> práctica, pero **un piso que a veces está por debajo del piso no es un piso.**
+
+### 🟠 4. Cinco cargadores mentían cuando Firestore fallaba
+
+Una lista vacía por falta de red se ve **idéntica** a una lista vacía porque no hay datos. Pedro
+concluye que no tiene técnicos.
+
+**Y este bug ya se había arreglado.** Este documento lo cuenta con orgullo: `cargarPausadasSupervisor`
+pasó de `console.error` a `_mostrarErrorPausadasSup(...)` con botón **Reintentar**, precisamente
+porque *"una lista congelada se veía idéntica a 'sin pausadas'"*. **El arreglo visitó una función.**
+
+| Función | Qué veía el usuario |
+|---|---|
+| `cargarTecnicosAdmin` | pestaña **Personal** vacía |
+| `cargarCadenasAdmin` | pestaña **Cadenas** vacía |
+| `cargarOTsSupervisor` | la **lista principal del supervisor**, vacía |
+| `_renderPausadasEnCadena` | **la sección de trabajo pausado DESAPARECÍA** (`display:none` en el `catch`) |
+| `verOTsTecnico` | la pantalla se quedaba en *"Cargando…"* **para siempre** |
+
+Los dos últimos **no los encontró la crítica: los encontró la regla nueva**. `verOTsTecnico` tenía
+dos `await db.collection(…).get()` **fuera de todo `try`**: si la red fallaba, la promesa se
+rechazaba, nadie la atrapaba, y el técnico se quedaba mirando "Cargando…".
+
+**Fix:** helper `_listaConError(contenedor, alReintentar)` + una regla en `check-a11y.js`.
+
+### 🟡 5. La app llamaba a la misma cosa de cinco maneras
+
+Cinco formas de decir lo mismo: `"No hay OTs registradas"`, `"Sin OTs registradas"`, `"Aún no hay
+OTs registradas"`, `"No hay OTs registradas hoy"`, `"No hay OTs preventivas registradas"`. Dos para
+sucursales. Y de ~15 estados vacíos, **2 enseñaban qué hacer**.
+
+**Y este fix también había visitado una lista.** El documento dice que *"los 6 estados vacíos de
+cotizaciones, que decían la misma cosa de 4 formas distintas"*, se unificaron. Se unificaron **los
+de cotizaciones**.
+
+**Fix:** helper `_vacio(mensaje, ayuda)` — el título constata, la ayuda enseña qué hacer o **qué
+esperar** cuando no hay nada que hacer (*"Aparecerán aquí cuando un técnico cierre la primera"*).
+14 sitios migrados. Tamaños 15px/12px: los pasos *body* y *small* de §3, migración oportunista.
+
+> **Y aquí me equivoqué en la crítica.** Escribí que *"la misma entidad tiene dos nombres: la
+> pestaña dice **Personal** y el modal dice **técnicos**"*, y propuse elegir uno. Al ir a leer el
+> código: `cargarTecnicosAdmin` **no filtra** (lista técnicos + supervisor + administrador), y
+> `_cargarListaTecnicosEnModal` **sí filtra** a técnicos. **Son dos conjuntos distintos y los dos
+> nombres son correctos.** Unificarlos habría sido una regresión. *Medir antes de acusar*, otra vez.
+
+### 🟡 6. Un icono que no podía dibujarse jamás
+
+La única línea `<i>` del archivo:
+
+```js
+iconEl.innerHTML = '<i class="ti ti-' + (iconosTipo[d.tipo]||'map-pin') + '" …></i>';
+```
+
+Eso es **Tabler Icons por fuente**. Los únicos `<link>` del documento son el manifest, el
+`apple-touch-icon` y Google Fonts. **La hoja de Tabler no se carga en ninguna parte**, y no existe
+regla `.ti` en el `<style>`. Una caja de 40×40 vacía, para siempre.
+
+`check-emojis.js` no lo veía, y no era descuido: verificaba *"no hay emojis"*, **no *"todo icono se
+dibuja"***. Ahora declara las familias de icon-fonts conocidas y falla si el prefijo de clase
+aparece sin que ningún `<link>` cargue su hoja. Y falla ante cualquier `<i>`: la iconografía de
+esta app es SVG inline con `currentColor`, y no hay ni una cursiva legítima.
+
+### 🧹 7. `locales` era un cementerio, no una feature a medio cablear
+
+Ver la corrección arriba. **7 funciones borradas, ~97 líneas.** Se conserva `seleccionarLocal`
+(la usa la lista de sucursales) y las clases `.local-item/.local-info/.local-name/.local-addr`
+(idem). Murió `.local-icon`, que solo servía al `<i>` que no dibujaba.
+
+Nota: `mostrarFormLocal()` referenciaba `#form-local-titulo`, **que no existe en el markup**.
+Habría lanzado un `TypeError` si alguien la hubiera llamado. Era la prueba de que nadie lo hacía.
+
+---
+
+### 🔍 Tres puntos ciegos de mis propias sondas, en una sola sesión
+
+Cada uno corregido midiendo, y cada uno más instructivo que el hallazgo:
+
+1. **`[^;]*` se cortó en el `;` de `color:var(--rojo);`**, dentro de un atributo `style`. Marcó como
+   mudos a `cargarVentas` y al modal de técnicos, que **sí** avisan.
+2. **El regex de "guía" matcheaba `registra` dentro de `registradas`** — un participio, no un
+   imperativo. Contó 9 estados vacíos guiando cuando eran 2.
+3. **El tokenizador de estados vacíos usó `[^'"]`** y se rompió con las comillas de `style="…"`.
+   Perdió *"Sin trabajos pausados. Pausa una OT…"*, uno de los dos buenos.
+
+Y **acusé a `cargarUsuariosApp` de ser muda**: es la función mejor escrita del archivo (cache-first,
+sin confiar en `navigator.onLine`). También fui a buscar un bug en el `catch` de
+`_renderPausadasEnCadena` por su `display='none'`; su llamada a Firestore tiene un `.catch` propio
+que **igual pinta las pausadas desde localStorage**. El `display='none'` sí era un bug, pero por
+localStorage corrupto, no por red.
+
+> La regla `cargador-mudo` empezó marcando `editarSucursal`, que **no carga una lista**: construye
+> un modal cuyo botón de guardar escribe más tarde, dentro de su propio handler con su propio
+> `catch`. La solución **no fue una allowlist**: fue definir "cargador" por su **forma** —una función
+> que lee Firestore *en su propio cuerpo*, no dentro de un callback. Una allowlist es una lista, y
+> las listas se pudren.
+
+### 🔡 `check-tildes.js` no veía los plurales
+
+El diccionario de irregulares guardaba `tecnico`. `"No hay tecnicos registrados"` pasaba limpio.
+En español una **esdrújula conserva la tilde al pluralizar** (`técnico→técnicos`), al revés que las
+agudas en `-ion`, que la pierden (`acción→acciones`). Otra lista con el borde mal dibujado.
+
+Y al nacer `_vacio()`, **14 mensajes visibles salieron de `textContent =`**. Sin añadir dos patrones
+a `VISIBLE`, el script habría seguido diciendo *"0 sin tilde"* mientras dejaba de mirarlos.
+
+> **Regla:** cada vez que nace una superficie de texto visible, el check que la vigila crece con
+> ella. Un check que no declara **dónde busca** no se puede evaluar.
+
+---
+
+### Los 6 verificadores, hoy
+
+| Script | Vigila | Nació de |
+|---|---|---|
+| `check-contraste.js` | WCAG AA sobre la superficie real (22 pares + escaneo) | el verde que pasó 4 críticas |
+| `check-emojis.js` | iconografía SVG única · **y que todo icono pueda dibujarse** | emojis, y un `<i>` sin su fuente |
+| `check-tokens.js` | tokens reales + zona de CSS exportado | radios que el doc daba por normalizados |
+| `check-tildes.js` | ortografía visible (regla `-ion` + irregulares **y sus plurales**) | 16 tildes que 4 pasadas no vieron |
+| `check-a11y.js` | **12 reglas** (ver cabecera) | se escribió antes del fix |
+| `check-mutantes.sh` | **a los otros cinco** | 3 checks que mintieron en verde |
+
+### Verificación
+
+```
+node check-contraste.js  →  48 pares · 0 fallos · 2 tolerados             exit 0
+node check-emojis.js     →  0 emojis · 0 iconos que no puedan dibujarse   exit 0
+node check-tokens.js     →  0 fantasmas · 0 muertos · 0 grises duplicados exit 0
+node check-tildes.js     →  0 palabras sin tilde (incluidos plurales)     exit 0
+node check-a11y.js       →  12 reglas en verde                            exit 0
+bash check-mutantes.sh   →  34 mutantes · 0 puntos ciegos                 exit 0
+sintaxis                 →  0 errores en los 3 bloques <script>
+```
+
+---
+
+### La lección, séptima forma: el fix que introduce el bug
+
+Las seis formas anteriores eran todas la misma: *el arreglo recorrió una lista, y la verificación
+usó esa misma lista.* Ésta añade una vuelta más.
+
+| Qué se arregló | Qué se introdujo |
+|---|---|
+| `confirm()`/`prompt()` → diálogo propio | el diálogo no tenía `max-height`: inalcanzable con el teclado |
+| doble toque → `_bloquear()` | el botón podía quedarse apagado **para siempre** |
+| `await` colgado → `_conTimeout()` | un timeout que dice *"Error"* provoca el duplicado que evitaba |
+| toast truncado → `max-width` | seguía truncado, **en el tiempo** |
+
+> **Un arreglo es un cambio, y todo cambio necesita su propio check.** Los tres primeros los
+> encontró una regla escrita *después*. El cuarto lo encontró medir el contenido en vez de mirarlo.
+>
+> Y el corolario, que es el que duele: **los seis verificadores estaban en verde mientras el botón
+> de Pedro se moría.** Un check no vigila lo que no se le pidió vigilar. La pregunta al terminar un
+> fix no es *"¿pasan los checks?"* sino **"¿qué acabo de hacer posible que antes era imposible?"**
 
 ---
 
