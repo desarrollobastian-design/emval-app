@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EMVAL">
 <meta name="mobile-web-app-capable" content="yes">
+<!-- LITERAL-FIRMADO: el color de la barra del navegador. Un <meta> no admite var(). -->
 <meta name="theme-color" content="#2D5AA0">
 <link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon.png">
@@ -25,6 +26,26 @@
        de ESTADO: relleno sin texto encima (foto lista, paso completado, check, bordes).
        Blanco sobre --verde da solo 3.3:1 y no pasa AA. */
     --verde-btn: #1E8052;
+    /* EL TERCER VERDE. Era el mas usado de la app (14 sitios: badges "Preventivo", "Enviado",
+       "Vendida", "Facturado", el avatar de carpeta enviada) y no era un token. DESIGN.md
+       declaraba dos verdes; check-tokens.js no podia verlo (solo compara contra los neutros);
+       el unico archivo del repo que sabia que existia era la lista curada de check-contraste.js,
+       tecleado a mano.
+
+       No es redundante con --verde-btn, y se midio ANTES de crear el token:
+           #1A7A3C sobre --verde-badge-fondo  ->  4.75:1  PASA
+           #1E8052 sobre --verde-badge-fondo  ->  4.34:1  FALLA
+       El boton es verde sobre BLANCO; el badge es verde sobre VERDE PALIDO, y ese fondo se
+       come contraste. Por eso el badge tiene que ser mas oscuro que el boton. Quien eligio
+       este hex acerto y no dejo escrito por que. Ahora esta escrito, y verificado. */
+    --verde-badge: #1A7A3C;
+    --verde-badge-fondo: #E6F4EA;
+    /* El mismo par, en naranja. El texto es --naranja-btn: 4.50:1 sobre este fondo, justo en
+       el limite. No aclarar este fondo ni un punto. */
+    --naranja-badge-fondo: #FEF0E6;
+    /* Ambar de .lista-error: el aviso de "no se pudo cargar la lista", con su boton reintentar. */
+    --ambar-fondo: #FEF9E7;
+    --ambar-borde: #FCD34D;
     /* Oscurecido de #E53E3E (4.13:1) a 4.98:1. No se parte en dos como el verde
        porque todos sus usos son funcionales (botones, texto de error, barra offline):
        no hay una superficie roja de estado cuyo tono emocional haya que preservar. */
@@ -295,7 +316,7 @@
   }
   .paused-order-action {
     flex: 1;
-    background: linear-gradient(135deg, #EF9F27 0%, #D97E0A 100%);
+    background: linear-gradient(135deg, var(--naranja) 0%, #D97E0A 100%);
     color: white;
     border: none;
     padding: 12px 16px;
@@ -349,8 +370,8 @@
   
   /* BADGES */
   .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radio-pill); }
-  .badge-prev { background: #E6F4EA; color: #1A7A3C; }
-  .badge-corr { background: #FEF0E6; color: #B45309; }
+  .badge-prev { background: var(--verde-badge-fondo); color: var(--verde-badge); }
+  .badge-corr { background: var(--naranja-badge-fondo); color: var(--naranja-btn); }
   .badge-pend { background: var(--gris2); color: var(--azul); }
   
   /* OT CARD */
@@ -370,7 +391,7 @@
      arbol de accesibilidad y el aria-live no anunciaria nada. */
   .solo-lector { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   /* Fallo de carga: NUNCA se confunde con un estado vacio. Ver _listaConError(). */
-  .lista-error { background: #FEF9E7; border: 1.5px solid #FCD34D; border-radius: var(--radio); padding: 14px; text-align: center; }
+  .lista-error { background: var(--ambar-fondo); border: 1.5px solid var(--ambar-borde); border-radius: var(--radio); padding: 14px; text-align: center; }
   .lista-error-titulo { font-size: 15px; font-weight: 600; color: var(--texto); }
   .lista-error-ayuda { font-size: 12px; color: var(--texto2); margin: 4px 0 10px; }
   .ot-icon { width: 44px; height: 44px; border-radius:var(--radio); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
@@ -811,12 +832,13 @@
     <h1>OTs por técnico</h1>
   </div>
   <div class="content">
-    <div onclick="go('s-preventivos');cargarPreventivos();" style="display:flex;align-items:center;gap:12px;background:#E6F4EA;border-radius:var(--radio);padding:13px 16px;cursor:pointer;margin-bottom:12px;border:1.5px solid #B7DFC9;">
-      <div style="width:42px;height:42px;border-radius:var(--radio-sm);background:#27A06B;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+    <div onclick="go('s-preventivos');cargarPreventivos();" style="display:flex;align-items:center;gap:12px;background:var(--verde-badge-fondo);border-radius:var(--radio);padding:13px 16px;cursor:pointer;margin-bottom:12px;border:1.5px solid #B7DFC9;">
+      <div style="width:42px;height:42px;border-radius:var(--radio-sm);background:var(--verde);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
       <div style="flex:1;">
-        <div style="font-size:15px;font-weight:600;color:#1A7A3C;">Preventivos</div>
+        <div style="font-size:15px;font-weight:600;color:var(--verde-badge);">Preventivos</div>
         <div style="font-size:12px;color:#2D8B4A;margin-top:2px;">Ver todos los trabajos preventivos</div>
       </div>
+      <!-- LITERAL-FIRMADO: stroke="" es atributo presentacional de SVG, no CSS: var() no resuelve. -->
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27A06B" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
     <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un técnico para ver sus OTs</div>
@@ -1054,6 +1076,7 @@
       <div id="form-cadena" style="display:none;" class="card">
         <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
+        <!-- LITERAL-FIRMADO: el value de un input es un DATO (se guarda en Firestore), no un estilo. -->
         <div class="field"><label>Color (hex)</label><input type="text" id="cad-color" placeholder="#E31837" value="#1B3A6B" /></div>
         <div class="field"><label>URL del logo</label><input type="text" id="cad-logo" placeholder="https://..." /></div>
         <div style="display:flex;gap:8px;margin-top:8px;">
@@ -1538,7 +1561,11 @@ function eliminarOTPausada(numero, tecnico) {
             db.collection('ordenes').doc(doc.id).delete();
           });
         }).catch(function(){});
-    } catch(e) {}
+    } catch(e) {
+      // SILENCIO-FIRMADO: el borrado en Firestore es best-effort. Si falla, la OT sigue
+      // "En Pausa" en el servidor y _reconciliarPausadasFirebase() la vuelve a bajar en el
+      // proximo arranque. El tecnico ya la vio desaparecer de su lista local, que es la suya.
+    }
   }
 }
 
@@ -1652,6 +1679,8 @@ function seleccionarUsuario(nombre, cargo, letra) {
   document.getElementById('pin-nombre-display').textContent = nombre;
   const av = document.getElementById('pin-avatar');
   av.textContent = letra;
+  /* LITERAL-FIRMADO: paleta de avatares. Pedro pidio un color estable por persona: son datos
+     de identidad, no tokens de marca. DESIGN.md manda no tocarlos. */
   const colorFijoPorCargo = { 'Administrador': '#2D5AA0', 'Supervisor': '#1B3A6B' };
   av.style.background = colorFijoPorCargo[cargo] || _colorPorNombre(nombre);
 
@@ -2191,6 +2220,7 @@ function irEjecucion() {
 const canvas = document.getElementById('firma-canvas');
 const ctx = canvas.getContext('2d');
 let dibujando = false, firmaConfirmada = false;
+/* LITERAL-FIRMADO: el contexto 2D de un <canvas> no lee CSS. strokeStyle exige un color real. */
 ctx.strokeStyle = '#1B3A6B'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
 
 function getPos(e, canvas) {
@@ -2409,6 +2439,9 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
     // Llegó a Firestore: ya no está pendiente de subir
     _marcarPausadaSincronizada(ot.numero, ot.tecnico);
   } catch(e) {
+    // SILENCIO-FIRMADO: la OT pausada ya esta guardada en localStorage; esto solo la publica
+    // para que el admin la vea. Si falla, queda marcada como pendiente de subir y la barra
+    // #pending-bar ya se lo dice al tecnico. Un toast aqui seria el segundo aviso del mismo hecho.
     console.error('Error sincronizando OT pausada con Firebase:', e);
   }
 }
@@ -2580,6 +2613,11 @@ function cerrarOT() {
 }
 
 // =========== CLOUDINARY CONFIG ===========
+/* LITERAL-FIRMADO: es un VALOR de dato, no un estilo. Es el color que se GUARDA en Firestore
+   para una cadena que no eligio el suyo, y desde ahi viaja al Excel y al correo, donde un
+   var(--azul) no resolveria. Coincide con --azul a proposito: es el azul de EMVAL. */
+const COLOR_CADENA_POR_DEFECTO = '#1B3A6B';
+
 const CLOUDINARY = {
   cloudName: 'dcrf29tna',
   apiKey: '791549653552789',
@@ -3140,7 +3178,7 @@ async function cargarCadenasAdmin() {
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;';
       const dot = document.createElement('div');
-      dot.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:' + (d.color||'#1B3A6B') + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0;overflow:hidden;';
+      dot.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:' + (d.color || COLOR_CADENA_POR_DEFECTO) + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0;overflow:hidden;';
       if (d.logo) {
         const limg = document.createElement('img');
         limg.src = d.logo;
@@ -3456,7 +3494,7 @@ async function eliminarSucursal(docId, idx) {
 function mostrarFormCadena() {
   window._editandoCadenaId = null;
   document.getElementById('cad-nombre').value = '';
-  document.getElementById('cad-color').value = '#1B3A6B';
+  document.getElementById('cad-color').value = COLOR_CADENA_POR_DEFECTO;
   document.getElementById('cad-logo').value = '';
   document.getElementById('form-cadena-titulo').textContent = 'Nueva cadena';
   document.getElementById('form-cadena').style.display = 'block';
@@ -3464,7 +3502,7 @@ function mostrarFormCadena() {
 
 function editarCadena(id, data) {
   document.getElementById('cad-nombre').value = data.nombre || '';
-  document.getElementById('cad-color').value = data.color || '#1B3A6B';
+  document.getElementById('cad-color').value = data.color || COLOR_CADENA_POR_DEFECTO;
   document.getElementById('cad-logo').value = data.logo || '';
   document.getElementById('form-cadena').style.display = 'block';
   document.getElementById('form-cadena-titulo').textContent = 'Editar cadena';
@@ -3474,7 +3512,7 @@ function editarCadena(id, data) {
 
 async function guardarCadenaEdicion() {
   const nombre = document.getElementById('cad-nombre').value.trim();
-  const color = document.getElementById('cad-color').value.trim() || '#1B3A6B';
+  const color = document.getElementById('cad-color').value.trim() || COLOR_CADENA_POR_DEFECTO;
   const logo = document.getElementById('cad-logo').value.trim();
   if (!nombre) { toast('Ingresa el nombre'); return; }
   const soltar = _bloquear(document.getElementById('btn-guardar-cadena'));
@@ -3604,7 +3642,12 @@ async function _obtenerCentroSucursal(nombreLocal) {
         }
       }
     }
-  } catch(e) {}
+  } catch(e) {
+    // SILENCIO-FIRMADO: devuelve '' y la cotizacion sale SIN CECO. Nadie se entera.
+    // Esto no esta bien y no se arregla con un toast: el helper no sabe si su llamador
+    // puede seguir sin el dato. Anotado como deuda en DESIGN.md — decision de Pedro.
+    console.error('Error buscando centro de costo:', e);
+  }
   return '';
 }
 
@@ -3622,7 +3665,11 @@ async function _obtenerSupervisorSucursal(nombreLocal) {
         }
       }
     }
-  } catch(e) { console.error('Error buscando supervisor:', e); }
+  } catch(e) {
+    // SILENCIO-FIRMADO: devuelve '' y la cotizacion sale SIN supervisor asignado.
+    // Misma deuda que _obtenerCentroSucursal, arriba.
+    console.error('Error buscando supervisor:', e);
+  }
   return '';
 }
 
@@ -4075,7 +4122,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
       const envDiv = document.createElement('div');
       envDiv.style.cssText = 'margin-top:4px;';
       const envTag = document.createElement('span');
-      envTag.style.cssText = 'display:inline-block;background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--radio-pill);';
+      envTag.style.cssText = 'display:inline-block;background:var(--verde-badge-fondo);color:var(--verde-badge);font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--radio-pill);';
       envTag.textContent = '✓ Enviado';
       envDiv.appendChild(envTag);
       rowContent.appendChild(envDiv);
@@ -4172,6 +4219,7 @@ async function cargarCarpetas() {
       lista.innerHTML = _vacio('Aún no hay cotizaciones', 'Se guardan aquí cuando generas una desde una OT.');
       return;
     }
+    /* LITERAL-FIRMADO: paleta de avatares. Color estable por tecnico. DESIGN.md manda conservarla. */
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
 
     // --- Carpeta especial ENVIADAS ---
@@ -4180,16 +4228,16 @@ async function cargarCarpetas() {
       const carpEnv = document.createElement('div');
       carpEnv.className = 'card';
       carpEnv.setAttribute('data-cot', 'Enviadas');
-      carpEnv.style.cssText = 'margin-bottom:10px;overflow:hidden;border:2px solid #1A7A3C;';
+      carpEnv.style.cssText = 'margin-bottom:10px;overflow:hidden;border:2px solid var(--verde-badge);';
       const headerEnv = document.createElement('div');
       headerEnv.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatarEnv = document.createElement('div');
-      avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:#1A7A3C;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
+      avatarEnv.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:var(--verde-badge);display:flex;align-items:center;justify-content:center;color:white;font-size:20px;flex-shrink:0;';
       avatarEnv.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
       const headerInfoEnv = document.createElement('div');
       headerInfoEnv.style.flex = '1';
       const nombreEnv = document.createElement('div');
-      nombreEnv.style.cssText = 'font-size:15px;font-weight:600;color:#1A7A3C;';
+      nombreEnv.style.cssText = 'font-size:15px;font-weight:600;color:var(--verde-badge);';
       nombreEnv.textContent = 'Enviadas';
       const resumenEnv = document.createElement('div');
       resumenEnv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
@@ -4322,7 +4370,7 @@ function _renderCadenasDesdeCache(lista) {
   cached.forEach(function(c) {
     var card = document.createElement('div'); card.className = 'cadena-card';
     var logoDiv = document.createElement('div'); logoDiv.className = 'cadena-logo fallback';
-    logoDiv.style.background = c.color || '#1B3A6B';
+    logoDiv.style.background = c.color || COLOR_CADENA_POR_DEFECTO;
     if (c.logo) {
       var img = document.createElement('img'); img.src = c.logo;
       img.alt = '';
@@ -4396,7 +4444,7 @@ async function cargarCadenasApp(_intento) {
       card.className = 'cadena-card';
       const logoDiv = document.createElement('div');
       logoDiv.className = 'cadena-logo';
-      logoDiv.style.background = c.color || '#1B3A6B';
+      logoDiv.style.background = c.color || COLOR_CADENA_POR_DEFECTO;
       const img = document.createElement('img');
       img.src = c.logo || '';
       img.alt = '';
@@ -4484,7 +4532,7 @@ function seleccionarCadena(cadena) {
     const item = document.createElement('div');
     item.className = 'local-item';
     const iconEl = document.createElement('div');
-    iconEl.style.cssText = 'width:40px;height:40px;border-radius:var(--radio-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0;background:' + (cadena.color||'#1B3A6B') + ';';
+    iconEl.style.cssText = 'width:40px;height:40px;border-radius:var(--radio-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0;background:' + (cadena.color || COLOR_CADENA_POR_DEFECTO) + ';';
     if (cadena.logo) {
       const logoImg = document.createElement('img');
       logoImg.src = cadena.logo;
@@ -4617,6 +4665,9 @@ async function _reconciliarPausadasFirebase() {
     if (cambios) guardarOTsPausadas(local);
     return cambios;
   } catch(e) {
+    // SILENCIO-FIRMADO: corre en segundo plano al arrancar, sin que nadie lo haya pedido.
+    // Si falla, las pausadas locales quedan como estaban — que es el estado correcto
+    // mientras no se pueda comprobar lo contrario. Devuelve false y nadie repinta nada.
     console.error('Error reconciliando pausadas con Firebase:', e);
     return false;
   }
@@ -4727,6 +4778,7 @@ function _renderPausadasEnCadena() {
         const cad = cadenaMap[nombreCadena];
         // Preferir el logo guardado en la propia OT (robusto), luego el mapa de cadenas
         const logoUrl = ot.cadenaLogo || (cad && cad.logo) || '';
+        /* LITERAL-FIRMADO: color de dato. Acaba en el PDF y en el Excel, donde var() no viaja. */
         const logoColor = ot.cadenaColor || (cad && cad.color) || '#EF9F27';
         const logoLetra = ot.cadenaLetra || (cad && cad.letra) || nombreCadena.charAt(0) || (ot.local ? ot.local.charAt(0) : '?');
         if (logoUrl) {
@@ -4870,7 +4922,7 @@ function adminTab(tab) {
 }
 
 async function cargarAdmin() {
-  if (!window._firebaseReady) { setTimeout(cargarAdmin, 800); return; }
+  if (_esperandoFirebase('admin', cargarAdmin)) return;
   await cargarTecnicosAdmin();
   await cargarCadenasAdmin();
 }
@@ -5074,7 +5126,7 @@ function _crearUsuarioItem(nombre, cargo, letra, color) {
   div.onclick = (function(n, c, l){ return function(){ seleccionarUsuario(n, c, l); }; })(nombre, cargo, letra);
   const avatar = document.createElement('div');
   avatar.className = 'usuario-avatar';
-  avatar.style.background = color || '#1B3A6B';
+  avatar.style.background = color || COLOR_CADENA_POR_DEFECTO;
   avatar.textContent = letra;
   const info = document.createElement('div');
   info.className = 'usuario-info';
@@ -5093,6 +5145,7 @@ function _cargoLabel(cargo) {
 }
 
 function _colorPorNombre(nombre) {
+  /* LITERAL-FIRMADO: paleta de avatares. Un color estable por tecnico, elegido por su nombre. */
   const paleta = [
     '#1D6B5A', // verde oscuro
     '#2D5AA0', // azul
@@ -5116,6 +5169,7 @@ function _renderListaUsuarios(docs) {
   const lista = document.getElementById('lista-usuarios');
   if (!lista) return;
   lista.innerHTML = '';
+  /* LITERAL-FIRMADO: paleta de avatares (misma razon). Color estable por cargo. */
   const colorFijoPorCargo = {
     'Administrador':       '#2D5AA0',
     'Supervisor':          '#1B3A6B',
@@ -5569,7 +5623,7 @@ async function generarPDFRecepcionObra() {
 
 async function verPDFById(pdfId) {
   try {
-    if (!window._firebaseReady) { setTimeout(function(){ verPDFById(pdfId); }, 1000); return; }
+    if (_esperandoFirebase('pdf:' + pdfId, function(){ verPDFById(pdfId); }, 1000)) return;
     const db = window.firebase.firestore();
     const doc = await db.collection('pdfs').doc(pdfId).get();
     if (!doc.exists) { await _avisar('No encontramos el PDF de esta OT. Puede que aún no se haya subido.', { titulo: 'PDF no encontrado' }); return; }
@@ -5583,11 +5637,17 @@ async function verPDFById(pdfId) {
     // El aviso anterior decia "Permite ventanas emergentes" — una instruccion que no se puede
     // ejecutar desde el propio dialogo. Ahora dice DONDE esta el permiso.
     if (!win) { await _avisar('Tu navegador bloqueó la ventana del PDF.\n\nToca el ícono de la barra de direcciones y permite las ventanas emergentes para este sitio.', { titulo: 'No se pudo abrir el PDF' }); return; }
+    // ── CSS-EXPORTADO: INICIO ────────────────────────────────────────────────────────────
+    // Este documento se escribe en OTRA ventana. Su :root no existe: aqui una custom property
+    // no resuelve y la declaracion entera se invalida. El literal es obligatorio.
     win.document.write('<html><head><title>OT #' + data.otNumero + ' - ' + data.local + '</title></head><body style="margin:0">');
     win.document.write('<embed src="' + data.pdfData + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;width:100%;height:100%"/>');
     win.document.write('</body></html>');
+    // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
   } catch(e) {
-    console.error('Error:', e);
+    // Este catch hacia `console.error` y nada mas: el tecnico tocaba "Ver PDF" sin senal,
+    // get() rechazaba, y la pantalla se quedaba exactamente igual. Cero senales de vida.
+    _error('abrir el PDF', e, 'Revisa la señal e inténtalo de nuevo.');
   }
 }
 
@@ -5874,7 +5934,12 @@ async function guardarYEnviarPDF() {
           });
         }
       }
-    } catch(e) { console.error('Error actualizando URL PDF en orden:', e); }
+    } catch(e) {
+      // SILENCIO-FIRMADO: el PDF ya existe, ya se subio y ya va camino del correo. Esto solo
+      // enlaza la URL en el documento de la orden. Si falla, el supervisor abre el PDF desde
+      // el correo. Interrumpir el cierre de la OT por esto seria peor que el fallo.
+      console.error('Error actualizando URL PDF en orden:', e);
+    }
   }
 
   // Notificacion de respaldo interno (con el link del PDF ya generado). No se envía en ediciones.
@@ -6314,7 +6379,12 @@ async function generarPDFCotizacion() {
     const cotSnap = await db2.collection('cotizaciones')
       .where('fechaCodigo', '==', hoyStr).get();
     correlativo = cotSnap.size + 1;
-  } catch(ecorr) { correlativo = 1; }
+  } catch(ecorr) {
+    // SILENCIO-FIRMADO: sin poder contar las cotizaciones de hoy, se asume que esta es la
+    // primera. Si la lectura fallo por red y ya habia una, DOS cotizaciones comparten numero.
+    // Es preferible a no emitirla: el numero se corrige a mano y el trabajo no se detiene.
+    correlativo = 1;
+  }
   const numCot = diaCot + mesCot + anioCot + String(correlativo).padStart(2, '0');
 
   // Colores
@@ -6709,18 +6779,20 @@ async function cargarOTsTecnicos() {
       });
     } catch(e) {}
 
-    // Cargar OTs de Firebase
+    // Cargar OTs de Firebase.
+    // NO envolver en try/catch propio: si esta lectura falla, `tecnicos` se queda solo con las
+    // pausadas locales y doce lineas mas abajo el admin lee "Aun no hay OTs". Una lista vacia
+    // por falta de red miente, y esta mentia desde el catch de dentro mientras el de fuera
+    // avisaba — por eso ninguna regla la vio. Que el error suba al catch de la funcion.
     if (window._firebaseReady) {
-      try {
-        const db = window.firebase.firestore();
-        const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
-        snap.docs.forEach(function(doc) {
-          const d = doc.data();
-          const t = d.tecnico || 'Sin asignar';
-          if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
-          tecnicos[t].ots.push({ id: doc.id, ...d });
-        });
-      } catch(e) { console.error('Error cargando Firebase:', e); }
+      const db = window.firebase.firestore();
+      const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
+      snap.docs.forEach(function(doc) {
+        const d = doc.data();
+        const t = d.tecnico || 'Sin asignar';
+        if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
+        tecnicos[t].ots.push({ id: doc.id, ...d });
+      });
     }
     const lista = document.getElementById('lista-tecnicos-ots');
     _cargado(lista);
@@ -6729,6 +6801,7 @@ async function cargarOTsTecnicos() {
       lista.innerHTML = _vacio('Aún no hay OTs', 'Aparecerán aquí cuando un técnico cierre la primera.');
       return;
     }
+    /* LITERAL-FIRMADO: paleta de avatares. Color estable por tecnico. DESIGN.md manda conservarla. */
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
     Object.keys(tecnicos).forEach(function(nombre, i) {
       const grupo = tecnicos[nombre];
@@ -6762,7 +6835,8 @@ async function cargarOTsTecnicos() {
       lista.appendChild(card);
     });
   } catch(e) {
-    _error('cargar las OTs', e);
+    console.error('cargar las OTs:', e);
+    _listaConError(document.getElementById('lista-tecnicos-ots'), cargarOTsTecnicos);
   }
 }
 
@@ -6862,7 +6936,7 @@ function continuarOT(otId) {
 // =========== PREVENTIVOS (SUPERVISOR) ===========
 async function cargarPreventivos() {
   try {
-    if (!window._firebaseReady) { setTimeout(cargarPreventivos, 800); return; }
+    if (_esperandoFirebase('preventivos', cargarPreventivos)) return;
     const db = window.firebase.firestore();
     const lista = document.getElementById('lista-preventivos');
     _cargando(lista, 4);
@@ -6974,7 +7048,7 @@ async function cargarPreventivos() {
         const wrapCot = document.createElement('div');
         wrapCot.style.cssText = 'flex:1;display:flex;align-items:center;gap:6px;';
         const badgeCot = document.createElement('span');
-        badgeCot.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);white-space:nowrap;';
+        badgeCot.style.cssText = 'background:var(--verde-badge-fondo);color:var(--verde-badge);font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);white-space:nowrap;';
         badgeCot.textContent = String.fromCharCode(10003) + ' Cotizada';
         const btnVerCotP = document.createElement('button');
         btnVerCotP.textContent = 'Ver cotización';
@@ -7086,7 +7160,11 @@ async function verOTsTecnico(nombre, grupo) {
       const d = pd.data();
       if (d.otNumero) pdfMapT[String(d.otNumero)] = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
     });
-  } catch(e) { console.warn('No se pudo cargar el indice de PDFs:', e); }
+  } catch(e) {
+    // SILENCIO-FIRMADO: sin el indice de PDFs las OTs se listan igual, solo que sin su boton
+    // "Ver PDF". La lista principal ya avisa si es ella la que falla; esto es un extra.
+    console.warn('No se pudo cargar el indice de PDFs:', e);
+  }
   console.log('Cotizaciones encontradas:', Object.keys(otsCotizadasT).length, 'por id,', Object.keys(otsCotizadasPorNumero).length, 'por numero');
 
   _cargado(lista);
@@ -7101,7 +7179,7 @@ async function verOTsTecnico(nombre, grupo) {
     const cadena = cadenaMap[ot.local] || null;
     const badge = ot.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
     const label = ot.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
-    const bg = ot.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
+    const bg = ot.tipo === 'correctivo' ? 'var(--naranja-badge-fondo)' : 'var(--verde-badge-fondo)';
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -7252,7 +7330,7 @@ async function verOTsTecnico(nombre, grupo) {
       const badgeCotT = document.createElement('div');
       badgeCotT.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
       const badgeV = document.createElement('span');
-      badgeV.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);';
+      badgeV.style.cssText = 'background:var(--verde-badge-fondo);color:var(--verde-badge);font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);';
       badgeV.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
       const btnVerCotT = document.createElement('button');
       btnVerCotT.textContent = 'Ver cotización';
@@ -7633,7 +7711,7 @@ async function cargarOTsSupervisor() {
   // durar hasta 12s (40 x 300ms) y el supervisor miraba un panel en blanco todo ese rato.
   _cargando(document.getElementById('sup-ots-hoy-lista'), 3);
   try {
-    if (!window._firebaseReady) { setTimeout(cargarOTsSupervisor, 800); return; }
+    if (_esperandoFirebase('ots-supervisor', cargarOTsSupervisor)) return;
     const db = window.firebase.firestore();
     const snap = await db.collection('ordenes').orderBy('creadoEn', 'desc').get();
     const lista = document.querySelector('#s-supervisor .content');
@@ -7710,7 +7788,7 @@ async function cargarOTsSupervisor() {
       const d = doc.data();
       const card = document.createElement('div');
       card.className = 'ot-card';
-      const bg = d.tipo === 'correctivo' ? '#FEF0E6' : '#E6F4EA';
+      const bg = d.tipo === 'correctivo' ? 'var(--naranja-badge-fondo)' : 'var(--verde-badge-fondo)';
       const badge = d.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
       const label = d.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
       const docId = doc.id;
@@ -7728,7 +7806,7 @@ async function cargarOTsSupervisor() {
           iconEl.removeChild(logoImg);
           iconEl.style.background = bg;
           iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-          iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
+          iconEl.style.color = d.tipo === 'correctivo' ? 'var(--naranja-btn)' : 'var(--verde-badge)';
           iconEl.style.fontWeight = '700';
           iconEl.style.fontSize = '14px';
         };
@@ -7736,7 +7814,7 @@ async function cargarOTsSupervisor() {
       } else {
         iconEl.style.background = bg;
         iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-        iconEl.style.color = d.tipo === 'correctivo' ? '#B45309' : '#1A7A3C';
+        iconEl.style.color = d.tipo === 'correctivo' ? 'var(--naranja-btn)' : 'var(--verde-badge)';
         iconEl.style.fontWeight = '700';
         iconEl.style.fontSize = '14px';
       }
@@ -7759,7 +7837,7 @@ async function cargarOTsSupervisor() {
         const badgeCot = document.createElement('div');
         badgeCot.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;';
         const badgeVerde = document.createElement('span');
-        badgeVerde.style.cssText = 'background:#E6F4EA;color:#1A7A3C;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);';
+        badgeVerde.style.cssText = 'background:var(--verde-badge-fondo);color:var(--verde-badge);font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);';
         badgeVerde.textContent = String.fromCharCode(10003) + ' Cotizacion realizada';
         const btnVerCot = document.createElement('button');
         btnVerCot.textContent = 'Ver cotización';
@@ -7823,7 +7901,7 @@ async function cargarPausadasSupervisor() {
   const listaEl = document.getElementById('sup-pausadas-lista');
   const countEl = document.getElementById('sup-pausadas-count');
   if (!seccion || !listaEl) return;
-  if (!window._firebaseReady) { setTimeout(cargarPausadasSupervisor, 800); return; }
+  if (_esperandoFirebase('pausadas-supervisor', cargarPausadasSupervisor)) return;
   const db = window.firebase.firestore();
 
   // Mapa de cadenas para resolver logos (se carga una vez; cambia rara vez)
@@ -7839,7 +7917,12 @@ async function cargarPausadasSupervisor() {
           _cadenaMapSup[sn] = cdata;
         });
       });
-    } catch(e) {}
+    } catch(e) {
+      // SILENCIO-FIRMADO: _cadenaMapSup solo resuelve el LOGO de cada cadena. Sin el, las OTs
+      // pausadas se pintan igual, con la inicial en vez del logo. El onSnapshot de abajo si
+      // avisa si falla la lista de verdad. Este catch estaba vacio y sin explicacion.
+      console.error('Error cargando el mapa de cadenas (logos):', e);
+    }
   }
 
   // Cerrar suscripción previa antes de re-suscribir (evita listeners duplicados)
@@ -7869,7 +7952,7 @@ function _mostrarErrorPausadasSup(seccion, listaEl, countEl) {
   _anunciar('No se pudo cargar la lista de trabajos pausados. Hay un botón para reintentar.');
   seccion.style.display = 'block';
   if (countEl) countEl.style.display = 'none';
-  listaEl.innerHTML = '<div class="card grid-full" style="border:1.5px solid #FCD34D;background:#FEF9E7;">'
+  listaEl.innerHTML = '<div class="card grid-full" style="border:1.5px solid var(--ambar-borde);background:var(--ambar-fondo);">'
     + '<div style="font-size:14px;font-weight:600;color:var(--texto);margin-bottom:2px;">No se pudo cargar la lista en vivo</div>'
     + '<div style="font-size:12px;color:var(--texto2);margin-bottom:10px;">Revisa la conexion. La lista se actualiza sola al reconectar.</div>'
     + '<button class="btn btn-secondary btn-sm" style="width:auto;" onclick="cargarPausadasSupervisor()">Reintentar</button>'
@@ -7927,12 +8010,13 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   const esAdmin = estado.cargo === 'Administrador';
   const cad = cadenaMap[d.cadena] || cadenaMap[d.local] || null;
   const logoUrl = d.cadenaLogo || (cad && cad.logo) || '';
+  /* LITERAL-FIRMADO: color de dato. Acaba en el PDF y en el Excel, donde var() no viaja. */
   const logoColor = d.cadenaColor || (cad && cad.color) || '#B45309';
   const logoLetra = d.cadenaLetra || (cad && cad.letra) || (d.local ? d.local.charAt(0) : 'P');
 
   const card = document.createElement('div');
   card.className = 'ot-card sup-pausada-card';
-  card.style.cssText = 'background:linear-gradient(135deg,#FEF9E7 0%,#FEF3C7 100%);border:1.5px solid #FCD34D;align-items:flex-start;';
+  card.style.cssText = 'background:linear-gradient(135deg,var(--ambar-fondo) 0%,#FEF3C7 100%);border:1.5px solid var(--ambar-borde);align-items:flex-start;';
 
   // Logo
   const iconEl = document.createElement('div');
@@ -8626,6 +8710,7 @@ async function cargarFacturacion() {
       grupos[sup].total += d.total || 0;
       if (!d.factura) grupos[sup].pendientes++;
     });
+    /* LITERAL-FIRMADO: paleta de avatares. Color estable por tecnico. DESIGN.md manda conservarla. */
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
     Object.keys(grupos).sort().forEach(function(sup, i) {
       const g = grupos[sup];
@@ -8696,7 +8781,7 @@ function abrirFactSupervisor(grupo) {
     // Badge estado (visible siempre en el header)
     const estadoBadge = document.createElement('div');
     estadoBadge.style.cssText = 'display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:var(--radio-pill);background:' +
-      (yaFacturado ? '#E6F4EA' : '#FEF0E6') + ';color:' + (yaFacturado ? '#1A7A3C' : '#B45309') + ';';
+      (yaFacturado ? 'var(--verde-badge-fondo)' : 'var(--naranja-badge-fondo)') + ';color:' + (yaFacturado ? 'var(--verde-badge)' : 'var(--naranja-btn)') + ';';
     estadoBadge.textContent = yaFacturado ? 'Facturado' : 'Pendiente';
 
     // Flecha toggle
@@ -8761,8 +8846,8 @@ function abrirFactSupervisor(grupo) {
         };
         await db.collection('cotizaciones').doc(docId).update(vals);
         const ok = vals.factura !== '';
-        badge.style.background = ok ? '#E6F4EA' : '#FEF0E6';
-        badge.style.color = ok ? '#1A7A3C' : '#B45309';
+        badge.style.background = ok ? 'var(--verde-badge-fondo)' : 'var(--naranja-badge-fondo)';
+        badge.style.color = ok ? 'var(--verde-badge)' : 'var(--naranja-btn)';
         badge.textContent = ok ? 'Facturado' : 'Pendiente';
         cuerpoEl.style.display = 'none';
         chev.textContent = 'Editar >';
@@ -8782,6 +8867,9 @@ function descargarExcelSupervisor() {
   try {
     const anoActual = new Date().getFullYear();
 
+    // ── CSS-EXPORTADO: INICIO ────────────────────────────────────────────────────────────
+    // Este CSS viaja dentro de un .xls que abre Excel. El :root de la app no viaja con el:
+    // una custom property sin fallback invalidaria la declaracion entera. El literal manda.
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
     html += '<head><meta charset="UTF-8"><style>';
     html += 'body{font-family:Calibri,sans-serif;font-size:11pt;}';
@@ -8792,6 +8880,7 @@ function descargarExcelSupervisor() {
     html += '.cen{text-align:center;}';
     html += '.verde{color:#1A7A3C;font-weight:600;}';
     html += '</style></head><body><table>';
+    // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
 
     // Cabecera
     html += '<tr>';
@@ -8855,6 +8944,8 @@ async function cargarVentas() {
     }
     const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
     const MESES_FULL = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    /* LITERAL-FIRMADO: paleta de series del grafico. Coinciden con la marca a proposito, pero son
+       datos de Chart.js, no CSS: var() no resuelve dentro de su config. */
     const COLORES_SUP = ['#1B3A6B','#2D5AA0','#27A06B','#EF9F27','#E53E3E','#6B3A1B'];
 
     // Agrupar por supervisor y mes
@@ -8986,6 +9077,7 @@ function _renderCharts(canvasBar, canvasDona, MESES, supervisores, porSup, total
       datasets: [{
         label: 'Total mensual',
         data: totalesMes,
+        // LITERAL-FIRMADO: config de Chart.js, no CSS. var() no resuelve aqui.
         backgroundColor: '#2D5AA0',
         borderRadius: 6,
         borderSkipped: false
@@ -9006,6 +9098,7 @@ function _renderCharts(canvasBar, canvasDona, MESES, supervisores, porSup, total
           ticks: {
             callback: function(v) { return '$ ' + (v/1000000).toFixed(1) + 'M'; }
           },
+          // LITERAL-FIRMADO: config de Chart.js, no CSS. var() no resuelve aqui.
           grid: { color: '#EEF1F7' }
         },
         x: { grid: { display: false } }
@@ -9073,6 +9166,9 @@ async function descargarExcelVentas() {
     const anoStr = String(anoActual);
 
     // Generar HTML con estilos
+    // ── CSS-EXPORTADO: INICIO ────────────────────────────────────────────────────────────
+    // Este CSS viaja dentro de un .xls que abre Excel. El :root de la app no viaja con el:
+    // una custom property sin fallback invalidaria la declaracion entera. El literal manda.
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
     html += '<head><meta charset="UTF-8"><style>';
     html += 'body{font-family:Calibri,sans-serif;font-size:11pt;}';
@@ -9088,6 +9184,7 @@ async function descargarExcelVentas() {
     html += '.totanio{background:#1E8052;color:#FFFFFF;font-weight:bold;text-align:right;border:1px solid #17603D;padding:5px 8px;}';
     html += '.lbl{background:#2D5AA0;color:#FFFFFF;font-weight:bold;border:1px solid #8A9BBE;padding:5px 8px;}';
     html += '</style></head><body><table>';
+    // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
 
     // Cabecera
     html += '<tr>';
@@ -9302,6 +9399,30 @@ function _error(accion, e, queHacer) {
     ? 'Revisa la señal e inténtalo de nuevo.'
     : 'Inténtalo de nuevo.');
   toast('No se pudo ' + accion + '. ' + salida);
+}
+
+/* Cinco sitios reintentaban asi:  si Firebase no esta listo, setTimeout(cargarLoQueSea, 800).
+   (El patron no se transcribe literal a proposito: un grep no debe contar este comentario
+    como un sexto uso. Ya paso — la primera version de esta nota se conto a si misma.)
+   Sin limite y sin decir nada. Si Firebase nunca inicializa —arranque en frio sin senal, un
+   bloqueador, el CDN caido— el panel reintenta cada 800ms para siempre, en blanco. El tecnico
+   mira una pantalla vacia que por dentro esta muy ocupada.
+
+   Un reintento sin limite no es paciencia: es una espera que nadie declaro. Diez segundos y
+   se dice la verdad. El contador se guarda por clave para que dos pantallas no compartan cupo. */
+var _MAX_ESPERAS_FIREBASE = 12;          // 12 x 800ms ≈ 10s
+var _esperasFirebase = {};
+
+function _esperandoFirebase(clave, reintentar, ms) {
+  if (window._firebaseReady) { delete _esperasFirebase[clave]; return false; }
+  _esperasFirebase[clave] = (_esperasFirebase[clave] || 0) + 1;
+  if (_esperasFirebase[clave] > _MAX_ESPERAS_FIREBASE) {
+    delete _esperasFirebase[clave];
+    _error('conectar con el servidor', null, 'Revisa la señal y vuelve a entrar a esta pantalla.');
+    return true;
+  }
+  setTimeout(reintentar, ms || 800);
+  return true;
 }
 
 /* UNA LISTA VACIA POR FALTA DE RED SE VE IGUAL QUE UNA LISTA SIN DATOS.

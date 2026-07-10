@@ -12,7 +12,8 @@
  *
  * ALCANCE: solo index.html.
  *
- * LAS 12 REGLAS
+ * LAS 18 REGLAS  (el numero de esta linea llego a decir 12 teniendo 17: si una cabecera no
+ *  se puede verificar, envejece. Cuando anadas una regla, corrige este numero.)
  *  1. El viewport no puede desactivar el zoom (WCAG 2.1 SC 1.4.4, nivel AA).
  *     La app la usan tecnicos de tercera edad bajo sol directo. Ver DESIGN.md §1.
  *  2. Ningun control de formulario baja de 16px. Bajo 16px, iOS hace zoom al enfocar,
@@ -36,9 +37,10 @@
  *  9. _bloquear() y _tomar() tienen un guardia de tiempo propio. La regla 8 es una lista de
  *     sitios; esta es la red que atrapa el sitio que nadie visito. Pase lo que pase, el
  *     boton vuelve.
- * 10. Toda funcion que lee Firestore y pinta una lista distingue "vacio" de "fallo".
- *     Una lista vacia por falta de red se ve IDENTICA a una lista sin datos, y el admin
- *     concluye que no tiene tecnicos. Se mira el catch de nivel superior, no los anidados.
+ * 10. Quien lee Firestore y se traga el error, FIRMA el silencio. Una lista vacia por falta de
+ *     red se ve IDENTICA a una lista sin datos, y el admin concluye que no tiene tecnicos.
+ *     La regla exigia ademas "pintar una lista" (innerHTML|appendChild) y esa exclusion
+ *     escondia nueve funciones. Ahora: avisar, relanzar, o escribir `SILENCIO-FIRMADO: razon`.
  * 11. La duracion del toast se calcula con el largo del mensaje, el toast se puede cerrar,
  *     y no se posa encima de una barra de estado tappable.
  *     2500ms fijos para mensajes de 6 a 73 caracteres: 43 de 117 no se alcanzaban a leer.
@@ -63,6 +65,20 @@
  * 17. Lo que se escribe en el DOM tambien se anuncia. #toast era la UNICA region aria-live de
  *     la app: un administrador con lector de pantalla tocaba "Personal", fallaba la red, y no
  *     oia nada. Hacer el error visible no basta; hay que hacerlo perceptible.
+ *
+ * ── Reglas nacidas de la critica del 2026-07-09 (tarde) ──
+ * 18. Esperar a Firebase tiene un final. Cinco pantallas reintentaban cada 800ms sin tope y sin
+ *     decir nada: si Firebase no inicializa nunca, el panel queda en blanco para siempre.
+ *     Todas pasan ahora por _esperandoFirebase(), que cuenta y luego dice la verdad.
+ *
+ * DOCTRINA DE LAS EXCLUSIONES (2026-07-09). Este archivo tenia dos, y las dos escondian bugs
+ * reales, y las dos venian con un comentario largo justificandolas. La regla 10 exigia pintar
+ * una lista; el `.some()` de sus catches dejaba pasar a la funcion que avisa una vez y se calla
+ * tres — que es exactamente lo que hacia cargarOTsTecnicos mientras mentia con "Aun no hay OTs".
+ *
+ * Un comentario que defiende una exclusion no es evidencia de que la exclusion sea correcta.
+ * Es prosa. Cuando escribas una exclusion, pregunta cual es su UNIDAD (la linea? la funcion?
+ * el catch?) y corre la regla una vez SIN ella, para ver que estabas decidiendo no mirar.
  */
 const fs = require('fs');
 const path = require('path');
@@ -356,17 +372,40 @@ for (const nombre of ['_bloquear', '_tomar']) {
   }
 }
 
-// ─── 10. Un cargador que falla en silencio miente ───────────────────────────────
-// "Cargador" no es una lista de nombres: es una FORMA. Una funcion que lee Firestore en su
-// propio cuerpo (no dentro de un callback) y pinta una lista. Esa distincion estructural es
-// la que separa a cargarTecnicosAdmin de editarSucursal, que solo construye un modal cuyo
-// boton de guardar escribira mas tarde, dentro de su propio handler con su propio catch.
+// ─── 10. Quien lee Firestore y se calla, firma el silencio ──────────────────────
+// Esta regla nacio como "cargador mudo" y tenia una exclusion en su primera linea:
 //
-// Del mismo modo, se mira SOLO el catch del propio cuerpo. Un catch anidado en un callback
-// ("Error eliminando OT") no dice nada sobre el fallo de la CARGA: contarlo dejaba pasar a
-// cargarOTsSupervisor, uno de los tres culpables.
+//     if (!/innerHTML|appendChild/.test(cuerpo)) continue;   // <- exigia PINTAR una lista
 //
-// ALCANCE declarado: esto no prueba que el mensaje sea bueno, solo que existe.
+// Nueve funciones leen Firestore en su propio cuerpo y no le dicen nada al usuario. Las
+// NUEVE eran invisibles para esa exclusion, incluida cargarPausadasSupervisor — que empieza
+// por `cargar` y cuyo catch estaba literalmente vacio — porque delega el pintado en un
+// helper. Y verPDFById: el tecnico tocaba "Ver PDF" sin senal y no pasaba absolutamente nada.
+//
+// Leccion, DECIMA forma. La novena decia "el punto ciego esta en lo que el check EXCLUYE".
+// Esta regla se escribio el mismo dia que esa frase, y excluia por forma sintactica.
+// Peor: la exclusion tenia tres parrafos de comentario justificandola. Un comentario que
+// defiende una exclusion no es evidencia de que la exclusion sea correcta. Es solo prosa.
+//
+// AHORA la regla no excluye: clasifica. Quien lee Firestore en su propio cuerpo y ATRAPA el
+// error tiene tres salidas legitimas, y ninguna es callarse por descuido:
+//
+//   1. AVISAR      — _error(), toast(), _listaConError()...
+//   2. RELANZAR    — `throw`: el error sube y lo maneja quien llame (asi trabaja
+//                    _fusionarDuplicadosCadenas, que no atrapa nada y hace bien).
+//   3. FIRMAR      — un comentario `SILENCIO-FIRMADO: <razon>` DENTRO del catch.
+//
+// La firma va en el sitio del silencio, no en una lista dentro de este script. Una lista
+// aqui se desincronizaria del codigo; un comentario dentro del catch se borra con el catch.
+// Y obliga a escribir la consecuencia: "el supervisor no vera el PDF" es una frase que
+// cuesta teclear, y ese coste es el punto.
+//
+// Se mira SOLO el catch del propio cuerpo. Un catch anidado en un callback ("Error
+// eliminando OT") no dice nada sobre el fallo de la LECTURA: contarlo dejaba pasar a
+// cargarOTsSupervisor, uno de los tres culpables originales.
+//
+// ALCANCE declarado: esto no prueba que el mensaje sea bueno ni que la razon firmada sea
+// cierta. Prueba que alguien tuvo que escribirla.
 function cierreDe(s, abre) {
   let n = 0;
   for (let j = abre; j < s.length; j++) {
@@ -396,10 +435,19 @@ const LEE_FIRESTORE = /\.collection\([^)]*\)[\s\S]{0,300}?\.(get|onSnapshot)\(/g
 // Un helper nuevo ciega a la regla vieja que no lo conoce. Que se pusiera roja es la prueba
 // de que la regla sirve; si hubiera seguido verde, no habriamos sabido que dejo de mirar.
 const AVISA = /_listaConError\(|_error\(|toast\(|_avisar\(|innerHTML/;
+const RELANZA = /\bthrow\b/;
+// `\s*` saltaria el salto de linea y una firma VACIA quedaria validada por el `//` de la
+// linea siguiente. La firma tiene que tener texto EN SU PROPIA linea.
+// Y `\S` tampoco basta: en  /* SILENCIO-FIRMADO: */  el `*/` valida la firma vacia.
+const FIRMA = /SILENCIO-FIRMADO:[ 	]*[\wÀ-ÿ]/;
+
+// `codigo` sale de sinComentarios(), que conserva la LONGITUD: cada comentario se sustituye
+// por espacios. Por eso un indice de `codigo` vale igual en `html`, y podemos buscar la firma
+// (que es un comentario, y por tanto invisible en `codigo`) en el mismo tramo del texto crudo.
 const mudos = [];
+const pintaSinRed = [];
 for (const f of fns) {
   const cuerpo = cuerpoLimpio(f);
-  if (!/innerHTML|appendChild/.test(cuerpo)) continue;
   const abreCuerpo = cuerpo.indexOf('{');
   if (abreCuerpo < 0) continue;
   const anidadas = rangosAnidados(cuerpo, abreCuerpo);
@@ -411,25 +459,62 @@ for (const f of fns) {
   }
   if (!leeAqui) continue;
 
-  // catches del propio cuerpo, no los de sus callbacks.
+  // El catch que importa es el que puede TRAGARSE LA LECTURA, no cualquier catch del cuerpo.
+  // La primera version culpaba a los siete `try { doc.addImage(...) } catch(e){}` de
+  // generarPDFCotizacionGuardada, que no tienen nada que ver con Firestore. Un check que
+  // acusa de mas se desactiva; hay que emparejar cada catch con SU try.
   const propios = [];
-  for (const m of cuerpo.matchAll(/catch\s*\([^)]*\)\s*\{/g)) {
+  for (const m of cuerpo.matchAll(/\btry\s*\{/g)) {
     if (dentroDe(anidadas, m.index)) continue;
-    const abre = m.index + m[0].length - 1;
+    const abreTry = m.index + m[0].length - 1;
+    const finTry = cierreDe(cuerpo, abreTry);
+    if (finTry < 0) continue;
+
+    let envuelve = false;
+    for (const r of cuerpo.slice(abreTry, finTry + 1).matchAll(LEE_FIRESTORE)) {
+      if (!dentroDe(anidadas, abreTry + r.index)) { envuelve = true; break; }
+    }
+    if (!envuelve) continue;
+
+    const cm = cuerpo.slice(finTry + 1).match(/^\s*catch\s*\([^)]*\)\s*\{/);
+    if (!cm) continue;                       // try/finally sin catch: el error sube. Correcto.
+    const abre = finTry + cm[0].length;      // indice de la '{' del catch
     const fin = cierreDe(cuerpo, abre);
-    if (fin > 0) propios.push(cuerpo.slice(abre, fin + 1));
+    if (fin > 0) propios.push({
+      limpio: cuerpo.slice(abre, fin + 1),
+      crudo: html.slice(f.ini + abre, f.ini + fin + 1),
+      ln: linea(f.ini + abre),
+    });
   }
+
+  // Sin catch: el error SUBE. Eso no es callarse. Pero si ademas pinta la pantalla, un rechazo
+  // sin manejar deja el "Cargando…" para siempre y nadie se entera: eso si es mentir.
   if (!propios.length) {
-    mudos.push({ fn: f.nombre, ln: linea(f.ini), por: 'lee Firestore sin ningun catch propio' });
-  } else if (!propios.some((c) => AVISA.test(c))) {
-    mudos.push({ fn: f.nombre, ln: linea(f.ini), por: 'su catch solo hace console.*' });
+    if (/innerHTML|appendChild/.test(cuerpo)) {
+      pintaSinRed.push({ fn: f.nombre, ln: linea(f.ini) });
+    }
+    continue;
   }
+
+  propios.forEach((c) => {
+    if (AVISA.test(c.limpio) || RELANZA.test(c.limpio)) return;
+    if (FIRMA.test(c.crudo)) return;
+    mudos.push({ fn: f.nombre, ln: c.ln, por: 'el catch se traga el error' });
+  });
 }
 if (mudos.length) {
   fallos.push({
-    regla: 'cargador-mudo',
-    msg: mudos.length + ' cargador(es) que no distinguen "vacio" de "fallo". Una lista vacia por falta de red miente.',
+    regla: 'silencio-sin-firma',
+    msg: mudos.length + ' catch(es) que leen Firestore, se tragan el error y no firman por que.',
     items: mudos.map((m) => 'index.html:' + String(m.ln).padEnd(6) + m.fn.padEnd(30) + m.por),
+    ayuda: 'Avisa (_error), relanza (throw), o escribe dentro del catch:  // SILENCIO-FIRMADO: <consecuencia>',
+  });
+}
+if (pintaSinRed.length) {
+  fallos.push({
+    regla: 'cargador-sin-catch',
+    msg: pintaSinRed.length + ' cargador(es) que pintan la pantalla y leen Firestore sin catch. Un rechazo deja "Cargando…" para siempre.',
+    items: pintaSinRed.map((m) => 'index.html:' + String(m.ln).padEnd(6) + m.fn),
   });
 }
 
@@ -637,6 +722,38 @@ if (errosFeos.length) {
   }
   if (problemas.length) {
     fallos.push({ regla: 'errores-no-anunciados', msg: 'El error es visible pero no perceptible.', items: problemas });
+  }
+}
+
+// ─── 18. Esperar a Firebase tiene un final ──────────────────────────────────────
+// Cinco pantallas reintentaban asi: si Firebase no esta listo, volver a intentarlo en 800ms.
+// Sin limite y sin decir nada. Si Firebase nunca inicializa —arranque en frio sin senal, un
+// bloqueador de scripts, el CDN caido— el panel del admin reintenta cada 800ms para siempre,
+// en blanco. El tecnico mira una pantalla vacia que por dentro esta muy ocupada.
+//
+// Un reintento sin limite no es paciencia: es una espera que nadie declaro. Ahora todos pasan
+// por _esperandoFirebase(), que cuenta hasta _MAX_ESPERAS_FIREBASE y entonces dice la verdad.
+{
+  const helper = fns.find((f) => f.nombre === '_esperandoFirebase');
+  const problemas = [];
+  if (!helper) problemas.push('no existe _esperandoFirebase()');
+  else {
+    const cuerpo = cuerpoLimpio(helper);
+    if (!/_MAX_ESPERAS_FIREBASE/.test(cuerpo)) problemas.push('_esperandoFirebase() no tiene tope de intentos');
+    if (!/_error\(|toast\(/.test(cuerpo)) problemas.push('_esperandoFirebase() se rinde sin decir nada');
+  }
+  // Cualquier reintento crudo, fuera del helper. Se busca en `codigo` (sin comentarios): la
+  // nota que EXPLICA el patron viejo no puede contar como un uso. Ya paso una vez.
+  for (const m of codigo.matchAll(/_firebaseReady[^\n]*setTimeout/g)) {
+    if (helper && m.index > helper.ini && m.index < helper.fin) continue;
+    problemas.push('index.html:' + linea(m.index) + '  reintento sin tope: usa _esperandoFirebase(clave, fn)');
+  }
+  if (problemas.length) {
+    fallos.push({
+      regla: 'espera-sin-final',
+      msg: 'Un reintento sin limite deja al usuario mirando una pantalla en blanco para siempre.',
+      items: problemas,
+    });
   }
 }
 

@@ -109,10 +109,22 @@ const PARES = [
   { nombre: 'Boton WhatsApp',       texto: '#FFFFFF',  fondo: '#25D366',      tam: 'normal',  donde: '.btn-whatsapp',
     tolerado: 'verde corporativo de WhatsApp; impuesto por un tercero, no es nuestra decision' },
 
-  // --- Badges: texto de 11px sobre fondo tenido. Hexes literales, no tokens. ---
-  { nombre: 'Badge preventivo',     texto: '#1A7A3C',  fondo: '#E6F4EA',      tam: 'normal',  donde: '.badge-prev (11px/600)' },
-  { nombre: 'Badge correctivo',     texto: '#B45309',  fondo: '#FEF0E6',      tam: 'normal',  donde: '.badge-corr (11px/600)' },
-  { nombre: 'Badge conteo pausadas',texto: '#92400E',  fondo: '#FEF3C7',      tam: 'normal',  donde: '#sup-pausadas-count (11px/700)' },
+  // --- Badges: texto de 11px sobre fondo tenido. ---
+  // Los tres hexes estaban TECLEADOS AQUI, y este era el unico archivo del repo que sabia que
+  // #1A7A3C existia. Era el verde mas usado de la app (14 sitios), DESIGN.md declaraba dos
+  // verdes, y check-tokens.js no podia verlo porque solo compara contra los neutros. Una lista
+  // curada que acierta por su cuenta no es una verificacion: es un segundo source of truth que
+  // nadie sabe que existe. Ahora dos son tokens; el tercero sigue literal, y por eso se le nota.
+  { nombre: 'Badge preventivo',     texto: '--verde-badge', fondo: '--verde-badge-fondo', tam: 'normal', donde: '.badge-prev (11px/600)' },
+  // El badge NO puede usar --verde-btn: sobre --verde-badge-fondo da 4.34:1 y falla AA. El boton
+  // es verde sobre BLANCO; el badge es verde sobre VERDE PALIDO, y ese fondo se come contraste.
+  // Este par existe para que nadie "simplifique" los dos verdes en uno. Se tolera a proposito:
+  // es un CONTRAEJEMPLO, y el dia que pase seria porque alguien aclaro el fondo del badge.
+  { nombre: 'Badge con --verde-btn', texto: '--verde-btn', fondo: '--verde-badge-fondo', tam: 'normal',
+    donde: 'CONTRAEJEMPLO: por que --verde-badge tiene que ser mas oscuro que --verde-btn',
+    tolerado: 'debe fallar: demuestra que los dos verdes oscuros no son intercambiables' },
+  { nombre: 'Badge correctivo',     texto: '--naranja-btn', fondo: '--naranja-badge-fondo', tam: 'normal', donde: '.badge-corr (11px/600)' },
+  { nombre: 'Badge conteo pausadas',texto: '#92400E',  fondo: '#FEF3C7',      tam: 'normal',  donde: '#sup-pausadas-count (11px/700) — aun sin token' },
 
   // --- Texto sobre superficies claras (--fondo es el peor caso) ---
   { nombre: 'Texto primario',       texto: '--texto',  fondo: '--fondo',      tam: 'normal',  donde: 'body' },

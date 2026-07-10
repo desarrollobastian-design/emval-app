@@ -81,6 +81,23 @@ probar "toast que expone e.message"             check-a11y.js 1 "s|_error('gener
 probar "error que no dice que hacer"            check-a11y.js 1 "s|_error('reasignar la OT', e);|toast('Error al reasignar');|"
 probar "error en el DOM sin anunciar"           check-a11y.js 1 "s|  _anunciar('No se pudo cargar la lista. Hay un botón para reintentar.');||"
 probar "sin region #anuncios"                   check-a11y.js 1 's|<div id="anuncios" class="solo-lector"|<div id="anuncios-roto" class="solo-lector"|'
+# ── Mutantes de la critica del 2026-07-09 (tarde) ──
+# La regla 10 exigia que la funcion PINTARA una lista (innerHTML|appendChild). Nueve funciones
+# leian Firestore y se callaban, y las nueve eran invisibles. Estos mutantes prueban la regla
+# nueva: avisar, relanzar, o firmar el silencio.
+probar "silencio sin firma"                     check-a11y.js 1 "s|// SILENCIO-FIRMADO: corre en segundo plano al arrancar, sin que nadie lo haya pedido.|// corre en segundo plano.|"
+# Una firma sin razon no es una firma. El regex pedia \s*\S, y \s cruza el salto de linea:
+# el `//` de la linea siguiente la validaba. Ahora exige texto en su propia linea.
+probar "firma de silencio VACIA"                check-a11y.js 1 "s|SILENCIO-FIRMADO: corre en segundo plano al arrancar, sin que nadie lo haya pedido.|SILENCIO-FIRMADO:|"
+# El tecnico tocaba "Ver PDF" sin senal y no pasaba absolutamente nada.
+probar "verPDFById se vuelve a callar"          check-a11y.js 1 "s|_error('abrir el PDF', e, 'Revisa la señal e inténtalo de nuevo.');|console.error('Error:', e);|"
+# El bug que destapo quitar la exclusion: el catch INTERNO se tragaba el fallo de red y la
+# linea siguiente pintaba "Aun no hay OTs". El catch EXTERNO si avisaba, y el `.some()` de la
+# regla vieja daba por buena la funcion entera.
+probar "el cargador que miente con 'no hay OTs'" check-a11y.js 1 "s|_listaConError(document.getElementById('lista-tecnicos-ots'), cargarOTsTecnicos);|console.error(e);|"
+# Cinco pantallas reintentaban cada 800ms para siempre, en blanco.
+probar "reintento a Firebase sin tope"          check-a11y.js 1 "s|if (_esperandoFirebase('admin', cargarAdmin)) return;|if (!window._firebaseReady) { setTimeout(cargarAdmin, 800); return; }|"
+probar "_esperandoFirebase sin limite"          check-a11y.js 1 "s|if (_esperasFirebase\[clave\] > _MAX_ESPERAS_FIREBASE) {|if (false) {|"
 probar "CONTROL (sin mutar)"                    check-a11y.js 0 CONTROL
 
 echo ""
@@ -94,6 +111,9 @@ probar "gris sobre gris (4.09:1)"               check-contraste.js 1 "s|backgrou
 probar "borde de control invisible (1.4.11)"    check-contraste.js 1 's|--gris3: #7F899E;|--gris3: #C8D0E0;|'
 probar "el onblur restaura un borde invisible"  check-contraste.js 1 "s|this.style.borderColor='var(--gris3)'|this.style.borderColor='var(--gris2)'|"
 probar "par heredado padre>hijo (icono camara)" check-contraste.js 1 's|.foto-box svg { width: 28px; height: 28px; color: var(--gris3); }|.foto-box svg { width: 28px; height: 28px; color: var(--gris2); }|'
+# El badge NO puede usar --verde-btn: sobre --verde-badge-fondo da 4.34:1. El boton es verde
+# sobre BLANCO; el badge es verde sobre VERDE PALIDO, y ese fondo se come contraste.
+probar "el badge usa el verde del boton"        check-contraste.js 1 "s|.badge-prev { background: var(--verde-badge-fondo); color: var(--verde-badge); }|.badge-prev { background: var(--verde-badge-fondo); color: var(--verde-btn); }|"
 probar "CONTROL (sin mutar)"                    check-contraste.js 0 CONTROL
 
 echo ""
@@ -124,6 +144,15 @@ probar "gris casi identico a --gris2"           check-tokens.js 1 's|\.badge-pen
 # falsas y nadie las verificaba: 7 `transition: all` y tres loops.
 probar "transition: all reintroducida"          check-tokens.js 1 's|transition: width 0.3s, background-color 0.3s;|transition: all 0.3s;|'
 probar "animacion en loop sin razon escrita"    check-tokens.js 1 's|animation: pulse 2s infinite|animation: parpadeo 2s infinite|'
+# check-tokens prohibia el hex PARECIDO a un token y permitia el IDENTICO: `if (valoresToken
+# .has(hex)) continue;`. Habia 35. La regla que existe para probar que la abstraccion es real
+# era la que la permitia.
+probar "hex identico a un token, a mano"        check-tokens.js 1 "s|background: linear-gradient(135deg, var(--naranja) 0%|background: linear-gradient(135deg, #EF9F27 0%|"
+probar "el tercer verde vuelve a ser literal"   check-tokens.js 1 "s|.badge-prev { background: var(--verde-badge-fondo); color: var(--verde-badge); }|.badge-prev { background: #E6F4EA; color: #1A7A3C; }|"
+probar "firma de literal VACIA"                 check-tokens.js 1 "s|LITERAL-FIRMADO: el contexto 2D de un <canvas> no lee CSS. strokeStyle exige un color real.|LITERAL-FIRMADO:|"
+# La reja CSS-EXPORTADO se levanto alrededor del unico campo que ya se habia quemado (el correo).
+# El Excel y la ventana de impresion tambien salen del DOM, y no tenian zona. Ahora si.
+probar "var() dentro del Excel exportado"       check-tokens.js 1 "s|html += '.cen{text-align:center;}';|html += '.cen{text-align:center;border-radius:var(--radio-sm);}';|"
 probar "CONTROL (sin mutar)"                    check-tokens.js 0 CONTROL
 
 echo ""

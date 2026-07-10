@@ -324,7 +324,10 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🟡 Media | Guardas de doble toque en las 5 acciones que crean documentos | `/polish` |
 | ✅ Hecho | 🟡 Media | Toast que no se trunca (6 de 99 mensajes se cortaban) | `/polish` |
 | ✅ Hecho | 🟡 Media | `role="dialog"` + `aria-modal` + Escape + foco atrapado en los 3 modales propios | feature |
-| ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 15 tamaños en 335 declaraciones → 5 · **medida por `check-tokens.js`** | `/normalize` |
+| ⏳ Pendiente | 🟡 Media | **Estilos inline**: 251 de 315 `font-size` fuera de la hoja · 228 `.style.cssText` · **medido** | `/normalize` |
+| ⏳ Pendiente | 🟢 Baja | Escala tipográfica **en el `<style>`**: 27 de 56 fuera de escala (esto sí es diseño) | `/normalize` |
+| ⏳ Pendiente | 🟢 Baja | Par de badge del contador de pausadas (`#FEF3C7`/`#92400E`) sin token | `/normalize` |
+| ⏳ Pendiente | 🟠 Alta | `_obtenerCentroSucursal` devuelve `''`: la cotización sale **sin CECO**, sin avisar | decisión de Pedro |
 | ✅ Hecho | 🟡 Media | **`locales` era un cementerio**, no una feature a medio cablear. 7 funciones borradas | borrar |
 | ✅ Hecho | 🔴 Alta | **Contraste por escaneo, no por lista** · 3 fallos reales corregidos | `/normalize` |
 | ✅ Hecho | 🔴 Alta | El diálogo scrollea con el teclado abierto (`max-height` + overlay) | `/polish` |
@@ -522,16 +525,43 @@ Continuación de `d915a6b`. La app promete *"nunca te deja con dudas sobre qué 
 
 > **Lección:** `textContent` sobre un contenedor con hijos es destructivo. Es el primo del bug `[mic]` (meter SVG dentro de un `textContent`): las dos caras del mismo malentendido.
 
-### Dos verdes + contraste verificable (2026-07-09)
+### ~~Dos~~ **Tres** verdes + contraste verificable (2026-07-09 · corregido el 2026-07-10)
 
-**Decisión aprobada: `--verde` se divide en dos, por semántica.**
+**Decisión aprobada: `--verde` se divide por semántica.**
 
-| Token | Valor | Rol | Lleva texto encima |
-|-------|-------|-----|--------------------|
-| `--verde` | `#27A06B` | **Verde de ESTADO** — `foto-box.filled`, `step.done`, `success-hero`, íconos, bordes | No |
-| `--verde-btn` | `#1E8052` | **Verde de ACCIÓN** — fondo de botones con texto blanco | Sí |
+| Token | Valor | Rol | Sobre qué fondo vive |
+|-------|-------|-----|----------------------|
+| `--verde` | `#27A06B` | **Verde de ESTADO** — `foto-box.filled`, `step.done`, `success-hero`, íconos, bordes | relleno, sin texto encima |
+| `--verde-btn` | `#1E8052` | **Verde de ACCIÓN** — fondo de botón con texto blanco; verde como texto | blanco |
+| `--verde-badge` | `#1A7A3C` | **Verde de BADGE** — "Preventivo", "Enviado", "Vendida", "Facturado" | `--verde-badge-fondo` |
+| `--verde-badge-fondo` | `#E6F4EA` | fondo del badge verde | — |
 
 Blanco sobre `--verde` da **3.3:1** (falla AA). Sobre `--verde-btn`, **4.92:1** (pasa). El `#1E8052` no es un color nuevo: ya estaba en la paleta como trazo del ícono de preventivo.
+
+> **⚠ Esta sección decía "dos verdes" y había tres.** `#1A7A3C` era el verde **más usado de la app**
+> — 14 sitios, más que `--verde` (5) y `--verde-btn` (3) juntos — y no era un token. Ni este
+> documento ni `check-tokens.js` sabían que existía: la regla de grises solo compara contra los
+> siete tokens **neutros**, y un verde queda fuera de su alcance por construcción. El único archivo
+> del repo que lo conocía era la **lista curada** de `check-contraste.js`, con el hex tecleado a mano.
+>
+> Y no es redundante con `--verde-btn`. Se midió **antes** de crear el token:
+>
+> ```
+> #1A7A3C sobre --verde-badge-fondo  ->  4.75:1   PASA
+> #1E8052 sobre --verde-badge-fondo  ->  4.34:1   FALLA
+> ```
+>
+> El botón es verde sobre **blanco**; el badge es verde sobre **verde pálido**, y ese fondo se come
+> contraste. Por eso el badge tiene que ser más oscuro que el botón. **Quien eligió ese hex acertó
+> y no dejó escrito por qué.** Ahora está escrito, y `check-contraste.js` guarda el contraejemplo
+> (`Badge con --verde-btn`, tolerado, que *debe* seguir fallando) para que nadie los "simplifique".
+
+**El mismo par, en naranja y en ámbar.** `--naranja-badge-fondo` (`#FEF0E6`) con `--naranja-btn` de
+texto — **4.50:1, justo en el límite: no aclarar ese fondo ni un punto**. Y `--ambar-fondo` /
+`--ambar-borde` para `.lista-error`.
+
+**Sigue sin token** el par del contador de pausadas (`#FEF3C7` / `#92400E`). `check-tokens.js` ahora
+lo **reporta** en su sección "colores de marca sin token, usados 3+ veces", sin fallar.
 
 Migrados 9 sitios con texto blanco: `.btn-verde`, `.top-action-verde`, el botón "Enviar" del modal de cotización, "Elegir de galería", "Agregar sucursal", "PDF", "Generar cotización", y el toggle Sí/No de servicios (que tenía `#27A06B` hardcodeado ×2). **No se tocó** ningún uso de `--verde` como relleno de estado ni como color de ícono.
 
@@ -1791,6 +1821,134 @@ verdes, un diccionario de veinte palabras, una lista de 22 pares. Ésta estaba e
 >
 > **La pregunta que ningún `check-mutantes.sh` responde solo:** *¿dónde decidí no mirar, y por qué
 > creí que ahí no había nada?*
+
+---
+
+## Crítica del 2026-07-09 (tarde) — el verde que nadie había nombrado, y dos exclusiones
+
+Auditoría **medida**. Cinco hallazgos. **Cuatro estaban en los verificadores, no en la app** —
+y uno de ellos estaba escrito, con su hex, en el comentario que explicaba por qué no hacía falta
+mirarlo.
+
+### 🎨 1. El tercer verde
+
+Ver la sección *"Tres verdes"* más arriba. `#1A7A3C`, 14 usos, el más frecuente de la app,
+sin token, invisible para `check-tokens.js`, conocido solo por una lista curada.
+
+### 🔒 2. `check-tokens.js` prohibía el hex *parecido* a un token y permitía el *idéntico*
+
+```js
+if (valoresToken.has(hex)) continue;   // "ES un token"
+```
+
+Escribir `background: #1B3A6B` donde toca `var(--azul)` pasaba en silencio. Había **35** así,
+en el único archivo cuya cabecera afirma *"la abstracción es real"*. La regla que existe para
+probarlo era la que lo permitía.
+
+De esos 35, unos 12 eran hardcodes; los otros ~23 estaban en sitios donde **una custom property
+no resuelve**. Todos legítimos, todos por la misma razón, y ninguno declarado.
+
+### 🧱 3. "El token no viaja aquí" existía una vez y ocurría seis veces
+
+La zona `CSS-EXPORTADO` nació cuando un `sed` global de radios rompió el correo de cotizaciones
+sin que ningún check lo viera. **La reja se levantó alrededor del único campo que ya se había
+quemado.** Cuatro funciones construyen documentos que salen del DOM; solo una estaba dentro.
+
+| Contexto | Por qué el token no llega | Ahora |
+|---|---|---|
+| Correo (EmailJS) | el `:root` no viaja | zona `CSS-EXPORTADO` |
+| **Excel** ×2 | ídem | **zona declarada** |
+| **Ventana de impresión** (`document.write`) | ídem | **zona declarada** |
+| **Canvas 2D** (`ctx.strokeStyle`) | el contexto 2D no lee CSS | `LITERAL-FIRMADO` |
+| **Chart.js** (`grid.color`) | es config JS, no CSS | `LITERAL-FIRMADO` |
+| **Atributo SVG** (`stroke="…"`) | presentacional, no CSS | `LITERAL-FIRMADO` |
+| **`<meta theme-color>`** | no admite `var()` | `LITERAL-FIRMADO` |
+| **Valor de dato** (paleta de avatares) | no es estilo | `LITERAL-FIRMADO` |
+
+La excepción se **firma en el sitio**, no en una lista dentro del checker. Una lista allí
+envejece sin que nadie lo note — que es exactamente la clase de fallo que llevamos diez formas
+persiguiendo. Escribir la razón cuesta; **ese coste es el punto**.
+
+### 🐛 4. La regla 10 excluía por forma, y su exclusión escondía nueve funciones
+
+```js
+if (!/innerHTML|appendChild/.test(cuerpo)) continue;   // exigía PINTAR una lista
+```
+
+Nueve funciones leían Firestore en su propio cuerpo y no le decían nada al usuario. **Las nueve
+eran invisibles.** Y el `.some()` sobre sus `catch` daba por buena a la función que **avisa una
+vez y se calla tres**.
+
+Ahí estaba el bug de terreno. En `cargarOTsTecnicos`, el `catch` **interno** se tragaba el fallo
+de red y doce líneas después la pantalla pintaba:
+
+> *"Aún no hay OTs — Aparecerán aquí cuando un técnico cierre la primera."*
+
+El admin veía "no hay OTs" cuando lo que hubo fue un fallo de red. Es **exactamente** el bug para
+el que nació la regla 10. El `catch` externo sí avisaba, así que la función pasaba entera.
+
+También: **`verPDFById`** hacía `console.error` y nada más — el técnico tocaba "Ver PDF" sin señal
+y la pantalla se quedaba igual. Y **cinco pantallas** reintentaban `setTimeout(…, 800)` para
+siempre, en blanco, si Firebase no inicializaba nunca.
+
+Ahora quien lee Firestore y atrapa el error tiene tres salidas, y **callarse por descuido no es
+una**: `avisar` · `throw` · `// SILENCIO-FIRMADO: <consecuencia>`.
+
+La firma obliga a escribir la consecuencia. *"El supervisor no verá el PDF"* es una frase que
+cuesta teclear. Hay **9 silencios firmados** en la app; cada uno dice qué se pierde.
+
+### 📏 5. La deuda tipográfica estaba mal encuadrada, y por eso llevaba semanas sin moverse
+
+`check-tokens.js` informaba *"132 fuera de escala"*, mezclando dos deudas que no se pagan igual:
+
+| origen | decl | fuera | cómo se paga |
+|---|---|---|---|
+| `<style>` (reglas CSS) | 56 | 27 | colapsar a la escala: **es diseño** |
+| inline (markup + JS) | 251 | 98 | **extraer a clases**; renombrar no arregla nada |
+| exportado | 8 | 7 | no se toca |
+
+**El 80 % de los `font-size` no está en la hoja de estilos.** Migrar 251 `font-size:13px` a
+`var(--txt-body)` no crea un sistema de diseño: crea la misma deriva con nombres más largos. La
+deuda real son los **228 `.style.cssText`** — las 121 clases del `<style>` describen un sistema
+que el JS no usa. *Primer paso: una clase, no un token.*
+
+---
+
+### 🔍 La lección del día, DÉCIMA forma: la exclusión se documenta nombrando lo que esconde
+
+Las formas 1–8 estaban en lo que el check **incluía**: una lista de emojis, una lista de verdes,
+un diccionario de veinte palabras, veintidós pares curados. La novena, ayer, estaba en lo que
+**excluía**: `check-tildes.js` descartaba la línea entera al ver un `console.*`.
+
+Hoy los dos puntos ciegos volvieron a estar en exclusiones. Y esto es lo nuevo:
+
+**Las dos estaban documentadas. Con prosa. Nombrando lo que escondían.**
+
+`check-tokens.js`, justificando su umbral de distancia ≤ 6:
+
+> *"`#E6F4EA` (verde pálido) queda «cerca» de `--gris2` sin serlo"*
+
+`#E6F4EA` es el fondo del badge verde. Está ahí, escrito, en el archivo que existe para probar que
+la capa de tokens es real — **archivado como ruido que conviene ignorar**.
+
+`check-a11y.js` tenía tres párrafos explicando por qué un "cargador" debe pintar una lista. Eran
+tres párrafos correctos sobre una distinción real. Y detrás vivían nueve funciones mudas.
+
+> **Un comentario que defiende una exclusión no es evidencia de que la exclusión sea correcta.
+> Es prosa.** Escribir la justificación se *siente* como haber verificado, y no lo es. Es la misma
+> ilusión que "se ve bien", con mejor vocabulario.
+>
+> Los mutantes no ayudan aquí: prueban que la regla funciona **donde el check ya mira**.
+>
+> **Lo único que funcionó fue correr cada regla una vez SIN su exclusión, y leer lo que aparecía.**
+> Nueve funciones. Treinta y cinco hexes. Cinco reintentos sin final.
+
+Al escribir una exclusión, pregúntate **cuál es su unidad** — ¿la línea? ¿la función? ¿el `catch`?
+¿el color? — y luego bórrala una vez y mira. Lo que salga es lo que llevabas semanas sin ver.
+
+*(Y una nota humilde: el comentario que escribí hoy para explicar el reintento infinito citaba el
+patrón literal, y se contó a sí mismo como un sexto uso. La trampa que `check-tokens.js` y
+`check-a11y.js` ya documentaban. Tres horas después de escribir esta lección.)*
 
 ---
 
