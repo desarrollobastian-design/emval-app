@@ -49,7 +49,7 @@ probar() {   # nombre, script, exit_esperado, comando_sed ("CONTROL" = sin mutar
 echo ""
 echo "  ── check-a11y.js ──"
 probar "viewport con user-scalable=no"          check-a11y.js 1 's|content="width=device-width, initial-scale=1, viewport-fit=cover"|content="width=device-width, initial-scale=1, user-scalable=no"|'
-probar "un input a 13px"                        check-a11y.js 1 's|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px|'
+probar "un input a 13px"                        check-a11y.js 1 's|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:13px|'
 probar "reintroducir un confirm() nativo"       check-a11y.js 1 "s|if (!await _confirmar('El técnico dejará|if (!confirm('El tecnico dejara|"
 probar "quitar aria-modal de un modal"          check-a11y.js 1 's|role="dialog" aria-modal="true" aria-labelledby="modal-reasignar-titulo"|role="dialog" aria-labelledby="modal-reasignar-titulo"|'
 probar "toast con white-space: nowrap"          check-a11y.js 1 's|max-width: calc(100vw - 32px); white-space: normal|max-width: calc(100vw - 32px); white-space: nowrap|'
@@ -68,6 +68,12 @@ probar "cargador que falla en silencio"         check-a11y.js 1 "s|_listaConErro
 probar "toast con duracion constante"           check-a11y.js 1 's|t._ms = _toastDuracion(msg);|t._ms = 2500;|'
 probar "toast que no se puede cerrar"           check-a11y.js 1 "s|t.addEventListener('click', ocultar);||"
 probar "estado vacio escrito a mano"            check-a11y.js 1 "s|lista.innerHTML = _vacio('Aún no hay cadenas', 'Agrega la primera con el botón + Agregar cadena.');|lista.innerHTML = '<p>No hay cadenas</p>';|"
+
+# ── Mutantes de la critica del 2026-07-09 (manana) ──
+probar "toast encima de la barra de pendientes" check-a11y.js 1 's|t.style.bottom = _toastAbajo();|t.style.bottom = "24px";|'
+probar "dos primarios en la misma pantalla"     check-a11y.js 1 's|<button class="btn btn-secondary btn-sm" onclick="confirmarFirma()"|<button class="btn btn-verde btn-sm" onclick="confirmarFirma()"|'
+probar "cargador sin estado de carga"           check-a11y.js 1 's|^  _cargando(lista, 3);          // el skeleton va ANTES del await, o no se ve nunca$||'
+probar "_cargando sin su _cargado"              check-a11y.js 1 's|^    _cargado(lista);$||'
 probar "CONTROL (sin mutar)"                    check-a11y.js 0 CONTROL
 
 echo ""
@@ -75,6 +81,12 @@ echo "  ── check-contraste.js (parte 2: escaneo, no lista) ──"
 probar "verde de ESTADO con texto blanco"       check-contraste.js 1 "s|background:var(--verde-btn);color:white;' : 'background:var(--gris2)|background:var(--verde);color:white;' : 'background:var(--gris2)|"
 probar "un rojo que no es --rojo, con blanco"   check-contraste.js 1 "s|background:var(--rojo);color:white;|background:#E74C3C;color:white;|"
 probar "gris sobre gris (4.09:1)"               check-contraste.js 1 "s|background:var(--gris2);color:var(--texto2);';\$|background:#E8ECF5;color:#6B7280;';|"
+
+# Parte 3 (herencia por selector) y parte 4 (SC 1.4.11). Ambas nacieron de que la cabecera
+# afirmaba "un escaner no los puede emparejar" — y era falso.
+probar "borde de control invisible (1.4.11)"    check-contraste.js 1 's|--gris3: #7F899E;|--gris3: #C8D0E0;|'
+probar "el onblur restaura un borde invisible"  check-contraste.js 1 "s|this.style.borderColor='var(--gris3)'|this.style.borderColor='var(--gris2)'|"
+probar "par heredado padre>hijo (icono camara)" check-contraste.js 1 's|.foto-box svg { width: 28px; height: 28px; color: var(--gris3); }|.foto-box svg { width: 28px; height: 28px; color: var(--gris2); }|'
 probar "CONTROL (sin mutar)"                    check-contraste.js 0 CONTROL
 
 echo ""

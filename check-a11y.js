@@ -39,9 +39,19 @@
  * 10. Toda funcion que lee Firestore y pinta una lista distingue "vacio" de "fallo".
  *     Una lista vacia por falta de red se ve IDENTICA a una lista sin datos, y el admin
  *     concluye que no tiene tecnicos. Se mira el catch de nivel superior, no los anidados.
- * 11. La duracion del toast se calcula con el largo del mensaje, y el toast se puede cerrar.
+ * 11. La duracion del toast se calcula con el largo del mensaje, el toast se puede cerrar,
+ *     y no se posa encima de una barra de estado tappable.
  *     2500ms fijos para mensajes de 6 a 73 caracteres: 43 de 117 no se alcanzaban a leer.
  * 12. Todo estado vacio pasa por _vacio(). Habia cinco maneras de decir "no hay OTs".
+ *
+ * ── Reglas nacidas de la critica del 2026-07-09 (manana) ──
+ * 13. Maximo UN boton de peso primario visible a la vez por pantalla (DESIGN.md §4). La
+ *     pantalla que cierra la OT tenia dos verdes identicos: "Confirmar firma" (un paso) y
+ *     "Cerrar y generar OT" (irreversible). Los paneles de pestana son excluyentes entre si;
+ *     los modales viven en su propio contexto.
+ * 14. Todo cargador muestra que esta trabajando. Nueve de quince pintaban un panel en blanco:
+ *     Pedro no sabia si cargaba, si estaba vacio, o si la app se habia colgado. Y todo
+ *     _cargando() tiene su _cargado(): un aria-busy pegado miente para siempre.
  */
 const fs = require('fs');
 const path = require('path');
@@ -421,6 +431,9 @@ if (mudos.length) {
     const problemas = [];
     if (!/_toastDuracion\(/.test(cuerpo)) problemas.push('la duracion no depende del largo del mensaje');
     if (!/addEventListener\(\s*['"]click['"]/.test(codigo)) problemas.push('no se puede cerrar tocandolo (WCAG 2.2.1)');
+    // Al hacer la duracion proporcional (hasta 8,3s) se triplico el tiempo que el toast pasa
+    // encima de #pending-bar, que es tappable y esta por debajo en el z-index.
+    if (!/_toastAbajo\(/.test(cuerpo)) problemas.push('se posa encima de las barras de estado tappables');
     if (problemas.length) {
       fallos.push({ regla: 'toast-tiempo', ln: linea(f.ini), msg: problemas.join(' · '), });
     }
@@ -447,6 +460,100 @@ if (vaciosSueltos.length) {
   });
 }
 
+// ─── 13. Un solo boton de peso primario por pantalla ────────────────────────────
+// DESIGN.md §4: "maximo un boton primario por pantalla. Todo lo demas secundario, ghost o
+// text-link." Nunca lo verifico nadie. Peso primario = relleno solido saturado + texto blanco.
+//
+// Dos distinciones que la regla NECESITA para no acusar a quien no debe:
+//  · los paneles de pestana (#panel-*) son mutuamente excluyentes: adminTab() muestra uno.
+//  · los modales y overlays viven en su propio contexto visual.
+// Sin ellas, `s-admin` (un primario por pestana) y `s-cotizacion` (un verde dentro de un
+// modal) saldrian marcados, y no lo estan.
+const PESO_PRIMARIO = /class="[^"]*\b(btn-primary|btn-verde|btn-peligro|btn-whatsapp)\b/;
+function cierraDiv(s, i) {
+  let d = 0;
+  const re = /<div\b|<\/div>/g;
+  re.lastIndex = i;
+  let m;
+  while ((m = re.exec(s))) {
+    if (m[0] === '</div>') { d--; if (d === 0) return m.index; }
+    else d++;
+  }
+  return s.length;
+}
+const jerarquia = [];
+for (const p of html.matchAll(/<div class="screen"[^>]*id="([^"]+)"/g)) {
+  const trozo = html.slice(p.index, cierraDiv(html, p.index));
+  const excluir = [];
+  for (const m of trozo.matchAll(/<div[^>]*(id="modal-[^"]*"|class="[^"]*(overlay|dlg)[^"]*")/g)) {
+    excluir.push([m.index, cierraDiv(trozo, m.index)]);
+  }
+  const paneles = [];
+  for (const m of trozo.matchAll(/<div[^>]*id="(panel-[^"]+)"/g)) {
+    paneles.push({ id: m[1], ini: m.index, fin: cierraDiv(trozo, m.index) });
+  }
+  const grupos = { raiz: [] };
+  paneles.forEach((x) => (grupos[x.id] = []));
+  for (const m of trozo.matchAll(/<button[^>]*>/g)) {
+    if (!PESO_PRIMARIO.test(m[0])) continue;
+    if (excluir.some(([a, b]) => m.index > a && m.index < b)) continue;
+    const pan = paneles.find((x) => m.index > x.ini && m.index < x.fin);
+    const et = ((trozo.slice(m.index).match(/<button[^>]*>([^<]*)/) || [])[1] || '').trim().slice(0, 26);
+    grupos[pan ? pan.id : 'raiz'].push(et);
+  }
+  // visibles a la vez = los de la raiz + los del panel mas cargado
+  const peor = Object.entries(grupos).filter(([k]) => k !== 'raiz').sort((a, b) => b[1].length - a[1].length)[0];
+  const total = grupos.raiz.length + (peor ? peor[1].length : 0);
+  if (total > 1) {
+    const cuales = grupos.raiz.concat(peor ? peor[1] : []);
+    jerarquia.push({ id: p[1], total, cuales: cuales.join('  |  ') });
+  }
+}
+if (jerarquia.length) {
+  fallos.push({
+    regla: 'jerarquia-botones',
+    msg: jerarquia.length + ' pantalla(s) con mas de un boton de peso primario visible a la vez (DESIGN.md §4).',
+    items: jerarquia.map((j) => j.id.padEnd(16) + j.total + ' -> ' + j.cuales),
+  });
+}
+
+// ─── 14. Un cargador dice que esta trabajando ───────────────────────────────────
+// Una lista tiene TRES estados. `_vacio()` y `_listaConError()` cubrian dos. El tercero,
+// "estoy trabajando", faltaba en nueve de quince cargadores: un panel en blanco no dice si
+// carga, si esta vacio, o si la app se colgo.
+//
+// EXENTOS, cada uno con su razon. No es una lista de conveniencia: son los tres casos donde
+// un skeleton seria peor que no ponerlo.
+const SIN_SKELETON = {
+  cargarUsuariosApp: 'cache-first: pinta la lista real de inmediato y el markup ya trae un skeleton estatico; un _cargando() parpadearia sobre datos ya visibles',
+  _renderPausadasEnCadena: 'pinta desde localStorage, es instantaneo; su lectura de Firestore solo trae los logos',
+  descargarExcelVentas: 'exporta un archivo, no pinta una lista en pantalla',
+  abrirCotizacion: 'rellena un formulario, no una lista',
+};
+const sinCarga = [];
+for (const f of fns) {
+  const cuerpo = cuerpoLimpio(f);
+  if (!/innerHTML|appendChild/.test(cuerpo)) continue;
+  const abreCuerpo = cuerpo.indexOf('{');
+  if (abreCuerpo < 0) continue;
+  const anidadas = rangosAnidados(cuerpo, abreCuerpo);
+  let leeAqui = false;
+  for (const m of cuerpo.matchAll(new RegExp(LEE_FIRESTORE.source, 'g'))) {
+    if (!dentroDe(anidadas, m.index)) { leeAqui = true; break; }
+  }
+  if (!leeAqui) continue;
+  if (SIN_SKELETON[f.nombre]) continue;
+  if (!/_cargando\(/.test(cuerpo)) sinCarga.push({ fn: f.nombre, ln: linea(f.ini), por: 'no muestra estado de carga' });
+  else if (!/_cargado\(/.test(cuerpo)) sinCarga.push({ fn: f.nombre, ln: linea(f.ini), por: '_cargando() sin su _cargado(): el aria-busy se queda pegado' });
+}
+if (sinCarga.length) {
+  fallos.push({
+    regla: 'sin-estado-de-carga',
+    msg: sinCarga.length + ' cargador(es) que no dicen que estan trabajando. Un panel en blanco no es un estado.',
+    items: sinCarga.map((s) => 'index.html:' + String(s.ln).padEnd(6) + s.fn.padEnd(30) + s.por),
+  });
+}
+
 // ─── Reporte ────────────────────────────────────────────────────────────────────
 console.log('\n  Accesibilidad verificable — EMVAL\n');
 
@@ -454,7 +561,8 @@ if (!fallos.length) {
   console.log('  Viewport permite zoom · controles >= 16px · 0 dialogos nativos');
   console.log('  modales con role/aria-modal/Escape · toast que no se trunca · acciones sin doble envio');
   console.log('  awaits con timeout · guardas con guardia · cargadores que avisan');
-  console.log('  toast proporcional y descartable · una sola voz para los estados vacios\n');
+  console.log('  toast proporcional, descartable y que no tapa las barras · una sola voz en los vacios');
+  console.log('  un solo boton primario por pantalla · todo cargador dice que trabaja\n');
   process.exit(0);
 }
 

@@ -39,7 +39,7 @@
        decision de marca discutible. Un token que nadie usa es deuda, no abstraccion. */
     --gris1: #F8F9FC;
     --gris2: #EEF1F7;
-    --gris3: #C8D0E0;
+    --gris3: #7F899E;
     --texto: #1A2035;
     --texto2: #5A6478;
     /* Oscurecido de #9AA3B2 (2.35:1 sobre el fondo de la app: ilegible bajo sol directo).
@@ -94,7 +94,10 @@
   /* Admin: contenedor ancho, pero controles/formularios contenidos (los forms anchos son incomodos) */
   #s-admin #form-tecnico, #s-admin #form-cadena,
   #s-admin #personal-buscar, #s-admin #cadenas-buscar { max-width: 480px; }
-  #s-admin #panel-personal > .btn-primary, #s-admin #panel-cadenas > .btn-primary { width: auto; }
+  /* Hijos directos: los botones "+ Agregar". Los de "Guardar" viven dentro del formulario.
+     El selector apuntaba a .btn-primary; los "+ Agregar" pasaron a secundarios (§4: un solo
+     boton de peso primario por pantalla) y el selector se habria quedado sin sujeto. */
+  #s-admin #panel-personal > .btn, #s-admin #panel-cadenas > .btn { width: auto; }
   /* Accion compacta de topbar (reemplaza botones inline hechos a mano) */
   .top-action { background: rgba(255,255,255,0.15); border: none; color: #fff; border-radius: var(--radio-sm); padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; }
   .top-action-verde { background: var(--verde-btn); }
@@ -110,7 +113,7 @@
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field label { font-size: 12px; font-weight: 600; color: var(--texto2); text-transform: uppercase; letter-spacing: 0.5px; }
   .field input, .field select, .field textarea {
-    background: white; border: 1.5px solid var(--gris2); border-radius: var(--radio-sm);
+    background: white; border: 1.5px solid var(--gris3); border-radius: var(--radio-sm);
     padding: 11px 13px; font-size: 16px; color: var(--texto); font-family: 'DM Sans', sans-serif;
     width: 100%; transition: border-color 0.2s;
   }
@@ -167,7 +170,7 @@
   
   /* TYPE CARDS */
   .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .tipo-card { background: white; border: 2px solid var(--gris2); border-radius: var(--radio); padding: 18px 12px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .tipo-card { background: white; border: 2px solid var(--gris3); border-radius: var(--radio); padding: 18px 12px; text-align: center; cursor: pointer; transition: all 0.2s; }
   .tipo-card.selected { border-color: var(--azul); background: var(--gris2); }
   .tipo-card .icon { font-size: 28px; margin-bottom: 8px; }
   .tipo-card .label { font-size: 14px; font-weight: 600; color: var(--texto); }
@@ -183,7 +186,7 @@
   /* PAUSED ORDERS CARD - Bento Grid Style */
   .paused-order-card {
     background: linear-gradient(135deg, #FEF3C7 0%, #FEF08A 100%);
-    border: 2px solid #FCD34D;
+    border: 2px solid var(--naranja-btn);
     border-radius: var(--radio-lg);
     padding: 18px;
     cursor: pointer;
@@ -384,8 +387,11 @@
   .success-hero { background: linear-gradient(160deg, var(--verde-btn) 0%, #17603D 100%); padding: 40px 24px; text-align: center; color: white; }
   .success-icon { width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 28px; }
   
-  /* SKELETON LOADING USUARIOS */
-  .usuario-skeleton { background: white; border-radius: var(--radio); padding: 14px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 10px; box-shadow: var(--sombra); }
+  /* SKELETON DE CARGA — el tercer estado de una lista, junto a _vacio() y _listaConError().
+     Existia solo para el login (.usuario-skeleton). Nueve cargadores no mostraban NADA
+     mientras cargaban: un panel en blanco no dice si esta cargando, si esta vacio, o si la
+     app se colgo. Renombrado a .sk-fila y servido por _cargando(contenedor, filas). */
+  .sk-fila { background: white; border-radius: var(--radio); padding: 14px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 10px; box-shadow: var(--sombra); }
   .sk-avatar { width: 44px; height: 44px; border-radius:var(--radio); background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; flex-shrink: 0; }
   .sk-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
   .sk-line { height: 10px; border-radius:var(--radio-sm); background: linear-gradient(90deg, var(--gris2) 25%, var(--gris1) 50%, var(--gris2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
@@ -410,7 +416,7 @@
   /* pre-line respeta los \n de los mensajes ("...\nEsta accion no se puede deshacer.") */
   .dlg-msg { font-size: 15px; color: var(--texto2); line-height: 1.5; white-space: pre-line; }
   .dlg-campo { margin-top: 14px; position: relative; }
-  .dlg-input { width: 100%; background: white; border: 1.5px solid var(--gris2); border-radius: var(--radio-sm); padding: 11px 44px 11px 13px; font-size: 16px; font-family: 'DM Sans', sans-serif; color: var(--texto); }
+  .dlg-input { width: 100%; background: white; border: 1.5px solid var(--gris3); border-radius: var(--radio-sm); padding: 11px 44px 11px 13px; font-size: 16px; font-family: 'DM Sans', sans-serif; color: var(--texto); }
   .dlg-input:focus { border-color: var(--azul); }
   .dlg-ojo { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--texto3); padding: 8px; display: flex; align-items: center; min-height: 40px; }
   .dlg-acciones { display: flex; gap: 8px; margin-top: 18px; }
@@ -505,9 +511,9 @@
       <label>¿Quién eres?</label>
     </div>
     <div id="lista-usuarios">
-      <div class="usuario-skeleton"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
-      <div class="usuario-skeleton"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
-      <div class="usuario-skeleton"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
+      <div class="sk-fila"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
+      <div class="sk-fila"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
+      <div class="sk-fila"><div class="sk-avatar"></div><div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>
     </div>
   </div>
 </div>
@@ -550,8 +556,8 @@
     <div id="admin-pass-section" style="display:none; width:100%; max-width:280px; margin-top:8px;">
       <div style="position:relative;">
         <input type="password" id="admin-pass-input" placeholder="Contraseña"
-          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris2);border-radius:var(--radio);font-size:16px;font-family:inherit;box-sizing:border-box;transition:border-color 0.2s;"
-          onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris2)'"
+          style="width:100%;padding:14px 46px 14px 14px;border:2px solid var(--gris3);border-radius:var(--radio);font-size:16px;font-family:inherit;box-sizing:border-box;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris3)'"
           onkeydown="if(event.key==='Enter') validarPassword()" />
         <button id="btn-pass-vis" type="button" aria-label="Mostrar contraseña" onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--texto3);line-height:1;padding:6px;display:flex;align-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
@@ -578,7 +584,7 @@
 
     <!-- TRABAJOS PAUSADOS (ACORDEÓN) -->
     <div id="seccion-pausadas" style="display:none;margin-bottom:20px;">
-      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border:2px solid #FCD34D;border-radius:var(--radio);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:14px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);">
+      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border: 2px solid var(--naranja-btn);border-radius:var(--radio);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:14px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);">
         <div style="display:flex;align-items:center;gap:8px;">
           <span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> Trabajos pausados</span>
           <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:var(--radio-sm);font-weight:600;" id="contador-pausadas">0</div>
@@ -719,13 +725,16 @@
         <canvas id="firma-canvas" width="600" height="200"></canvas>
         <div class="firma-actions">
           <button class="btn btn-secondary btn-sm" onclick="limpiarFirma()" style="flex:1;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Limpiar</button>
-          <button class="btn btn-verde btn-sm" onclick="confirmarFirma()" style="flex:1;">✓ Confirmar firma</button>
+          <!-- Secundario a proposito: es un paso DENTRO de la card de firma, no el destino de la
+               pantalla. El verde de accion queda para "Cerrar y generar OT", que es irreversible.
+               DESIGN.md §4: maximo un boton de peso primario por pantalla. -->
+          <button class="btn btn-secondary btn-sm" onclick="confirmarFirma()" style="flex:1;">✓ Confirmar firma</button>
         </div>
       </div>
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pídele al administrador que firme con el dedo</div>
       <div style="margin-top:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Email del administrador</label>
-        <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+        <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
         <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
         <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
       </div>
@@ -822,19 +831,19 @@
     <!-- FILTROS Y BÚSQUEDA OTs -->
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
+        <input type="text" id="ot-buscar-tecnico" placeholder="Buscar OT..." style="flex:1;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarOTsTecnico();">
         <button onclick="toggleFiltrosTecnico()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-ots-tecnico" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <select id="filter-local-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">TIPO</label>
-          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <select id="filter-tipo-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
             <option value="correctivo">Correctivo</option>
             <option value="preventivo">Preventivo</option>
@@ -842,7 +851,7 @@
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <input type="date" id="filter-fecha-tecnico" onchange="filtrarOTsTecnico()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
         </div>
         <button onclick="limpiarFiltrosTecnico()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
       </div>
@@ -862,25 +871,25 @@
     <!-- FILTROS Y BÚSQUEDA PREVENTIVOS -->
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarPreventivos();">
+        <input type="text" id="preventivo-buscar" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarPreventivos();">
         <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
       </div>
       <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">TÉCNICO</label>
-          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="">Todos</option>
           </select>
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
         </div>
         <button onclick="limpiarFiltrosPreventivos()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
       </div>
@@ -905,14 +914,14 @@
     <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+        <input type="text" id="cot-buscar" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
         <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
       </div>
       <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
         <div id="filtro-input-cot-general" style="display:none;">
           <label id="filtro-label-cot-general" style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;"></label>
-          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
+          <input type="text" id="filtro-valor-cot-general" placeholder="" style="width:100%;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 8px;font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
         </div>
       </div>
     </div>
@@ -1011,14 +1020,16 @@
 
     <!-- PANEL PERSONAL -->
     <div id="panel-personal">
-      <button class="btn btn-primary" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
-      <input type="text" id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
+      <!-- Secundario: es la puerta de entrada al formulario, no el compromiso. Cuando el
+           formulario esta abierto, el primario es "Guardar" y los dos se ven a la vez. -->
+      <button class="btn btn-secondary btn-sm" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
+      <input type="text" id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
         <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
         <div class="field"><label>Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
         <div class="field">
           <label>Rol</label>
-          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
+          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
             <option value="Tecnico en terreno">Técnico en terreno</option>
             <option value="Supervisor">Supervisor</option>
             <option value="Administrador">Administrador</option>
@@ -1035,8 +1046,8 @@
 
     <!-- PANEL CADENAS -->
     <div id="panel-cadenas" style="display:none;">
-      <button class="btn btn-primary btn-sm" onclick="mostrarFormCadena()" style="margin-bottom:12px;">+ Agregar cadena</button>
-      <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
+      <button class="btn btn-secondary btn-sm" onclick="mostrarFormCadena()" style="margin-bottom:12px;">+ Agregar cadena</button>
+      <input type="text" id="cadenas-buscar" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
       <div id="form-cadena" style="display:none;" class="card">
         <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label>Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
@@ -2244,7 +2255,7 @@ function cargarEjecucionScreen() {
     }
     let html = '<div class="field">';
     html += '<label>Nº Equipos Suscritos</label>';
-    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
+    html += '<input type="number" id="num-equipos" min="0" placeholder="Ej: 02" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" value="' + (estado.numEquipos || '') + '" oninput="estado.numEquipos=this.value;programarAutoguardadoOT()"/>';
     html += '</div>';
     html += '<div class="field"><label>Servicios a realizar</label>';
     html += '<div style="border:1.5px solid var(--gris2);border-radius:var(--radio-sm);overflow:hidden;">';
@@ -3087,13 +3098,15 @@ async function _fusionarDuplicadosCadenas(db) {
 }
 
 async function cargarCadenasAdmin() {
+  const lista = document.getElementById('lista-cadenas-admin');
+  if (!lista) return;
+  _cargando(lista, 3);          // el skeleton va ANTES del await, o no se ve nunca
   try {
     const db = window.firebase.firestore();
     // Fusionar duplicados silenciosamente antes de mostrar
     await _fusionarDuplicadosCadenas(db);
     const snap = await db.collection('cadenas').get();
-    const lista = document.getElementById('lista-cadenas-admin');
-    if (!lista) return;
+    _cargado(lista);
     lista.innerHTML = '';
     if (snap.empty) { lista.innerHTML = _vacio('Aún no hay cadenas', 'Agrega la primera con el botón + Agregar cadena.'); return; }
     const _ORDEN_ADMIN = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
@@ -3173,7 +3186,7 @@ async function cargarCadenasAdmin() {
       const searchSubInput = document.createElement('input');
       searchSubInput.type = 'text';
       searchSubInput.placeholder = 'Buscar sucursal...';
-      searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;font-family:inherit;';
+      searchSubInput.style.cssText = 'flex:1;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;font-family:inherit;';
 
       const btnFiltro = document.createElement('button');
       btnFiltro.innerHTML = _SVG_EMBUDO + ' Filtro';
@@ -3188,7 +3201,7 @@ async function cargarCadenasAdmin() {
       filtroInputLabelSub.style.cssText = 'font-size:11px;font-weight:600;display:block;margin-bottom:4px;';
       const filtroInputSub = document.createElement('input');
       filtroInputSub.type = 'text';
-      filtroInputSub.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;';
+      filtroInputSub.style.cssText = 'width:100%;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;';
       filtroInputDivSub.appendChild(filtroInputLabelSub);
       filtroInputDivSub.appendChild(filtroInputSub);
 
@@ -3203,7 +3216,7 @@ async function cargarCadenasAdmin() {
       filtroOptions.forEach(function(opt) {
         const btn = document.createElement('button');
         btn.textContent = opt.label;
-        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+        btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
         btn.onclick = function() {
           if (filtroActivo === opt.value) {
             filtroActivo = null;
@@ -3509,9 +3522,9 @@ function editarSucursal(docId, idx, s) {
     l.textContent = lbl;
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = val; inp.placeholder = ph;
-    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;';
+    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;';
     inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
-    inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
+    inp.onblur = function(){ this.style.borderColor='var(--gris3)'; };
     w.appendChild(l); w.appendChild(inp);
     return { wrap: w, inp: inp };
   }
@@ -3852,7 +3865,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   const searchInput = document.createElement('input');
   searchInput.type = 'text';
   searchInput.placeholder = 'Buscar en esta carpeta...';
-  searchInput.style.cssText = 'flex:1;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;font-family:inherit;';
+  searchInput.style.cssText = 'flex:1;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;font-family:inherit;';
 
   const btnFiltoCot = document.createElement('button');
   btnFiltoCot.innerHTML = _SVG_EMBUDO + ' Filtro';
@@ -3866,7 +3879,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   filtroInputLabel.style.cssText = 'font-size:11px;font-weight:600;display:block;margin-bottom:4px;';
   const filtroInput = document.createElement('input');
   filtroInput.type = 'text';
-  filtroInput.style.cssText = 'width:100%;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;';
+  filtroInput.style.cssText = 'width:100%;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 8px;font-size:12px;font-family:inherit;';
   filtroInputDiv.appendChild(filtroInputLabel);
   filtroInputDiv.appendChild(filtroInput);
 
@@ -3882,7 +3895,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
   filtroOptionsCot.forEach(function(opt) {
     const btn = document.createElement('button');
     btn.textContent = opt.label;
-    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
     btn.onclick = function() {
       if (filtroActivoCot === opt.value) {
         filtroActivoCot = null;
@@ -4097,6 +4110,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
 }
 
 async function cargarCarpetas() {
+  _cargando(document.getElementById('lista-carpetas'), 3);   // antes del await
   try {
     const db = window.firebase.firestore();
 
@@ -4142,6 +4156,7 @@ async function cargarCarpetas() {
       }
     });
     const lista = document.getElementById('lista-carpetas');
+    _cargado(lista);
     lista.innerHTML = '';
     const keys = Object.keys(carpetas);
     if (keys.length === 0 && itemsEnviados.length === 0) {
@@ -4327,7 +4342,7 @@ async function cargarCadenasApp(_intento) {
   // que puede mentir sin señal real). Luego se intenta refrescar desde Firestore.
   const hayCacheCad = _renderCadenasDesdeCache(lista);
   if (!hayCacheCad) {
-    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>';
+    _cargando(lista, 3);
   }
   // Esperar a que Firebase cargue para refrescar (tope ~12s); el cache ya se pinto.
   if (!window._firebaseReady) {
@@ -4357,6 +4372,7 @@ async function cargarCadenasApp(_intento) {
     }
     cadenas = _dedupCadenas(cadenas); // red de seguridad (defaults u otros caminos)
 
+    _cargado(lista);
     lista.innerHTML = ''; // Limpiar "Cargando…" antes de agregar cadenas
     const _ORDEN_CADENAS = ['Unimarc','S10','Alvi','M10','Entel','Papa Johns'];
     cadenas.sort(function(a, b) {
@@ -4852,10 +4868,13 @@ async function cargarAdmin() {
 }
 
 async function cargarTecnicosAdmin() {
+  const lista = document.getElementById('lista-tecnicos-admin');
+  if (!lista) return;
+  _cargando(lista, 3);          // el skeleton va ANTES del await, o no se ve nunca
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
-    const lista = document.getElementById('lista-tecnicos-admin');
+    _cargado(lista);
     lista.innerHTML = '';
     if (snap.empty) {
       lista.innerHTML = _vacio('Aún no hay personal', 'Agrega al primero con el botón + Agregar.');
@@ -6669,6 +6688,7 @@ async function generarPDFCotizacion() {
 
 // =========== OTs POR TECNICO ===========
 async function cargarOTsTecnicos() {
+  _cargando(document.getElementById('lista-tecnicos-ots'), 3);   // antes del await
   try {
     const tecnicos = {};
 
@@ -6696,6 +6716,7 @@ async function cargarOTsTecnicos() {
       } catch(e) { console.error('Error cargando Firebase:', e); }
     }
     const lista = document.getElementById('lista-tecnicos-ots');
+    _cargado(lista);
     lista.innerHTML = '';
     if (Object.keys(tecnicos).length === 0) {
       lista.innerHTML = _vacio('Aún no hay OTs', 'Aparecerán aquí cuando un técnico cierre la primera.');
@@ -6840,7 +6861,7 @@ async function cargarPreventivos() {
     if (!window._firebaseReady) { setTimeout(cargarPreventivos, 800); return; }
     const db = window.firebase.firestore();
     const lista = document.getElementById('lista-preventivos');
-    lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:30px;">Cargando…</p>';
+    _cargando(lista, 4);
 
     const [ordenesSnap, pdfSnap, cadenasSnap, cotSnap] = await Promise.all([
       db.collection('ordenes').orderBy('creadoEn', 'desc').get(),
@@ -6880,6 +6901,7 @@ async function cargarPreventivos() {
       .filter(function(d){ return d.data().tipo === 'preventivo'; })
       .map(function(d){ return { id: d.id, ...d.data() }; });
 
+    _cargado(lista);
     lista.innerHTML = '';
     if (prevOTs.length === 0) {
       lista.innerHTML = _vacio('Aún no hay OTs preventivas', 'Aparecerán aquí cuando un técnico cierre una OT preventiva.');
@@ -7011,7 +7033,7 @@ async function cargarPreventivos() {
 async function verOTsTecnico(nombre, grupo) {
   document.getElementById('detalle-tecnico-nombre').textContent = nombre;
   const lista = document.getElementById('lista-ots-tecnico-detalle');
-  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);">Cargando…</p>';
+  _cargando(lista, 4);
   go('s-ots-tecnico-detalle');
 
   // Estos dos await estaban FUERA de todo try. Si la red fallaba, la promesa se rechazaba,
@@ -7064,6 +7086,7 @@ async function verOTsTecnico(nombre, grupo) {
   } catch(e) { console.warn('No se pudo cargar el indice de PDFs:', e); }
   console.log('Cotizaciones encontradas:', Object.keys(otsCotizadasT).length, 'por id,', Object.keys(otsCotizadasPorNumero).length, 'por numero');
 
+  _cargado(lista);
   lista.innerHTML = '';
   const ots = grupo.ots;
   if (ots.length === 0) {
@@ -7360,7 +7383,7 @@ function agregarFilaEmailCot(valor) {
   inp.type = 'email';
   inp.placeholder = 'correo@ejemplo.cl';
   inp.value = valor || '';
-  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:14px;font-family:inherit;';
+  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:14px;font-family:inherit;';
   const del = document.createElement('button');
   del.type = 'button';
   del.textContent = '✕';
@@ -7604,12 +7627,19 @@ async function eliminarCotizacionesSeleccionadas() {
 // =========== TOAST ===========
 // =========== SUPERVISOR FIREBASE ===========
 async function cargarOTsSupervisor() {
+  // El skeleton va antes del await y antes del reintento: sin Firebase listo la espera puede
+  // durar hasta 12s (40 x 300ms) y el supervisor miraba un panel en blanco todo ese rato.
+  _cargando(document.getElementById('sup-ots-hoy-lista'), 3);
   try {
     if (!window._firebaseReady) { setTimeout(cargarOTsSupervisor, 800); return; }
     const db = window.firebase.firestore();
     const snap = await db.collection('ordenes').orderBy('creadoEn', 'desc').get();
     const lista = document.querySelector('#s-supervisor .content');
     const otsHoyCont = document.getElementById('sup-ots-hoy-lista') || lista;
+    _cargado(otsHoyCont);
+    // Solo se vacia el contenedor dedicado. Si el fallback fuera `.content`, un innerHTML=''
+    // borraria la pantalla entera del supervisor.
+    if (otsHoyCont !== lista) otsHoyCont.innerHTML = '';
     const titulo = lista.querySelector('[style*="font-weight: 600"]');
     // Limpiar OTs demo
     document.querySelectorAll('#s-supervisor .ot-card').forEach(c => c.remove());
@@ -7987,10 +8017,11 @@ let _reasignarOT = null;
 
 // Renderiza la lista de técnicos (excluye supervisor/admin) en el modal; onPick(nombre) al elegir
 async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
-  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:16px;">Cargando técnicos...</p>';
+  _cargando(lista, 3);
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    _cargado(lista);
     lista.innerHTML = '';
     const tecnicos = snap.docs
       .map(function(doc){ return doc.data(); })
@@ -8391,7 +8422,7 @@ function _inicializarFiltrosCotizacionesGeneral() {
   opciones.forEach(function(opt) {
     const btn = document.createElement('button');
     btn.textContent = opt.label;
-    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris2);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
+    btn.style.cssText = 'flex:1;background:white;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:6px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;';
     btn.onclick = function() {
       if (_filtroActivoCotGeneral === opt.value) {
         _filtroActivoCotGeneral = null;
@@ -8575,10 +8606,11 @@ async function descargarExcelCotizaciones() {
 async function cargarFacturacion() {
   const lista = document.getElementById('lista-supervisores-fact');
   if (!lista) return;
-  lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>';
+  _cargando(lista, 3);
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','desc').get();
+    _cargado(lista);
     lista.innerHTML = '';
     if (snap.empty) {
       lista.innerHTML = _vacio('Aún no hay cotizaciones', 'Aparecerán aquí cuando un supervisor genere la primera.');
@@ -8700,9 +8732,9 @@ function abrirFactSupervisor(grupo) {
       l.textContent = lbl;
       const inp = document.createElement('input');
       inp.type = 'text'; inp.value = val || ''; inp.placeholder = lbl;
-      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;';
+      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;';
       inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
-      inp.onblur = function(){ this.style.borderColor='var(--gris2)'; };
+      inp.onblur = function(){ this.style.borderColor='var(--gris3)'; };
       w.appendChild(l); w.appendChild(inp);
       return { wrap: w, inp: inp };
     }
@@ -8812,11 +8844,12 @@ function descargarExcelSupervisor() {
 
 async function cargarVentas() {
   const cont = document.getElementById('ventas-content');
-  cont.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>';
+  _cargando(cont, 3);
   try {
     const db = window.firebase.firestore();
     const snap = await db.collection('cotizaciones').orderBy('creadoEn','asc').get();
     if (snap.empty) {
+      _cargado(cont);
       cont.innerHTML = _vacio('Aún no hay cotizaciones', 'Aparecerán aquí cuando un supervisor genere la primera.');
       return;
     }
@@ -9138,6 +9171,26 @@ function _toastDuracion(msg) {
   return Math.min(TOAST_MAX_MS, Math.max(TOAST_MIN_MS, Math.ceil(ms)));
 }
 
+/* EL TOAST NO PUEDE TAPAR LAS BARRAS DE ESTADO.
+   Al hacer la duracion proporcional (hasta 8,3 s) se triplico el tiempo que el toast pasa
+   encima de #pending-bar (bottom:70px, z-index 8888) — que es TAPPABLE y dispara la
+   sincronizacion. El toast esta en z-index 9999, asi que se comia el toque.
+   Caso concreto: el tecnico cierra una OT sin senal, sale "OT guardada. Se subira sola…"
+   (dos lineas, 4,1 s) justo encima de "N OTs pendientes", que es lo que iba a tocar.
+
+   Se mide la geometria real en vez de fijar constantes: las barras cambian de altura con el
+   texto, y #correos-bar ya se apila sola a 116px cuando la de OTs esta visible. */
+function _toastAbajo() {
+  var alto = 0;
+  ['offline-bar', 'pending-bar', 'correos-bar'].forEach(function(id) {
+    var b = document.getElementById(id);
+    if (!b || !b.offsetHeight) return;                       // display:none -> offsetHeight 0
+    var abajo = parseInt(b.style.bottom || '70', 10) || 70;
+    alto = Math.max(alto, abajo + b.offsetHeight);
+  });
+  return (alto ? alto + 12 : 24) + 'px';
+}
+
 function _toastCablear(t) {
   if (t._cableado) return;
   t._cableado = true;
@@ -9157,6 +9210,7 @@ function _toastCablear(t) {
 function toast(msg) {
   const t = document.getElementById('toast');
   _toastCablear(t);
+  t.style.bottom = _toastAbajo();   // nunca encima de una barra de estado tappable
   // Mostrar ANTES de escribir: un aria-live en display:none esta fuera del arbol de
   // accesibilidad, asi que el lector de pantalla no ve el cambio de texto y no anuncia nada.
   t.style.display = 'block';
@@ -9184,6 +9238,27 @@ function _vacio(mensaje, ayuda) {
   return html + '</div>';
 }
 
+/* EL TERCER ESTADO DE UNA LISTA: "estoy trabajando".
+   Una lista tiene tres estados y hasta hoy solo dos tenian helper: _vacio() y
+   _listaConError(). Nueve de quince cargadores no mostraban NADA mientras cargaban — entre
+   ellos el panel "Personal" y la lista principal del supervisor. Pedro, en su telefono con
+   mala senal, miraba un panel en blanco sin saber si cargaba, si estaba vacio, o si la app
+   se habia colgado. El skeleton ya existia y era bueno: solo lo usaba el login.
+   `aria-busy` para que un lector de pantalla no anuncie una lista que todavia no existe. */
+function _cargando(contenedor, filas) {
+  if (!contenedor) return;
+  contenedor.setAttribute('aria-busy', 'true');
+  var html = '';
+  for (var i = 0; i < (filas || 3); i++) {
+    html += '<div class="sk-fila grid-full"><div class="sk-avatar"></div>'
+          + '<div class="sk-lines"><div class="sk-line sk-l1"></div><div class="sk-line sk-l2"></div></div></div>';
+  }
+  contenedor.innerHTML = html;
+}
+function _cargado(contenedor) {
+  if (contenedor) contenedor.removeAttribute('aria-busy');
+}
+
 /* UNA LISTA VACIA POR FALTA DE RED SE VE IGUAL QUE UNA LISTA SIN DATOS.
    Y entonces Pedro concluye que no tiene tecnicos. Esto ya se habia arreglado UNA vez, para
    `cargarPausadasSupervisor`, con _mostrarErrorPausadasSup. El arreglo visito una funcion:
@@ -9191,6 +9266,7 @@ function _vacio(mensaje, ayuda) {
    _renderPausadasEnCadena seguian mintiendo. Ahora es un helper y una regla en check-a11y. */
 function _listaConError(contenedor, alReintentar) {
   if (!contenedor) return;
+  _cargado(contenedor);   // un aria-busy pegado anunciaria "cargando" para siempre
   contenedor.innerHTML = '';
   var caja = document.createElement('div');
   caja.className = 'lista-error grid-full';

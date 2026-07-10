@@ -48,7 +48,12 @@ pregunta: *¿un técnico apurado, con mala luz, entiende esto en dos segundos?*
 - **Tinta Profunda** (`#1A2035`) — Texto primario. (No es negro puro — tintado hacia el azul de marca.)
 - **Gris Pizarra** (`#5A6478`) — Texto secundario, labels de campo.
 - **Gris Neblina** (`#9AA3B2`) — Texto terciario, metadatos, placeholders.
-- **Gris Borde** (`#C8D0E0`) — Bordes de inputs sin foco, dividers, dashed de foto-box.
+- **Gris Borde** (`#7F899E`, era `#C8D0E0`) — Bordes de inputs sin foco, dividers, dashed de foto-box,
+  puntos del PIN, dots del step-indicator. **Es el límite visual de los controles**, y WCAG 2.1
+  **SC 1.4.11 (Non-text Contrast, AA)** le exige **3:1** contra lo que lo rodea. `#C8D0E0` daba
+  **1,43:1**. Es el gris tintado hacia el azul de marca **más claro** que pasa 3:1 contra la peor
+  superficie (`--fondo`, 3,25:1); `#8A93A6` se queda en 2,85. **Vigilado por `check-contraste.js`
+  (parte 4).**
 
 ### Surfaces
 - **Fondo App** (`#F4F6FB`) — Fondo general (blanco tintado hacia azul).
@@ -148,7 +153,11 @@ usaba y el documento no los contemplaba; son numéricos tabulares, así que la r
 - **WhatsApp:** Verde WhatsApp (`#25D366`) + texto blanco (solo compartir OT).
 - **Press feedback:** `transform: scale(0.98)` en `:active` (ya en uso).
 - **Hover:** Solo bajo `@media (hover: hover)` — elevación sutil (`translateY(-2px)`) + `--sombra-hover`. **NUNCA glows saturados** (`rgba(...,0.5)`). Debe vivir en clases CSS, no en handlers `onmouseover` inline.
-- **Regla de jerarquía:** máximo **un** botón primario por pantalla. Todo lo demás secundario, ghost o text-link.
+- **Regla de jerarquía:** máximo **un** botón de peso primario **visible a la vez** por pantalla
+  (`btn-primary`, `btn-verde`, `btn-peligro`, `btn-whatsapp`). Todo lo demás secundario, ghost o
+  text-link. Los paneles de pestaña (`#panel-*`) son mutuamente excluyentes y los modales viven en
+  su propio contexto: no cuentan entre sí. **Vigilada por `check-a11y.js` (regla 13)** desde el
+  2026-07-09, cuando se descubrió que la pantalla que cierra la OT tenía **dos verdes idénticos**.
 
 ### Cards & Containers
 - **Corners:** 14px estándar (`--radio`), 18px para destacadas.
@@ -157,7 +166,9 @@ usaba y el documento no los contemplaba; son numéricos tabulares, así que la r
 - **No anidar cards dentro de cards.** Aplanar la jerarquía.
 
 ### Inputs & Forms
-- **Stroke:** borde 1.5px Gris Borde (`#C8D0E0`).
+- **Stroke:** borde 1.5px Gris Borde (`--gris3`, `#7F899E`). **El código usaba `--gris2`
+  (`#EEF1F7`, 1,05:1 contra la página): alguien aclaró el borde documentado y no lo anotó.
+  Corregido el 2026-07-09; vigilado por `check-contraste.js` (parte 4).**
 - **Background:** Blanco.
 - **Focus:** borde Azul Institucional, sin glow.
 - **Label:** 12px, uppercase, letter-spacing 0.5px, Gris Pizarra.
@@ -307,7 +318,12 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🟠 Alta | **5 cargadores mudos**: una lista vacía por falta de red mentía | bug |
 | ✅ Hecho | 🟡 Media | **Una sola voz para los 14 estados vacíos** (`_vacio`) · antes 5 formas de decir "no hay OTs" | `/polish` |
 | ✅ Hecho | 🟡 Media | **Icono de fuente sin su hoja** (`<i class="ti">`): no podía dibujarse jamás | bug |
-| ⏳ Pendiente | 🟢 Baja | Skeleton real de carga en stat-cards | `/polish` |
+| ✅ Hecho | 🔴 Alta | **SC 1.4.11**: ningún control tenía un límite visible (1,05–1,55:1) | `/normalize` |
+| ✅ Hecho | 🔴 Alta | **`check-contraste.js` no cubría 1.4.11** y su cabecera afirmaba algo falso | bug |
+| ✅ Hecho | 🟠 Alta | El toast tapaba `#pending-bar`, que es tappable (regresión propia) | bug |
+| ✅ Hecho | 🟠 Alta | **Dos botones verdes idénticos** en la pantalla que cierra la OT | `/polish` |
+| ✅ Hecho | 🟡 Media | **Skeleton de carga en las 11 listas** (`_cargando`) · antes 9 de 15 en blanco | `/polish` |
+| ⏳ Pendiente | 🟢 Baja | Skeleton real en las **stat-cards** del supervisor (números, no listas) | `/polish` |
 
 > **Esta tabla estuvo mintiendo durante días**: marcaba como ⏳ Pendiente la migración de emojis y los hover-glows, que llevaban hecho una semana. El source of truth no sabía su propio estado. Si una fila no tiene un script que la verifique, **asume que está desactualizada**.
 
@@ -1460,6 +1476,147 @@ usó esa misma lista.* Ésta añade una vuelta más.
 > Y el corolario, que es el que duele: **los seis verificadores estaban en verde mientras el botón
 > de Pedro se moría.** Un check no vigila lo que no se le pidió vigilar. La pregunta al terminar un
 > fix no es *"¿pasan los checks?"* sino **"¿qué acabo de hacer posible que antes era imposible?"**
+
+---
+
+## Crítica del 2026-07-09 (mañana) — los bordes que nadie miraba
+
+### 🔴 1. Ningún control que toca el técnico tenía un límite visible
+
+WCAG 2.1 **SC 1.4.11 (Non-text Contrast, nivel AA)** exige **3:1** para el límite visual de un
+control. Medido:
+
+| Control | Borde | Contraste |
+|---|---|---|
+| `.pin-dot` — los 4 puntos del PIN | `--gris3` | **1,55:1** |
+| `.foto-box` — la caja de fotos | `--gris3` punteado | **1,43:1** |
+| `.firma-container` — el recuadro de firma | `--gris3` punteado | **1,43:1** |
+| `.field input / select / textarea` | `--gris2` | **1,05:1** |
+| `.tipo-card` — Preventivo/Correctivo | `--gris2` | **1,05:1** |
+| `.paused-order-card` | `#FCD34D` sobre su ámbar | **1,29:1** |
+
+Y el icono de cámara dentro de la caja de fotos, a **1,47:1**. Lo único legible ahí era la
+etiqueta *"Antes 1"*.
+
+**Lo que eso significa en el login:** los puntos **vacíos** del PIN estaban a 1,55:1; los **llenos**
+son azul institucional a 11,27:1. Un técnico mayor, al sol, veía **cuántos dígitos llevaba
+escritos, pero no cuántos le faltaban.** Los tres puntos vacíos, sencillamente, no estaban.
+
+**Y el código se desviaba de este documento.** §4 mandaba `#C8D0E0` para el borde de los inputs;
+el código usaba `--gris2` (`#EEF1F7`), **más claro todavía**. Alguien aclaró el borde documentado y
+no lo anotó. Ninguna de las dos versiones pasaba.
+
+**Fix:** `--gris3` de `#C8D0E0` a **`#7F899E`** — el gris tintado hacia el azul de marca **más
+claro** que pasa 3:1 contra la peor superficie. Y los 28 bordes de control que usaban `--gris2`
+pasan a `--gris3`. La card de OT pausada usa **`--naranja-btn`** (`#B45309`, 4,51:1), que ya
+existía: **no se inventó ni un color**.
+
+> Efecto colateral bienvenido: los chevrons de `.usuario-arrow` pasaron de 1,55:1 a **3,52:1**, y
+> los dots inactivos del step-indicator, igual. Eran affordances invisibles.
+
+### 🔴 2. `check-contraste.js` no cubría 1.4.11 — y su cabecera afirmaba algo falso
+
+El script decía, sobre sus 22 pares curados:
+
+> *"pares que solo se ven leyendo el CSS por clases. **Un escáner no los puede emparejar.**"*
+
+**Era falso.** Un escáner sí puede: parsea las reglas, resuelve los selectores descendientes, y
+empareja. La nueva **parte 3** lo hace en 40 líneas y encuentra **6 pares**. Uno de ellos,
+`.lista-error`, se escribió **anoche, para arreglar un bug**, y nadie lo estaba midiendo.
+
+Y la **parte 4** cubre el criterio entero que faltaba: **52 controles**, de los cuales **47
+fallaban**. Ninguna de las dos partes es una lista.
+
+> **No es que la lista estuviera desactualizada. Es que se escribió una lista y se justificó con
+> una imposibilidad que no era cierta.** Antes de curar una lista, intenta la regla.
+
+**Tres puntos ciegos más, encontrados al escribir la parte 4:**
+- Once controles se construyen en JS con `style.cssText` — el escaneo de markup no los veía.
+- Dos `onblur` restauraban `var(--gris2)` **después** de que todo lo demás usara `--gris3`: el
+  campo se veía… hasta que lo tocabas y lo soltabas. Ningún escaneo de `border:` lo habría
+  encontrado, porque ahí la propiedad se llama `borderColor`.
+- La primera versión de la regla acusó a `.ot-card` y `.pin-btn`, que se ven perfectamente. La
+  solución **no fue una allowlist**: fue distinguir por forma. Un control se mide por su **borde**;
+  un indicador de estado sin borde (`.step`, 8px) se mide por su **relleno**, porque el relleno es
+  toda su información. Una card se identifica por su texto.
+
+### 🟠 3. El toast que arreglé anoche tapaba la barra de pendientes
+
+`#toast` en `bottom:24px`, `z-index:9999`. `#pending-bar` en `bottom:70px`, `z-index:8888`. Un
+toast de dos líneas llega a 84px. **Al hacer la duración proporcional (hasta 8,3 s) tripliqué el
+tiempo que pasa encima.**
+
+El caso concreto: el técnico cierra una OT sin señal, sale *"OT guardada. Se subirá sola…"* (4,1 s)
+justo encima de *"N OTs pendientes"*, que es **tappable** y es lo que iba a tocar. El toast se
+comía el toque.
+
+**Fix:** `_toastAbajo()` mide la geometría real de las tres barras y posa el toast encima de la más
+alta. No fija constantes: las barras cambian de altura con el texto.
+
+### 🟠 4. Dos botones verdes idénticos en la pantalla que cierra la OT
+
+```
+✓ Confirmar firma          ← un paso, dentro de la card de firma
+✓ Cerrar y generar OT →    ← terminal, irreversible, dispara PDF y correos
+```
+
+§4 lo prohibía desde siempre y **nadie lo verificaba**. También `#panel-personal` tenía dos
+`btn-primary` visibles. Ahora "Confirmar firma" y los dos "+ Agregar" son secundarios, y la
+**regla 13** de `check-a11y.js` lo vigila — distinguiendo paneles de pestaña (excluyentes) y
+modales (contexto propio), porque sin esas dos distinciones acusaba a quien no debía.
+
+### 🟡 5. Nueve de quince cargadores no decían que estaban trabajando
+
+Una lista tiene **tres** estados y solo dos tenían helper: `_vacio()` y `_listaConError()`. El
+tercero faltaba. El panel "Personal" y la lista principal del supervisor se quedaban **en blanco**:
+Pedro no sabía si cargaba, si estaba vacío, o si la app se había colgado.
+
+El skeleton **ya existía y era bueno** (`.usuario-skeleton`). Solo lo usaba el login. Renombrado a
+`.sk-fila` y servido por **`_cargando(contenedor, filas)`**, con `aria-busy` y su `_cargado()`
+obligatorio — *un `aria-busy` pegado anunciaría "cargando" para siempre*. **Regla 14.**
+
+Tres exentos, con razón escrita: `cargarUsuariosApp` (cache-first, parpadearía sobre datos ya
+pintados), `_renderPausadasEnCadena` (pinta desde localStorage) y `descargarExcelVentas` (exporta
+un archivo, no pinta una lista).
+
+---
+
+### Los 6 verificadores, hoy
+
+| Script | Vigila | Nació de |
+|---|---|---|
+| `check-contraste.js` | **4 partes**: curados · escaneo · herencia por selector · **SC 1.4.11** | el verde que pasó 4 críticas, y una cabecera que mentía |
+| `check-emojis.js` | iconografía SVG única · y que todo icono **pueda dibujarse** | emojis, y un `<i>` sin su fuente |
+| `check-tokens.js` | tokens reales + zona de CSS exportado | radios que el doc daba por normalizados |
+| `check-tildes.js` | ortografía visible (regla `-ion` + irregulares y sus plurales) | 16 tildes que 4 pasadas no vieron |
+| `check-a11y.js` | **14 reglas** (ver cabecera) | se escribió antes del fix |
+| `check-mutantes.sh` | **a los otros cinco** | 3 checks que mintieron en verde |
+
+```
+node check-contraste.js  →  22 curados + 26 escaneados + 6 heredados + 52 limites   exit 0
+node check-emojis.js     →  0 emojis · 0 iconos que no puedan dibujarse             exit 0
+node check-tokens.js     →  0 fantasmas · 0 muertos · 0 grises duplicados           exit 0
+node check-tildes.js     →  0 palabras sin tilde (incluidos plurales)               exit 0
+node check-a11y.js       →  14 reglas en verde                                      exit 0
+bash check-mutantes.sh   →  41 mutantes · 0 puntos ciegos                           exit 0
+```
+
+---
+
+### La lección, octava forma: la imposibilidad que nadie comprobó
+
+Las siete anteriores decían: *el arreglo recorrió una lista, y la verificación usó esa misma lista.*
+Ésta es peor, porque venía con una **justificación escrita**:
+
+> *"Un escáner no los puede emparejar."*
+
+Esa frase, en la cabecera del propio verificador, sostuvo una lista de 22 entradas y un criterio
+WCAG entero sin cobertura. Nadie la comprobó — **yo tampoco, durante dos críticas** — porque venía
+en el archivo que se supone que sabe.
+
+> **Cuando un comentario explica por qué algo no se puede hacer, ese comentario es una hipótesis.**
+> Y las hipótesis se miden. Ésta tardó veinte minutos en caerse, y debajo había el borde invisible
+> de todos los controles que un técnico de tercera edad toca bajo el sol.
 
 ---
 
