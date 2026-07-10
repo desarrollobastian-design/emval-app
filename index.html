@@ -94,7 +94,7 @@
   
   /* TOPBAR */
   .topbar { background: var(--azul); color: white; padding: 14px 16px 12px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 100; }
-  .topbar .back { width: 32px; height: 32px; border-radius: var(--radio-sm); background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; color: white; font-size: 18px; flex-shrink: 0; }
+  .topbar .back { width: 32px; height: 32px; border-radius: var(--radio-sm); background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; color: white; font-size: 16px; flex-shrink: 0; }
   /* h1 a 15px NO es un error de escala. El topbar ES el titulo de la pantalla: un segundo
      titulo de 22px en el contenido repetiria la misma palabra dos veces. La jerarquia la dan
      la posicion y la barra azul, no el tamano. Antes era <h2> y el documento no tenia h1. */
@@ -150,7 +150,7 @@
   }
   .btn-primary { background: var(--azul); color: white; }
   .seg-tabs { display: flex; background: var(--gris2); border-radius: var(--radio-sm); padding: 3px; margin-bottom: 16px; }
-  .seg-tab { flex: 1; border: none; border-radius: var(--radio-sm); padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; background: transparent; color: var(--texto2); transition: background 0.15s var(--ease), color 0.15s var(--ease); }
+  .seg-tab { flex: 1; border: none; border-radius: var(--radio-sm); padding: 9px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; background: transparent; color: var(--texto2); transition: background 0.15s var(--ease), color 0.15s var(--ease); }
   .seg-tab.active { background: var(--azul); color: #fff; }
   .seg-tab:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   .btn-secondary { background: var(--gris2); color: var(--texto); }
@@ -158,7 +158,7 @@
   /* Accion destructiva del dialogo. --rojo con blanco da 4.98:1 (check-contraste.js). */
   .btn-peligro { background: var(--rojo); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
-  .btn-sm { padding: 10px; font-size: 13px; border-radius: var(--radio-sm); min-height: 44px; }
+  .btn-sm { padding: 10px; font-size: 12px; border-radius: var(--radio-sm); min-height: 44px; }
 
   /* OBJETIVO TACTIL. Pedro confirmo que los tecnicos NO usan guantes, asi que el minimo
      deja de ser el peor caso de 48px y pasa a 44px (WCAG 2.5.5 / Apple HIG) para el flujo
@@ -194,7 +194,7 @@
   .tipo-card { background: white; border: 2px solid var(--gris3); border-radius: var(--radio); padding: 18px 12px; text-align: center; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
   .tipo-card.selected { border-color: var(--azul); background: var(--gris2); }
   .tipo-card .icon { font-size: 28px; margin-bottom: 8px; }
-  .tipo-card .label { font-size: 14px; font-weight: 600; color: var(--texto); }
+  .tipo-card .label { font-size: 15px; font-weight: 600; color: var(--texto); }
   .tipo-card .desc { font-size: 12px; color: var(--texto3); margin-top: 3px; }
   
   /* LOCAL ITEMS */
@@ -271,7 +271,7 @@
   .paused-order-header-info { flex: 1; }
   .paused-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .paused-order-num {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
     color: #78350F;
     font-family: 'DM Mono', monospace;
@@ -321,7 +321,7 @@
     border: none;
     padding: 12px 16px;
     border-radius:var(--radio-sm);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -352,10 +352,10 @@
   /* USUARIO LIST */
   .usuario-item { background: white; border-radius: var(--radio); padding: 18px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; box-shadow: var(--sombra); transition: transform 0.1s; margin-bottom: 12px; }
   .usuario-item:active { transform: scale(0.99); }
-  .usuario-avatar { width: 56px; height: 56px; border-radius:var(--radio-lg); background: var(--azul); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: 700; flex-shrink: 0; }
+  .usuario-avatar { width: 56px; height: 56px; border-radius:var(--radio-lg); background: var(--azul); display: flex; align-items: center; justify-content: center; color: white; font-size: 22px; font-weight: 700; flex-shrink: 0; }
   .usuario-info { flex: 1; min-width: 0; }
-  .usuario-info .nombre { font-size: 18px; font-weight: 700; }
-  .usuario-info .cargo { font-size: 13px; color: var(--texto2); margin-top: 3px; }
+  .usuario-info .nombre { font-size: 16px; font-weight: 700; }
+  .usuario-info .cargo { font-size: 12px; color: var(--texto2); margin-top: 3px; }
   .usuario-arrow { margin-left: auto; color: var(--gris3); display: flex; align-items: center; flex-shrink: 0; }
   @media (hover: hover) {
     .usuario-item { transition: transform 0.1s, box-shadow 0.2s var(--ease); }
@@ -365,8 +365,8 @@
   /* SUMMARY */
   .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--gris2); }
   .summary-row:last-child { border-bottom: none; }
-  .sum-label { font-size: 13px; color: var(--texto2); }
-  .sum-val { font-size: 13px; font-weight: 600; color: var(--texto); }
+  .sum-label { font-size: 12px; color: var(--texto2); }
+  .sum-val { font-size: 12px; font-weight: 600; color: var(--texto); }
   
   /* BADGES */
   .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radio-pill); }
@@ -396,7 +396,7 @@
   .lista-error-ayuda { font-size: 12px; color: var(--texto2); margin: 4px 0 10px; }
   .ot-icon { width: 44px; height: 44px; border-radius:var(--radio); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
   .ot-info { flex: 1; }
-  .ot-titulo { font-size: 14px; font-weight: 600; }
+  .ot-titulo { font-size: 15px; font-weight: 600; }
   .ot-sub { font-size: 12px; color: var(--texto3); margin-top: 2px; }
   
   /* LOGO SCREEN */
@@ -404,7 +404,14 @@
   .login-logo { width: 100%; max-width: 500px; height: 220px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
   .login-logo img { width: 100%; height: 100%; object-fit: contain; }
   .login-brand { display: none; }
-  .login-sub { color: var(--texto2); font-size: 14px; margin-top: 4px; font-weight: 500; letter-spacing: 0.3px; }
+  .login-sub { color: var(--texto2); font-size: 15px; margin-top: 4px; font-weight: 500; letter-spacing: 0.3px; }
+  /* En escritorio (Pedro/admin) el logo de 220px + padding empujaba la lista de usuarios muy
+     abajo, con casi medio viewport de espacio muerto arriba. En pantallas anchas bajamos la
+     altura del hero para que el contenido util suba. En movil queda intacto. */
+  @media (min-width: 980px) {
+    .login-hero { padding: 20px 8px 16px; }
+    .login-logo { height: 120px; margin-bottom: 4px; }
+  }
   
   /* SUCCESS */
   /* Lleva texto encima -> usa el verde de ACCION. Con --verde el subtitulo de 13px daba 2.6:1. */
@@ -457,7 +464,7 @@
      El radio deja de ser pill: dos lineas con esquinas de 99px se ven deformes. */
   /* cursor:pointer -> el toast se cierra al tocarlo (WCAG 2.2.1). Su duracion la calcula
      _toastDuracion() con el largo del mensaje; no hay constante que la fije. */
-  #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 12px 20px; border-radius: var(--radio); font-size: 13px; font-weight: 500; z-index: 9999; max-width: calc(100vw - 32px); white-space: normal; text-align: center; line-height: 1.4; box-shadow: var(--sombra-lg); cursor: pointer; }
+  #toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--texto); color: white; padding: 12px 20px; border-radius: var(--radio); font-size: 12px; font-weight: 500; z-index: 9999; max-width: calc(100vw - 32px); white-space: normal; text-align: center; line-height: 1.4; box-shadow: var(--sombra-lg); cursor: pointer; }
 
   /* CAMPO RECHAZADO POR VALIDACION
      El toast dura 2.5s y aparece abajo, justo donde el pulgar tapa la pantalla. Sin una
@@ -475,7 +482,7 @@
   .stat-card-primary { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; }
   .stat-num { font-size: 28px; font-weight: 700; color: var(--azul); font-family: 'DM Sans', sans-serif; line-height: 1; }
   .stat-card-primary .stat-num { font-size: 40px; }
-  .stat-label { font-size: 13px; color: var(--texto2); margin-top: 4px; }
+  .stat-label { font-size: 12px; color: var(--texto2); margin-top: 4px; }
   .stat-card-primary .stat-label { margin-top: 0; align-self: center; font-weight: 500; }
 
   /* CADENA CARDS */
@@ -483,10 +490,10 @@
   .cadena-card:active { transform: scale(0.99); }
   .cadena-logo { width: 80px; height: 80px; border-radius:var(--radio-lg); overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .cadena-logo img { width: 100%; height: 100%; object-fit: contain; }
-  .cadena-logo.fallback { font-size: 34px; font-weight: 700; color: white; }
+  .cadena-logo.fallback { font-size: 32px; font-weight: 700; color: white; }
   .cadena-info { flex: 1; }
   .cadena-nombre { font-size: 20px; font-weight: 700; color: var(--texto); }
-  .cadena-nsuc { font-size: 14px; color: var(--texto3); margin-top: 5px; }
+  .cadena-nsuc { font-size: 15px; color: var(--texto3); margin-top: 5px; }
 
   .spacer { flex: 1; }
   .mt-auto { margin-top: auto; }
@@ -512,9 +519,9 @@
   .voz-player { width: 100%; margin-top: 12px; border-radius: var(--radio-sm); }
   .voz-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   .voz-item { background: var(--gris1); border-radius: var(--radio-sm); padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
-  .voz-item-icon { width: 32px; height: 32px; background: var(--azul); border-radius: var(--radio-sm); display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0; }
+  .voz-item-icon { width: 32px; height: 32px; background: var(--azul); border-radius: var(--radio-sm); display: flex; align-items: center; justify-content: center; color: white; font-size: 15px; flex-shrink: 0; }
   .voz-item-info { flex: 1; }
-  .voz-item-nombre { font-size: 13px; font-weight: 600; }
+  .voz-item-nombre { font-size: 12px; font-weight: 600; }
   .voz-item-dur { font-size: 11px; color: var(--texto3); margin-top: 2px; }
   .voz-item audio { width: 100%; height: 32px; margin-top: 6px; }
 </style>
@@ -550,9 +557,9 @@
   </div>
   <div class="content" style="align-items: center;">
     <div style="height: 8px;"></div>
-    <div id="pin-avatar" class="usuario-avatar" style="width:64px;height:64px;font-size:26px;border-radius:var(--radio-lg);margin:0 auto;"></div>
+    <div id="pin-avatar" class="usuario-avatar" style="width:64px;height:64px;font-size:28px;border-radius:var(--radio-lg);margin:0 auto;"></div>
     <div style="font-size: 16px; font-weight: 600; margin-top: 10px;" id="pin-nombre-display"></div>
-    <div id="pin-subtitulo" style="font-size: 13px; color: var(--texto3);">Ingresa tu PIN de 4 números</div>
+    <div id="pin-subtitulo" style="font-size: 12px; color: var(--texto3);">Ingresa tu PIN de 4 números</div>
     <!-- Numpad PIN (técnicos y supervisores) -->
     <div id="pin-numpad-section">
       <div class="pin-display">
@@ -604,11 +611,11 @@
     <div class="step active"></div><div class="step"></div><div class="step"></div><div class="step"></div>
   </div>
   <div class="content">
-    <div style="font-size:13px;color:var(--texto2);">Paso 1 de 4 - Selecciona la cadena</div>
+    <div style="font-size:12px;color:var(--texto2);">Paso 1 de 4 - Selecciona la cadena</div>
 
     <!-- TRABAJOS PAUSADOS (ACORDEÓN) -->
     <div id="seccion-pausadas" style="display:none;margin-bottom:20px;">
-      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border: 2px solid var(--naranja-btn);border-radius:var(--radio);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:14px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);">
+      <button id="toggle-pausadas" style="width:100%;background:#FEF3C7;border: 2px solid var(--naranja-btn);border-radius:var(--radio);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:15px;font-weight:600;color:#78350F;font-family:inherit;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 8px rgba(252, 211, 77, 0.2);">
         <div style="display:flex;align-items:center;gap:8px;">
           <span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> Trabajos pausados</span>
           <div style="font-size:11px;background:rgba(120, 53, 15, 0.15);padding:3px 8px;border-radius:var(--radio-sm);font-weight:600;" id="contador-pausadas">0</div>
@@ -618,7 +625,7 @@
       <div id="lista-pausadas" style="display:none;grid-template-columns:1fr;gap:10px;margin-top:12px;opacity:0;max-height:0;overflow:hidden;transition:opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;font-size:13px;font-weight:700;color:var(--azul);">
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;font-size:12px;font-weight:700;color:var(--azul);">
       <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--azul);color:white;font-size:15px;line-height:1;">+</span>
       <span>Nueva OT — elige la cadena</span>
     </div>
@@ -636,13 +643,13 @@
     <div class="step active"></div><div class="step"></div><div class="step"></div><div class="step"></div>
   </div>
   <div class="content">
-    <div style="font-size:13px;color:var(--texto2);" id="local-subtitulo">Paso 1 de 4 - Selecciona la sucursal</div>
+    <div style="font-size:12px;color:var(--texto2);" id="local-subtitulo">Paso 1 de 4 - Selecciona la sucursal</div>
 
     <div style="margin-bottom:16px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
       <div style="display:flex;gap:8px;align-items:stretch;">
         <input type="text" id="search-sucursales" aria-label="Buscar sucursal" placeholder="Ej: Talcahuano, Santiago" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid var(--gris3);border-radius:var(--radio-sm);transition:border-color 0.2s;font-family:inherit;color:var(--texto);" oninput="filtrarSucursales(this.value)" onfocus="this.style.borderColor='var(--azul)'" onblur="this.style.borderColor='var(--gris3)'"/>
-        <button type="button" aria-label="Limpiar búsqueda" style="width:44px;height:44px;padding:0;border:2px solid var(--gris3);background:transparent;border-radius:var(--radio-sm);cursor:pointer;font-size:18px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
+        <button type="button" aria-label="Limpiar búsqueda" style="width:44px;height:44px;padding:0;border:2px solid var(--gris3);background:transparent;border-radius:var(--radio-sm);cursor:pointer;font-size:16px;transition:all 0.2s;color:var(--texto3);" onclick="var inp = document.getElementById('search-sucursales'); inp.value=''; filtrarSucursales('');">✕</button>
       </div>
     </div>
 
@@ -664,7 +671,7 @@
     <div class="step"></div>
   </div>
   <div class="content">
-    <div style="font-size: 13px; color: var(--texto2);">Paso 2 de 4 — ¿Qué tipo de servicio?</div>
+    <div style="font-size: 12px; color: var(--texto2);">Paso 2 de 4 — ¿Qué tipo de servicio?</div>
     <div class="tipo-grid">
       <div class="tipo-card" id="t-prev" onclick="seleccionarTipo('preventivo')">
         <div class="icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--azul)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
@@ -701,7 +708,7 @@
     <div class="step"></div>
   </div>
   <div class="content">
-    <div style="font-size: 13px; color: var(--texto2);">Paso 3 de 4 — Fotografía el estado antes de comenzar</div>
+    <div style="font-size: 12px; color: var(--texto2);">Paso 3 de 4 — Fotografía el estado antes de comenzar</div>
     <div class="foto-grid" id="grid-antes"></div>
     <button class="btn btn-secondary" onclick="agregarFotoBox('antes')" style="margin-top:12px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Agregar foto</button>
     <input type="file" id="input-foto-camara" aria-label="Tomar foto con la cámara" accept="image/*" capture="environment" style="display:none" onchange="procesarFoto(event)">
@@ -726,7 +733,7 @@
     <div class="step active"></div>
   </div>
   <div class="content">
-    <div style="font-size: 13px; color: var(--texto2);">Paso 4 de 4 — Documenta el trabajo realizado</div>
+    <div style="font-size: 12px; color: var(--texto2);">Paso 4 de 4 — Documenta el trabajo realizado</div>
 
     <!-- Solo en modo edición (admin): acceso a las fotos del inicio -->
     <button id="btn-ver-antes-edit" class="btn btn-secondary" onclick="go('s-fotos-antes');renderizarFotosScreen();" style="display:none;margin-bottom:10px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Ver / editar fotos del inicio (antes)</button>
@@ -738,13 +745,13 @@
     </div>
 
     <div class="field">
-      <label>Fotos — Trabajo terminado</label>
+      <label>Fotos del trabajo</label>
       <div class="foto-grid" id="grid-despues"></div>
       <button class="btn btn-secondary" onclick="agregarFotoBox('despues')" style="margin-top:12px;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Agregar foto</button>
     </div>
 
     <div class="field">
-      <label>Firma del administrador del local</label>
+      <label>Firma del administrador</label>
       <div class="firma-container" id="firma-container">
         <canvas id="firma-canvas" width="600" height="200"></canvas>
         <div class="firma-actions">
@@ -765,9 +772,11 @@
     </div>
 
     <div class="field">
-      <label>Foto del timbre del local / Credencial receptor</label>
+      <label>Timbre o credencial del local</label>
       <div class="foto-box" id="ftimbre" onclick="tomarFoto('ftimbre', 'timbre', 0)" style="aspect-ratio: 2.5/1;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        <!-- Sello (no maletin): comunica "timbre/sello del local" — lo que de verdad va aqui.
+             Antes era un briefcase que no decia nada. Icono de sello de Lucide, hereda currentColor. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;"><path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 2 1 2 1 3.5V13"/></svg>
         <span>Toca para fotografiar el timbre</span>
       </div>
     </div>
@@ -793,11 +802,11 @@
       <label for="cot-detalle-trabajo">Descripción que verá el cliente en el PDF</label>
       <textarea id="cot-detalle-trabajo" placeholder="Describe los trabajos que aparecerán en el PDF..." style="min-height:80px;resize:vertical;"></textarea>
     </div>
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);">ÍTEMS A COTIZAR</div>
+    <div style="font-size:12px;font-weight:600;color:var(--texto2);">ÍTEMS A COTIZAR</div>
     <div id="cot-items"></div>
     <button class="btn btn-secondary" onclick="agregarItemCot()" style="margin-top:4px;">+ Agregar ítem</button>
     <div class="card" id="cot-total-box">
-      <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
+      <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:16px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
       <label for="cot-nombre-servicio">Nombre del archivo PDF</label>
@@ -841,7 +850,7 @@
       <!-- LITERAL-FIRMADO: stroke="" es atributo presentacional de SVG, no CSS: var() no resuelve. -->
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27A06B" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
-    <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un técnico para ver sus OTs</div>
+    <div style="font-size:12px;color:var(--texto2);margin-bottom:4px;">Selecciona un técnico para ver sus OTs</div>
     <div id="lista-tecnicos-ots"></div>
   </div>
 </div>
@@ -931,16 +940,16 @@
     <h1>Cotizaciones guardadas</h1>
   </div>
   <div id="cot-acciones-bar" style="display:none;padding:10px 16px;background:white;border-bottom:1px solid var(--gris2);display:none;gap:8px;align-items:center;">
-    <span id="cot-seleccionadas-count" style="font-size:13px;color:var(--texto2);flex:1;">0 seleccionadas</span>
-    <button onclick="enviarCotizacionesSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Enviar email</button>
-    <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">Eliminar</button>
+    <span id="cot-seleccionadas-count" style="font-size:12px;color:var(--texto2);flex:1;">0 seleccionadas</span>
+    <button onclick="enviarCotizacionesSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:500;">Enviar email</button>
+    <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:500;">Eliminar</button>
   </div>
   <div class="content">
-    <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
+    <button onclick="iniciarCotizacionPrevia()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva cotización previa</button>
     <div style="margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input type="text" id="cot-buscar" aria-label="Buscar cotización" placeholder="Buscar cotización..." style="flex:1;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarCotizaciones();">
-        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
+        <button id="btn-filtro-cot-general" style="background:var(--gris2);border:none;border-radius:var(--radio-sm);padding:8px 12px;font-size:12px;cursor:pointer;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtro</button>
       </div>
       <div id="panel-filtro-cot-general" style="display:none;padding:10px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="botones-filtro-cot-general"></div>
@@ -961,7 +970,7 @@
     <div style="font-size: 20px; font-weight: 700;">Servicio completado!</div>
     <!-- sin opacity: sobre verde oscuro, el blanco puro es el maximo contraste posible (4.9:1).
          La jerarquia con el titulo la dan el tamano (13 vs 20px) y el peso, no la transparencia. -->
-    <div style="font-size: 13px; margin-top: 6px;" id="cierre-ot-info">OT #--- · ---</div>
+    <div style="font-size: 12px; margin-top: 6px;" id="cierre-ot-info">OT #--- · ---</div>
   </div>
   <div class="content">
     <div class="card">
@@ -973,7 +982,7 @@
       <div class="summary-row"><span class="sum-label">Firma admin</span><span class="sum-val" id="sum-firma" style="color:var(--verde-btn)">—</span></div>
     </div>
     <div id="comparacion-fotos" style="display:none;">
-      <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;">COMPARACIÓN ANTES / DESPUÉS</div>
+      <div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;">COMPARACIÓN ANTES / DESPUÉS</div>
       <div id="grid-comparacion"></div>
     </div>
     <div class="field" style="margin-top:8px;">
@@ -1017,14 +1026,14 @@
     </div>
     <!-- TRABAJOS PAUSADOS (admin/supervisor) -->
     <div id="sup-pausadas-seccion" style="display:none;margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
         <span style="color:#D97706;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></span> TRABAJOS PAUSADOS
         <span id="sup-pausadas-count" style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:2px 9px;border-radius:var(--radio-pill);">0</span>
       </div>
       <div id="sup-pausadas-lista" class="card-grid"></div>
     </div>
 
-    <div style="font-size: 13px; font-weight: 600; color: var(--texto2);">OTs DE HOY</div>
+    <div style="font-size: 12px; font-weight: 600; color: var(--texto2);">OTs DE HOY</div>
     <div id="sup-ots-hoy-lista" class="card-grid"></div>
   </div>
 </div>
@@ -1050,7 +1059,7 @@
       <button class="btn btn-secondary btn-sm" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
       <input type="text" id="personal-buscar" aria-label="Buscar personal" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
-        <div style="font-size:14px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
+        <div style="font-size:15px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
         <div class="field"><label for="tec-nombre">Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
         <div class="field">
           <label for="tec-cargo">Rol</label>
@@ -1074,7 +1083,7 @@
       <button class="btn btn-secondary btn-sm" onclick="mostrarFormCadena()" style="margin-bottom:12px;">+ Agregar cadena</button>
       <input type="text" id="cadenas-buscar" aria-label="Buscar cadena" placeholder="Buscar cadena..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarCadenas();">
       <div id="form-cadena" style="display:none;" class="card">
-        <div id="form-cadena-titulo" style="font-size:14px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
+        <div id="form-cadena-titulo" style="font-size:15px;font-weight:500;margin-bottom:12px;">Nueva cadena</div>
         <div class="field"><label for="cad-nombre">Nombre</label><input type="text" id="cad-nombre" placeholder="Ej: Jumbo" /></div>
         <!-- LITERAL-FIRMADO: el value de un input es un DATO (se guarda en Firestore), no un estilo. -->
         <div class="field"><label for="cad-color">Color (hex)</label><input type="text" id="cad-color" placeholder="#E31837" value="#1B3A6B" /></div>
@@ -1097,7 +1106,7 @@
     <h1>Facturación</h1>
   </div>
   <div class="content">
-    <div style="font-size:13px;color:var(--texto2);margin-bottom:4px;">Selecciona un supervisor para ver sus cotizaciones</div>
+    <div style="font-size:12px;color:var(--texto2);margin-bottom:4px;">Selecciona un supervisor para ver sus cotizaciones</div>
     <div id="lista-supervisores-fact"></div>
   </div>
 </div>
@@ -1122,7 +1131,7 @@
     <button class="top-action top-action-verde" onclick="descargarExcelVentas()">Descargar Excel</button>
   </div>
   <div class="content" id="ventas-content">
-    <p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>
+    <p style="font-size:12px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>
   </div>
 </div>
 
@@ -1152,16 +1161,16 @@
     </div>
   </div>
 </div>
-<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
+<div id="offline-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--rojo);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:12px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;">
   Sin conexión — modo offline
 </div>
-<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
+<div id="pending-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:12px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="sincronizarOTsPendientes()">
   <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> <span id="pending-count">0</span> <span id="pending-label">OT(s) pendiente(s) — Toca para subir</span>
 </div>
 
 <!-- Avisos por correo encolados: misma visibilidad persistente que las OTs pendientes.
      Un toast se desvanece; una barra no. Se apila sobre la de OTs si ambas estan visibles. -->
-<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
+<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:12px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
   <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span> — Toca para reintentar
 </div>
 
@@ -1170,11 +1179,11 @@
   <div role="dialog" aria-modal="true" aria-labelledby="modal-reasignar-titulo" aria-describedby="modal-reasignar-sub" style="background:white;border-radius:var(--radio-lg);max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-reasignar-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
-      <div id="modal-reasignar-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Selecciona el nuevo técnico</div>
+      <div id="modal-reasignar-sub" style="font-size:12px;color:var(--texto3);margin-top:2px;">Selecciona el nuevo técnico</div>
     </div>
     <div id="modal-reasignar-lista" style="overflow-y:auto;padding:10px 14px;flex:1;"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--gris2);">
-      <button onclick="cerrarModalReasignar()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+      <button onclick="cerrarModalReasignar()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
     </div>
   </div>
 </div>
@@ -1184,15 +1193,15 @@
   <div role="dialog" aria-modal="true" aria-labelledby="modal-enviar-cot-titulo" aria-describedby="modal-enviar-cot-sub" style="background:white;border-radius:var(--radio-lg);max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-enviar-cot-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Enviar cotización</div>
-      <div id="modal-enviar-cot-sub" style="font-size:13px;color:var(--texto3);margin-top:2px;">Agrega uno o más correos de destino</div>
+      <div id="modal-enviar-cot-sub" style="font-size:12px;color:var(--texto3);margin-top:2px;">Agrega uno o más correos de destino</div>
     </div>
     <div style="overflow-y:auto;padding:14px 18px;flex:1;">
       <div id="modal-enviar-cot-lista"></div>
-      <button type="button" onclick="agregarFilaEmailCot('')" style="width:100%;background:transparent;color:var(--azul);border:1.5px dashed var(--azul);border-radius:var(--radio-sm);padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;">+ Agregar otro correo</button>
+      <button type="button" onclick="agregarFilaEmailCot('')" style="width:100%;background:transparent;color:var(--azul);border:1.5px dashed var(--azul);border-radius:var(--radio-sm);padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;">+ Agregar otro correo</button>
     </div>
     <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;">
-      <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
-      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
+      <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+      <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
     </div>
   </div>
 </div>
@@ -2311,10 +2320,10 @@ function cargarEjecucionScreen() {
       const siSt = svc.respuesta === 'si' ? 'background:var(--verde-btn);color:white;' : 'background:var(--gris2);color:var(--texto2);';
       const noSt = svc.respuesta === 'no' ? 'background:var(--rojo);color:white;' : 'background:var(--gris2);color:var(--texto2);';
       html += '<div style="display:flex;padding:8px 12px;gap:8px;align-items:center;background:' + bg + ';border-bottom:1px solid #E5E7EB;">';
-      html += '<span style="flex:1;font-size:13px;color:var(--texto);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
+      html += '<span style="flex:1;font-size:12px;color:var(--texto);line-height:1.4;">' + (idx+1) + '. ' + svc.nombre + '</span>';
       html += '<div style="display:flex;gap:4px;min-width:90px;justify-content:center;">';
-      html += '<button id="svc-si-' + idx + '" onclick="responderServicio(' + idx + ',\'si\')" style="' + siSt + 'border:none;border-radius:var(--radio-sm);padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Sí</button>';
-      html += '<button id="svc-no-' + idx + '" onclick="responderServicio(' + idx + ',\'no\')" style="' + noSt + 'border:none;border-radius:var(--radio-sm);padding:5px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">No</button>';
+      html += '<button id="svc-si-' + idx + '" onclick="responderServicio(' + idx + ',\'si\')" style="' + siSt + 'border:none;border-radius:var(--radio-sm);padding:5px 12px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;">Sí</button>';
+      html += '<button id="svc-no-' + idx + '" onclick="responderServicio(' + idx + ',\'no\')" style="' + noSt + 'border:none;border-radius:var(--radio-sm);padding:5px 12px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;">No</button>';
       html += '</div></div>';
     });
     html += '</div></div>';
@@ -3178,7 +3187,7 @@ async function cargarCadenasAdmin() {
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;';
       const dot = document.createElement('div');
-      dot.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:' + (d.color || COLOR_CADENA_POR_DEFECTO) + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0;overflow:hidden;';
+      dot.style.cssText = 'width:32px;height:32px;border-radius:var(--radio-sm);background:' + (d.color || COLOR_CADENA_POR_DEFECTO) + ';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;';
       if (d.logo) {
         const limg = document.createElement('img');
         limg.src = d.logo;
@@ -3343,7 +3352,7 @@ async function cargarCadenasAdmin() {
         const rowInfo = document.createElement('div');
         rowInfo.style.flex = '1';
         const rNom = document.createElement('div');
-        rNom.style.cssText = 'font-size:13px;font-weight:600;';
+        rNom.style.cssText = 'font-size:12px;font-weight:600;';
         rNom.textContent = sNombre;
         const rDet = document.createElement('div');
         rDet.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
@@ -3377,7 +3386,7 @@ async function cargarCadenasAdmin() {
       btnAddSucDiv.style.cssText = 'margin-top:12px;margin-bottom:10px;';
       const btnAddSuc = document.createElement('button');
       btnAddSuc.textContent = '+ Agregar sucursal';
-      btnAddSuc.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:10px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
+      btnAddSuc.style.cssText = 'width:100%;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:10px 12px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;';
       btnAddSucDiv.appendChild(btnAddSuc);
       body.appendChild(btnAddSucDiv);
 
@@ -3388,29 +3397,29 @@ async function cargarCadenasAdmin() {
       sep.style.cssText = 'display:none;margin-bottom:10px;padding:12px;background:var(--gris1);border-radius:var(--radio-sm);border:1px solid var(--gris2);';
       const inpCentro = document.createElement('input');
       inpCentro.type = 'text'; inpCentro.placeholder = 'Numero de centro (Ej: 345)';
-      inpCentro.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpCentro.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:12px;margin-bottom:6px;';
       const inpNom = document.createElement('input');
       inpNom.type = 'text'; inpNom.placeholder = 'Nombre (Ej: Unimarc Chillan)';
-      inpNom.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpNom.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:12px;margin-bottom:6px;';
       const inpDir = document.createElement('input');
       inpDir.type = 'text'; inpDir.placeholder = 'Direccion (Ej: Av. El Roble 123)';
-      inpDir.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpDir.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:12px;margin-bottom:6px;';
       const inpSup = document.createElement('input');
       inpSup.type = 'text'; inpSup.placeholder = 'Supervisor responsable (opcional)';
-      inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:12px;margin-bottom:6px;';
       const inpEmailSup = document.createElement('input');
       inpEmailSup.type = 'email'; inpEmailSup.placeholder = 'Correo del supervisor (opcional)';
-      inpEmailSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:6px;';
+      inpEmailSup.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:12px;margin-bottom:6px;';
       const inpEmail = document.createElement('input');
       inpEmail.type = 'email'; inpEmail.placeholder = 'Correo del local (opcional)';
-      inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:13px;margin-bottom:8px;';
+      inpEmail.style.cssText = 'width:100%;padding:8px 10px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:12px;margin-bottom:8px;';
       const btnAdd = document.createElement('button');
       btnAdd.textContent = '✓ Agregar sucursal';
-      btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:6px;';
+      btnAdd.style.cssText = 'width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px 12px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:6px;';
       btnAdd.onclick = (function(dId, iCentro, iNom, iDir, iSup, iEmailSup, iEmail){ return function(){ agregarSucursal(dId, iCentro, iNom, iDir, iSup, iEmailSup, iEmail); }; })(docId, inpCentro, inpNom, inpDir, inpSup, inpEmailSup, inpEmail);
       const btnCancel = document.createElement('button');
       btnCancel.textContent = 'Cancelar';
-      btnCancel.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;';
+      btnCancel.style.cssText = 'width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:9px 12px;font-size:12px;cursor:pointer;font-family:inherit;';
       btnCancel.onclick = function() { sep.style.display = 'none'; btnAddSuc.textContent = '+ Agregar sucursal'; };
       sep.appendChild(inpCentro); sep.appendChild(inpNom); sep.appendChild(inpDir);
       sep.appendChild(inpSup); sep.appendChild(inpEmailSup); sep.appendChild(inpEmail); sep.appendChild(btnAdd); sep.appendChild(btnCancel);
@@ -3570,7 +3579,7 @@ function editarSucursal(docId, idx, s) {
     l.textContent = lbl;
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = val; inp.placeholder = ph;
-    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:14px;';
+    inp.style.cssText = 'width:100%;padding:9px 11px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:15px;';
     inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
     inp.onblur = function(){ this.style.borderColor='var(--gris3)'; };
     w.appendChild(l); w.appendChild(inp);
@@ -3597,11 +3606,11 @@ function editarSucursal(docId, idx, s) {
   btns.style.cssText = 'display:flex;gap:10px;margin-top:8px;';
   const btnCan = document.createElement('button');
   btnCan.textContent = 'Cancelar';
-  btnCan.style.cssText = 'flex:1;padding:11px;border:none;background:var(--gris2);border-radius:var(--radio-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnCan.style.cssText = 'flex:1;padding:11px;border:none;background:var(--gris2);border-radius:var(--radio-sm);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnCan.onclick = function(){ document.body.removeChild(overlay); };
   const btnSave = document.createElement('button');
   btnSave.textContent = 'Guardar';
-  btnSave.style.cssText = 'flex:1;padding:11px;border:none;background:var(--azul);color:white;border-radius:var(--radio-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+  btnSave.style.cssText = 'flex:1;padding:11px;border:none;background:var(--azul);color:white;border-radius:var(--radio-sm);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnSave.onclick = async function() {
     const nuevoNombre = fNom.inp.value.trim();
     if (!nuevoNombre) { toast('El nombre es obligatorio'); return; }
@@ -3718,7 +3727,7 @@ function renderItemsCot() {
     div.style.marginBottom = '8px';
     div.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
       '<input type="text" value="' + item.desc + '" placeholder="Descripción" aria-label="Descripción del ítem ' + (i + 1) + '" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
-      '<button aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;cursor:pointer;font-size:13px;">✕</button>' +
+      '<button aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 10px;cursor:pointer;font-size:12px;">✕</button>' +
       '</div>' +
       '<div style="display:flex;gap:8px;">' +
       '<div style="flex:1"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Cantidad</div>' +
@@ -3749,14 +3758,14 @@ function mostrarVistaPreviaCotizacion() {
   const local = cotizacionActual ? (cotizacionActual.local || '') : '';
   const fecha = cotizacionActual ? (cotizacionActual.fecha || '') : '';
 
-  let html = '<div style="font-size:13px;color:var(--texto3);margin-bottom:10px;">';
+  let html = '<div style="font-size:12px;color:var(--texto3);margin-bottom:10px;">';
   html += '<b style="color:var(--texto);">' + local + '</b> &nbsp;·&nbsp; ' + fecha;
   if (supervisor) html += ' &nbsp;·&nbsp; Sup: ' + supervisor;
   html += '</div>';
 
   if (detalle) {
     html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:4px;">DETALLE DEL TRABAJO</div>';
-    html += '<div style="font-size:13px;color:var(--texto);background:var(--gris1);border-radius:var(--radio-sm);padding:10px;margin-bottom:12px;line-height:1.5;">' + detalle.replace(/\n/g,'<br>') + '</div>';
+    html += '<div style="font-size:12px;color:var(--texto);background:var(--gris1);border-radius:var(--radio-sm);padding:10px;margin-bottom:12px;line-height:1.5;">' + detalle.replace(/\n/g,'<br>') + '</div>';
   }
 
   html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:6px;">ÍTEMS</div>';
@@ -4074,7 +4083,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     const infoDiv = document.createElement('div');
     infoDiv.style.cssText = 'flex:1;';
     const localDiv = document.createElement('div');
-    localDiv.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto);';
+    localDiv.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto);';
     localDiv.textContent = it.local || '';
     const numDiv = document.createElement('div');
     numDiv.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:1px;';
@@ -4089,7 +4098,7 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     fechaDiv.textContent = it.fecha || '';
     rowHeader.appendChild(fechaDiv);
     const totalDiv = document.createElement('div');
-    totalDiv.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde-btn);margin-top:3px;';
+    totalDiv.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde-btn);margin-top:3px;';
     totalDiv.textContent = '$' + (it.total||0).toLocaleString('es-CL');
     const descDiv = document.createElement('div');
     descDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
@@ -4247,7 +4256,7 @@ async function cargarCarpetas() {
       headerInfoEnv.appendChild(nombreEnv);
       headerInfoEnv.appendChild(resumenEnv);
       const chevronEnv = document.createElement('div');
-      chevronEnv.style.cssText = 'font-size:18px;color:var(--texto3);transition:transform 0.2s;';
+      chevronEnv.style.cssText = 'font-size:16px;color:var(--texto3);transition:transform 0.2s;';
       chevronEnv.textContent = '>';
       headerEnv.appendChild(avatarEnv);
       headerEnv.appendChild(headerInfoEnv);
@@ -4283,7 +4292,7 @@ async function cargarCarpetas() {
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
       const avatar = document.createElement('div');
-      avatar.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:' + color + ';display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:600;flex-shrink:0;';
+      avatar.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:' + color + ';display:flex;align-items:center;justify-content:center;color:white;font-size:16px;font-weight:600;flex-shrink:0;';
       avatar.textContent = letra;
       const headerInfo = document.createElement('div');
       headerInfo.style.flex = '1';
@@ -4296,7 +4305,7 @@ async function cargarCarpetas() {
       headerInfo.appendChild(nombreTec);
       headerInfo.appendChild(resumen);
       const chevron = document.createElement('div');
-      chevron.style.cssText = 'font-size:18px;color:var(--texto3);transition:transform 0.2s;';
+      chevron.style.cssText = 'font-size:16px;color:var(--texto3);transition:transform 0.2s;';
       chevron.textContent = '>';
       header.appendChild(avatar);
       header.appendChild(headerInfo);
@@ -4803,7 +4812,7 @@ function _renderPausadasEnCadena() {
 
         const local = document.createElement('div');
         local.className = 'paused-order-local';
-        local.style.cssText = 'font-size:14px;font-weight:700;color:var(--texto);margin-bottom:4px;';
+        local.style.cssText = 'font-size:15px;font-weight:700;color:var(--texto);margin-bottom:4px;';
         local.textContent = ot.local || 'Sin sucursal';
 
         const detalles = document.createElement('div');
@@ -4949,7 +4958,7 @@ async function cargarTecnicosAdmin() {
       const info = document.createElement('div');
       info.style.flex = '1';
       const nombre = document.createElement('div');
-      nombre.style.cssText = 'font-size:14px;font-weight:500;';
+      nombre.style.cssText = 'font-size:15px;font-weight:500;';
       nombre.textContent = d.nombre;
       const detalle = document.createElement('div');
       detalle.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
@@ -5233,7 +5242,7 @@ async function cargarUsuariosApp(_intento) {
     console.warn('Usuarios: sin conexion, usando cache.', e && e.message);
     if (!hayCache) {
       const lista = document.getElementById('lista-usuarios');
-      if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin conexión. Abre la app con internet al menos una vez.</p>';
+      if (lista) lista.innerHTML = '<p style="font-size:12px;color:var(--texto3);text-align:center;padding:20px;">Sin conexión. Abre la app con internet al menos una vez.</p>';
     }
   }
 }
@@ -7018,7 +7027,7 @@ async function cargarPreventivos() {
       hdrInfo.style.flex = '1';
       const cecoValPrev = ot.ceco || cecoMapPrev[ot.local] || '';
       const cecoTag = cecoValPrev ? ' · <b>CeCo:' + cecoValPrev + '</b>' : '';
-      hdrInfo.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
+      hdrInfo.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
         + '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + cecoTag + ' · ' + (ot.tecnico||'-') + '</div>';
       const numBadge = document.createElement('span');
       numBadge.className = 'badge badge-prev';
@@ -7034,7 +7043,7 @@ async function cargarPreventivos() {
       if (pdfCloudUrl || pdfFirestoreUrl) {
         const btnDesc = document.createElement('button');
         btnDesc.textContent = 'Ver PDF';
-        btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnDesc.onclick = (function(cUrl, fUrl){ return function(){
           var a = document.createElement('a');
           a.href = cUrl || fUrl;
@@ -7060,7 +7069,7 @@ async function cargarPreventivos() {
       } else {
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Cotización';
-        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
         btns.appendChild(btnCot);
       }
@@ -7225,7 +7234,7 @@ async function verOTsTecnico(nombre, grupo) {
     // Descripcion
     if (ot.descripcionTrabajo) {
       const descDiv = document.createElement('div');
-      descDiv.style.cssText = 'font-size:13px;color:var(--texto2);padding:8px 0;border-top:1px solid var(--gris2);line-height:1.5;';
+      descDiv.style.cssText = 'font-size:12px;color:var(--texto2);padding:8px 0;border-top:1px solid var(--gris2);line-height:1.5;';
       descDiv.textContent = ot.descripcionTrabajo;
       card.appendChild(descDiv);
     }
@@ -7261,7 +7270,7 @@ async function verOTsTecnico(nombre, grupo) {
         const audioItem = document.createElement('div');
         audioItem.style.cssText = 'background:var(--gris1);border-radius:var(--radio-sm);padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;';
         const audioIcon = document.createElement('div');
-        audioIcon.style.cssText = 'width:32px;height:32px;background:var(--azul);border-radius:var(--radio-sm);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0;';
+        audioIcon.style.cssText = 'width:32px;height:32px;background:var(--azul);border-radius:var(--radio-sm);display:flex;align-items:center;justify-content:center;color:white;font-size:15px;flex-shrink:0;';
         audioIcon.textContent = String.fromCharCode(9654);
         const audioInfo = document.createElement('div');
         audioInfo.style.flex = '1';
@@ -7289,7 +7298,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (ot.estado === 'En Pausa' || ot.pausa) {
       const btnContinuar = document.createElement('button');
       btnContinuar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><path d="M5 3l14 9-14 9V3z"/></svg> Continuar OT';
-      btnContinuar.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnContinuar.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnContinuar.onclick = (function(id){ return function(){ continuarOT(id); }; })(ot.id);
       btns.appendChild(btnContinuar);
     }
@@ -7306,7 +7315,7 @@ async function verOTsTecnico(nombre, grupo) {
     if (urlParaVer) {
       const btnPdf = document.createElement('button');
       btnPdf.textContent = 'Ver PDF';
-      btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnPdf.onclick = (function(url){ return function(){
         // Si es URL de la app (Firestore), abrir directamente
         // Si es URL de Cloudinary, forzar descarga con nombre correcto
@@ -7342,7 +7351,7 @@ async function verOTsTecnico(nombre, grupo) {
     } else {
       const btnCot = document.createElement('button');
       btnCot.textContent = '+ Cotización';
-      btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
       btns.appendChild(btnCot);
     }
@@ -7350,14 +7359,14 @@ async function verOTsTecnico(nombre, grupo) {
     if (estado.cargo === 'Administrador' && !ot.pausa && ot.estado !== 'En Pausa' && !ot.enEspera) {
       const btnEditOT = document.createElement('button');
       btnEditOT.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> Editar OT';
-      btnEditOT.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnEditOT.style.cssText = 'flex:1;background:var(--naranja-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnEditOT.onclick = (function(otRef){ return function(){ editarOTTerminada(otRef); }; })(ot);
       btns.appendChild(btnEditOT);
     }
     if (estado.cargo === 'Administrador') {
       const btnDelOT = document.createElement('button');
       btnDelOT.textContent = 'Eliminar OT';
-      btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnDelOT.onclick = (function(id, cardRef){ return async function() {
         if (!await _confirmar('Esta acción no se puede deshacer.', { titulo: 'Eliminar OT', okTexto: 'Eliminar', peligro: true })) return;
         const ok = await verificarPasswordAdmin();
@@ -7464,12 +7473,12 @@ function agregarFilaEmailCot(valor) {
   inp.type = 'email';
   inp.placeholder = 'correo@ejemplo.cl';
   inp.value = valor || '';
-  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:14px;font-family:inherit;';
+  inp.style.cssText = 'flex:1;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:15px;font-family:inherit;';
   const del = document.createElement('button');
   del.type = 'button';
   del.textContent = '✕';
   del.title = 'Quitar';
-  del.style.cssText = 'flex-shrink:0;width:40px;height:40px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:var(--radio-sm);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;';
+  del.style.cssText = 'flex-shrink:0;width:40px;height:40px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:var(--radio-sm);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
   del.onclick = function() {
     const filas = cont.querySelectorAll('.fila-email-cot');
     if (filas.length <= 1) { inp.value = ''; return; } // siempre dejar al menos una fila
@@ -7607,23 +7616,23 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
     const numCot = (it.numeroCotizacion || '').toString().trim();
     const total = '$' + (it.total || 0).toLocaleString('es-CL');
     const verPdf = it.pdfUrl
-      ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">Ver / Descargar PDF</a>'
+      ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar PDF</a>'
       : '';
     itemsHtml +=
       '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
         '<div style="font-weight:700;font-size:15px;color:#1B3A6B;">' + (i+1) + '. ' + (it.local||'') + ' &mdash; ' + (it.fecha||'') + '</div>' +
-        (servicio ? '<div style="margin-top:4px;font-size:13px;color:#444;">Servicio: ' + servicio + '</div>' : '') +
-        (numCot ? '<div style="margin-top:2px;font-size:13px;color:#444;">N° cotización: ' + numCot + '</div>' : '') +
-        (trabajo ? '<div style="margin-top:2px;font-size:13px;color:#444;">Trabajo: ' + trabajo + '</div>' : '') +
-        '<div style="margin-top:2px;font-size:13px;color:#444;">Total: ' + total + '</div>' +
+        (servicio ? '<div style="margin-top:4px;font-size:12px;color:#444;">Servicio: ' + servicio + '</div>' : '') +
+        (numCot ? '<div style="margin-top:2px;font-size:12px;color:#444;">N° cotización: ' + numCot + '</div>' : '') +
+        (trabajo ? '<div style="margin-top:2px;font-size:12px;color:#444;">Trabajo: ' + trabajo + '</div>' : '') +
+        '<div style="margin-top:2px;font-size:12px;color:#444;">Total: ' + total + '</div>' +
         verPdf +
       '</div>';
   });
 
   const cuerpoHtml =
-    '<p style="font-size:14px;color:#222;">Estimado/a:<br>Le compartimos <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
+    '<p style="font-size:15px;color:#222;">Estimado/a:<br>Le compartimos <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
     itemsHtml +
-    '<p style="font-size:14px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
+    '<p style="font-size:15px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
   // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
 
   const asunto = _asuntoCotizaciones(seleccionadas);
@@ -7953,7 +7962,7 @@ function _mostrarErrorPausadasSup(seccion, listaEl, countEl) {
   seccion.style.display = 'block';
   if (countEl) countEl.style.display = 'none';
   listaEl.innerHTML = '<div class="card grid-full" style="border:1.5px solid var(--ambar-borde);background:var(--ambar-fondo);">'
-    + '<div style="font-size:14px;font-weight:600;color:var(--texto);margin-bottom:2px;">No se pudo cargar la lista en vivo</div>'
+    + '<div style="font-size:15px;font-weight:600;color:var(--texto);margin-bottom:2px;">No se pudo cargar la lista en vivo</div>'
     + '<div style="font-size:12px;color:var(--texto2);margin-bottom:10px;">Revisa la conexión. La lista se actualiza sola al reconectar.</div>'
     + '<button class="btn btn-secondary btn-sm" style="width:auto;" onclick="cargarPausadasSupervisor()">Reintentar</button>'
     + '</div>';
@@ -8131,7 +8140,7 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
       av.textContent = (t.nombre || '?').charAt(0).toUpperCase();
       const nom = document.createElement('div');
       nom.style.flex = '1';
-      nom.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + t.nombre + '</div><div style="font-size:12px;color:var(--texto3);">' + (esActual ? 'Técnico actual' : _cargoLabel(t.cargo || 'Tecnico en terreno')) + '</div>';
+      nom.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--texto);">' + t.nombre + '</div><div style="font-size:12px;color:var(--texto3);">' + (esActual ? 'Técnico actual' : _cargoLabel(t.cargo || 'Tecnico en terreno')) + '</div>';
       row.appendChild(av);
       row.appendChild(nom);
       if (!esActual) {
@@ -8146,7 +8155,7 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
     });
   } catch(e) {
     console.error('Error cargando tecnicos:', e);
-    lista.innerHTML = '<p style="font-size:13px;color:var(--rojo);text-align:center;padding:16px;">Error cargando técnicos</p>';
+    lista.innerHTML = '<p style="font-size:12px;color:var(--rojo);text-align:center;padding:16px;">Error cargando técnicos</p>';
   }
 }
 
@@ -8323,7 +8332,7 @@ function verTrabajoCotizacion(cotId) {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'margin-bottom:16px;';
     const t = document.createElement('div');
-    t.style.cssText = 'font-size:13px;font-weight:700;color:var(--texto);margin-bottom:8px;';
+    t.style.cssText = 'font-size:12px;font-weight:700;color:var(--texto);margin-bottom:8px;';
     t.textContent = titulo;
     wrap.appendChild(t);
     if (!urls.length) {
@@ -8355,7 +8364,7 @@ function verTrabajoCotizacion(cotId) {
   if (firma) {
     const fwrap = document.createElement('div');
     const ft = document.createElement('div');
-    ft.style.cssText = 'font-size:13px;font-weight:700;color:var(--texto);margin-bottom:8px;';
+    ft.style.cssText = 'font-size:12px;font-weight:700;color:var(--texto);margin-bottom:8px;';
     ft.textContent = 'Firma';
     const fimg = document.createElement('img');
     fimg.src = firma;
@@ -8759,7 +8768,7 @@ function abrirFactSupervisor(grupo) {
     hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;';
     const hInfo = document.createElement('div');
     const hLocal = document.createElement('div');
-    hLocal.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
+    hLocal.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
     hLocal.textContent = d.local || '';
     const hDet = document.createElement('div');
     hDet.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
@@ -8792,7 +8801,7 @@ function abrirFactSupervisor(grupo) {
     const badgeWrap = document.createElement('div');
     badgeWrap.appendChild(estadoBadge);
     const chevFact = document.createElement('span');
-    chevFact.style.cssText = 'font-size:13px;color:var(--texto3);font-weight:600;transition:transform 0.2s;display:inline-block;';
+    chevFact.style.cssText = 'font-size:12px;color:var(--texto3);font-weight:600;transition:transform 0.2s;display:inline-block;';
     chevFact.textContent = 'Editar >';
     flechaDiv.appendChild(badgeWrap);
     flechaDiv.appendChild(chevFact);
@@ -8819,7 +8828,7 @@ function abrirFactSupervisor(grupo) {
       l.textContent = lbl;
       const inp = document.createElement('input');
       inp.type = 'text'; inp.value = val || ''; inp.placeholder = lbl;
-      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:13px;font-family:inherit;';
+      inp.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:12px;font-family:inherit;';
       inp.onfocus = function(){ this.style.borderColor='var(--azul)'; };
       inp.onblur = function(){ this.style.borderColor='var(--gris3)'; };
       w.appendChild(l); w.appendChild(inp);
@@ -8836,7 +8845,7 @@ function abrirFactSupervisor(grupo) {
     // Boton guardar
     const btnG = document.createElement('button');
     btnG.textContent = 'Guardar';
-    btnG.style.cssText = 'width:100%;padding:11px;border:none;background:var(--azul);color:white;border-radius:var(--radio-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
+    btnG.style.cssText = 'width:100%;padding:11px;border:none;background:var(--azul);color:white;border-radius:var(--radio-sm);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;';
     btnG.onclick = (function(docId, fS, fO, fH, fF, badge, chev, cuerpoEl) { return async function() {
       try {
         const db = window.firebase.firestore();
@@ -8982,7 +8991,7 @@ async function cargarVentas() {
     function mkStat(label, valor) {
       var d = document.createElement('div');
       d.className = 'stat-card';
-      d.innerHTML = '<div class="stat-num" style="font-size:18px;">$ ' + valor.toLocaleString('es-CL') + '</div><div class="stat-label">' + label + '</div>';
+      d.innerHTML = '<div class="stat-num" style="font-size:16px;">$ ' + valor.toLocaleString('es-CL') + '</div><div class="stat-label">' + label + '</div>';
       return d;
     }
     statsDiv.appendChild(mkStat('Total ' + new Date().getFullYear(), totalAnioActual));
@@ -8991,7 +9000,7 @@ async function cargarVentas() {
 
     // ---- GRAFICO BARRAS: total por mes ----
     const tituloBar = document.createElement('div');
-    tituloBar.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px;';
+    tituloBar.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;';
     tituloBar.textContent = 'TOTAL POR MES';
     cont.appendChild(tituloBar);
     const canvasBar = document.createElement('canvas');
@@ -9005,7 +9014,7 @@ async function cargarVentas() {
 
     // ---- GRAFICO DONA: por supervisor ----
     const tituloDona = document.createElement('div');
-    tituloDona.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
+    tituloDona.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
     tituloDona.textContent = 'DISTRIBUCIÓN POR SUPERVISOR';
     cont.appendChild(tituloDona);
     const canvasDona = document.createElement('canvas');
@@ -9019,7 +9028,7 @@ async function cargarVentas() {
 
     // ---- TABLA RESUMEN ----
     const tituloTabla = document.createElement('div');
-    tituloTabla.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
+    tituloTabla.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin-top:16px;margin-bottom:8px;';
     tituloTabla.textContent = 'RESUMEN POR SUPERVISOR';
     cont.appendChild(tituloTabla);
     const tablaCard = document.createElement('div');
@@ -9034,10 +9043,10 @@ async function cargarVentas() {
       var top = document.createElement('div');
       top.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
       var nombre = document.createElement('div');
-      nombre.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
+      nombre.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
       nombre.textContent = sup;
       var monto = document.createElement('div');
-      monto.style.cssText = 'font-size:14px;font-weight:700;color:var(--verde-btn);';
+      monto.style.cssText = 'font-size:15px;font-weight:700;color:var(--verde-btn);';
       monto.textContent = '$ ' + totalSup.toLocaleString('es-CL');
       top.appendChild(nombre); top.appendChild(monto);
       var bar = document.createElement('div');
