@@ -49,7 +49,7 @@ probar() {   # nombre, script, exit_esperado, comando_sed ("CONTROL" = sin mutar
 echo ""
 echo "  ── check-a11y.js ──"
 probar "viewport con user-scalable=no"          check-a11y.js 1 's|content="width=device-width, initial-scale=1, viewport-fit=cover"|content="width=device-width, initial-scale=1, user-scalable=no"|'
-probar "un input a 13px"                        check-a11y.js 1 's|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px|id="personal-buscar" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:13px|'
+probar "un input a 13px"                        check-a11y.js 1 's|placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px|placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:13px|'
 probar "reintroducir un confirm() nativo"       check-a11y.js 1 "s|if (!await _confirmar('El técnico dejará|if (!confirm('El tecnico dejara|"
 probar "quitar aria-modal de un modal"          check-a11y.js 1 's|role="dialog" aria-modal="true" aria-labelledby="modal-reasignar-titulo"|role="dialog" aria-labelledby="modal-reasignar-titulo"|'
 probar "toast con white-space: nowrap"          check-a11y.js 1 's|max-width: calc(100vw - 32px); white-space: normal|max-width: calc(100vw - 32px); white-space: nowrap|'
@@ -98,6 +98,15 @@ probar "el cargador que miente con 'no hay OTs'" check-a11y.js 1 "s|_listaConErr
 # Cinco pantallas reintentaban cada 800ms para siempre, en blanco.
 probar "reintento a Firebase sin tope"          check-a11y.js 1 "s|if (_esperandoFirebase('admin', cargarAdmin)) return;|if (!window._firebaseReady) { setTimeout(cargarAdmin, 800); return; }|"
 probar "_esperandoFirebase sin limite"          check-a11y.js 1 "s|if (_esperasFirebase\[clave\] > _MAX_ESPERAS_FIREBASE) {|if (false) {|"
+# ── Mutantes de la critica del 2026-07-10 ──
+# 33 controles de formulario y CERO con nombre accesible. Un lector de pantalla oia el
+# placeholder ("Ej: 1234"), no la etiqueta ("PIN, 4 numeros"). WCAG 1.3.1 / 4.1.2, nivel A.
+probar "un campo pierde su label for"           check-a11y.js 1 's|<label for="tec-pin">PIN|<label>PIN|'
+probar "una caja de busqueda sin aria-label"     check-a11y.js 1 's|id="cot-buscar" aria-label="Buscar cotización"|id="cot-buscar"|'
+probar "el input del dialogo sin nombre"         check-a11y.js 1 's|id="dlg-input" type="text" autocomplete="off" aria-labelledby="dlg-titulo"|id="dlg-input" type="text" autocomplete="off"|'
+# aria-modal="true" promete que la pagina de detras esta inerte. _modalMostrar cumple la promesa
+# (foco+trampa+Escape); una apertura cruda con style.display la rompe sin que el markup cambie.
+probar "modal abierto por la puerta trasera"     check-a11y.js 1 "s|_modalMostrar('modal-reasignar', 'flex', cerrarModalReasignar);|document.getElementById('modal-reasignar').style.display = 'flex';|"
 probar "CONTROL (sin mutar)"                    check-a11y.js 0 CONTROL
 
 echo ""

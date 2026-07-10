@@ -12,7 +12,7 @@
  *
  * ALCANCE: solo index.html.
  *
- * LAS 18 REGLAS  (el numero de esta linea llego a decir 12 teniendo 17: si una cabecera no
+ * LAS 20 REGLAS  (el numero de esta linea llego a decir 12 teniendo 17: si una cabecera no
  *  se puede verificar, envejece. Cuando anadas una regla, corrige este numero.)
  *  1. El viewport no puede desactivar el zoom (WCAG 2.1 SC 1.4.4, nivel AA).
  *     La app la usan tecnicos de tercera edad bajo sol directo. Ver DESIGN.md §1.
@@ -70,6 +70,12 @@
  * 18. Esperar a Firebase tiene un final. Cinco pantallas reintentaban cada 800ms sin tope y sin
  *     decir nada: si Firebase no inicializa nunca, el panel queda en blanco para siempre.
  *     Todas pasan ahora por _esperandoFirebase(), que cuenta y luego dice la verdad.
+ *
+ * ── Reglas nacidas de la critica del 2026-07-10 ──
+ * 19. Todo control de formulario tiene nombre accesible (label for / aria-label / envuelto).
+ *     33 controles y cero con nombre: un lector de pantalla oia el placeholder, no la etiqueta.
+ * 20. Un modal se abre por _modalMostrar, la puerta que instala foco+trampa+Escape. modal-reasignar
+ *     tenia una segunda puerta cruda: aria-modal prometia inercia que esa puerta no cableaba.
  *
  * DOCTRINA DE LAS EXCLUSIONES (2026-07-09). Este archivo tenia dos, y las dos escondian bugs
  * reales, y las dos venian con un comentario largo justificandolas. La regla 10 exigia pintar
@@ -753,6 +759,104 @@ if (errosFeos.length) {
       regla: 'espera-sin-final',
       msg: 'Un reintento sin limite deja al usuario mirando una pantalla en blanco para siempre.',
       items: problemas,
+    });
+  }
+}
+
+// ─── 19. Todo control de formulario tiene nombre accesible ──────────────────────
+// 33 controles (25 input, 5 select, 3 textarea) y CERO con nombre asociado: ni <label for>,
+// ni input envuelto, ni aria-label, ni title. Los <label> existian —"PIN (4 numeros)",
+// "Nombre completo"— pero eran texto suelto al lado, sin relacion programatica con el campo.
+//
+// Un lector de pantalla (Pedro, en su telefono) enfoca el PIN y oye el placeholder "Ej: 1234",
+// no "PIN, 4 numeros". Un placeholder NO es un nombre: desaparece al escribir, tiene bajo
+// contraste, y no todos los lectores lo anuncian. WCAG 1.3.1 y 4.1.2, nivel A — mas basico que
+// casi todo lo demas de este archivo, y sobrevivio a cinco criticas porque NINGUNA regla lo
+// miraba. La tabla de deuda decia "aria-label en los 18 botones": los botones recibieron nombre,
+// los campos nunca.
+//
+// El nombre puede venir por cualquier via valida: <label for>, envolver el control, aria-label,
+// aria-labelledby, o title. La regla no exige UNA forma; exige que EXISTA alguna.
+{
+  const labelsFor = new Set();
+  for (const m of html.matchAll(/<label[^>]*\bfor="([^"]*)"/g)) labelsFor.add(m[1]);
+  // controles envueltos: <label ...> ... <input ...> ... </label>
+  const envueltos = new Set();
+  for (const m of html.matchAll(/<label\b[^>]*>([\s\S]*?)<\/label>/g)) {
+    for (const c of m[1].matchAll(/\bid="([^"]*)"/g)) envueltos.add(c[1]);
+  }
+  const SIN_NOMBRE_OK = /type="(hidden|submit|button|image|reset)"/;
+  const sinNombre = [];
+  for (const m of html.matchAll(/<(input|select|textarea)\b([^>]*)>/gi)) {
+    const attrs = m[2];
+    if (SIN_NOMBRE_OK.test(attrs)) continue;
+    const id = (attrs.match(/\bid="([^"]*)"/) || [])[1] || '';
+    const tieneNombre =
+      /aria-label(ledby)?="[^"]*\S[^"]*"/.test(attrs) ||   // aria-label / aria-labelledby con contenido
+      /\btitle="[^"]*\S[^"]*"/.test(attrs) ||               // title (debil, pero cuenta)
+      (id && labelsFor.has(id)) ||                          // <label for="id">
+      (id && envueltos.has(id));                            // <label>…<control id>…</label>
+    if (!tieneNombre) {
+      const ph = (attrs.match(/placeholder="([^"]*)"/) || [])[1] || '';
+      sinNombre.push('index.html:' + String(linea(m.index)).padEnd(6) + m[1] +
+        (id ? ' #' + id : ' (sin id)') + (ph ? '   placeholder="' + ph + '"' : ''));
+    }
+  }
+  if (sinNombre.length) {
+    fallos.push({
+      regla: 'campo-sin-nombre',
+      msg: sinNombre.length + ' control(es) de formulario sin nombre accesible (WCAG 1.3.1 / 4.1.2, nivel A).',
+      items: sinNombre,
+      ayuda: 'Anade <label for="id">, o aria-label, o aria-labelledby. Un placeholder no es un nombre.',
+    });
+  }
+}
+
+// ─── 20. Un modal se abre por la puerta que instala su comportamiento ───────────
+// aria-modal="true" es una PROMESA al lector de pantalla: el resto de la pagina esta inerte.
+// _modalMostrar() la cumple: guarda el foco, atrapa el tab, engancha Escape, enfoca el primero.
+// Pero modal-reasignar se abria por DOS puertas —_modalMostrar (bien) y un `modal.style.display
+// = 'flex'` crudo en aceptarCotizacionPrevia (mal)— y por la segunda no se instalaba nada: el
+// tab se escapaba a la pagina de detras y Escape no cerraba. La promesa del atributo, mentira.
+//
+// La regla 4 comprueba que el markup DECLARE role="dialog"+aria-modal. Y lo declara: verde. No
+// puede ver que UNA de las dos puertas no cablea el comportamiento. Igual que la regla 10: el
+// atributo presente, el comportamiento condicional. Esta regla mira el cableado, no el atributo.
+{
+  // ids de los contenedores con role="dialog" y su overlay (el id del div que se muestra).
+  // El overlay es el elemento con id que ENVUELVE al role="dialog" (o el propio, si lo lleva).
+  const dialogIds = new Set();
+  // overlay pattern: <div id="modal-x" ...> ... <div role="dialog"
+  for (const m of html.matchAll(/<div\s+id="([^"]*)"[^>]*>\s*<div[^>]*role="dialog"/g)) dialogIds.add(m[1]);
+  // tambien el caso donde el propio elemento con id lleva role="dialog"
+  for (const m of html.matchAll(/<div\s+id="([^"]*)"[^>]*role="dialog"/g)) dialogIds.add(m[1]);
+
+  const crudos = [];
+  // display de un overlay de dialogo puesto a 'flex'/'block' fuera de _modalMostrar.
+  const helper = fns.find((f) => f.nombre === '_modalMostrar');
+  for (const m of codigo.matchAll(/getElementById\(['"]([^'"]+)['"]\)[\s\S]{0,40}?\.style\.display\s*=\s*['"](flex|block)['"]/g)) {
+    if (!dialogIds.has(m[1])) continue;
+    if (helper && m.index > helper.ini && m.index < helper.fin) continue;
+    crudos.push('index.html:' + linea(m.index) + '  ' + m[1] + ' abierto a mano: usa _modalMostrar()');
+  }
+  // tambien: var modal = getElementById('modal-x'); ... modal.style.display = 'flex'
+  for (const m of codigo.matchAll(/\b(\w+)\s*=\s*document\.getElementById\(['"]([^'"]+)['"]\)/g)) {
+    if (!dialogIds.has(m[2])) continue;
+    const varName = m[1];
+    const re = new RegExp('\\b' + varName + '\\.style\\.display\\s*=\\s*[\'"](flex|block)[\'"]', 'g');
+    let d;
+    while ((d = re.exec(codigo))) {
+      if (helper && d.index > helper.ini && d.index < helper.fin) continue;
+      // evitar doble conteo con el patron directo de arriba
+      crudos.push('index.html:' + linea(d.index) + '  ' + m[2] + ' (via ' + varName + ') abierto a mano: usa _modalMostrar()');
+    }
+  }
+  if (crudos.length) {
+    fallos.push({
+      regla: 'modal-puerta-trasera',
+      msg: crudos.length + ' modal(es) abiertos sin _modalMostrar: aria-modal promete inercia que no se instala.',
+      items: [...new Set(crudos)],
+      ayuda: 'Abre SIEMPRE por _modalMostrar(id, display, cerrar): instala foco, trampa de tab y Escape.',
     });
   }
 }

@@ -1952,4 +1952,63 @@ patrón literal, y se contó a sí mismo como un sexto uso. La trampa que `check
 
 ---
 
+## Crítica del 2026-07-10 — lo que el atributo promete y el comportamiento no cumple
+
+Sexta ronda. Por primera vez el hallazgo principal **no estaba en un verificador**: estaba en
+la app, y era de **nivel A** — más básico que casi todo lo de las cinco rondas anteriores, que
+fueron AA. Se me pasó porque **ningún check lo miraba, y yo miraba lo que los checks señalaban.**
+
+### ✅ Lo que ya estaba bien (medido, no asumido)
+
+- **`prefers-reduced-motion` frena las tres animaciones en bucle.** La regla universal
+  (`animation-iteration-count: 1 !important`) cubre `pulse`, `shimmer` y `grabar-pulse`. Hay
+  hasta un comentario que documenta haber borrado una regla duplicada porque la universal bastaba.
+- **La gestión de foco en modales existe y es correcta.** `_modalMostrar`/`_modalOcultar` guardan
+  el foco previo, atrapan el tab, enfocan el primero, y restauran el foco al cerrar.
+
+### 🐛 1. Ningún campo de formulario tenía nombre accesible
+
+**33 controles** (25 input, 5 select, 3 textarea) y **cero** con `for`, `aria-label`, input
+envuelto o `title`. Los `<label>` existían —*"PIN (4 números)"*— pero eran texto suelto al lado,
+sin relación programática con el campo. Un lector de pantalla enfocaba el PIN y oía el placeholder
+*"Ej: 1234"*, no la etiqueta. **WCAG 1.3.1 y 4.1.2, nivel A.**
+
+Lo punzante: la tabla de deuda decía *"✅ aria-label en los 18 botones sin nombre accesible"*.
+**Los botones recibieron nombre; los campos nunca.** Y `check-a11y.js` tenía 18 reglas y ninguna
+preguntaba *"¿este campo se llama de algo?"*.
+
+Arreglado en tres formas: `<label for>` donde hay etiqueta visible (18), `aria-label` en las
+cajas de búsqueda y los file inputs, `aria-labelledby="dlg-titulo"` en el input del diálogo, y
+`aria-label` en los tres inputs de la fila de cotización generada por JS. **Regla 19** nueva:
+falla si un control no tiene nombre por *ninguna* vía.
+
+### 🐛 2. El modal de asignar técnico tenía dos puertas, y una no instalaba nada
+
+`aria-modal="true"` es una **promesa**: el resto de la página está inerte. `_modalMostrar()` la
+cumple (foco + trampa de tab + Escape). Pero `modal-reasignar` se abría por **dos** caminos, y el
+segundo —`modal.style.display = 'flex'` crudo en `aceptarCotizacionPrevia`— no instalaba nada.
+Con teclado: el Escape no cerraba, el tab se escapaba a la página de detrás. **La promesa, mentira.**
+
+La **regla 4** comprueba que el markup *declare* `role="dialog"` + `aria-modal`. Y lo declara:
+verde. No puede ver que una de las dos puertas no cablea el comportamiento. Mismo patrón que la
+regla 10: el atributo presente, el comportamiento condicional. **Regla 20** nueva: mira el
+cableado — ningún `id` de un `role="dialog"` recibe `.style.display` fuera de `_modalMostrar`.
+
+### 🔍 La lección: el check verifica que la promesa esté ESCRITA, no que se CUMPLA
+
+`role`, `aria-modal`, `aria-label`, `alt` — todos son promesas estáticas. Leer el markup confirma
+que la promesa está **escrita**; que se **cumpla** depende del comportamiento en tiempo de
+ejecución, que el markup no revela. La regla 4 vio `aria-modal="true"` y dio el modal por bueno;
+no podía ver que una puerta dejaba la página de detrás alcanzable.
+
+La única regla del repo que verifica cumplimiento y no promesa es la de los silencios firmados —
+y solo porque la firma es texto que hay que teclear a mano, en el sitio del hecho. Esa es la forma
+que funciona: **acercar la evidencia al comportamiento, no al atributo.**
+
+65 mutantes, 0 puntos ciegos. Dos de ellos —los que probaban estas reglas— nacieron rotos: sus
+`sed` apuntaban a un texto que mis propios arreglos habían cambiado (un `aria-label` metido entre
+el `id` y el `placeholder`). Un mutante cuyo objetivo ya no existe no prueba nada. Reanclados.
+
+---
+
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*
