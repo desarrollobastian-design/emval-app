@@ -88,8 +88,12 @@ const PARES = [
   { nombre: 'Rojo como texto',      texto: '--rojo',   fondo: '--fondo',      tam: 'normal',  donde: 'mensajes de error' },
 
   // --- Graficos (SC 1.4.11, min 3:1). No se cambian sin decidir el lenguaje visual. ---
-  { nombre: 'Icono preventivo',     texto: '--verde-btn', fondo: '--blanco',  tam: 'grafico', donde: '.ot-icon (SVG)' },
-  { nombre: 'Icono correctivo',     texto: '--naranja',   fondo: '--blanco',  tam: 'grafico', donde: '.tipo-card .icon (SVG naranja sobre card blanca)',
+  // La superficie de card es `white` literal en el CSS: nunca existio un `var(--blanco)`.
+  // Este script era el UNICO consumidor del token, asi que check-tokens.js lo dio por muerto
+  // (solo escanea index.html) y al borrarlo rompio esta medicion. Se mide contra lo que el
+  // CSS realmente pinta, no contra un token que la app ignoraba.
+  { nombre: 'Icono preventivo',     texto: '--verde-btn', fondo: '#FFFFFF',   tam: 'grafico', donde: '.ot-icon (SVG)' },
+  { nombre: 'Icono correctivo',     texto: '--naranja',   fondo: '#FFFFFF',   tam: 'grafico', donde: '.tipo-card .icon (SVG naranja sobre card blanca)',
     tolerado: 'decorativo: el label "Correctivo" debajo carga el significado. Revisar si alguna vez queda sin label' },
 ];
 

@@ -14,10 +14,11 @@
 ## 1. Visual Theme & Atmosphere
 
 EMVAL es una **herramienta de trabajo de campo**, no un producto de marketing. La usan
-técnicos de mantención (electricidad, cañerías, baños, correctivos y preventivos) en
+**tres** técnicos de mantención (electricidad, cañerías, baños, correctivos y preventivos) en
 **condiciones variables y no controladas**: interiores oscuros, exteriores con sol directo,
-posiblemente con guantes o con una sola mano libre. Y la usa un administrador desde un
-entorno de escritorio.
+con una sola mano libre — **sin guantes** (confirmado por Pedro, 2026-07-09). Algunos son de
+**tercera edad**, y eso manda: el login es un PIN de 4 dígitos simple, no una contraseña. Y la usa
+un administrador desde un entorno de escritorio (monitor + laptop + teléfono).
 
 La atmósfera es **utilitaria, sólida y confiable** — la sensación de un instrumento de
 trabajo bien hecho, no de una app "bonita". Cada decisión visual se subordina a una
@@ -88,10 +89,15 @@ usaba y el documento no los contemplaba; son numéricos tabulares, así que la r
 - **Micro / Badge:** DM Sans 500 · 11px
 - **CTA Buttons:** DM Sans 600 · 15px
 
-> **⚠ Deriva actual:** el código usa ~19 tamaños distintos (10-32px) y el `h2` del topbar es
-> solo 15px (sin H1 dominante). Colapsar a la escala de 7 pasos de arriba. El topbar mantiene
-> su título compacto a 15px por ser barra de navegación, pero cada pantalla debe tener un
-> **título de contenido a 22px** que ancle la vista.
+> **✅ Estructura corregida (2026-07-09):** el título del topbar es ahora `<h1>` (antes `<h2>`, y el
+> documento no tenía **ningún** `h1`). Sigue a **15px** y eso es correcto: el topbar **es** el título
+> de la pantalla. La regla anterior pedía además *"un título de contenido a 22px"* — **se descarta**:
+> sería un segundo título repitiendo la misma palabra, el anti-patrón "headers redundantes". La
+> jerarquía la dan la posición y la barra azul, no el tamaño.
+>
+> **⚠ Deriva viva:** 15 tamaños distintos en 335 declaraciones (7 roles arriba → **5 tamaños
+> distintos**: 11/12/15/16/22). Los 3 más usados (13/12/11px) son 228 declaraciones. **Vigilada por
+> `check-tokens.js`**, que la reporta sin fallar: se migra por pantalla, no de una vez.
 
 ### Spacing Principles
 - Labels de campo: `text-transform: uppercase` + `letter-spacing: 0.5px` (ya en uso, mantener).
@@ -109,9 +115,14 @@ usaba y el documento no los contemplaba; son numéricos tabulares, así que la r
 - `--radio-pill: 99px` — pills / tags redondeados
 - `50%` — solo para elementos circulares (avatares, dots, checks)
 
-> **✅ Normalizado (2026-07-08):** los 12 radios hardcodeados se consolidaron a la escala de
-> 4 valores. Hoy el código solo usa `8 / 14 / 18 / 99px` (+ `50%` para círculos). Tokens
-> `--radio-lg` y `--radio-pill` agregados a `:root`.
+> **✅ Normalizado de verdad (2026-07-09) · vigilado por `check-tokens.js`:** los **187** radios
+> pasan por `var(--radio*)`. **0 literales** (salvo `50%`, que es geometría, no marca).
+>
+> La versión anterior de esta nota decía *"✅ Normalizado"* desde el 2026-07-08 y era **medio
+> cierta**: los *valores* habían colapsado a 4, pero había **163 `border-radius` hardcodeados**
+> contra 20 vía token, y `--radio-lg` / `--radio-pill` no los usaba **nadie**. La capa de
+> abstracción existía y no abstraía nada. *Si una fila no tiene un script que la verifique, asume
+> que está desactualizada* — otra vez.
 
 ### Buttons
 - **Shape:** Esquinas redondeadas medias (14px); variante `btn-sm` a 8px.
@@ -135,6 +146,17 @@ usaba y el documento no los contemplaba; son numéricos tabulares, así que la r
 - **Focus:** borde Azul Institucional, sin glow.
 - **Label:** 12px, uppercase, letter-spacing 0.5px, Gris Pizarra.
 - **Error:** borde Rojo + mensaje debajo (no solo color, para daltónicos).
+- **Rechazo de validación:** nunca solo un toast. Usar `_rechazar(msg, idCampo)` — hace scroll al
+  campo, le pone `.campo-error` (halo rojo) y lo limpia al tocarlo. Un toast dice *qué* faltó; no
+  dice *dónde*.
+- **Campos numéricos:** `type="text" inputmode="numeric"`, **nunca `type="number"`** cuando importe
+  la longitud: `maxlength` **no aplica** a `type="number"` (spec HTML) y el navegador lo ignora en
+  silencio.
+- **PIN:** exactamente **4 dígitos**, `/^\d{4}$/`, validado en el formulario que lo escribe **y** en
+  el teclado que lo lee. Nunca "al menos 4".
+
+> **Regla:** si un formulario escribe un dato y otra pantalla lo lee, **ambos comparten la regla de
+> validación**. El bug del PIN existió porque el escritor aceptaba lo que el lector no podía leer.
 
 ### Iconografía
 - **Set único de iconos SVG inline** (recomendado: Phosphor o Lucide) que heredan `currentColor`.
@@ -247,7 +269,12 @@ firma confirmada). El usuario recuerda que la app *nunca lo deja con dudas sobre
 | ✅ Hecho | 🔴 Alta | Contraste WCAG AA · **vigilado por `check-contraste.js`** | `/normalize` |
 | ✅ Hecho | 🔴 Alta | Objetivos táctiles (44/32px) y foco de teclado (`:focus-visible`) | `/polish` |
 | ✅ Hecho | 🟡 Media | Stat-cards: romper el template hero-metric | `/polish` |
-| ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 16 tamaños en 336 declaraciones → 7 pasos | `/normalize` |
+| ✅ Hecho | 🔴 Alta | PIN de exactamente 4 dígitos · fallback de login **falla cerrado** | bug |
+| ✅ Hecho | 🔴 Alta | Validación que apunta al campo (`_rechazar`) + `toast` con `aria-live` | `/polish` |
+| ✅ Hecho | 🟡 Media | Radios → tokens (187, 0 literales) · **vigilado por `check-tokens.js`** | `/normalize` |
+| ✅ Hecho | 🟡 Media | Estructura de encabezados: 16 `h2` de topbar → `h1` | `/normalize` |
+| ✅ Hecho | 🟡 Media | `aria-label` en los 18 botones sin nombre accesible | `/polish` |
+| ⏳ Pendiente | 🟡 Media | **Escala tipográfica**: 15 tamaños en 335 declaraciones → 5 · **medida por `check-tokens.js`** | `/normalize` |
 | ⏳ Pendiente | 🟡 Media | **Modales in-app**: 19 diálogos nativos (`confirm`×11, `prompt`×6, `alert`×2) | feature |
 | ⏳ Pendiente | 🟢 Baja | Skeleton real de carga en stat-cards | `/polish` |
 | ⏳ Pendiente | 🟢 Baja | Colores de estado seleccionado con `color-mix` | `/polish` |
@@ -591,6 +618,272 @@ Los 3 tamaños más usados (**11/12/13px = 225 de 336 declaraciones**) son la ca
 ### Pendiente que sigue esperando su propia pasada
 
 **19 diálogos nativos** — `confirm()`×11, `prompt()`×6, **`alert()`×2** (estos últimos ni figuraban en la deuda declarada). Es una feature que toca lógica **destructiva** (borrar personal, borrar OTs, contraseña de admin). Necesita su propia pasada con testing, no un `/polish`.
+
+---
+
+## Crítica del 2026-07-09 (tarde) — el PIN, la validación muda y los tokens decorativos
+
+Auditoría **medida**. Cinco hallazgos, de los cuales **dos de mi propio reporte resultaron falsos**
+al ir a leer el código. Se documentan igual: un reporte sin sus errores enseña la mitad.
+
+### 🐛 1. Un PIN de 5 dígitos dejaba al técnico fuera de la app, en silencio
+
+Tres líneas que se contradecían:
+
+| Sitio | Decía |
+|---|---|
+| `index.html:968` | `<input type="number" maxlength="4">` — **`maxlength` no existe para `type="number"`** (spec HTML: solo text/search/url/tel/email/password). El navegador lo ignoraba sin avisar. |
+| `guardarTecnico()` | `if (!pin \|\| pin.length < 4)` — solo un **mínimo**. Un PIN de 6 dígitos se guardaba sin queja. |
+| `pinInput()` | `if (pinActual.length >= 4) return;` — tope **duro** de 4, y auto-valida al llegar ahí. |
+
+**Consecuencia:** el administrador crea un técnico con PIN `123456`. El técnico llega a terreno,
+marca `1234`, y la app dice *"PIN incorrecto"*. **Ninguna combinación de teclas lo deja entrar**, y
+nada en pantalla lo explica. Es el patrón de *"trabajo que desaparece"* que este proyecto lleva
+semanas cazando — pero la que desaparecía era la persona.
+
+**Contexto de negocio (Pedro, 2026-07-09):** los 4 dígitos son una **decisión de accesibilidad**,
+no una limitación técnica. Son 3 técnicos en terreno, algunos de tercera edad, y Pedro eligió PINs
+simples (`1234`) con opción de cambiarlos. **La regla canónica es: exactamente 4 dígitos.** Nunca
+"al menos".
+
+**Fix:** `type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"` + filtro `oninput` que
+descarta no-dígitos, y validación `/^\d{4}$/` al guardar. `type="text"` + `inputmode` da el teclado
+numérico en móvil **y** respeta `maxlength`; `type="number"` no hacía ninguna de las dos.
+
+> **Regla:** cuando un formulario escribe un dato y otra pantalla lo lee, **ambos lados deben
+> compartir la regla de validación**. Aquí el escritor aceptaba lo que el lector no podía leer.
+
+### 🔒 2. `PINS[d.nombre] = d.pin || '1234'` — el fallback concedía acceso
+
+Un técnico sin `pin` en Firestore recibía **1234** en silencio. La pantalla de login **lista a todos
+los técnicos por nombre**, y el sitio es **público** (GitHub Pages). El fallback abría la puerta en
+vez de cerrarla.
+
+Ahora **falla cerrado**: un PIN ausente o mal formado (`/^\d{4}$/`) guarda `null`, y `validarPin`
+dice *"Este usuario no tiene PIN. Pídele al administrador que lo configure."* — en vez de
+*"PIN incorrecto"*, que mandaría al técnico a probar combinaciones para siempre por un problema
+que solo el administrador puede resolver.
+
+> ⚠️ **Verificar antes de mergear:** los 3 técnicos deben tener el campo `pin` en Firestore.
+> Si alguno no lo tiene, hoy entraba con `1234` y ahora no entrará. Es el comportamiento correcto,
+> pero hay que confirmarlo con datos reales, no asumirlo.
+
+### 🐛 3. La app validaba, pero no llevaba a nadie a ninguna parte
+
+`cerrarOT()` tiene **5 puntos de rechazo**. Los cinco hacían `toast(...)` y `return`. Y `toast()`
+muestra un div **2,5 segundos**, abajo al centro — justo donde el pulgar tapa la pantalla — y no
+hace scroll al campo, no lo resalta, no mueve el foco, no deja rastro.
+
+El técnico, al final de un formulario largo y al sol, tenía que **adivinar** cuál de las cinco
+condiciones falló. El documento promete que la app *"nunca te deja con dudas sobre qué pasó"* (§7).
+Aquí sí lo hacía.
+
+**Fix:** `_rechazar(msg, idCampo)` hace scroll al campo culpable, le pone un halo rojo persistente
+(`.campo-error`) y lo limpia cuando el técnico lo toca. Los 5 rechazos lo usan.
+
+**Bonus a11y:** `<div id="toast">` no tenía `role="status"` ni `aria-live` — siendo el **único canal
+de feedback de toda la app**. Además `toast()` escribía el texto **antes** de quitar el
+`display:none`: un `aria-live` oculto está fuera del árbol de accesibilidad, así que el lector de
+pantalla nunca veía el cambio. Ahora se muestra primero y se escribe después.
+
+### ✅ 4. Los tokens de radio eran decoración — ahora `check-tokens.js` los vigila
+
+Medido: **163 `border-radius` hardcodeados** contra 20 vía `var()`. `--radio-lg` y `--radio-pill`
+estaban definidos en `:root` y **no los usaba nadie**. §4 decía *"✅ Normalizado"*: era **medio
+cierto, y la mitad falsa era la que costaba plata**. Los *valores* sí habían colapsado a 4; los
+*tokens* no se habían adoptado. Cambiar el radio de las cards significaba editar 126 sitios.
+
+Hoy: **187 radios, todos por token. 0 literales** (salvo `50%`, que es geometría, no marca).
+
+**Nuevo `check-tokens.js`** — falla ante:
+- **tokens fantasma** (`var(--x)` no definido → invalida el shorthand `border` entero y el borde
+  simplemente no se dibuja; ya pasó 15 veces en esta app),
+- **tokens muertos** (definidos, 0 usos),
+- **radios hardcodeados**.
+
+E **informa** (sin fallar) sobre la deriva tipográfica, que se migra por pantalla, no de una vez.
+
+```
+node check-tokens.js  →  22 tokens definidos, 22 en uso. 0 fantasmas, 0 muertos.
+                         Los 187 radios pasan por token. La abstraccion es real.
+```
+
+### 🔤 5. El documento no tenía `<h1>`, y pedir uno de 22px habría sido un error
+
+`<h1>` aparecía **0 veces** en 9.300 líneas. Había **16 `<h2>`, todos en el topbar**, uno por
+pantalla. Un documento con `h2` y sin `h1` no tiene estructura para un lector de pantalla.
+
+§3 exigía *"un título de contenido a 22px que ancle la vista"*. **Se descarta esa regla.** El topbar
+**ya es** el título de la pantalla: agregar un segundo título de 22px repetiría la misma palabra dos
+veces — justo el anti-patrón *"headers redundantes"* del skill impeccable. La jerarquía la dan la
+posición y la barra azul, no el tamaño.
+
+**Fix:** los 16 `<h2>` del topbar pasan a `<h1>`, **sin cambio visual** (siguen a 15px). §3 se
+corrige: el topbar es el H1, y no hace falta un H1 de contenido.
+
+---
+
+### 🔍 Dos errores de mi propia crítica, y por qué importan
+
+**a) "11 botones solo-ícono, 2 con nombre" era falso.**
+El grep `<button[^>]*>\s*<svg` matcheaba botones que **sí tienen texto** ("Agregar foto", "Filtros",
+"Pausar", "Hacer otra OT"). Botones realmente solo-ícono hay **2**, y ambos ya tenían `aria-label`.
+Al medir bien — *contenido sin SVG ni tags, ¿queda vacío?* — aparecieron los verdaderos: **18
+botones sin nombre accesible**, y ninguno era de los que acusé. Eran **15 botones "volver" (`←`)**,
+un cerrar (`✕`), el de grabar (`●`) y un quitar-ítem (`x`).
+
+*(Y hasta ese recuento lo di mal la primera vez: dije 14 "volver" y 17 en total. Son 15 y 18.
+Los conté a ojo desde una lista impresa en vez de contarlos con código. Tercera vez en esta
+sesión que una cifra dicha de memoria resulta falsa; la cuarta será igual si no la mido.)*
+
+> El primer grep contaba *"botones que contienen un SVG"*. La pregunta era *"botones sin texto"*.
+> Casi la misma frase, poblaciones distintas.
+
+**b) "Token fantasma en la línea 3533" era falso.** `--gris3` **sí** está definido en `:root`.
+Verificado antes de "arreglarlo".
+
+**c) El doble-envío de `cerrarOT()` no existe.** Fui a buscarlo y encontré `estado.otClientId`
+memoizado + `doc(clientId).set(..., {merge:true})`. Es idempotente. Alguien ya lo había pensado.
+
+### 🔍 Y un error al arreglar: borré un token que no estaba muerto
+
+`check-tokens.js` marcó `--blanco` como token muerto. Cierto **para la app** (el CSS usa `white`
+literal, nunca `var(--blanco)`). Lo borré. Y **`check-contraste.js` se puso rojo**: era su único
+consumidor, lo usaba como superficie de card.
+
+El script hizo exactamente su trabajo — atrapó una regresión que yo introduje. Pero revela que
+**`check-tokens.js` solo lee `index.html`**: su "muerto" significa *"sin usos en index.html"*, no
+*"sin usos en el repo"*. El alcance ahora está **escrito en la cabecera del script**.
+
+Se resolvió midiendo contra `#FFFFFF` literal en `check-contraste.js`, que es **lo que el CSS
+realmente pinta**. El token estaba muerto de verdad; el que tenía el mapa incompleto era yo.
+
+> **Regla (extensión de la lección del emoji):** un check debe **declarar su alcance**. "0 usos"
+> sin decir *dónde buscó* es una afirmación que no se puede evaluar. La versión anterior de esta
+> lección decía que un check no puede compartir la fuente de verdad con el fix. Ésta añade: tampoco
+> puede callar cuál es su fuente de verdad.
+
+### 🐛 6. El `sed` de radios rompió el correo de cotizaciones — y los 3 checks siguieron en verde
+
+Encontrado por una **revisión adversarial** del diff, no por los verificadores.
+
+El `sed` global convirtió `border-radius:8px` → `var(--radio-sm)` en **163 sitios**. Dos de ellos
+(`index.html:7524` y `:7527`) están dentro de `cuerpoHtml`, el HTML que **EmailJS envía a Pedro**.
+Las líneas vecinas usaban hex hardcodeados (`#1B3A6B`, `#e0e0e0`, `#444`) **a propósito**, porque en
+un cliente de correo el `:root` de la app no existe. Yo metí dos `var()` justo en medio.
+
+Una custom property sin fallback **invalida la declaración entera**: el navegador computa el valor
+inicial y `border-radius` se vuelve `0`. El correo llegaba con las esquinas cuadradas.
+
+**Yo mismo busqué este bug y no lo encontré.** Revisé los exports a Excel (limpios, 0 radios) y di
+el tema por cerrado. Nunca miré las plantillas de EmailJS. La revisión adversarial sí.
+
+**Fix + guardián:** la región se marca con centinelas `CSS-EXPORTADO: INICIO` / `FIN`, y
+`check-tokens.js` **invierte su regla** dentro: allí el literal es obligatorio y una custom property
+es un error. Es la única zona del código donde un hardcode es lo correcto, y ahora está vigilada.
+
+> **Y el comentario que escribí para advertir del peligro contenía el peligro.** Puse `var(--x)` como
+> texto de ejemplo dentro de la zona vigilada, y el script — que escanea texto, no AST — lo marcó.
+> El comentario se delató a sí mismo. Quedó anotado en el propio comentario.
+
+### Verificación
+
+```
+node check-contraste.js  →  22 pares · 0 fallos reales · 2 tolerados   exit 0
+node check-emojis.js     →  0 emojis a color                           exit 0
+node check-tokens.js     →  0 fantasmas · 0 muertos · 0 radios sueltos
+                            1 zona de CSS exportado, 0 var() dentro     exit 0
+sintaxis                 →  0 errores en los 3 bloques <script>
+```
+
+**`check-tokens.js` se validó con mutantes**, no solo corriéndolo:
+
+| Mutante inyectado | exit esperado | exit real |
+|---|---|---|
+| `var()` dentro de la zona de correo | 1 | **1** ✅ |
+| radio hardcodeado fuera de la zona | 1 | **1** ✅ |
+| token fantasma (`var(--noexiste)`) | 1 | **1** ✅ |
+| control (copia intacta) | 0 | **0** ✅ |
+
+> **Regla:** un check que nunca has visto fallar no es un check, es una decoración que dice "verde".
+> Rómpelo a propósito antes de confiar en él.
+
+### 🔍 La revisión adversarial dijo "0 confirmados". Estaba equivocada.
+
+La revisión corrió 6 dimensiones × 3 escépticos. Su veredicto final fue **0 hallazgos confirmados,
+3 refutados**. Si lo hubiera creído, el bug del correo se habría mergeado.
+
+Lo que el veredicto escondía:
+- **2 de los 15 agentes murieron** con error. En un hallazgo, la votación quedó 1-de-2 en vez de
+  1-de-3, y un solo escéptico bastó para matarlo (la mayoría se calcula sobre los votos emitidos).
+- **Un refutador devolvió literalmente la palabra `"test"`** como razón. Ese voto contaba igual.
+- Los escépticos que sí razonaron **confirmaron los hechos** (*"El código es real: git diff confirma
+  que 7524 y 7527 pasaron a `var(--radio-sm)`… en el cliente de correo queda indefinido"*) y lo
+  refutaron por ser **"solo estético"**. Pero el brief decía *"nada de estilo"* para excluir opiniones
+  de gusto, no para excluir **regresiones que yo introduje**.
+
+El bug estaba en el reporte, bien descrito, marcado como refutado. **La señal existía; el agregado la
+borró.**
+
+> **Regla:** un veredicto agregado (`0 confirmados`) es un resumen, no una conclusión. Antes de
+> creerle, mira cuántos votantes murieron, si algún voto es basura, y si el criterio de refutación es
+> el que pediste. Un pipeline de verificación con votos corruptos **produce falsos negativos con
+> total confianza** — exactamente el fallo que este documento lleva tres sesiones persiguiendo.
+
+### QA visual del 2026-07-09 → `check-tildes.js`
+
+Los 5 puntos del guion pasaron (PIN, halo `.campo-error` + scroll, radios, buscador de sucursales,
+nota de voz). Pero las **capturas** mostraron *"Nuevo tecnico"* y *"1 cotizacion | $0"*.
+
+Este documento lleva **cuatro pasadas** arreglando ortografía a ojo: "Después", "Fotografía",
+"Facturación", "Pídele", "PIN (4 números)"... y seguían vivos **16 errores**: `Nuevo tecnico`,
+`Ver cotizacion` ×3, `placeholder="Descripcion"`, y 11 toasts.
+
+> **Revisar a ojo encuentra lo que miras. No encuentra lo que no abriste.** Es la misma lección
+> del emoji, la cuarta vez que aparece: el arreglo manual recorre una lista, y la verificación
+> recorre esa misma lista.
+
+**Nuevo `check-tildes.js`.** Escanea los contextos donde el string es visible (`toast()`,
+`textContent=`, `placeholder=`, `encodeURIComponent` de WhatsApp) buscando palabras que llevan tilde
+escritas sin ella. Ignora `console.*` (nadie los lee) y respeta `DATOS_INTOCABLES`.
+
+**Dos trampas que el script codifica:**
+1. **`'Tecnico en terreno'` es un VALOR de Firestore, no un texto de pantalla.** Ponerle tilde
+   rompería `cargo === 'Tecnico en terreno'` y la lectura de los documentos ya guardados. El display
+   va por `_cargoLabel()`. El script tiene una lista explícita de intocables, y se verificó con un
+   mutante que **no** lo reporta.
+2. **El plural mueve la tilde.** El código hacía `' cotizacion' + (n !== 1 ? 'es' : '')`, que con
+   tilde daría `cotizaciónes`. Y `' enviadas'` estaba fijo en plural: con una sola decía
+   *"1 cotización enviadas"*. **Nunca formes el plural con `+ 'es'` sobre una palabra acentuada.**
+
+**Y un placeholder que se contradecía con su JS, otra vez:** el markup estático del formulario decía
+`Nuevo personal`; el JS que lo reemplaza escribe `Nuevo técnico`. Mismo patrón que el separador `·`.
+
+```
+node check-tildes.js  →  0 palabras sin tilde en texto visible   exit 0
+```
+
+Validado con mutantes: reintroducir `Nuevo tecnico` → falla ✅ · un toast nuevo sin tilde → falla ✅ ·
+el dato `Tecnico en terreno` → **no** lo reporta ✅
+
+### Los 5 verificadores del repo
+
+| Script | Vigila | Falla ante |
+|---|---|---|
+| `check-contraste.js` | WCAG AA sobre la superficie real | par de texto bajo 4.5:1 |
+| `check-emojis.js` | iconografía SVG única | símbolo fuera de la allowlist (escanea por rango) |
+| `check-tokens.js` | la capa de tokens es real | fantasma · muerto · radio suelto · `var()` en CSS exportado |
+| `check-tildes.js` | ortografía del texto visible | palabra sin tilde en `toast`/`textContent`/`placeholder` |
+| *(syntax-check)* | los 3 bloques `<script>` | error de parseo |
+
+> Cada uno nació de un bug que **sobrevivió a una revisión manual**. Ninguno se escribió por
+> disciplina abstracta.
+
+**De paso:** murió el último `#D0D5DD` hardcodeado (`index.html:563-564`), un color stale que este
+documento ya había dado por eliminado y seguía vivo en el buscador de sucursales. El token real es
+`--gris3` (`#C8D0E0`). Y los 6 estados vacíos de cotizaciones, que decían la misma cosa de 4 formas
+distintas, ahora distinguen **lista vacía** ("Aún no hay cotizaciones guardadas") de **acción sin
+datos** ("No hay cotizaciones para exportar") — que no son el mismo mensaje.
 
 ---
 
