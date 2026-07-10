@@ -793,9 +793,9 @@
       <label for="cot-detalle-trabajo">Descripción que verá el cliente en el PDF</label>
       <textarea id="cot-detalle-trabajo" placeholder="Describe los trabajos que aparecerán en el PDF..." style="min-height:80px;resize:vertical;"></textarea>
     </div>
-    <div style="font-size:13px;font-weight:600;color:var(--texto2);">ITEMS A COTIZAR</div>
+    <div style="font-size:13px;font-weight:600;color:var(--texto2);">ÍTEMS A COTIZAR</div>
     <div id="cot-items"></div>
-    <button class="btn btn-secondary" onclick="agregarItemCot()" style="margin-top:4px;">+ Agregar item</button>
+    <button class="btn btn-secondary" onclick="agregarItemCot()" style="margin-top:4px;">+ Agregar ítem</button>
     <div class="card" id="cot-total-box">
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:18px;color:var(--azul);">$0</span></div>
     </div>
@@ -3759,7 +3759,7 @@ function mostrarVistaPreviaCotizacion() {
     html += '<div style="font-size:13px;color:var(--texto);background:var(--gris1);border-radius:var(--radio-sm);padding:10px;margin-bottom:12px;line-height:1.5;">' + detalle.replace(/\n/g,'<br>') + '</div>';
   }
 
-  html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:6px;">ITEMS</div>';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:6px;">ÍTEMS</div>';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">';
   html += '<tr style="background:var(--gris2);"><th style="text-align:left;padding:6px 8px;">Descripción</th><th style="padding:6px 4px;text-align:center;">Cant.</th><th style="padding:6px 8px;text-align:right;">Precio unit.</th><th style="padding:6px 8px;text-align:right;">Total</th></tr>';
   itemsCot.forEach(function(item, i) {
@@ -3776,7 +3776,7 @@ function mostrarVistaPreviaCotizacion() {
   html += '<span>TOTAL</span><span style="color:var(--azul);">$' + total.toLocaleString('es-CL') + '</span></div>';
 
   if (nombreSvc) {
-    html += '<div style="font-size:12px;color:var(--texto3);margin-top:10px;">Descripcion del trabajo: <b>' + nombreSvc + '</b></div>';
+    html += '<div style="font-size:12px;color:var(--texto3);margin-top:10px;">Descripción del trabajo: <b>' + nombreSvc + '</b></div>';
   }
 
   document.getElementById('preview-cot-contenido').innerHTML = html;
@@ -5233,7 +5233,7 @@ async function cargarUsuariosApp(_intento) {
     console.warn('Usuarios: sin conexion, usando cache.', e && e.message);
     if (!hayCache) {
       const lista = document.getElementById('lista-usuarios');
-      if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin conexion. Abre la app con internet al menos una vez.</p>';
+      if (lista) lista.innerHTML = '<p style="font-size:13px;color:var(--texto3);text-align:center;padding:20px;">Sin conexión. Abre la app con internet al menos una vez.</p>';
     }
   }
 }
@@ -7235,7 +7235,7 @@ async function verOTsTecnico(nombre, grupo) {
     statsDiv.style.cssText = 'display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto3);';
     const fa = (ot.fotosAntes && ot.fotosAntes.length) ? ot.fotosAntes.length : 0;
     const fd = (ot.fotosDespues && ot.fotosDespues.length) ? ot.fotosDespues.length : 0;
-    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos despues: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde-btn)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
+    statsDiv.innerHTML = '<span>Fotos antes: <b>' + fa + '</b></span><span>Fotos después: <b>' + fd + '</b></span><span>Firma: <b style="color:var(--verde-btn)">' + (ot.firmada ? 'Si' : 'No') + '</b></span>';
     card.appendChild(statsDiv);
 
     // Badge de estado (En Pausa)
@@ -7954,7 +7954,7 @@ function _mostrarErrorPausadasSup(seccion, listaEl, countEl) {
   if (countEl) countEl.style.display = 'none';
   listaEl.innerHTML = '<div class="card grid-full" style="border:1.5px solid var(--ambar-borde);background:var(--ambar-fondo);">'
     + '<div style="font-size:14px;font-weight:600;color:var(--texto);margin-bottom:2px;">No se pudo cargar la lista en vivo</div>'
-    + '<div style="font-size:12px;color:var(--texto2);margin-bottom:10px;">Revisa la conexion. La lista se actualiza sola al reconectar.</div>'
+    + '<div style="font-size:12px;color:var(--texto2);margin-bottom:10px;">Revisa la conexión. La lista se actualiza sola al reconectar.</div>'
     + '<button class="btn btn-secondary btn-sm" style="width:auto;" onclick="cargarPausadasSupervisor()">Reintentar</button>'
     + '</div>';
 }
@@ -8889,7 +8889,7 @@ function descargarExcelSupervisor() {
     html += '<td class="cab">LOCAL</td>';
     html += '<td class="cab">CeCo</td>';
     html += '<td class="cab">TRABAJO</td>';
-    html += '<td class="cab">N cotizacion</td>';
+    html += '<td class="cab">N cotización</td>';
     html += '<td class="cab">HS</td>';
     html += '<td class="cab">Monto</td>';
     html += '<td class="cab">Fecha</td>';

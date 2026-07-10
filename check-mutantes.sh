@@ -142,6 +142,15 @@ probar "la ayuda de _vacio() sin tilde"         check-tildes.js 1 "s|'Agrégalos
 probar "tilde escondida tras un console.error"  check-tildes.js 1 "s|} catch(e) { _error('cargar la facturación', e); }|} catch(e) { console.error(e); toast('Error cargando facturacion'); }|"
 probar "la accion de _error() sin tilde"        check-tildes.js 1 "s|_error('cargar la facturación', e)|_error('cargar la facturacion', e)|"
 probar "el DATO 'Tecnico en terreno' no se toca" check-tildes.js 0 CONTROL
+# El markup tiene texto tan visible como un toast, y este script solo miraba strings de JS y
+# atributos. "ITEMS A COTIZAR" y "+ Agregar item" vivian en NODOS DE TEXTO del markup. El PASE 2
+# los alcanza; este mutante mete una tilde faltante en un <button> y exige que falle.
+probar "tilde faltante en un nodo de texto del markup"  check-tildes.js 1 's|>Facturar<|>Facturacion<|'
+# Y el tercer punto ciego: el HTML GENERADO. La primera version del PASE 2 vaciaba <script>, y
+# con el todo el `html += '<div>texto</div>'`. Si alguien vuelve a estriparlo, este mutante —que
+# mete la tilde faltante en una cabecera generada— lo atrapa. El de arriba solo prueba el markup
+# estatico; este prueba que tambien se mira lo que se construye en JS.
+probar "tilde faltante en HTML generado (html +=)"     check-tildes.js 1 's|>N cotización</td>|>N cotizacion</td>|'
 
 echo ""
 echo "  ── check-tokens.js ──"

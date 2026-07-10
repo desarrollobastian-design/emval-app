@@ -11,14 +11,21 @@
  * "Nuevo tecnico", "Ver cotizacion" x3, placeholder="Descripcion" y ocho toasts. Revisar a ojo
  * encuentra lo que miras; no encuentra lo que no abriste.
  *
- * ALCANCE: solo index.html, y solo los contextos donde el string es VISIBLE
- * (toast(), textContent=, placeholder=, encodeURIComponent para WhatsApp, _vacio()).
+ * ALCANCE: solo index.html, en DOS pases sobre todo lo que el usuario lee:
+ *   PASE 1 — strings de JS y atributos: toast(), textContent=, placeholder=,
+ *            encodeURIComponent (WhatsApp), _vacio(), _error(), _anunciar()...
+ *   PASE 2 — NODOS DE TEXTO DEL MARKUP: lo que va entre > y < (botones, headings, labels, divs).
  * NO revisa console.* (nadie los lee) ni claves de datos.
  *
- * OJO CON LA UNIDAD DE LA EXCLUSION. Durante dias este script reporto CERO teniendo un
- * hallazgo real, porque descartaba la LINEA entera al ver un console.*. Y el patron de error
- * mas comun del archivo mete el console y el toast en la misma linea. Ahora se vacia la
- * EXPRESION (parentesis balanceados, comillas respetadas) y se sigue mirando el resto.
+ * El PASE 2 se anadio el 2026-07-10. La cabecera decia "solo los contextos donde el string es
+ * VISIBLE (toast, textContent, placeholder, _vacio)" y esa lista se leyo como exhaustiva. Un
+ * <button>+ Agregar item</button> es tan visible como un toast, y no estaba: ahi vivian "item"
+ * (-> ítem) e "ITEMS A COTIZAR". El alcance declarado excluia la clase de texto mas obvia que hay.
+ *
+ * OJO CON LA UNIDAD DE LA EXCLUSION. Este script ha tenido DOS puntos ciegos, los dos en lo que
+ * su alcance se callaba que no miraba: (1) descartaba la LINEA entera al ver un console.*, cuando
+ * el patron de error mete console y toast en la misma linea; (2) no miraba los nodos de texto del
+ * markup. La leccion no cambia: una lista de contextos no es la lista de TODOS los contextos.
  *
  * CUIDADO — la distincion critica de este proyecto:
  * 'Tecnico en terreno' es el VALOR guardado en Firestore, no un texto de pantalla. Ponerle tilde
@@ -58,6 +65,11 @@ const IRREGULARES = {
   ultima: 'última', ultimo: 'último',
   pagina: 'página',
   sesion: 'sesión',   // termina en -ion, pero lo dejamos explicito por claridad
+  // item -> ítem: llana terminada en -m. El plural CONSERVA la tilde (ítems), porque termina en
+  // -ms (s precedida de consonante), como cómics o bíceps. La logica de plural de abajo le pega
+  // la 's' a la forma acentuada, asi que sale bien. Vivia en un <button> del flujo de cotizacion,
+  // en un NODO DE TEXTO del markup, que este script no miraba (ver mas abajo).
+  item: 'ítem',
 };
 
 // Sugiere la forma correcta. En MAYUSCULAS la tilde tambien se escribe (RAE): DISTRIBUCIÓN.
@@ -135,42 +147,77 @@ function sinIntocables(l) {
   return l.replace(/(['"])Tecnico en terreno\1/g, '$1$1');
 }
 
+// LA REGLA, en un solo sitio. Antes vivia dentro del bucle de VISIBLE; al anadir un segundo
+// pase (los nodos de texto del markup) habria que duplicarla, y una regla duplicada es dos
+// reglas que un dia divergen. Devuelve {malo, bueno} o null.
+function revisarPalabra(p) {
+  const min = p.toLowerCase();
+  // 1) La REGLA: aguda terminada en -ion. Los plurales (-iones) no matchean.
+  if (REGLA_ION.test(min) && !EXCEPCIONES_ION.has(min)) return { malo: p, bueno: acentuarIon(p) };
+  // 2) Los irregulares, y su PLURAL. Una esdrujula conserva la tilde al pluralizar
+  //    (tecnico->tecnicos), al reves que las agudas en -ion, que la pierden (accion->acciones).
+  const raiz = IRREGULARES[min] ? min
+             : (min.endsWith('s') && IRREGULARES[min.slice(0, -1)]) ? min.slice(0, -1)
+             : null;
+  if (raiz) {
+    let bueno = IRREGULARES[raiz] + (raiz === min ? '' : 's');
+    // ITEMS -> ÍTEMS, no "Ítems": si la palabra viene toda en mayusculas, la tilde va igual y
+    // el resto tambien (RAE). Si solo empieza en mayuscula, capitalizamos la inicial.
+    if (p.length > 1 && p === p.toUpperCase()) bueno = bueno.toUpperCase();
+    else if (p[0] === p[0].toUpperCase()) bueno = bueno[0].toUpperCase() + bueno.slice(1);
+    return { malo: p, bueno };
+  }
+  return null;
+}
+const palabrasDe = (s) => s.split(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/).filter(Boolean);
+
 const hits = [];
+
+// PASE 1: strings de JS y atributos (toast, textContent, placeholder, _vacio, _error...).
 L.forEach((linea_, i) => {
   const linea = sinIntocables(sinConsole(linea_));
   VISIBLE.forEach((re) => {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(linea))) {
-      // Tokenizar en palabras. \b no respeta acentos, asi que partimos por lo que NO es letra.
-      const palabras = m[1].split(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/).filter(Boolean);
-      for (const p of palabras) {
-        const min = p.toLowerCase();
-        // 1) La REGLA: aguda terminada en -ion. Los plurales (-iones) no matchean.
-        if (REGLA_ION.test(min) && !EXCEPCIONES_ION.has(min)) {
-          hits.push({ ln: i + 1, txt: m[1], malo: p, bueno: acentuarIon(p) });
-          continue;
-        }
-        // 2) Los irregulares, y su PLURAL. Una esdrujula conserva la tilde al pluralizar
-        //    (tecnico->tecnicos, numero->numeros), al reves que las agudas en -ion, que la
-        //    pierden (accion->acciones). El diccionario guardaba solo el singular: "No hay
-        //    tecnicos registrados" pasaba limpio. Otra lista con el borde mal dibujado.
-        const raiz = IRREGULARES[min] ? min
-                   : (min.endsWith('s') && IRREGULARES[min.slice(0, -1)]) ? min.slice(0, -1)
-                   : null;
-        if (raiz) {
-          let bueno = IRREGULARES[raiz] + (raiz === min ? '' : 's');
-          if (p[0] === p[0].toUpperCase()) bueno = bueno[0].toUpperCase() + bueno.slice(1);
-          hits.push({ ln: i + 1, txt: m[1], malo: p, bueno });
-        }
+      for (const p of palabrasDe(m[1])) {
+        const r = revisarPalabra(p);
+        if (r) hits.push({ ln: i + 1, txt: m[1], malo: r.malo, bueno: r.bueno });
       }
     }
   });
 });
 
+// PASE 2: TEXTO RENDERIZADO —lo que va entre > y <—, venga de donde venga.
+//
+// Primera version de este pase (misma tarde): vaciaba <script> Y <style> antes de escanear.
+// Eso tiro por la borda el HTML GENERADO —`html += '<div>ITEMS</div>'`, `innerHTML = '...'`—,
+// que vive dentro de <script> y es donde se construyen las listas, las tarjetas y los badges.
+// Habia CUATRO tildes ahi (ITEMS, Descripcion, conexion, cotizacion) que el pase seguia sin ver.
+// Arreglar "no miro el markup" creando "no miro el markup generado" es la leccion repitiendose
+// dentro de su propia correccion. El texto que el usuario lee no distingue si nacio estatico o
+// de un `html +=`: entre > y < hay una palabra, y hay que mirarla.
+//
+// Ahora solo se vacia <style> (los selectores CSS usan `>` y no son UI). <script> se conserva.
+// El riesgo es un falso positivo por un operador JS (`a > palabra < b`): raro, ruidoso y
+// corregible — nunca un falso negativo, que es el unico resultado inaceptable (doctrina del repo).
+// La clase [^<>{}'"] mantiene cada match dentro de un literal o nodo, sin cruzar comillas.
+const preservandoLineas = (s) => s.replace(/[^\n]/g, ' ');
+const renderizado = L.join('\n').replace(/<style[\s\S]*?<\/style>/gi, (b) => preservandoLineas(b));
+for (const m of renderizado.matchAll(/>([^<>{}'"]+)</g)) {
+  const txt = m[1].replace(/\s+/g, ' ').trim();
+  if (!txt || !/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(txt)) continue;
+  const ln = renderizado.slice(0, m.index).split('\n').length;
+  for (const p of palabrasDe(m[1])) {
+    const r = revisarPalabra(p);
+    if (r) hits.push({ ln, txt, malo: r.malo, bueno: r.bueno });
+  }
+}
+
 console.log('\n  Tildes faltantes en texto visible — EMVAL\n');
 if (!hits.length) {
-  console.log('  0 palabras sin tilde en toasts, textContent, placeholders y mensajes de WhatsApp.\n');
+  console.log('  0 sin tilde: ni en strings de JS, ni en atributos, ni en el texto renderizado\n' +
+              '  (markup estatico y HTML generado por `html += \'...\'`).\n');
   process.exit(0);
 }
 hits.forEach((h) => {

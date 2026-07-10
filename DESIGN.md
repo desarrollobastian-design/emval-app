@@ -2011,4 +2011,49 @@ el `id` y el `placeholder`). Un mutante cuyo objetivo ya no existe no prueba nad
 
 ---
 
+## Crítica del 2026-07-10 (tarde) — el check de tildes miraba strings, no lo que se ve
+
+Séptima ronda. Fui a las dimensiones de diseño que llevaba seis rondas esquivando —microcopy,
+terminología, capitalización, carga cognitiva— porque no se *grep*ean fácil. Casi todo salió a
+favor: la capitalización de botones es consistente (Sentence case, 39 botones), el flujo del
+técnico es un wizard de 4 pasos y no una avalancha. El único hallazgo fueron **tildes**.
+
+### 🔤 `check-tildes.js` escaneaba strings de JS, no el texto que se ve
+
+El verificador miraba `toast()`, `textContent=`, `placeholder=`, `_vacio()`, `_error()`… — y su
+cabecera decía *"solo los contextos donde el string es VISIBLE"*. Esa lista se leyó como
+exhaustiva y no lo era. Un `<button>+ Agregar item</button>` es tan visible como un toast, y no
+estaba. En ese punto ciego vivían `ítem` e `ÍTEMS A COTIZAR`.
+
+### 🔁 Y al taparlo, lo destapé otra vez — en el mismo commit
+
+Añadí un PASE 2 que escanea los nodos de texto del markup… y **vacié `<script>` antes de
+escanear.** Con `<script>` se fue todo el **HTML generado** —`html += '<div>ITEMS</div>'`,
+`innerHTML = '…'`—, que es donde se construyen las listas, las tarjetas y los badges: la mayor
+parte de la UI real. Cuatro tildes más seguían invisibles ahí: `Descripción`, `conexión` (×2),
+`cotización`. **Arreglar "no miro el markup" creando "no miro el markup generado"** es la lección
+repitiéndose dentro de su propia corrección.
+
+El PASE 2 final ya no distingue origen: el texto que el usuario lee no sabe si nació estático o de
+un `html +=`. Escanea `>texto<` sobre todo el archivo (solo vacía `<style>`, cuyos selectores usan
+`>`). **Seis tildes** corregidas en total, cero falsos positivos de operadores JS.
+
+### 🔍 La lección, otra forma: una lista de contextos no es la lista de TODOS los contextos
+
+`check-tildes` ha tenido **tres** puntos ciegos, los tres en lo que su alcance declarado se
+callaba que no miraba:
+
+1. Descartaba la **línea entera** al ver un `console.*` (el `toast` visible se iba con él).
+2. No miraba los **nodos de texto del markup** (`<button>…</button>`).
+3. No miraba el **HTML generado** en JS (`html += '…'`) — y este lo abrí yo tapando el 2.
+
+La forma no cambia. Cuando un check declara *dónde* mira con una lista, la pregunta no es si la
+lista es correcta, sino **qué clase de sitio no está en ella**. Y "lo obvio" —el texto de un
+botón— es justo lo que una lista de casos especiales se salta, porque nadie lo anota como caso.
+
+67 mutantes, 0 puntos ciegos. Dos nuevos: uno mete una tilde faltante en markup estático, otro en
+HTML generado. El segundo existe para que, si alguien vuelve a vaciar `<script>`, se entere.
+
+---
+
 *Documenta el sistema real de EMVAL. Alinear el código a este documento, no al revés.*
