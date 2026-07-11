@@ -14,6 +14,18 @@
 <meta name="theme-color" content="#2D5AA0">
 <link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon.png">
+<!-- favicon explicito: sin esto el navegador pide /favicon.ico en la raiz del dominio y recibe
+     404 (GitHub Pages sirve la app en un subpath). Ese 404 ensuciaba la consola en cada carga. -->
+<link rel="icon" href="./icon.png">
+<meta name="description" content="EMVAL — gestión de órdenes de trabajo para mantención industrial: obras civiles, correctivos y preventivos.">
+<!-- preconnect/dns-prefetch a los CDN externos: adelanta el handshake DNS/TLS antes de que el
+     navegador descubra cada recurso en serie. Barato y seguro; ayuda al FCP/LCP en la primera carga. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://res.cloudinary.com">
+<link rel="dns-prefetch" href="https://api.emailjs.com">
 <title>EMVAL - Órdenes de Trabajo</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -545,6 +557,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+<!-- <main>: landmark unico del contenido principal (todas las pantallas). El toast, los anuncios
+     aria-live y los dialogos quedan fuera a proposito: son complementarios, no el contenido. -->
+<main>
 
 <!-- ============ SCREEN: SELECCIÓN USUARIO ============ -->
 <div class="screen active" id="s-usuarios">
@@ -1154,6 +1169,7 @@
     <p style="font-size:12px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>
   </div>
 </div>
+</main>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
