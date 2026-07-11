@@ -13,6 +13,13 @@
  *
  * Aqui se escanea todo el espacio de simbolos y se RESTA una allowlist explicita.
  * Si aparece un simbolo nuevo, falla por defecto. Es lo contrario de una lista.
+ *
+ * SEGUNDA REGLA (2026-07-09): un icono que no puede dibujarse.
+ * Este script verificaba "no hay emojis". No verificaba "todo icono se dibuja". Sobrevivio
+ * un  <i class="ti ti-store">  —Tabler Icons por fuente— cuya hoja de estilos NO se carga
+ * en ninguna parte del documento. Ese glifo era una caja de 40x40 vacia, para siempre.
+ * La regla no es "prohibido Tabler": es que una fuente de iconos sin su hoja cargada no
+ * puede renderizar nada, y la iconografia de esta app es SVG inline con currentColor.
  */
 const fs = require('fs');
 const path = require('path');
@@ -68,7 +75,43 @@ lineas.forEach((linea, i) => {
   }
 });
 
+// ─── Iconos por fuente ───────────────────────────────────────────────────────────
+// Se declaran las familias conocidas y como se carga cada una. Si el prefijo de clase
+// aparece y ningun <link> trae su hoja, el icono no puede dibujarse NUNCA.
+// Ademas: la iconografia de esta app es SVG inline. Un <i> es el portador canonico de
+// un icono de fuente, y aqui no hay ni una cursiva legitima.
+const FAMILIAS = [
+  { nombre: 'Tabler Icons',    clase: /class="[^"]*\bti\b[\s"]|class="ti /, hoja: /tabler/i },
+  { nombre: 'Font Awesome',    clase: /class="[^"]*\bfa[srlbd]?\b[^"]*\bfa-/, hoja: /font-?awesome/i },
+  { nombre: 'Bootstrap Icons', clase: /class="[^"]*\bbi-/,                    hoja: /bootstrap-icons/i },
+  { nombre: 'Material Icons',  clase: /class="[^"]*material-icons/,           hoja: /material/i },
+];
+const hojas = [...html.matchAll(/<link[^>]+href="([^"]+)"/gi)].map((m) => m[1]).join(' ');
+const iconosRotos = [];
+
+for (const fam of FAMILIAS) {
+  if (!fam.clase.test(html)) continue;
+  if (fam.hoja.test(hojas)) continue;
+  const ln = lineas.findIndex((l) => fam.clase.test(l)) + 1;
+  iconosRotos.push({ ln, msg: fam.nombre + ' usado sin que ningun <link> cargue su hoja: el glifo no se dibuja jamas.' });
+}
+for (let i = 0; i < lineas.length; i++) {
+  if (/<i\s+class=|<i>/.test(lineas[i])) {
+    iconosRotos.push({ ln: i + 1, msg: 'Elemento <i> como icono. La iconografia es SVG inline con currentColor.' });
+  }
+}
+
 console.log('\n  Emojis a color — EMVAL\n');
+
+if (iconosRotos.length) {
+  console.log('  ' + iconosRotos.length + ' ICONO(S) QUE NO PUEDEN DIBUJARSE:\n');
+  iconosRotos.forEach((v) => console.log('    index.html:' + String(v.ln).padEnd(6) + v.msg));
+  console.log('');
+  if (!violaciones.length) {
+    console.log('  0 emojis a color, pero la iconografia no esta completa.\n');
+    process.exit(1);
+  }
+}
 
 if (Object.keys(permitidosVistos).length) {
   console.log('  Simbolos tipograficos permitidos (monocromos, intencionales):');
