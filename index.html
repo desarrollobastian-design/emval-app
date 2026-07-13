@@ -152,6 +152,10 @@
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--azul); }
   .field textarea { min-height: 100px; resize: none; line-height: 1.5; }
+  /* Inputs inline de los items de cotizacion (fila descripcion/cantidad/precio). Antes eran
+     border:1px repetido tres veces en el JS y sin foco visible; ahora hablan el idioma de .field. */
+  .item-input { padding: 8px; border: 1.5px solid var(--gris3); border-radius: var(--radio-sm); font-family: inherit; font-size: 16px; background: white; color: var(--texto); }
+  .item-input:focus { border-color: var(--azul); }
   
   /* BUTTONS */
   .btn { border: none; border-radius: var(--radio); padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s, transform 0.1s; }
@@ -167,6 +171,10 @@
   .seg-tab:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   .btn-secondary { background: var(--gris2); color: var(--texto); }
   .btn-verde { background: var(--verde-btn); color: white; }
+  /* Jerarquia dentro de una card (no gastan el verde primario). .btn-ghost = undo de bajo peso
+     (Limpiar firma); .btn-confirmar = gate obligatorio, mas peso via borde azul (Confirmar firma). */
+  .btn-ghost { background: transparent; color: var(--texto2); }
+  .btn-confirmar { background: white; color: var(--azul); border: 1.5px solid var(--azul); }
   /* Accion destructiva del dialogo. --rojo con blanco da 4.98:1 (check-contraste.js). */
   .btn-peligro { background: var(--rojo); color: white; }
   .btn-whatsapp { background: #25D366; color: white; }
@@ -787,20 +795,21 @@
       <div class="firma-container" id="firma-container">
         <canvas id="firma-canvas" width="600" height="200"></canvas>
         <div class="firma-actions">
-          <button class="btn btn-secondary btn-sm" onclick="limpiarFirma()" style="flex:1;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Limpiar</button>
-          <!-- Secundario a proposito: es un paso DENTRO de la card de firma, no el destino de la
-               pantalla. El verde de accion queda para "Cerrar y generar OT", que es irreversible.
-               DESIGN.md §4: maximo un boton de peso primario por pantalla. -->
-          <button class="btn btn-secondary btn-sm" onclick="confirmarFirma()" style="flex:1;">✓ Confirmar firma</button>
+          <!-- "Limpiar" es el undo raro (ghost, menos peso). "Confirmar firma" es el gate obligatorio
+               (borde azul, mas peso), pero NO verde: el verde queda para "Cerrar y generar OT", que es
+               irreversible. DESIGN.md §4: un solo boton de peso primario por pantalla. -->
+          <button class="btn btn-ghost btn-sm" onclick="limpiarFirma()" style="flex:1;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Limpiar</button>
+          <button class="btn btn-confirmar btn-sm" onclick="confirmarFirma()" style="flex:1;">✓ Confirmar firma</button>
         </div>
       </div>
       <div id="firma-status" style="font-size: 12px; color: var(--texto3); margin-top: 4px;">Pídele al administrador que firme con el dedo</div>
-      <div style="margin-top:12px;">
-        <label style="font-size:12px;font-weight:600;color:var(--texto2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;" for="email-admin">Email del administrador</label>
-        <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional - ya configurado en sucursal" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
-        <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;">Email configurado automáticamente</div>
-        <div style="font-size:11px;color:var(--texto3);margin-top:2px;">Si la sucursal tiene email, se envía automáticamente</div>
-      </div>
+    </div>
+
+    <div class="field">
+      <label for="email-admin">Email del administrador</label>
+      <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+      <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;"></div>
+      <div id="email-hint-default" style="font-size:11px;color:var(--texto3);margin-top:4px;">Si lo dejas vacío y la sucursal tiene email, se envía sola.</div>
     </div>
 
     <div class="field">
@@ -841,12 +850,14 @@
       <div class="summary-row"><span class="sum-label" style="font-weight:600;">TOTAL</span><span class="sum-val" id="cot-total" style="font-size:16px;color:var(--azul);">$0</span></div>
     </div>
     <div class="field">
-      <label for="cot-nombre-servicio">Nombre del archivo PDF</label>
+      <label for="cot-nombre-servicio">Nombre del servicio</label>
       <input type="text" id="cot-nombre-servicio" placeholder="Ej: Servicio gasfitería, Reparación eléctrica..." />
     </div>
     <div class="field">
-      <label for="cot-carpeta">Supervisor del local</label>
-      <input type="text" id="cot-carpeta" placeholder="Ej: A. Espinoza, C. Zapata..." />
+      <label for="cot-carpeta-sel">Supervisor del local</label>
+      <select id="cot-carpeta-sel" onchange="_onSupervisorSelChange()"></select>
+      <input type="text" id="cot-carpeta" aria-label="Nombre del nuevo supervisor" placeholder="Escribe el nombre del nuevo supervisor..." style="display:none;margin-top:8px;" />
+      <div style="font-size:11px;color:var(--texto2);margin-top:4px;">Con esto se archiva la cotización y se le envía al supervisor.</div>
     </div>
     <div style="display:flex;gap:10px;margin-top:auto;">
       <button class="btn btn-verde" onclick="mostrarVistaPreviaCotizacion()" style="flex:1;">Validar y visualizar</button>
@@ -1467,6 +1478,7 @@ function _restaurarCamposDOMDesdeEstado() {
   if (trabajo) trabajo.value = estado.descripcion || '';
   const email = document.getElementById('email-admin');
   if (email) email.value = estado.emailAdmin || estado.emailSucursal || '';
+  _actualizarHintEmail(estado.emailAdmin || estado.emailSucursal);
   const equipos = document.getElementById('num-equipos');
   if (equipos) equipos.value = estado.numEquipos || '';
   const prev = document.getElementById('t-prev');
@@ -1959,7 +1971,7 @@ function _iniciarCotizadorPrevia(nombre, direccion, emailAdmin, centro) {
     '<div class="summary-row"><span class="sum-label">Técnico</span><span class="sum-val">Por asignar</span></div>' +
     '<div class="summary-row"><span class="sum-label">Fecha</span><span class="sum-val">' + cotizacionActual.fecha + '</span></div>' +
     '<div class="summary-row" style="border:none"><span class="sum-label">Tipo</span><span class="sum-val" style="color:var(--azul);font-weight:600;">Cotización previa</span></div>';
-  const cp = document.getElementById('cot-carpeta'); if (cp) cp.value = nombre || '';
+  _llenarSupervisoresSelect('');   // el supervisor lo elige Pedro (no se prellenar con el nombre del local)
   const dt = document.getElementById('cot-detalle-trabajo'); if (dt) dt.value = '';
   const ns = document.getElementById('cot-nombre-servicio'); if (ns) ns.value = '';
   renderItemsCot();
@@ -1967,6 +1979,20 @@ function _iniciarCotizadorPrevia(nombre, direccion, emailAdmin, centro) {
 }
 
 // =========== LOCAL ===========
+// Un solo hint bajo el email del admin, mutuamente excluyente: si la sucursal trae correo -> verde
+// "Se enviara a X"; si no -> gris "si lo dejas vacio... se envia sola". Antes habia tres mensajes
+// solapados (placeholder + verde + gris) diciendo lo mismo.
+function _actualizarHintEmail(emailSuc) {
+  const hint = document.getElementById('email-sucursal-hint');
+  const hintDef = document.getElementById('email-hint-default');
+  const dest = (emailSuc == null ? '' : String(emailSuc)).trim();
+  if (hint) {
+    hint.textContent = dest ? ('Se enviará a ' + dest) : '';
+    hint.style.display = dest ? 'block' : 'none';
+  }
+  if (hintDef) hintDef.style.display = dest ? 'none' : 'block';
+}
+
 function seleccionarLocal(nombre, direccion, emailAdmin, centro) {
   if (window._modoCotPrevia) {
     _iniciarCotizadorPrevia(nombre, direccion, emailAdmin, centro);
@@ -1980,8 +2006,7 @@ function seleccionarLocal(nombre, direccion, emailAdmin, centro) {
   toast(nombre + ' seleccionado');
   setTimeout(() => {
     go('s-tipo');
-    const hint = document.getElementById('email-sucursal-hint');
-    if (hint) hint.style.display = emailAdmin ? 'block' : 'none';
+    _actualizarHintEmail(emailAdmin);
   }, 400);
 }
 
@@ -2690,6 +2715,45 @@ function _normSupervisor(nombre) {
 }
 function _correoSupervisor(nombre) {
   return (window.CORREOS_SUPERVISORES || {})[_normSupervisor(nombre)] || '';
+}
+// Llena el desplegable "Supervisor del local" con TODOS los supervisores conocidos (siempre visibles),
+// mas el valor actual si es uno viejo/escrito a mano que no este en la lista, mas "+ Otro supervisor..."
+// para agregar uno nuevo. El campo de texto oculto (cot-carpeta) es la fuente de verdad al guardar.
+function _llenarSupervisoresSelect(valorActual) {
+  const sel = document.getElementById('cot-carpeta-sel');
+  const inp = document.getElementById('cot-carpeta');
+  if (!sel || !inp) return;
+  const actual = (valorActual == null ? '' : String(valorActual)).trim();
+  const nombres = Object.keys(window.CORREOS_SUPERVISORES || {}).sort();
+  let html = '<option value="">Elige un supervisor...</option>';
+  nombres.forEach(function(nom){
+    html += '<option value="' + _escHtml(nom) + '">' + _escHtml(nom) + '</option>';
+  });
+  // supervisor guardado que no este en la lista (uno viejo o escrito a mano): se suma para no perderlo
+  if (actual && nombres.indexOf(actual) === -1) {
+    html += '<option value="' + _escHtml(actual) + '">' + _escHtml(actual) + '</option>';
+  }
+  html += '<option value="__nuevo__">+ Otro supervisor...</option>';
+  sel.innerHTML = html;
+  sel.value = actual;
+  inp.value = actual;
+  inp.style.display = 'none';
+}
+
+// Al cambiar el desplegable: si eligen "+ Otro", muestra el campo para escribir uno nuevo;
+// si eligen un supervisor de la lista, lo copia al campo oculto que se guarda.
+function _onSupervisorSelChange() {
+  const sel = document.getElementById('cot-carpeta-sel');
+  const inp = document.getElementById('cot-carpeta');
+  if (!sel || !inp) return;
+  if (sel.value === '__nuevo__') {
+    inp.value = '';
+    inp.style.display = 'block';
+    inp.focus();
+  } else {
+    inp.value = sel.value;
+    inp.style.display = 'none';
+  }
 }
 
 // Rechaza una promesa si tarda más de ms. Clave: el SDK de Firestore, con mala señal
@@ -3762,7 +3826,7 @@ async function abrirCotizacion(docId) {
     const _supSuc = await _obtenerSupervisorSucursal(cotizacionActual.local);
     const _centroSuc = await _obtenerCentroSucursal(cotizacionActual.local);
     cotizacionActual.centroSucursal = _centroSuc;
-    document.getElementById('cot-carpeta').value = _supSuc || cotizacionActual.local || '';
+    _llenarSupervisoresSelect(_supSuc || '');   // pre-elige el supervisor de la sucursal; se puede cambiar en el desplegable
     document.getElementById('cot-detalle-trabajo').value = cotizacionActual.descripcionTrabajo || '';
     document.getElementById('cot-nombre-servicio').value = '';
     renderItemsCot();
@@ -3780,14 +3844,14 @@ function renderItemsCot() {
     div.className = 'card';
     div.style.marginBottom = '8px';
     div.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-      '<input type="text" value="' + item.desc + '" placeholder="Descripción" aria-label="Descripción del ítem ' + (i + 1) + '" style="flex:2;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
+      '<input type="text" value="' + item.desc + '" placeholder="Descripción" aria-label="Descripción del ítem ' + (i + 1) + '" class="item-input" style="flex:2;" oninput="itemsCot[' + i + '].desc=this.value;calcTotalCot()" />' +
       '<button class="item-quitar" aria-label="Quitar ítem" onclick="eliminarItemCot(' + i + ')">✕</button>' +
       '</div>' +
       '<div style="display:flex;gap:8px;">' +
       '<div style="flex:1"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Cantidad</div>' +
-      '<input type="number" value="' + item.qty + '" min="1" aria-label="Cantidad del ítem ' + (i + 1) + '" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" onfocus="this.select()" oninput="itemsCot[' + i + '].qty=Number(this.value)||1;calcTotalCot()" /></div>' +
+      '<input type="text" inputmode="numeric" value="' + item.qty + '" aria-label="Cantidad del ítem ' + (i + 1) + '" class="item-input" style="width:100%;" onfocus="this.select()" oninput="itemsCot[' + i + '].qty=Number(this.value)||1;calcTotalCot()" /></div>' +
       '<div style="flex:2"><div style="font-size:11px;color:var(--texto3);margin-bottom:4px;">Precio unitario ($)</div>' +
-      '<input type="number" value="' + item.precio + '" min="0" aria-label="Precio unitario del ítem ' + (i + 1) + '" style="width:100%;padding:8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;font-size:16px;" onfocus="this.select()" oninput="itemsCot[' + i + '].precio=Number(this.value)||0;calcTotalCot()" /></div>' +
+      '<input type="text" inputmode="numeric" value="' + item.precio + '" aria-label="Precio unitario del ítem ' + (i + 1) + '" class="item-input" style="width:100%;" onfocus="this.select()" oninput="itemsCot[' + i + '].precio=Number(this.value)||0;calcTotalCot()" /></div>' +
       '</div>';
     cont.appendChild(div);
   });
@@ -3858,7 +3922,7 @@ function calcTotalCot() {
 
 async function guardarCotizacion() {
   if (!cotizacionActual) return;
-  const carpeta = document.getElementById('cot-carpeta').value.trim() || cotizacionActual.local;
+  const carpeta = document.getElementById('cot-carpeta').value.trim() || 'Sin supervisor';   // catch-all: nunca el nombre del local -> no se dispersan las carpetas
   const supervisorCarpeta = carpeta;
   const nombreServicio = document.getElementById('cot-nombre-servicio').value.trim();
   const totales = calcTotalCot();
@@ -3972,7 +4036,7 @@ async function editarCotizacion(cotData) {
   itemsCot = (cotData.items || []).map(function(i){ return { desc: i.desc||'', qty: i.qty||1, precio: i.precio||0 }; });
   document.getElementById('cot-detalle-trabajo').value = cotData.descripcionTrabajo || '';
   document.getElementById('cot-nombre-servicio').value = cotData.nombreServicio || '';
-  document.getElementById('cot-carpeta').value = cotData.supervisor || cotData.carpeta || '';
+  _llenarSupervisoresSelect(cotData.supervisor || cotData.carpeta || '');
   renderItemsCot();
   go('s-cotizacion');
 }
@@ -7264,6 +7328,7 @@ async function verOTsTecnico(nombre, grupo) {
     return;
   }
 
+  const _cotizadasCards = [];   // Tema 1: las OT ya cotizadas bajan a una sección aparte
   ots.forEach(function(ot) {
     const cadena = cadenaMap[ot.local] || null;
     const badge = ot.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
@@ -7460,8 +7525,34 @@ async function verOTsTecnico(nombre, grupo) {
       btns.appendChild(btnDelOT);
     }
     card.appendChild(btns);
-    lista.appendChild(card);
+    // Tema 1: las ya cotizadas se bajan a "Ya cotizadas"; arriba solo las pendientes.
+    if (yaCotizadaT) { _cotizadasCards.push(card); } else { lista.appendChild(card); }
   });
+
+  // Sección colapsable "Ya cotizadas" al fondo (no estorban las pendientes).
+  if (_cotizadasCards.length) {
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-top:6px;';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 12px;background:var(--gris1);border-radius:var(--radio-sm);';
+    const chev = document.createElement('span');
+    chev.style.cssText = 'font-size:14px;color:var(--texto3);transition:transform 0.2s;';
+    chev.textContent = '>';
+    const txt = document.createElement('span');
+    txt.style.cssText = 'font-size:13px;font-weight:600;color:var(--texto2);flex:1;';
+    txt.textContent = 'Ya cotizadas (' + _cotizadasCards.length + ')';
+    hdr.appendChild(chev); hdr.appendChild(txt);
+    const cont = document.createElement('div');
+    cont.style.cssText = 'display:none;margin-top:8px;';
+    _cotizadasCards.forEach(function(c){ cont.appendChild(c); });
+    hdr.onclick = function(){
+      const abierto = cont.style.display !== 'none';
+      cont.style.display = abierto ? 'none' : 'block';
+      chev.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
+    };
+    sec.appendChild(hdr); sec.appendChild(cont);
+    lista.appendChild(sec);
+  }
 
   // Populate filtro LOCAL
   const locales = new Set();
@@ -7479,10 +7570,11 @@ async function verOTsTecnico(nombre, grupo) {
     });
   }
 
-  // Actualizar contador
+  // Actualizar contador: pendientes por cotizar (las ya cotizadas van aparte)
   const contador = document.getElementById('ot-contador-tecnico');
   if (contador) {
-    contador.textContent = ots.length + ' resultado' + (ots.length !== 1 ? 's' : '');
+    const _pend = ots.length - _cotizadasCards.length;
+    contador.textContent = _pend + ' por cotizar' + (_cotizadasCards.length ? ' · ' + _cotizadasCards.length + ' ya cotizada' + (_cotizadasCards.length !== 1 ? 's' : '') : '');
   }
 }
 
