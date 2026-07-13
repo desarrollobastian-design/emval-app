@@ -2677,6 +2677,13 @@ function _uid() {
   return 'ot_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
 }
 
+// Cuentas de prueba/desarrollo que NO se muestran en la app (login, listas de OT, admin).
+// No se borra nada en Firestore: solo se ocultan de la vista. Para mostrar de nuevo, quitar de aqui.
+const OCULTOS_TECNICOS = ['Bastian Baeza'];
+function _ocultoTecnico(nombre) {
+  return OCULTOS_TECNICOS.indexOf(String(nombre == null ? '' : nombre).trim()) !== -1;
+}
+
 // Rechaza una promesa si tarda más de ms. Clave: el SDK de Firestore, con mala señal
 // y sin persistencia, deja el add()/set() colgado sin resolver ni rechazar; el timeout
 // permite darse por vencido y confiar en la cola de reintento (IndexedDB).
@@ -4990,6 +4997,7 @@ async function cargarTecnicosAdmin() {
     }
     snap.docs.forEach(function(doc) {
       const d = doc.data();
+      if (_ocultoTecnico(d.nombre)) return;  // cuenta oculta (dev/pruebas)
       const div = document.createElement('div');
       div.className = 'card';
       div.setAttribute('data-tecnico', d.nombre);
@@ -5229,6 +5237,7 @@ function _renderListaUsuarios(docs) {
   });
   sorted.forEach(function(d) {
     if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
+    if (_ocultoTecnico(d.nombre)) return;  // cuentas ocultas (dev/pruebas)
     // Falla CERRADO. Antes era `d.pin || '1234'`: un tecnico sin PIN en Firestore recibia
     // 1234 en silencio, y la pantalla de login lista a todos por nombre en un sitio publico.
     // Un PIN ausente o mal formado ahora niega el acceso y lo dice (ver validarPin).
@@ -6826,6 +6835,7 @@ async function cargarOTsTecnicos() {
     try {
       const otsPausadas = JSON.parse(localStorage.getItem('emval_ots_pausadas') || '[]');
       otsPausadas.forEach(function(ot) {
+        if (_ocultoTecnico(ot.tecnico)) return;  // OT de prueba ocultas
         const t = ot.tecnico || 'Sin asignar';
         if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
         tecnicos[t].ots.push({ id: 'local_' + ot.numero, ...ot });
@@ -6842,6 +6852,7 @@ async function cargarOTsTecnicos() {
       const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
       snap.docs.forEach(function(doc) {
         const d = doc.data();
+        if (_ocultoTecnico(d.tecnico)) return;  // OT de prueba ocultas
         const t = d.tecnico || 'Sin asignar';
         if (!tecnicos[t]) tecnicos[t] = { nombre: t, ots: [] };
         tecnicos[t].ots.push({ id: doc.id, ...d });
@@ -7032,7 +7043,7 @@ async function cargarPreventivos() {
     });
 
     const prevOTs = ordenesSnap.docs
-      .filter(function(d){ return d.data().tipo === 'preventivo'; })
+      .filter(function(d){ return d.data().tipo === 'preventivo' && !_ocultoTecnico(d.data().tecnico); })
       .map(function(d){ return { id: d.id, ...d.data() }; });
 
     _cargado(lista);
@@ -7772,6 +7783,8 @@ async function cargarOTsSupervisor() {
     if (_esperandoFirebase('ots-supervisor', cargarOTsSupervisor)) return;
     const db = window.firebase.firestore();
     const snap = await db.collection('ordenes').orderBy('creadoEn', 'desc').get();
+    // Ocultar de la vista del supervisor las OT de cuentas ocultas (dev/pruebas).
+    const _docsVis = snap.docs.filter(function(dd){ return !_ocultoTecnico((dd.data() || {}).tecnico); });
     const lista = document.querySelector('#s-supervisor .content');
     const otsHoyCont = document.getElementById('sup-ots-hoy-lista') || lista;
     _cargado(otsHoyCont);
@@ -7781,16 +7794,16 @@ async function cargarOTsSupervisor() {
     const titulo = lista.querySelector('[style*="font-weight: 600"]');
     // Limpiar OTs demo
     document.querySelectorAll('#s-supervisor .ot-card').forEach(c => c.remove());
-    if (snap.empty) {
+    if (_docsVis.length === 0) {
       const p = document.createElement('div');
       p.innerHTML = _vacio('Aún no hay OTs', 'Aparecerán aquí cuando un técnico cierre la primera.');
       lista.appendChild(p);
       return;
     }
     // Actualizar stats
-    const total = snap.size;
-    const correctivos = snap.docs.filter(d => d.data().tipo === 'correctivo').length;
-    const preventivos = snap.docs.filter(d => d.data().tipo === 'preventivo').length;
+    const total = _docsVis.length;
+    const correctivos = _docsVis.filter(d => d.data().tipo === 'correctivo').length;
+    const preventivos = _docsVis.filter(d => d.data().tipo === 'preventivo').length;
     const statCards = document.querySelectorAll('#s-supervisor .stat-card');
     const statNums = document.querySelectorAll('#s-supervisor .stat-num');
     if (statNums[0]) statNums[0].textContent = total;
@@ -7832,7 +7845,7 @@ async function cargarOTsSupervisor() {
     const yyyy = now.getFullYear();
     const todayStr = dd + '-' + mm + '-' + yyyy;
     // OTs de hoy COMPLETADAS (las pausadas se muestran en la seccion "Trabajos pausados")
-    const docsHoy = snap.docs.filter(doc => {
+    const docsHoy = _docsVis.filter(doc => {
       const dd2 = doc.data();
       return (dd2.fecha || '') === todayStr && dd2.pausa !== true;
     });
@@ -8024,10 +8037,11 @@ function _renderPausadasSup(snap, seccion, listaEl, countEl) {
       listaEl.innerHTML = '';
       return;
     }
-    // Ordenar por fecha de creacion (mas reciente primero)
-    const docs = snap.docs.slice().sort(function(a, b) {
+    // Ordenar por fecha de creacion (mas reciente primero); ocultar cuentas de prueba
+    const docs = snap.docs.filter(function(d){ return !_ocultoTecnico((d.data() || {}).tecnico); }).sort(function(a, b) {
       return _msCreado(b.data().creadoEn) - _msCreado(a.data().creadoEn);
     });
+    if (docs.length === 0) { seccion.style.display = 'none'; listaEl.innerHTML = ''; return; }
 
     seccion.style.display = 'block';
     if (countEl) { countEl.style.display = ''; countEl.textContent = docs.length; }
