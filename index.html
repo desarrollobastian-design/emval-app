@@ -936,30 +936,12 @@
   <div class="content">
     <!-- FILTROS Y BÚSQUEDA PREVENTIVOS -->
     <div style="margin-bottom:12px;">
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="preventivo-buscar" aria-label="Buscar preventivo" placeholder="Buscar..." style="flex:1;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;" onkeyup="filtrarPreventivos();">
-        <button onclick="toggleFiltrosPreventivos()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filtros</button>
-      </div>
-      <div id="panel-filtros-preventivos" style="display:none;background:var(--gris1);border-radius:var(--radio-sm);padding:12px;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:8px;">
-        <div>
-          <label for="filter-local-preventivo" style="font-size:11px;color:var(--texto3);font-weight:600;">LOCAL</label>
-          <select id="filter-local-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
-            <option value="">Todos</option>
-          </select>
-        </div>
-        <div>
-          <label for="filter-tecnico-preventivo" style="font-size:11px;color:var(--texto3);font-weight:600;">TÉCNICO</label>
-          <select id="filter-tecnico-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
-            <option value="">Todos</option>
-          </select>
-        </div>
-        <div style="grid-column:1/-1;">
-          <label for="filter-fecha-preventivo" style="font-size:11px;color:var(--texto3);font-weight:600;">FECHA</label>
-          <input type="date" id="filter-fecha-preventivo" onchange="filtrarPreventivos()" style="width:100%;padding:6px 8px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
-        </div>
-        <button onclick="limpiarFiltrosPreventivos()" style="grid-column:1/-1;background:var(--texto3);color:white;border:none;border-radius:var(--radio-sm);padding:6px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">Limpiar filtros</button>
-      </div>
-      <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="preventivo-contador">0 resultados</div>
+      <input type="text" id="preventivo-buscar" aria-label="Buscar preventivo" placeholder="Buscar local, técnico o N° de OT..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:8px;" onkeyup="filtrarPreventivos();">
+      <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="preventivo-contador">0 hojas</div>
+    </div>
+    <div id="prev-acciones-bar" style="display:none;gap:8px;align-items:center;margin-bottom:10px;padding:10px 12px;background:var(--gris1);border-radius:var(--radio-sm);">
+      <span id="prev-seleccionadas-count" style="font-size:12px;color:var(--texto2);flex:1;">0 seleccionadas</span>
+      <button id="prev-enviar-btn" onclick="enviarPreventivosSeleccionados()" disabled style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap;opacity:0.5;">Enviar hojas</button>
     </div>
     <div id="lista-preventivos"></div>
   </div>
@@ -2682,6 +2664,32 @@ function _uid() {
 const OCULTOS_TECNICOS = ['Bastian Baeza'];
 function _ocultoTecnico(nombre) {
   return OCULTOS_TECNICOS.indexOf(String(nombre == null ? '' : nombre).trim()) !== -1;
+}
+
+// Escapa texto para meterlo seguro en HTML (correos/markup): un "<" en un dato ya no rompe el correo.
+function _escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+// Correos de los SUPERVISORES (no de los locales). Se usa para pre-llenar el envío de hojas
+// de preventivo al supervisor de cada local. La clave es el nombre tal como está en la sucursal.
+// PENDIENTE: completar con los correos reales.
+window.CORREOS_SUPERVISORES = window.CORREOS_SUPERVISORES || {
+  'A. Espinoza': 'aespinozas@smu.cl',   // Ariel Espinoza Sanhueza
+  'C. Zapata': 'czapatap@smu.cl',       // Carlos Zapata
+  'P. Blake': 'pblake@smu.cl',          // Pablo Roberto Blake Candia
+  'R. Abedrapo': 'rabedrapog@smu.cl'    // Rodrigo Abedrapo
+};
+// Une variantes de tipeo del nombre del supervisor a la clave canónica del mapa.
+function _normSupervisor(nombre) {
+  const n = String(nombre == null ? '' : nombre).trim();
+  const alias = { 'Ariel Espinoza': 'A. Espinoza', 'C.Zapata': 'C. Zapata' };
+  return alias[n] || n;
+}
+function _correoSupervisor(nombre) {
+  return (window.CORREOS_SUPERVISORES || {})[_normSupervisor(nombre)] || '';
 }
 
 // Rechaza una promesa si tarda más de ms. Clave: el SDK de Firestore, con mala señal
@@ -7053,21 +7061,66 @@ async function cargarPreventivos() {
       return;
     }
 
+    window._todosPreventivos = {};
+    const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const _folders = {};  // mesKey -> {content, countEl, n}. Se crean en orden de aparición (fecha desc = mes más nuevo primero).
+    function _folderMes(mesKey, label) {
+      if (_folders[mesKey]) return _folders[mesKey];
+      const carp = document.createElement('div');
+      carp.className = 'card prev-mes-folder';
+      carp.style.cssText = 'margin-bottom:10px;overflow:hidden;';
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;align-items:center;gap:12px;cursor:pointer;padding:2px 0;';
+      const av = document.createElement('div');
+      av.style.cssText = 'width:44px;height:44px;border-radius:var(--radio);background:var(--azul);display:flex;align-items:center;justify-content:center;color:white;flex-shrink:0;';
+      av.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+      const hi = document.createElement('div'); hi.style.flex = '1';
+      const nom = document.createElement('div'); nom.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);'; nom.textContent = label;
+      const cnt = document.createElement('div'); cnt.className = 'prev-mes-count'; cnt.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      hi.appendChild(nom); hi.appendChild(cnt);
+      const chev = document.createElement('div'); chev.style.cssText = 'font-size:16px;color:var(--texto3);transition:transform 0.2s;'; chev.textContent = '>';
+      header.appendChild(av); header.appendChild(hi); header.appendChild(chev);
+      const content = document.createElement('div'); content.className = 'prev-mes-content'; content.style.cssText = 'display:none;margin-top:10px;';
+      const btnSel = document.createElement('button');
+      btnSel.textContent = 'Seleccionar todas';
+      btnSel.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;margin-bottom:8px;';
+      btnSel.onclick = (function(cont){ return function(){
+        const cks = cont.querySelectorAll('input.prev-check');
+        const todas = cks.length > 0 && Array.from(cks).every(function(c){ return c.checked; });
+        cks.forEach(function(c){ c.checked = !todas; });
+        actualizarSeleccionadasPrev();
+      }; })(content);
+      content.appendChild(btnSel);
+      header.onclick = (function(cont, chv){ return function(){
+        const abierto = cont.style.display !== 'none';
+        cont.style.display = abierto ? 'none' : 'block';
+        chv.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
+      }; })(content, chev);
+      carp.appendChild(header); carp.appendChild(content);
+      lista.appendChild(carp);
+      const f = { content: content, countEl: cnt, n: 0 };
+      _folders[mesKey] = f;
+      return f;
+    }
     prevOTs.forEach(function(ot) {
       const cadena = cadenaMap[ot.local] || null;
       const otNum = String(ot.numero || ot.otNumero || '');
       const pdfInfo = (ot.id && pdfMap['c_' + ot.id]) || pdfMap[otNum] || null;
-      const pdfCloudUrl = pdfInfo ? pdfInfo.cloudUrl : '';
-      const pdfFirestoreUrl = pdfInfo ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfInfo.id) : '';
-      const yaCotizada = cotMap[ot.id] || cotMap['n_' + otNum] || null;
+      // Prefiere el PDF guardado en el propio documento de la OT (p. ej. OTs sincronizadas
+      // offline, sin entrada en el índice 'pdfs'); si no, cae al índice.
+      const pdfCloudUrl = ot.pdfUrlCloudinary || (pdfInfo ? pdfInfo.cloudUrl : '') || '';
+      const pdfFirestoreUrl = ot.pdfUrl || (pdfInfo ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfInfo.id) : '');
+      let supNombre = '';
+      if (cadena && cadena.sucursales) {
+        const suc = cadena.sucursales.find(function(s){ return (typeof s === 'object' ? s.nombre : s) === ot.local; });
+        if (suc && typeof suc === 'object') supNombre = suc.supervisor || '';
+      }
+      window._todosPreventivos[ot.id] = { id: ot.id, local: ot.local || '', tecnico: ot.tecnico || '', numero: otNum, fecha: ot.fecha || '', pdfUrl: pdfCloudUrl || pdfFirestoreUrl || '', supervisorNombre: supNombre };
 
       const card = document.createElement('div');
-      card.className = 'card';
-      card.style.marginBottom = '12px';
-      card.setAttribute('data-local', ot.local || '');
-      card.setAttribute('data-tecnico', ot.tecnico || '');
-      card.setAttribute('data-fecha', ot.fecha || '');
-      card.setAttribute('data-ot', (otNum || '') + ' ' + (ot.local || '') + ' ' + (ot.tecnico || ''));
+      card.className = 'card prev-hoja-row';
+      card.style.marginBottom = '10px';
+      card.setAttribute('data-buscar', (otNum + ' ' + (ot.local || '') + ' ' + (ot.tecnico || '')).toLowerCase());
 
       // ---- Header ----
       const hdr = document.createElement('div');
@@ -7090,7 +7143,14 @@ async function cargarPreventivos() {
       const numBadge = document.createElement('span');
       numBadge.className = 'badge badge-prev';
       numBadge.textContent = '#' + otNum;
-      hdr.appendChild(ico); hdr.appendChild(hdrInfo); hdr.appendChild(numBadge);
+      const chkPrev = document.createElement('input');
+      chkPrev.type = 'checkbox';
+      chkPrev.className = 'prev-check';
+      chkPrev.dataset.prevId = ot.id;
+      chkPrev.setAttribute('aria-label', 'Seleccionar hoja ' + otNum);
+      chkPrev.style.cssText = 'width:20px;height:20px;flex-shrink:0;cursor:pointer;accent-color:var(--azul);';
+      chkPrev.onchange = actualizarSeleccionadasPrev;
+      hdr.appendChild(chkPrev); hdr.appendChild(ico); hdr.appendChild(hdrInfo); hdr.appendChild(numBadge);
       card.appendChild(hdr);
 
       // ---- Botones ----
@@ -7111,64 +7171,24 @@ async function cargarPreventivos() {
         btns.appendChild(btnDesc);
       }
 
-      if (yaCotizada) {
-        const wrapCot = document.createElement('div');
-        wrapCot.style.cssText = 'flex:1;display:flex;align-items:center;gap:6px;';
-        const badgeCot = document.createElement('span');
-        badgeCot.style.cssText = 'background:var(--verde-badge-fondo);color:var(--verde-badge);font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--radio-pill);white-space:nowrap;';
-        badgeCot.textContent = String.fromCharCode(10003) + ' Cotizada';
-        const btnVerCotP = document.createElement('button');
-        btnVerCotP.textContent = 'Ver cotización';
-        btnVerCotP.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;';
-        btnVerCotP.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizada);
-        wrapCot.appendChild(badgeCot);
-        wrapCot.appendChild(btnVerCotP);
-        btns.appendChild(wrapCot);
-      } else {
-        const btnCot = document.createElement('button');
-        btnCot.textContent = '+ Cotización';
-        btnCot.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
-        btns.appendChild(btnCot);
-      }
+      // Preventivos NO llevan cotización: la hoja solo se envía. (Se quitó "+ Cotización".)
 
       card.appendChild(btns);
-      lista.appendChild(card);
+      // Meter la hoja en la carpeta de su mes
+      const pp = (ot.fecha || '').split('-');
+      const mesKey = (pp.length === 3) ? (pp[2] + '-' + String(pp[1]).padStart(2, '0')) : '0000-00';
+      const mesLabel = (pp.length === 3 && +pp[1] >= 1 && +pp[1] <= 12) ? (MESES[+pp[1]] + ' ' + pp[2]) : 'Sin fecha';
+      const _f = _folderMes(mesKey, mesLabel);
+      _f.content.appendChild(card);
+      _f.n++;
+      _f.countEl.textContent = _f.n + (_f.n === 1 ? ' hoja' : ' hojas');
     });
 
-    // Populate filtros
-    const locales = new Set();
-    const tecnicos = new Set();
-    prevOTs.forEach(ot => {
-      if (ot.local) locales.add(ot.local);
-      if (ot.tecnico) tecnicos.add(ot.tecnico);
-    });
-    const selectLocal = document.getElementById('filter-local-preventivo');
-    const selectTecnico = document.getElementById('filter-tecnico-preventivo');
-    if (selectLocal) {
-      selectLocal.innerHTML = '<option value="">Todos</option>';
-      Array.from(locales).sort().forEach(l => {
-        const opt = document.createElement('option');
-        opt.value = l;
-        opt.textContent = l;
-        selectLocal.appendChild(opt);
-      });
-    }
-    if (selectTecnico) {
-      selectTecnico.innerHTML = '<option value="">Todos</option>';
-      Array.from(tecnicos).sort().forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = t;
-        selectTecnico.appendChild(opt);
-      });
-    }
-
-    // Actualizar contador
     const contador = document.getElementById('preventivo-contador');
-    if (contador) {
-      contador.textContent = prevOTs.length + ' resultado' + (prevOTs.length !== 1 ? 's' : '');
-    }
+    if (contador) contador.textContent = prevOTs.length + ' hoja' + (prevOTs.length !== 1 ? 's' : '');
+    const _prevBar = document.getElementById('prev-acciones-bar');
+    if (_prevBar) _prevBar.style.display = prevOTs.length > 0 ? 'flex' : 'none';
+    actualizarSeleccionadasPrev();
   } catch(e) {
     _error('cargar las OTs preventivas', e);
   }
@@ -7497,6 +7517,118 @@ function obtenerCotizacionesSeleccionadas() {
 }
 
 let _cotsParaEnviar = [];
+let _hojasParaEnviar = [];
+let _envioModo = 'cot';  // 'cot' | 'hoja' — el modal de correos se reutiliza para ambos
+
+// ===== Envío de HOJAS de preventivo a los correos que elija el admin (SIN cotización) =====
+function actualizarSeleccionadasPrev() {
+  const checks = document.querySelectorAll('#lista-preventivos input.prev-check');
+  const marcadas = Array.from(checks).filter(function(c){ return c.checked; });
+  const count = document.getElementById('prev-seleccionadas-count');
+  if (count) count.textContent = marcadas.length + ' seleccionada' + (marcadas.length !== 1 ? 's' : '');
+  const btn = document.getElementById('prev-enviar-btn');
+  if (btn) { btn.disabled = marcadas.length === 0; btn.style.opacity = marcadas.length === 0 ? '0.5' : '1'; }
+}
+
+function toggleSeleccionarTodasPrev() {
+  // Solo las visibles (respeta los filtros); las ocultas por filtro no se marcan.
+  const checks = Array.from(document.querySelectorAll('#lista-preventivos input.prev-check'))
+    .filter(function(c){ const card = c.closest('.card'); return !card || card.style.display !== 'none'; });
+  const todas = checks.length > 0 && checks.every(function(c){ return c.checked; });
+  checks.forEach(function(c){ c.checked = !todas; });
+  actualizarSeleccionadasPrev();
+}
+
+function obtenerPreventivosSeleccionados() {
+  const checks = document.querySelectorAll('#lista-preventivos input.prev-check:checked');
+  const mapa = window._todosPreventivos || {};
+  return Array.from(checks).map(function(c){ return mapa[c.dataset.prevId]; }).filter(Boolean);
+}
+
+function enviarPreventivosSeleccionados() {
+  const sel = obtenerPreventivosSeleccionados();
+  if (sel.length === 0) { toast('Marca al menos una hoja'); return; }
+  if (sel.every(function(h){ return !h.pdfUrl; })) { toast('Las hojas marcadas aún no tienen PDF disponible'); return; }
+  _hojasParaEnviar = sel;
+  _envioModo = 'hoja';
+  const tit = document.getElementById('modal-enviar-cot-titulo');
+  if (tit) tit.textContent = 'Enviar hojas de trabajo';
+  const sub = document.getElementById('modal-enviar-cot-sub');
+  if (sub) sub.textContent = sel.length + ' hoja(s) · agrega uno o más correos';
+  const cont = document.getElementById('modal-enviar-cot-lista');
+  if (cont) cont.innerHTML = '';
+  // Pre-llenar con el correo del SUPERVISOR de cada hoja (mapeado por nombre, no el del local).
+  const prefill = [];
+  const sinCorreo = [];
+  sel.forEach(function(h){
+    const em = _correoSupervisor(h.supervisorNombre);
+    if (em) { if (prefill.indexOf(em) === -1) prefill.push(em); }
+    else if (h.supervisorNombre) {
+      const nom = _normSupervisor(h.supervisorNombre);
+      if (sinCorreo.indexOf(nom) === -1) sinCorreo.push(nom);
+    }
+  });
+  if (prefill.length === 0) prefill.push('');
+  prefill.forEach(function(em){ agregarFilaEmailCot(em); });
+  _modalMostrar('modal-enviar-cot', 'flex', cerrarModalEnviarCot);
+  if (sinCorreo.length) toast('Sin correo configurado para: ' + sinCorreo.join(', ') + '. Agrégalo abajo.');
+}
+
+// Arma el correo con los PDF de las hojas marcadas y lo manda a cada destinatario (mismo template).
+async function _procesarEnvioHojas(hojas, emails) {
+  const conPdf = hojas.filter(function(h){ return h && h.pdfUrl; });
+  const sinPdf = hojas.filter(function(h){ return !h || !h.pdfUrl; });
+  if (conPdf.length === 0) { toast('Ninguna hoja tiene PDF para enviar'); return; }
+  // ── CSS-EXPORTADO: INICIO ────────────────────────────────────────────────────────────
+  // Este HTML viaja a un CLIENTE DE CORREO (EmailJS): el :root de la app no existe alli, asi
+  // que TODO va con literales (hex, radios). Una custom property se invalidaria. check-tokens
+  // invierte su regla dentro de esta zona: aqui el literal es obligatorio.
+  let itemsHtml = '';
+  conPdf.forEach(function(h, i) {
+    const verPdf = '<a href="' + h.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar hoja</a>';
+    itemsHtml +=
+      '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
+        '<div style="font-weight:700;font-size:15px;color:#1B3A6B;">' + (i+1) + '. ' + _escHtml(h.local) + ' &mdash; ' + _escHtml(h.fecha) + '</div>' +
+        '<div style="margin-top:2px;font-size:12px;color:#444;">OT #' + _escHtml(h.numero) + ' &middot; Preventivo &middot; ' + _escHtml(h.tecnico) + '</div>' +
+        verPdf +
+      '</div>';
+  });
+  const cuerpoHtml =
+    '<p style="font-size:15px;color:#222;">Estimado/a:<br>Le compartimos <strong>' + conPdf.length + '</strong> hoja(s) de trabajo (preventivo) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
+    itemsHtml;
+  // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
+  const fecha = new Date().toLocaleDateString('es-CL');
+  const locales = [];
+  conPdf.forEach(function(h){ const l = (h.local || '').trim(); if (l && locales.indexOf(l) === -1) locales.push(l); });
+  let locStr = locales.slice(0, 3).join(', ');
+  if (locales.length > 3) locStr += ', +' + (locales.length - 3);
+  const asunto = 'Hojas de trabajo · ' + locStr + ' · ' + fecha;
+  toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
+  let enviados = 0; const fallidos = [];
+  for (var k = 0; k < emails.length; k++) {
+    const _params = {
+      email_admin: emails[k], email: emails[k], name: 'EMVAL E.I.R.L.',
+      ot_numero: conPdf.map(function(h){ return h.numero || ''; }).join(', '),
+      local: conPdf.map(function(h){ return h.local || ''; }).join(', '),
+      fecha: fecha, tecnico: conPdf[0].tecnico || '',
+      tipo: 'Hoja de trabajo', cantidad: String(conPdf.length),
+      asunto: asunto, trabajo: cuerpoHtml, pdf_url: ''
+    };
+    try { await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _params); enviados++; }
+    catch(e) { console.error('EmailJS hoja ERROR (' + emails[k] + '):', JSON.stringify(e)); fallidos.push(emails[k]); }
+  }
+  if (enviados > 0) {
+    document.querySelectorAll('#lista-preventivos input.prev-check').forEach(function(c){ c.checked = false; });
+    actualizarSeleccionadasPrev();
+  }
+  if (fallidos.length === 0) {
+    toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : '') + (sinPdf.length ? ' (' + sinPdf.length + ' sin PDF no se enviaron)' : ''));
+  } else if (enviados > 0) {
+    toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
+  } else {
+    toast('No se pudo enviar. Revisa las direcciones e inténtalo de nuevo.');
+  }
+}
 
 // Email guardado de la sucursal de una cotización (best-effort) para pre-llenar el modal
 function _sucursalDeCot(cot) {
@@ -7553,6 +7685,9 @@ async function enviarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotización'); return; }
   _cotsParaEnviar = seleccionadas;
+  _envioModo = 'cot';
+  const _titCot = document.getElementById('modal-enviar-cot-titulo');
+  if (_titCot) _titCot.textContent = 'Enviar cotización';
   const cont = document.getElementById('modal-enviar-cot-lista');
   const sub = document.getElementById('modal-enviar-cot-sub');
   if (sub) sub.textContent = seleccionadas.length + ' cotización(es) · agrega uno o más correos';
@@ -7590,7 +7725,8 @@ function confirmarEnviarCot() {
   if (invalido) { toast('Correo inválido: ' + invalido); return; }
   if (emails.length === 0) { toast('Agrega al menos un correo'); return; }
   cerrarModalEnviarCot();
-  _procesarEnvioCotizaciones(_cotsParaEnviar, emails);
+  if (_envioModo === 'hoja') { _procesarEnvioHojas(_hojasParaEnviar, emails); }
+  else { _procesarEnvioCotizaciones(_cotsParaEnviar, emails); }
 }
 
 // Normaliza un texto para usarlo como nombre de archivo (sin tildes, espacios->_)
@@ -8519,35 +8655,22 @@ function toggleFiltrosPreventivos() {
 }
 
 function filtrarPreventivos() {
-  const buscar = (document.getElementById('preventivo-buscar') || {}).value.toLowerCase();
-  const filtroLocal = (document.getElementById('filter-local-preventivo') || {}).value;
-  const filtroTecnico = (document.getElementById('filter-tecnico-preventivo') || {}).value;
-  const filtroFecha = (document.getElementById('filter-fecha-preventivo') || {}).value;
-
-  const cards = document.querySelectorAll('#s-preventivos .card');
+  const buscar = (((document.getElementById('preventivo-buscar') || {}).value) || '').toLowerCase().trim();
   let visibles = 0;
-  cards.forEach(card => {
-    const local = card.getAttribute('data-local') || '';
-    const tecnico = card.getAttribute('data-tecnico') || '';
-    const fecha = card.getAttribute('data-fecha') || '';
-    const otText = card.getAttribute('data-ot') || '';
-
-    // Condiciones de filtro
-    const coincideBusqueda = !buscar || otText.toLowerCase().includes(buscar);
-    const coincideLocal = !filtroLocal || local === filtroLocal;
-    const coincideTecnico = !filtroTecnico || tecnico === filtroTecnico;
-    const coincideFecha = !filtroFecha || fecha === filtroFecha;
-
-    const mostrar = coincideBusqueda && coincideLocal && coincideTecnico && coincideFecha;
-    card.style.display = mostrar ? '' : 'none';
-    if (mostrar) visibles++;
+  document.querySelectorAll('#s-preventivos .prev-mes-folder').forEach(function(folder) {
+    let n = 0;
+    folder.querySelectorAll('.prev-hoja-row').forEach(function(row) {
+      const mostrar = !buscar || (row.getAttribute('data-buscar') || '').includes(buscar);
+      row.style.display = mostrar ? '' : 'none';
+      if (mostrar) { n++; visibles++; }
+    });
+    folder.style.display = n > 0 ? '' : 'none';
+    // Al buscar, abrir las carpetas que tienen resultados para que se vean.
+    const content = folder.querySelector('.prev-mes-content');
+    if (buscar && n > 0 && content) content.style.display = 'block';
   });
-
-  // Actualizar contador
   const contador = document.getElementById('preventivo-contador');
-  if (contador) {
-    contador.textContent = visibles + ' resultado' + (visibles !== 1 ? 's' : '');
-  }
+  if (contador) contador.textContent = visibles + ' hoja' + (visibles !== 1 ? 's' : '');
 }
 
 function limpiarFiltrosPreventivos() {
