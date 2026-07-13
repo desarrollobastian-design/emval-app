@@ -14,6 +14,18 @@
 <meta name="theme-color" content="#2D5AA0">
 <link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon.png">
+<!-- favicon explicito: sin esto el navegador pide /favicon.ico en la raiz del dominio y recibe
+     404 (GitHub Pages sirve la app en un subpath). Ese 404 ensuciaba la consola en cada carga. -->
+<link rel="icon" href="./icon.png">
+<meta name="description" content="EMVAL — gestión de órdenes de trabajo para mantención industrial: obras civiles, correctivos y preventivos.">
+<!-- preconnect/dns-prefetch a los CDN externos: adelanta el handshake DNS/TLS antes de que el
+     navegador descubra cada recurso en serie. Barato y seguro; ayuda al FCP/LCP en la primera carga. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://res.cloudinary.com">
+<link rel="dns-prefetch" href="https://api.emailjs.com">
 <title>EMVAL - Órdenes de Trabajo</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -545,6 +557,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+<!-- <main>: landmark unico del contenido principal (todas las pantallas). El toast, los anuncios
+     aria-live y los dialogos quedan fuera a proposito: son complementarios, no el contenido. -->
+<main>
 
 <!-- ============ SCREEN: SELECCIÓN USUARIO ============ -->
 <div class="screen active" id="s-usuarios">
@@ -1154,6 +1169,7 @@
     <p style="font-size:12px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>
   </div>
 </div>
+</main>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -1836,8 +1852,11 @@ function _generarNumeroOTUnico() {
   try {
     JSON.parse(localStorage.getItem('emval_ots') || '[]').forEach(function(o){ if (o && o.numero != null) usados[String(o.numero)] = true; });
   } catch(e){}
+  // Espacio grande (900k) para que la colision entre telefonos sea improbable. La unicidad
+  // REAL de datos la da estado.otClientId (doc(clientId)); el numero es solo etiqueta visible.
+  // No se puede usar un contador servido por Firestore porque la OT se genera offline en terreno.
   var n, intentos = 0;
-  do { n = 9000 + Math.floor(Math.random() * 1000); intentos++; } while (usados[String(n)] && intentos < 60);
+  do { n = 100000 + Math.floor(Math.random() * 900000); intentos++; } while (usados[String(n)] && intentos < 60);
   return n;
 }
 
@@ -5881,7 +5900,7 @@ async function guardarYEnviarPDF() {
     formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', _nombreArchivoPDF().replace(/\.pdf$/i, '') + '.pdf');
+    formData.append('public_id', _nombreArchivoPDF().replace(/\.pdf$/i, '') + '_' + String(estado.otClientId || estado.editandoOTId || _uid()).slice(-7) + '.pdf');
     const resp = await fetch(
       'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
       { method: 'POST', body: formData }
@@ -5906,6 +5925,7 @@ async function guardarYEnviarPDF() {
       // Guardar PDF completo (con fotos) en Firestore
       const pdfDoc = await db.collection('pdfs').add({
         otNumero: estado.otNumero,
+        otClientId: estado.otClientId || estado.editandoOTId || '',
         local: estado.local,
         tecnico: estado.usuario,
         fecha: new Date().toLocaleDateString('es-CL'),
@@ -5947,13 +5967,17 @@ async function guardarYEnviarPDF() {
   if (window._firebaseReady && (pdfUrlCloudinary || pdfUrlFirestore)) {
     try {
       const db = window.firebase.firestore();
-      if (estado.editandoOTId) {
-        // En edicion, actualizar exactamente el documento que se está editando.
-        await db.collection('ordenes').doc(estado.editandoOTId).update({
+      // Enlazar el PDF por el ID del documento (clientId), NUNCA por numero: si dos OT
+      // comparten numero (colision), enlazar por numero pisaba el PDF de la otra OT.
+      // set({merge}) por si el doc de la OT aun no lo escribio guardarEnFirebase (mala senal).
+      const _otDocId = estado.editandoOTId || estado.otClientId;
+      if (_otDocId) {
+        await db.collection('ordenes').doc(_otDocId).set({
           pdfUrl: pdfUrlFirestore || '',
           pdfUrlCloudinary: pdfUrlCloudinary || ''
-        });
+        }, { merge: true });
       } else {
+        // Legacy: OT sin clientId (versiones viejas) → fallback por numero.
         const snap = await db.collection('ordenes')
           .where('numero', '==', estado.otNumero).get();
         if (!snap.empty) {
@@ -6977,11 +7001,14 @@ async function cargarPreventivos() {
       db.collection('cotizaciones').get()
     ]);
 
-    // Index: pdfs por otNumero → {docId, pdfUrlCloudinary}
+    // Index: pdfs por clientId (preferente) y por otNumero (fallback legacy). Buscar por
+    // clientId evita que dos OT con el mismo numero se muestren el PDF de la otra.
     const pdfMap = {};
     pdfSnap.docs.forEach(function(pd) {
       const d = pd.data();
-      if (d.otNumero) pdfMap[String(d.otNumero)] = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
+      const info = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
+      if (d.otNumero) pdfMap[String(d.otNumero)] = info;
+      if (d.otClientId) pdfMap['c_' + d.otClientId] = info;
     });
 
     // Index: cadenas y sucursales por nombre
@@ -7018,7 +7045,7 @@ async function cargarPreventivos() {
     prevOTs.forEach(function(ot) {
       const cadena = cadenaMap[ot.local] || null;
       const otNum = String(ot.numero || ot.otNumero || '');
-      const pdfInfo = pdfMap[otNum] || null;
+      const pdfInfo = (ot.id && pdfMap['c_' + ot.id]) || pdfMap[otNum] || null;
       const pdfCloudUrl = pdfInfo ? pdfInfo.cloudUrl : '';
       const pdfFirestoreUrl = pdfInfo ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfInfo.id) : '';
       const yaCotizada = cotMap[ot.id] || cotMap['n_' + otNum] || null;
@@ -7180,14 +7207,16 @@ async function verOTsTecnico(nombre, grupo) {
     if (cdata.otNumero) otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
   });
 
-  // Index de PDFs por otNumero (fallback para "Ver PDF" cuando el documento de la OT
-  // perdio su pdfUrl, p.ej. por colision de numero — el PDF igual existe en 'pdfs')
+  // Index de PDFs por clientId (preferente) y otNumero (fallback) para "Ver PDF" cuando el
+  // documento de la OT perdio su pdfUrl. Buscar por clientId evita el cruce por numero.
   const pdfMapT = {};
   try {
     const pdfSnapT = await db.collection('pdfs').get();
     pdfSnapT.docs.forEach(function(pd) {
       const d = pd.data();
-      if (d.otNumero) pdfMapT[String(d.otNumero)] = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
+      const info = { id: pd.id, cloudUrl: d.pdfUrlCloudinary || '' };
+      if (d.otNumero) pdfMapT[String(d.otNumero)] = info;
+      if (d.otClientId) pdfMapT['c_' + d.otClientId] = info;
     });
   } catch(e) {
     // SILENCIO-FIRMADO: sin el indice de PDFs las OTs se listan igual, solo que sin su boton
@@ -7327,7 +7356,7 @@ async function verOTsTecnico(nombre, grupo) {
     // por numero (el PDF existe aunque el documento de la OT haya perdido su URL).
     let urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
     if (!urlParaVer) {
-      const _pinfoT = pdfMapT[String(ot.numero || ot.otNumero || '')];
+      const _pinfoT = (ot.id && pdfMapT['c_' + ot.id]) || pdfMapT[String(ot.numero || ot.otNumero || '')];
       if (_pinfoT) {
         urlParaVer = _pinfoT.cloudUrl || ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + _pinfoT.id);
       }
@@ -9770,7 +9799,7 @@ function _modalOcultar(id) {
 // =========== OFFLINE / INDEXEDDB ===========
 
 // Sube un PDF (base64 completo 'data:...;base64,...') a Cloudinary (raw) y devuelve la URL.
-async function _subirPDFaCloudinary(pdfDataUri, numero) {
+async function _subirPDFaCloudinary(pdfDataUri, numero, clientId) {
   try {
     const solo = String(pdfDataUri || '').split(',').pop();
     if (!solo) return null;
@@ -9778,7 +9807,7 @@ async function _subirPDFaCloudinary(pdfDataUri, numero) {
     formData.append('file', 'data:application/pdf;base64,' + solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', 'Recepcion_Obra_OT' + (numero || '') + '.pdf');
+    formData.append('public_id', 'Recepcion_Obra_OT' + (numero || '') + '_' + String(clientId || '').slice(-7) + '.pdf');
     const resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: formData }, 30000);
     const data = await resp.json();
     return data.secure_url || null;
@@ -9964,7 +9993,7 @@ async function sincronizarOTsPendientes() {
       // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link
       var pdfUrlSync = '';
       if (ot.pdfBase64) {
-        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot.numero)) || '';
+        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot.numero, ot.clientId)) || '';
         if (pdfUrlSync && ot.clientId) {
           try { await db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }); }
           catch(e) { console.warn('No se pudo guardar pdfUrl en la OT (sync):', e); }
