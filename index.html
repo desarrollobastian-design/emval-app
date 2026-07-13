@@ -1367,7 +1367,7 @@ function _crearOTPausadaDesdeEstado() {
     cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
     cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
     tipo: estado.tipo,
-    tecnico: estado.usuario,
+    tecnico: _tecnicoActual(),
     fecha: ahora.toLocaleDateString('es-CL'),
     hora: ahora.toLocaleTimeString('es-CL'),
     descripcionProblema: estado.descripProblema || '',
@@ -1711,9 +1711,20 @@ function go(id) {
   }
 }
 
+// Tecnico a registrar en una OT. Si estado.usuario aun no cargo (sesion reseteada, app reabierta
+// en frio, arranque offline), cae al ultimo usuario logueado en ESTE dispositivo. NUNCA devuelve
+// null: un tecnico null rompia la tarjeta en la app y partia el trabajo de una persona en dos
+// (caso Manquimavida #109223, 2026-07-13).
+function _tecnicoActual() {
+  if (estado.usuario) return estado.usuario;
+  try { return localStorage.getItem('emval_ultimo_usuario') || ''; } catch(e) { return ''; }
+}
+
 // =========== LOGIN ===========
 function seleccionarUsuario(nombre, cargo, letra) {
   estado.usuario = nombre; estado.cargo = cargo; estado.avatar = letra;
+  // Respaldo en el dispositivo para _tecnicoActual(): sobrevive a un reset de sesion.
+  try { if (nombre) localStorage.setItem('emval_ultimo_usuario', nombre); } catch(e) {}
   document.getElementById('pin-nombre-topbar').textContent = nombre;
   document.getElementById('pin-nombre-display').textContent = nombre;
   const av = document.getElementById('pin-avatar');
@@ -2461,7 +2472,7 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       cadenaColor: ot.cadenaColor || '',
       cadenaLetra: ot.cadenaLetra || '',
       tipo: ot.tipo,
-      tecnico: ot.tecnico,
+      tecnico: ot.tecnico || _tecnicoActual(),
       fecha: ot.fecha,
       hora: ot.hora,
       descripcionProblema: ot.descripcionProblema || '',
@@ -2640,7 +2651,7 @@ function cerrarOT() {
   // Guardar localmente (offline)
   const ot = {
     numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
-    tecnico: estado.usuario, fecha: fecha, descripcion: desc,
+    tecnico: _tecnicoActual(), fecha: fecha, descripcion: desc,
     fotosAntes, fotosDespues, firmada: true
   };
   // En una edicion de OT ya terminada no se re-registra localmente ni se toca la lista de pausadas.
@@ -2994,7 +3005,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
   const pendPayload = {
     clientId: clientId,
     numero: otBase.numero, local: estado.local, tipo: estado.tipo,
-    tecnico: estado.usuario, fecha: fecha,
+    tecnico: _tecnicoActual(), fecha: fecha,
     descripcionProblema: descripcionProblema,
     descripcionTrabajo: desc, ceco: estado.ceco || '',
     numEquipos: estado.numEquipos || '',
@@ -3067,7 +3078,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     // Modo edicion (solo admin): actualizar el mismo documento, preservando tecnico y fecha originales.
     const otData = {
       numero: otBase.numero, local: estado.local, tipo: estado.tipo,
-      tecnico: esEdicion ? (estado.editandoTecnico || estado.usuario) : estado.usuario,
+      tecnico: esEdicion ? (estado.editandoTecnico || _tecnicoActual()) : _tecnicoActual(),
       fecha: esEdicion ? (estado.editandoFecha || fecha) : fecha,
       descripcionProblema: descripcionProblema,
       ceco: estado.ceco || '', descripcionTrabajo: desc,
@@ -3100,7 +3111,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
           numero: otBase.numero, fecha: fecha,
           urlsAntes: urlsAntes, urlsDespues: urlsDespues,
           urlTimbre: urlTimbre, firmaBase64: firmaBase64,
-          tecnico: estado.usuario
+          tecnico: _tecnicoActual()
         });
       } catch(evc) { console.error('Error vinculando cotizacion:', evc); }
     }
@@ -6008,7 +6019,7 @@ async function guardarYEnviarPDF() {
         otNumero: estado.otNumero,
         otClientId: estado.otClientId || estado.editandoOTId || '',
         local: estado.local,
-        tecnico: estado.usuario,
+        tecnico: _tecnicoActual(),
         fecha: new Date().toLocaleDateString('es-CL'),
         pdfData: (pdfBase64 && pdfBase64.length < 900000) ? pdfBase64 : '',
         pdfUrl: '',
@@ -6036,7 +6047,7 @@ async function guardarYEnviarPDF() {
       ot_numero: String(estado.otNumero),
       local: String(estado.local || ''),
       fecha: new Date().toLocaleDateString('es-CL'),
-      tecnico: String(estado.usuario || ''),
+      tecnico: String(_tecnicoActual()),
       tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
       trabajo: String(trabajo),
       pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
@@ -10201,7 +10212,7 @@ async function sincronizarOTsPendientes() {
       var db = window.firebase.firestore();
       var otDoc = {
         numero: ot.numero, local: ot.local, tipo: ot.tipo,
-        tecnico: ot.tecnico, fecha: ot.fecha,
+        tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
         descripcionProblema: ot.descripcionProblema || '',
         ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
         numEquipos: ot.numEquipos || '',
@@ -10235,7 +10246,7 @@ async function sincronizarOTsPendientes() {
           numero: ot.numero, fecha: ot.fecha,
           urlsAntes: urlsAntes, urlsDespues: urlsDespues,
           urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,
-          tecnico: ot.tecnico
+          tecnico: ot.tecnico || _tecnicoActual()
         });
       }
 
@@ -10244,7 +10255,7 @@ async function sincronizarOTsPendientes() {
       if (ot.emailLocal && pdfUrlSync) {
         await _enviarCorreo({
           email_admin: ot.emailLocal, ot_numero: String(ot.numero), local: String(ot.local || ''),
-          fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || ''),
+          fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
           tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
           trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
         });
