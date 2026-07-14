@@ -893,8 +893,20 @@
       <!-- LITERAL-FIRMADO: stroke="" es atributo presentacional de SVG, no CSS: var() no resuelve. -->
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27A06B" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
-    <div style="font-size:12px;color:var(--texto2);margin-bottom:4px;">Selecciona un técnico para ver sus OTs</div>
-    <div id="lista-tecnicos-ots"></div>
+    <!-- Correctivos: despliega los tecnicos y sus correctivos (los preventivos viven en su tarjeta). -->
+    <div id="correctivos-card" onclick="_toggleCorrectivos()" style="display:flex;align-items:center;gap:12px;background:var(--naranja-badge-fondo);border-radius:var(--radio);padding:13px 16px;cursor:pointer;margin-bottom:12px;border:1.5px solid #EAC48D;">
+      <div style="width:42px;height:42px;border-radius:var(--radio-sm);background:var(--naranja);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div style="flex:1;">
+        <div style="font-size:15px;font-weight:600;color:var(--naranja-btn);">Correctivos</div>
+        <div style="font-size:12px;color:var(--naranja-btn);margin-top:2px;">Ver los correctivos por técnico</div>
+      </div>
+      <!-- LITERAL-FIRMADO: stroke de SVG no resuelve var(); #B45309 = valor de --naranja-btn. -->
+      <svg id="correctivos-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" style="transition:transform 0.2s;"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div id="correctivos-wrap" style="display:none;">
+      <div style="font-size:12px;color:var(--texto2);margin-bottom:4px;">Selecciona un técnico para ver sus correctivos</div>
+      <div id="lista-tecnicos-ots"></div>
+    </div>
   </div>
 </div>
 
@@ -6909,6 +6921,16 @@ async function generarPDFCotizacion() {
 }
 
 // =========== OTs POR TECNICO ===========
+// Despliega/oculta la lista de tecnicos bajo la tarjeta "Correctivos".
+function _toggleCorrectivos() {
+  const wrap = document.getElementById('correctivos-wrap');
+  const chev = document.getElementById('correctivos-chev');
+  if (!wrap) return;
+  const abierto = wrap.style.display !== 'none';
+  wrap.style.display = abierto ? 'none' : 'block';
+  if (chev) chev.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
 async function cargarOTsTecnicos() {
   _cargando(document.getElementById('lista-tecnicos-ots'), 3);   // antes del await
   try {
@@ -6952,9 +6974,11 @@ async function cargarOTsTecnicos() {
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
     Object.keys(tecnicos).forEach(function(nombre, i) {
       const grupo = tecnicos[nombre];
-      const color = _colorPorNombre(nombre);
       const correctivos = grupo.ots.filter(function(o){ return o.tipo === 'correctivo'; }).length;
-      const preventivos = grupo.ots.filter(function(o){ return o.tipo === 'preventivo'; }).length;
+      // Esta lista es la de "Correctivos": los tecnicos con solo preventivos no van aca
+      // (sus preventivos viven en la tarjeta Preventivos).
+      if (correctivos === 0) return;
+      const color = _colorPorNombre(nombre);
       const card = document.createElement('div');
       card.className = 'usuario-item';
       card.style.marginBottom = '10px';
@@ -6972,7 +6996,7 @@ async function cargarOTsTecnicos() {
       nombreDiv.textContent = nombre;
       const statsDiv = document.createElement('div');
       statsDiv.className = 'cargo';
-      statsDiv.textContent = grupo.ots.length + ' OTs | ' + correctivos + ' correctivas / ' + preventivos + ' preventivas';
+      statsDiv.textContent = correctivos + ' correctiva' + (correctivos !== 1 ? 's' : '');
       info.appendChild(nombreDiv);
       info.appendChild(statsDiv);
       const arrow = document.createElement('div');
@@ -6981,6 +7005,9 @@ async function cargarOTsTecnicos() {
       card.appendChild(avatar); card.appendChild(info); card.appendChild(arrow);
       lista.appendChild(card);
     });
+    if (!lista.children.length) {
+      lista.innerHTML = _vacio('Aún no hay correctivos', 'Aparecerán aquí cuando un técnico cierre un correctivo.');
+    }
   } catch(e) {
     console.error('cargar las OTs:', e);
     _listaConError(document.getElementById('lista-tecnicos-ots'), cargarOTsTecnicos);
@@ -7312,6 +7339,10 @@ async function verOTsTecnico(nombre, grupo) {
     if (cdata.otId) otsCotizadasT[cdata.otId] = cd.id;
     if (cdata.otNumero) otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
   });
+  // Previas pendientes (sin OT asignada aun) para el boton "Adjuntar previa".
+  const previasPendientesT = cotSnapT.docs
+    .filter(function(cd){ var x = cd.data(); return x.tipoCot === 'previa' && x.estadoCot === 'Pendiente' && !x.otId; })
+    .map(function(cd){ return Object.assign({ id: cd.id }, cd.data()); });
 
   // Index de PDFs por clientId (preferente) y otNumero (fallback) para "Ver PDF" cuando el
   // documento de la OT perdio su pdfUrl. Buscar por clientId evita el cruce por numero.
@@ -7333,9 +7364,10 @@ async function verOTsTecnico(nombre, grupo) {
 
   _cargado(lista);
   lista.innerHTML = '';
-  const ots = grupo.ots;
+  // "Correctivos" solo: los preventivos viven en su propia seccion y no llevan cotizacion.
+  const ots = (grupo.ots || []).filter(function(o){ return o.tipo === 'correctivo'; });
   if (ots.length === 0) {
-    lista.innerHTML = _vacio('Aún no hay OTs', 'Aparecerán aquí cuando este técnico cierre la primera.');
+    lista.innerHTML = _vacio('Aún no hay correctivos', 'Aparecerán aquí cuando este técnico cierre un correctivo.');
     return;
   }
 
@@ -7504,12 +7536,18 @@ async function verOTsTecnico(nombre, grupo) {
       badgeCotT.appendChild(badgeV);
       badgeCotT.appendChild(btnVerCotT);
       btns.appendChild(badgeCotT);
-    } else {
+    } else if (ot.tipo === 'correctivo') {
+      // Correctivos: crear una cotizacion nueva O adjuntar una previa pendiente.
       const btnCot = document.createElement('button');
       btnCot.textContent = '+ Cotización';
       btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(ot.id);
       btns.appendChild(btnCot);
+      const btnAdj = document.createElement('button');
+      btnAdj.textContent = 'Adjuntar previa';
+      btnAdj.style.cssText = 'flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+      btnAdj.onclick = (function(otRef){ return function(){ abrirAdjuntarPrevia(otRef, previasPendientesT, function(){ verOTsTecnico(nombre, grupo); }); }; })(ot);
+      btns.appendChild(btnAdj);
     }
     // Editar OT terminada (solo admin, y solo si no está en pausa/en espera)
     if (estado.cargo === 'Administrador' && !ot.pausa && ot.estado !== 'En Pausa' && !ot.enEspera) {
@@ -8076,6 +8114,10 @@ async function cargarOTsSupervisor() {
       const cdata = cd.data();
       if (cdata.otId) otsCotizadas[cdata.otId] = cd.id;
     });
+    // Previas pendientes (sin OT asignada aun) para el boton "Adjuntar previa".
+    const previasPendientesSup = cotSnap.docs
+      .filter(function(cd){ var x = cd.data(); return x.tipoCot === 'previa' && x.estadoCot === 'Pendiente' && !x.otId; })
+      .map(function(cd){ return Object.assign({ id: cd.id }, cd.data()); });
 
     // Filtrar solo OTs de hoy
     const now = new Date();
@@ -8143,6 +8185,9 @@ async function cargarOTsSupervisor() {
       descEl.textContent = d.descripcionTrabajo ? d.descripcionTrabajo.substring(0,60)+'...' : '';
       // Badge y boton segun si ya tiene cotizacion
       const yaTieneCot = otsCotizadas[docId];
+      infoEl.appendChild(tituloEl);
+      infoEl.appendChild(subEl);
+      infoEl.appendChild(descEl);
       if (yaTieneCot) {
         const badgeCot = document.createElement('div');
         badgeCot.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;';
@@ -8155,19 +8200,22 @@ async function cargarOTsSupervisor() {
         btnVerCot.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaTieneCot);
         badgeCot.appendChild(badgeVerde);
         badgeCot.appendChild(btnVerCot);
-        infoEl.appendChild(tituloEl);
-        infoEl.appendChild(subEl);
-        infoEl.appendChild(descEl);
         infoEl.appendChild(badgeCot);
-      } else {
+      } else if (d.tipo === 'correctivo') {
+        // Correctivos: crear una cotizacion nueva O adjuntar una previa. Preventivos NO llevan
+        // cotizacion (solo se envia la hoja), por eso no cae aca.
+        const acc = document.createElement('div');
+        acc.style.cssText = 'margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;';
         const btnCot = document.createElement('button');
         btnCot.textContent = '+ Generar cotización';
-        btnCot.style.cssText = 'margin-top:8px;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCot.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnCot.onclick = (function(id){ return function(){ abrirCotizacion(id); }; })(docId);
-        infoEl.appendChild(tituloEl);
-        infoEl.appendChild(subEl);
-        infoEl.appendChild(descEl);
-        infoEl.appendChild(btnCot);
+        const btnAdj = document.createElement('button');
+        btnAdj.textContent = 'Adjuntar previa';
+        btnAdj.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnAdj.onclick = (function(otObj){ return function(){ abrirAdjuntarPrevia(otObj, previasPendientesSup, cargarOTsSupervisor); }; })(Object.assign({ id: docId }, d));
+        acc.appendChild(btnCot); acc.appendChild(btnAdj);
+        infoEl.appendChild(acc);
       }
       card.appendChild(iconEl);
       card.appendChild(infoEl);
@@ -8590,6 +8638,77 @@ async function _vincularCotizacionRealizada(cotId, datos) {
   } catch(e) {
     console.error('Error vinculando cotización realizada:', e);
   }
+}
+
+// --- Adjuntar una cotizacion PREVIA (pendiente) a una OT correctiva ya hecha ---
+// Camino inverso al de "aceptar": el tecnico ya hizo el correctivo por su cuenta y el admin le pega
+// una previa que tenia guardada. Adjuntar = aprobar: une las dos y marca la previa como Realizada.
+function abrirAdjuntarPrevia(ot, previasPendientes, recargar) {
+  const pend = previasPendientes || [];
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.onclick = function(e){ if (e.target === overlay) document.body.removeChild(overlay); };
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:white;border-radius:var(--radio-lg);max-width:460px;width:100%;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:16px 18px;border-bottom:1px solid var(--gris2);position:sticky;top:0;background:white;';
+  head.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--texto);">Adjuntar cotización previa</div>' +
+    '<div style="font-size:12px;color:var(--texto2);margin-top:2px;">' + _escHtml(ot.local || '') + ' &middot; OT #' + _escHtml(String(ot.numero || ot.otNumero || '')) + '</div>';
+  panel.appendChild(head);
+  const body = document.createElement('div');
+  body.style.cssText = 'padding:12px 14px;';
+  if (!pend.length) {
+    body.innerHTML = _vacio('No hay cotizaciones previas pendientes', 'Créalas desde la carpeta de cotizaciones.');
+  } else {
+    pend.forEach(function(p){
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--gris2);border-radius:var(--radio-sm);margin-bottom:8px;';
+      const info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0;';
+      info.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + _escHtml(p.local || 'Sin local') + '</div>' +
+        '<div style="font-size:12px;color:var(--texto2);margin-top:2px;">' + (p.numeroCotizacion ? 'Cot ' + _escHtml(String(p.numeroCotizacion)) + ' &middot; ' : '') + '$' + Number(p.total || 0).toLocaleString('es-CL') + '</div>';
+      const btn = document.createElement('button');
+      btn.textContent = 'Adjuntar';
+      btn.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;';
+      btn.onclick = (function(previa){ return function(){ _confirmarAdjuntarPrevia(previa, ot, overlay, recargar); }; })(p);
+      row.appendChild(info); row.appendChild(btn);
+      body.appendChild(row);
+    });
+  }
+  panel.appendChild(body);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+}
+
+async function _confirmarAdjuntarPrevia(previa, ot, overlay, recargar) {
+  const otNum = String(ot.numero || ot.otNumero || '');
+  if (!await _confirmar('Se unirá la cotización de ' + (previa.local || '') + ' a la OT #' + otNum + ' y quedará aprobada.', { titulo: 'Adjuntar cotización previa', okTexto: 'Adjuntar' })) return;
+  if (!navigator.onLine || !window._firebaseReady) { toast('Necesitas conexión para adjuntar la cotización'); return; }
+  if (_ocupado('adjuntar-previa')) { toast('Espera, se está adjuntando...'); return; }
+  const soltar = _tomar('adjuntar-previa');
+  try {
+    const db = window.firebase.firestore();
+    await _conTimeout(db.collection('cotizaciones').doc(previa.id).update({
+      otId: ot.id,
+      otNumero: otNum,
+      estadoCot: 'Realizada',
+      otCompletadaNumero: otNum,
+      tecnicoRealizo: ot.tecnico || '',
+      fechaRealizada: ot.fecha || new Date().toLocaleDateString('es-CL'),
+      fotosAntes: ot.fotosAntes || [],
+      fotosDespues: ot.fotosDespues || [],
+      fotoTimbre: ot.fotoTimbre || null,
+      firmaImagen: ot.firmaImagen || ''
+    }), 25000, 'adjuntar previa');
+    try { await db.collection('ordenes').doc(ot.id).update({ cotizacionId: previa.id }); } catch(e) {}
+    toast('✓ Cotización adjuntada a la OT #' + otNum);
+    if (overlay && overlay.parentNode) document.body.removeChild(overlay);
+    if (typeof recargar === 'function') recargar();
+  } catch(e) {
+    console.error('Error adjuntando previa:', e);
+    if (_esTimeout(e)) toast('Sin respuesta del servidor. Revisa la cotización antes de reintentar: puede haberse adjuntado igual.');
+    else toast('No se pudo adjuntar la cotización. Intenta de nuevo.');
+  } finally { soltar(); }
 }
 
 // --- Ver el trabajo ejecutado de una cotización Realizada (modal con fotos antes/después + firma) ---
