@@ -1378,7 +1378,7 @@ function _crearOTPausadaDesdeEstado() {
     cadenaLogo: estado.cadenaLogo || (cadenaSeleccionada && cadenaSeleccionada.logo) || '',
     cadenaColor: estado.cadenaColor || (cadenaSeleccionada && cadenaSeleccionada.color) || '',
     cadenaLetra: estado.cadenaLetra || (cadenaSeleccionada && cadenaSeleccionada.letra) || '',
-    tipo: estado.tipo,
+    tipo: _tipoActual(),
     tecnico: _tecnicoActual(),
     fecha: ahora.toLocaleDateString('es-CL'),
     hora: ahora.toLocaleTimeString('es-CL'),
@@ -1731,6 +1731,13 @@ function _tecnicoActual() {
   if (estado.usuario) return estado.usuario;
   try { return localStorage.getItem('emval_ultimo_usuario') || ''; } catch(e) { return ''; }
 }
+
+// tipo puede llegar null/desconocido (OT guardada por una ruta que no lo tenia cargado). Regla unica
+// y segura: solo 'preventivo' es preventivo; TODO lo demas (correctivo, null, vacio) se normaliza a
+// 'correctivo' -> queda visible y cotizable. Asi una OT nunca desaparece de las listas por tipo nulo.
+// Caso: 7 OT de Chillan Viejo (Jose/Lucas) invisibles por tipo NULL, 2026-07-17.
+function _normTipo(tipo) { return tipo === 'preventivo' ? 'preventivo' : 'correctivo'; }
+function _tipoActual() { return _normTipo(estado.tipo); }
 
 // =========== LOGIN ===========
 function seleccionarUsuario(nombre, cargo, letra) {
@@ -2483,7 +2490,7 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       cadenaLogo: ot.cadenaLogo || '',
       cadenaColor: ot.cadenaColor || '',
       cadenaLetra: ot.cadenaLetra || '',
-      tipo: ot.tipo,
+      tipo: _normTipo(ot.tipo),
       tecnico: ot.tecnico || _tecnicoActual(),
       fecha: ot.fecha,
       hora: ot.hora,
@@ -2662,7 +2669,7 @@ function cerrarOT() {
 
   // Guardar localmente (offline)
   const ot = {
-    numero: estado.otNumero, local: estado.local, tipo: estado.tipo,
+    numero: estado.otNumero, local: estado.local, tipo: _tipoActual(),
     tecnico: _tecnicoActual(), fecha: fecha, descripcion: desc,
     fotosAntes, fotosDespues, firmada: true
   };
@@ -3016,7 +3023,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
   // Payload COMPLETO (fotos/firma/timbre/audios en base64) para la cola de reintento.
   const pendPayload = {
     clientId: clientId,
-    numero: otBase.numero, local: estado.local, tipo: estado.tipo,
+    numero: otBase.numero, local: estado.local, tipo: _tipoActual(),
     tecnico: _tecnicoActual(), fecha: fecha,
     descripcionProblema: descripcionProblema,
     descripcionTrabajo: desc, ceco: estado.ceco || '',
@@ -3089,7 +3096,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     toast('Guardando datos...');
     // Modo edicion (solo admin): actualizar el mismo documento, preservando tecnico y fecha originales.
     const otData = {
-      numero: otBase.numero, local: estado.local, tipo: estado.tipo,
+      numero: otBase.numero, local: estado.local, tipo: _tipoActual(),
       tecnico: esEdicion ? (estado.editandoTecnico || _tecnicoActual()) : _tecnicoActual(),
       fecha: esEdicion ? (estado.editandoFecha || fecha) : fecha,
       descripcionProblema: descripcionProblema,
@@ -6974,7 +6981,7 @@ async function cargarOTsTecnicos() {
     const colores = ['#E53E3E','#2D5AA0','#1D6B5A','#D97706','#7C3AED','#0891B2','#BE185D','#059669'];
     Object.keys(tecnicos).forEach(function(nombre, i) {
       const grupo = tecnicos[nombre];
-      const correctivos = grupo.ots.filter(function(o){ return o.tipo === 'correctivo'; }).length;
+      const correctivos = grupo.ots.filter(function(o){ return o.tipo !== 'preventivo'; }).length;   // null/desconocido cuenta como correctivo
       // Esta lista es la de "Correctivos": los tecnicos con solo preventivos no van aca
       // (sus preventivos viven en la tarjeta Preventivos).
       if (correctivos === 0) return;
@@ -7365,7 +7372,8 @@ async function verOTsTecnico(nombre, grupo) {
   _cargado(lista);
   lista.innerHTML = '';
   // "Correctivos" solo: los preventivos viven en su propia seccion y no llevan cotizacion.
-  const ots = (grupo.ots || []).filter(function(o){ return o.tipo === 'correctivo'; });
+  // null/desconocido se trata como correctivo (visible y cotizable), nunca desaparece.
+  const ots = (grupo.ots || []).filter(function(o){ return o.tipo !== 'preventivo'; });
   if (ots.length === 0) {
     lista.innerHTML = _vacio('Aún no hay correctivos', 'Aparecerán aquí cuando este técnico cierre un correctivo.');
     return;
@@ -7374,9 +7382,9 @@ async function verOTsTecnico(nombre, grupo) {
   const _cotizadasCards = [];   // Tema 1: las OT ya cotizadas bajan a una sección aparte
   ots.forEach(function(ot) {
     const cadena = cadenaMap[ot.local] || null;
-    const badge = ot.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
-    const label = ot.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
-    const bg = ot.tipo === 'correctivo' ? 'var(--naranja-badge-fondo)' : 'var(--verde-badge-fondo)';
+    const badge = ot.tipo === 'preventivo' ? 'badge-prev' : 'badge-corr';
+    const label = ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo';
+    const bg = ot.tipo === 'preventivo' ? 'var(--verde-badge-fondo)' : 'var(--naranja-badge-fondo)';
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -7536,8 +7544,8 @@ async function verOTsTecnico(nombre, grupo) {
       badgeCotT.appendChild(badgeV);
       badgeCotT.appendChild(btnVerCotT);
       btns.appendChild(badgeCotT);
-    } else if (ot.tipo === 'correctivo') {
-      // Correctivos: crear una cotizacion nueva O adjuntar una previa pendiente.
+    } else if (ot.tipo !== 'preventivo') {
+      // Correctivos (y tipo desconocido): crear una cotizacion nueva O adjuntar una previa pendiente.
       const btnCot = document.createElement('button');
       btnCot.textContent = '+ Cotización';
       btnCot.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
@@ -8079,7 +8087,7 @@ async function cargarOTsSupervisor() {
     }
     // Actualizar stats
     const total = _docsVis.length;
-    const correctivos = _docsVis.filter(d => d.data().tipo === 'correctivo').length;
+    const correctivos = _docsVis.filter(d => d.data().tipo !== 'preventivo').length;   // null cuenta como correctivo
     const preventivos = _docsVis.filter(d => d.data().tipo === 'preventivo').length;
     const statCards = document.querySelectorAll('#s-supervisor .stat-card');
     const statNums = document.querySelectorAll('#s-supervisor .stat-num');
@@ -8140,9 +8148,9 @@ async function cargarOTsSupervisor() {
       const d = doc.data();
       const card = document.createElement('div');
       card.className = 'ot-card';
-      const bg = d.tipo === 'correctivo' ? 'var(--naranja-badge-fondo)' : 'var(--verde-badge-fondo)';
-      const badge = d.tipo === 'correctivo' ? 'badge-corr' : 'badge-prev';
-      const label = d.tipo === 'correctivo' ? 'Correctivo' : 'Preventivo';
+      const bg = d.tipo === 'preventivo' ? 'var(--verde-badge-fondo)' : 'var(--naranja-badge-fondo)';
+      const badge = d.tipo === 'preventivo' ? 'badge-prev' : 'badge-corr';
+      const label = d.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo';
       const docId = doc.id;
       const cadena = cadenaMapSup[d.local] || null;
       const iconEl = document.createElement('div');
@@ -8157,16 +8165,16 @@ async function cargarOTsSupervisor() {
         logoImg.onerror = function() {
           iconEl.removeChild(logoImg);
           iconEl.style.background = bg;
-          iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-          iconEl.style.color = d.tipo === 'correctivo' ? 'var(--naranja-btn)' : 'var(--verde-badge)';
+          iconEl.textContent = d.tipo === 'preventivo' ? 'P' : 'C';
+          iconEl.style.color = d.tipo === 'preventivo' ? 'var(--verde-badge)' : 'var(--naranja-btn)';
           iconEl.style.fontWeight = '700';
           iconEl.style.fontSize = '14px';
         };
         iconEl.appendChild(logoImg);
       } else {
         iconEl.style.background = bg;
-        iconEl.textContent = d.tipo === 'correctivo' ? 'C' : 'P';
-        iconEl.style.color = d.tipo === 'correctivo' ? 'var(--naranja-btn)' : 'var(--verde-badge)';
+        iconEl.textContent = d.tipo === 'preventivo' ? 'P' : 'C';
+        iconEl.style.color = d.tipo === 'preventivo' ? 'var(--verde-badge)' : 'var(--naranja-btn)';
         iconEl.style.fontWeight = '700';
         iconEl.style.fontSize = '14px';
       }
@@ -8201,8 +8209,8 @@ async function cargarOTsSupervisor() {
         badgeCot.appendChild(badgeVerde);
         badgeCot.appendChild(btnVerCot);
         infoEl.appendChild(badgeCot);
-      } else if (d.tipo === 'correctivo') {
-        // Correctivos: crear una cotizacion nueva O adjuntar una previa. Preventivos NO llevan
+      } else if (d.tipo !== 'preventivo') {
+        // Correctivos (y tipo desconocido): crear cotizacion nueva O adjuntar previa. Preventivos NO llevan
         // cotizacion (solo se envia la hoja), por eso no cae aca.
         const acc = document.createElement('div');
         acc.style.cssText = 'margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;';
@@ -10330,7 +10338,7 @@ async function sincronizarOTsPendientes() {
 
       var db = window.firebase.firestore();
       var otDoc = {
-        numero: ot.numero, local: ot.local, tipo: ot.tipo,
+        numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
         tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
         descripcionProblema: ot.descripcionProblema || '',
         ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
