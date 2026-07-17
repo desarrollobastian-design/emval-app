@@ -712,7 +712,7 @@
   </div>
   <div class="content">
     <div style="font-size: 12px; color: var(--texto2);">Paso 2 de 4 — ¿Qué tipo de servicio?</div>
-    <div class="tipo-grid">
+    <div class="tipo-grid" id="tipo-grid">
       <div class="tipo-card" id="t-prev" onclick="seleccionarTipo('preventivo')">
         <div class="icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--azul)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
         <div class="label">Preventivo</div>
@@ -2049,7 +2049,11 @@ function seleccionarTipo(tipo) {
 }
 
 function irFotosAntes() {
-  if (!estado.tipo) { toast('Selecciona un tipo de trabajo'); return; }
+  // Tipo obligatorio: resalta las dos tarjetas (no solo un toast que se va).
+  if (!estado.tipo) { _rechazar('Elige correctivo o preventivo', 'tipo-grid'); return; }
+  // Descripcion obligatoria: sin ella la OT llega vacia al supervisor y no dice que se hizo.
+  const _desc = document.getElementById('desc-problema');
+  if (!_desc || !_desc.value.trim()) { _rechazar('Describe el problema o el trabajo', 'desc-problema'); return; }
   sincronizarCamposOTEnEstado();
   programarAutoguardadoOT();
   go('s-fotos-antes');
