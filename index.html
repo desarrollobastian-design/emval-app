@@ -193,7 +193,10 @@
      del tecnico, hecho con el pulgar y una sola mano. Los controles densos del admin (con
      mouse) tienen un piso de 32px. El limite absoluto son 24px: WCAG 2.2 SC 2.5.8, nivel AA.
      Antes .btn-sm medía ~37px, y eso incluye el boton de Confirmar firma. */
-  button { min-height: 32px; }
+  /* touch-action: manipulation mata el doble-tap-zoom (y el retardo de 300ms) SOBRE los botones:
+     el tecnico marca la pauta Si/No a golpes rapidos y el navegador lo leia como doble-tap = zoom.
+     NO desactiva el pinch-zoom de la pagina (eso rompe WCAG 2.1 SC 1.4.4); solo el gesto en el boton. */
+  button { min-height: 32px; touch-action: manipulation; }
 
   /* FOCO DE TECLADO (WCAG 2.4.7). Sin esto, quien navega con Tab no ve donde esta parado.
      Habia 9 sitios que hacian outline:none sin poner nada en su lugar. */
@@ -1035,7 +1038,7 @@
     </div>
     <!-- Un triangulo de play significa "reproducir", no "crear otra". Aqui va un mas. -->
     <button class="btn btn-primary" onclick="nuevaOT()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-0.12em"><path d="M12 5v14M5 12h14"/></svg> Hacer otra OT</button>
-    <button class="btn btn-secondary" onclick="cerrarSesion()">Volver al inicio</button>
+    <button class="btn btn-secondary" onclick="volverAInicioDesdeCierre()">Volver al inicio</button>
     <p style="font-size: 11px; color: var(--texto3); text-align: center;">OT guardada · se sincroniza automáticamente con la nube</p>
   </div>
 </div>
@@ -1863,6 +1866,19 @@ function cerrarSesion() {
   guardarBorradorOTActual();
   estado.usuario = null;
   go('s-usuarios');
+}
+
+// Tras cerrar una OT, "Volver al inicio" NO debe cerrar sesion (obligaba a re-ingresar el PIN).
+// El tecnico que hace dos hojas en un local manda la preventiva y quiere volver a su inicio para
+// seguir con la correctiva, sin re-loguearse. Devuelve al panel del rol manteniendo la sesion.
+// Para salir de verdad, la flecha del inicio (volverDesdeCadena) sigue cerrando sesion.
+function volverAInicioDesdeCierre() {
+  if (estado.cargo === 'Supervisor' || estado.cargo === 'Administrador') {
+    go('s-supervisor');
+    cargarOTsSupervisor();
+  } else {
+    _verInicioTecnico();
+  }
 }
 
 // =========== NUEVA OT ===========
