@@ -1401,6 +1401,7 @@ function _crearOTPausadaDesdeEstado() {
     enEspera: !!estado.enEspera,
     cotizacionId: estado.cotizacionId || '',
     autoDraft: true,
+    otClientId: estado.otClientId || '',   // identidad de escritura: sobrevive a retomar la OT
     firmada: !!estado.firmada,
     firmaImagen: _capturarFirmaBorrador(),
     creadoEn: estado.creadoEnBorrador || ahora.toISOString(),
@@ -1474,6 +1475,10 @@ function _cargarEstadoDesdeOTGuardada(ot) {
   estado.firmada = !!ot.firmada;
   estado.firmaImagen = ot.firmaImagen || '';
   estado.creadoEnBorrador = ot.creadoEn || new Date().toISOString();
+  // Id de escritura de ESTA OT: se arrastra al retomarla para que un segundo cierre escriba el
+  // MISMO documento en vez de crear otro. Sin esto, cerrar dos veces la misma OT (el tecnico
+  // vuelve porque no vio confirmacion) dejaba dos hojas identicas del mismo local.
+  estado.otClientId = ot.otClientId || '';
   // Vínculo con cotización previa (OT "en espera"): se arrastra para unir el recibo al completar
   estado.cotizacionId = ot.cotizacionId || '';
   estado.enEspera = !!ot.enEspera;
@@ -1592,6 +1597,9 @@ function _mismoTecnico(a, b) {
 }
 
 function eliminarOTPausada(numero, tecnico) {
+  // Sin tecnico no coincide NADA y la pausada sobrevive a su propio cierre (asi nacieron las
+  // hojas duplicadas). Si quien llama no lo trae, se cae al ultimo logueado en este dispositivo.
+  if (!tecnico) tecnico = _tecnicoActual();
   try {
     const otsPausadas = cargarOTsPausadas();
     const filtradas = otsPausadas.filter(function(ot) {
@@ -1602,16 +1610,22 @@ function eliminarOTPausada(numero, tecnico) {
     guardarOTsPausadas(filtradas);
   } catch(e) { console.error('Error eliminando OT pausada:', e); }
 
-  // Tambien quitar el registro "En Pausa" de Firebase si existe
+  // Tambien quitar el registro "En Pausa" de Firebase si existe.
+  // Se consulta SOLO por numero y se afina en el cliente: el where('tecnico','==') exacto dejaba
+  // vivo el documento pausado cuando el nombre del tecnico difería en una tilde o un espacio, y
+  // entonces el cierre creaba un segundo documento -> el local aparecia repetido en el panel.
   if (window._firebaseReady) {
     try {
       const db = window.firebase.firestore();
       db.collection('ordenes')
         .where('numero', '==', numero)
-        .where('tecnico', '==', tecnico)
-        .where('pausa', '==', true)
         .get().then(function(snapshot) {
           snapshot.docs.forEach(function(doc) {
+            const d = doc.data();
+            // NUNCA borrar una OT firmada: es el trabajo cerrado, no un borrador.
+            if (d.firmada === true) return;
+            if (!(d.pausa === true || d.estado === 'En Pausa')) return;
+            if (!_mismoTecnico(d.tecnico, tecnico)) return;
             db.collection('ordenes').doc(doc.id).delete();
           });
         }).catch(function(){});
@@ -1741,6 +1755,79 @@ function _tecnicoActual() {
 // Caso: 7 OT de Chillan Viejo (Jose/Lucas) invisibles por tipo NULL, 2026-07-17.
 function _normTipo(tipo) { return tipo === 'preventivo' ? 'preventivo' : 'correctivo'; }
 function _tipoActual() { return _normTipo(estado.tipo); }
+
+// Texto normalizado para comparar nombres de local: sin tildes, sin espacios sobrantes, minusculas.
+// "UNIMARC SAN CARLOS 2" y "Unimarc San Carlos 2" son EL MISMO local.
+function _normTexto(s) {
+  return String(s == null ? '' : s)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+// Identidad de una OT para detectar duplicados: numero + local. Dos documentos con la misma
+// clave son la MISMA visita guardada dos veces (pausada + cierre, o dos cierres), no dos trabajos.
+function _claveOT(ot) {
+  return String(ot.numero == null ? '' : ot.numero).trim() + '|' + _normTexto(ot.local);
+}
+
+// Fecha de una OT en milisegundos, tolerante a TODOS los formatos que la app ha guardado:
+// 'fecha' es dd-mm-yyyy (es-CL) y 'creadoEn' puede ser Timestamp de Firestore (nuevo) o string
+// ISO (borradores). Nunca devuelve NaN: sin dato utilizable, 0 (se va al final del orden).
+// Momento exacto en que se guardo el documento. Tolera los dos formatos historicos de creadoEn:
+// Timestamp de Firestore (cierres) y string ISO (borradores). 0 si el campo no existe.
+function _creadoEnMs(ot) {
+  const c = ot && ot.creadoEn;
+  if (!c) return 0;
+  if (typeof c.toMillis === 'function') { try { return c.toMillis(); } catch(e) {} }
+  if (typeof c.seconds === 'number') return c.seconds * 1000;
+  if (typeof c === 'string') { const t = Date.parse(c); if (!isNaN(t)) return t; }
+  return 0;
+}
+
+function _fechaOTms(ot) {
+  const f = String(ot && ot.fecha != null ? ot.fecha : '').trim();
+  const p = f.split(/[-\/]/);
+  if (p.length === 3 && p[2].length === 4) {
+    const t = Date.UTC(+p[2], (+p[1] || 1) - 1, +p[0] || 1);
+    if (!isNaN(t)) return t;
+  }
+  return _creadoEnMs(ot);
+}
+
+// Una hoja esta LISTA para entregar cuando esta firmada, no quedo en pausa y tiene su PDF.
+function _hojaLista(ot) {
+  return ot.firmada === true && ot.pausa !== true && ot.estado !== 'En Pausa' && !!_pdfDeOT(ot);
+}
+function _pdfDeOT(ot) { return ot.pdfUrlCloudinary || ot.pdfUrl || ''; }
+
+// Colapsa documentos duplicados de la MISMA OT (mismo numero+local) en uno solo, quedandose con
+// el mas completo. Existen duplicados porque una OT pausada y su cierre pudieron escribirse en
+// documentos distintos, o porque un cierre se reintento con otro id de cliente.
+// Devuelve { lista, duplicados } — 'duplicados' es cuantas tarjetas se colapsaron.
+function _dedupeOTs(ots) {
+  const porClave = {};
+  let duplicados = 0;
+  function _puntaje(ot) {
+    return (ot.firmada === true ? 8 : 0)
+         + (_pdfDeOT(ot) ? 4 : 0)
+         + (ot.pausa === true || ot.estado === 'En Pausa' ? 0 : 2)
+         + ((ot.serviciosPreventivo || []).length ? 1 : 0);
+  }
+  ots.forEach(function(ot) {
+    const k = _claveOT(ot);
+    const previa = porClave[k];
+    if (!previa) { porClave[k] = ot; return; }
+    duplicados++;
+    const pNueva = _puntaje(ot), pPrevia = _puntaje(previa);
+    if (pNueva !== pPrevia) { if (pNueva > pPrevia) porClave[k] = ot; return; }
+    // Igual de completas: gana la ultima guardada. Se compara por creadoEn (hora exacta) porque
+    // dos cierres de la misma visita comparten el campo 'fecha' y ahi no habria desempate.
+    const dNueva = _creadoEnMs(ot), dPrevia = _creadoEnMs(previa);
+    if (dNueva || dPrevia) { if (dNueva > dPrevia) porClave[k] = ot; return; }
+    if (_fechaOTms(ot) > _fechaOTms(previa)) porClave[k] = ot;
+  });
+  return { lista: Object.keys(porClave).map(function(k){ return porClave[k]; }), duplicados: duplicados };
+}
 
 // =========== LOGIN ===========
 function seleccionarUsuario(nombre, cargo, letra) {
@@ -2524,6 +2611,7 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       direccion: ot.direccion || '',
       ceco: ot.ceco || '',
       emailAdmin: ot.emailAdmin || '',
+      otClientId: ot.otClientId || '',   // viaja a Firestore: la identidad sobrevive a retomar la OT
       estado: ot.enEspera ? 'En espera' : 'En Pausa',
       pausa: true,
       enEspera: !!ot.enEspera,
@@ -2531,14 +2619,28 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       firmada: false
     };
 
-    const snapshot = await db.collection('ordenes')
-      .where('numero', '==', ot.numero).where('tecnico', '==', ot.tecnico).get();
-    if (snapshot.empty) {
-      payload.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('ordenes').add(payload);
+    // Buscar la OT ya subida SOLO por numero y afinar en el cliente con _mismoTecnico().
+    // Antes se filtraba con where('tecnico','==') — comparacion EXACTA: si el nombre variaba en
+    // mayusculas, tildes o un espacio entre sesiones, no encontraba la anterior y hacia add() de
+    // nuevo, dejando un documento extra por cada re-sincronizacion (local repetido en el panel).
+    const snapshot = await db.collection('ordenes').where('numero', '==', ot.numero).get();
+    const _tec = ot.tecnico || _tecnicoActual();   // vacio no coincidiria con nada -> duplicaria
+    const mismos = snapshot.docs.filter(function(d){ return _mismoTecnico(d.data().tecnico, _tec); });
+    // Nunca pisar ni borrar una OT ya firmada: la pausada es el borrador, la firmada es el trabajo.
+    const vivos = mismos.filter(function(d){ return d.data().firmada !== true; });
+    if (vivos.length === 0) {
+      if (mismos.length === 0) {
+        payload.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
+        await db.collection('ordenes').add(payload);
+      }
+      // Si ya existe firmada, la OT se cerro en otro dispositivo: no se resucita como pausada.
     } else {
-      for (let i = 0; i < snapshot.docs.length; i++) {
-        await db.collection('ordenes').doc(snapshot.docs[i].id).update(payload);
+      // Se conserva UNO y se colapsan los duplicados que hayan quedado de sincronizaciones previas.
+      const principal = vivos[0];
+      if (!principal.data().creadoEn) payload.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('ordenes').doc(principal.id).update(payload);
+      for (let i = 1; i < vivos.length; i++) {
+        try { await db.collection('ordenes').doc(vivos[i].id).delete(); } catch(e) {}
       }
     }
     // Llegó a Firestore: ya no está pendiente de subir
@@ -2599,6 +2701,9 @@ function pausarOT() {
     const hora = new Date().toLocaleTimeString('es-CL');
 
     sincronizarCamposOTEnEstado();
+    // Identidad de escritura desde la pausa: si mas tarde se retoma y se cierra (incluso dos
+    // veces), todos los guardados apuntan al MISMO documento en vez de crear uno por cierre.
+    if (!estado.otClientId) estado.otClientId = _uid();
     const otPausada = _crearOTPausadaDesdeEstado();
     otPausada.fecha = fecha;
     otPausada.hora = hora;
@@ -2611,8 +2716,12 @@ function pausarOT() {
     // Guardar en almacenamiento local (base64, para continuar offline)
     try {
       const otsPausadas = cargarOTsPausadas();
+      // Comparacion robusta del tecnico (_mismoTecnico): con === exacto, una diferencia de
+      // tilde o espacio en el nombre no encontraba la pausada y agregaba una SEGUNDA copia local.
       const existeIndex = otsPausadas.findIndex(function(ot) {
-        return ot.numero.toString() === estado.otNumero.toString() && ot.tecnico === estado.usuario;
+        return ot.numero != null && estado.otNumero != null
+          && ot.numero.toString() === estado.otNumero.toString()
+          && _mismoTecnico(ot.tecnico, _tecnicoActual());
       });
       if (existeIndex >= 0) {
         otsPausadas[existeIndex] = otPausada;
@@ -2701,8 +2810,14 @@ function cerrarOT() {
       localStorage.setItem('emval_ots', JSON.stringify(ots));
     } catch(e) {}
 
-    // Quitar de trabajos pausados (la OT ya se completó)
-    eliminarOTPausada(estado.otNumero, estado.usuario);
+    // Quitar de trabajos pausados (la OT ya se completó).
+    // CAUSA RAIZ de las hojas duplicadas (SAN CARLOS 2 y CORONEL 2, 20-23 jul 2026): aqui se
+    // pasaba `estado.usuario`, que queda VACIO si la sesion no cargo (arranque en frio, reset).
+    // Con el tecnico vacio no coincide ninguna pausada: no se borraba ni la local ni la de
+    // Firestore, la OT seguia en "Trabajos pausados" despues de cerrada y al retomarla y
+    // pausarla otra vez se escribia un SEGUNDO documento del mismo trabajo. El resto del cierre
+    // ya usaba _tecnicoActual() (con respaldo del ultimo logueado); esta llamada quedo sin migrar.
+    eliminarOTPausada(estado.otNumero, _tecnicoActual());
   }
 
   // Guardar en Firebase (nube)
@@ -3136,6 +3251,12 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       await _conTimeout(db.collection('ordenes').doc(clientId).update(otData), 25000, 'update OT');
     } else {
       otData.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
+      // Cerrar es dejar de estar en pausa. Si el documento venia de una pausada (mismo clientId)
+      // o si el borrado de la pausada no alcanzo a correr, esto evita que la OT terminada siga
+      // contandose como pendiente: el estado lo fija el cierre, no el borrado de otro documento.
+      otData.pausa = false;
+      otData.enEspera = false;
+      otData.estado = 'Terminada';
       await _conTimeout(db.collection('ordenes').doc(clientId).set(otData, { merge: true }), 25000, 'set OT');
     }
 
@@ -4034,9 +4155,10 @@ async function guardarCotizacion() {
       const nombreTec = window._cotizacionTecnicoActivo;
       document.getElementById('detalle-tecnico-nombre').textContent = nombreTec;
       const db2 = window.firebase.firestore();
-      const snap2 = await _conTimeout(db2.collection('ordenes').orderBy('creadoEn','desc').get(), 25000, 'get ordenes');
+      // Sin orderBy: excluiria en silencio las OT sin 'creadoEn'. Orden por fecha real en el cliente.
+      const snap2 = await _conTimeout(db2.collection('ordenes').get(), 25000, 'get ordenes');
       const grupo2 = { nombre: nombreTec, ots: [] };
-      snap2.docs.forEach(function(doc) {
+      snap2.docs.slice().sort(function(a, b){ return _fechaOTms(b.data()) - _fechaOTms(a.data()); }).forEach(function(doc) {
         if (doc.data().tecnico === nombreTec) {
           grupo2.ots.push({ id: doc.id, ...doc.data() });
         }
@@ -6981,8 +7103,9 @@ async function cargarOTsTecnicos() {
     // avisaba — por eso ninguna regla la vio. Que el error suba al catch de la funcion.
     if (window._firebaseReady) {
       const db = window.firebase.firestore();
-      const snap = await db.collection('ordenes').orderBy('creadoEn','desc').get();
-      snap.docs.forEach(function(doc) {
+      // Sin orderBy: dejaria fuera en silencio cualquier OT sin 'creadoEn'. Orden por fecha real.
+      const snap = await db.collection('ordenes').get();
+      snap.docs.slice().sort(function(a, b){ return _fechaOTms(b.data()) - _fechaOTms(a.data()); }).forEach(function(doc) {
         const d = doc.data();
         if (_ocultoTecnico(d.tecnico)) return;  // OT de prueba ocultas
         const t = d.tecnico || 'Sin asignar';
@@ -7142,8 +7265,13 @@ async function cargarPreventivos() {
     const lista = document.getElementById('lista-preventivos');
     _cargando(lista, 4);
 
+    // SIN orderBy A PROPOSITO: en Firestore un orderBy('creadoEn') EXCLUYE en silencio todo
+    // documento que no tenga ese campo — una OT guardada por una ruta que no lo escribio
+    // (o por una version anterior de la app) desapareceria de esta lista sin ningun aviso,
+    // aunque exista y tenga su PDF. Se trae todo y se ordena en el cliente con _fechaOTms(),
+    // que ademas tolera los dos formatos historicos de creadoEn (Timestamp y string ISO).
     const [ordenesSnap, pdfSnap, cadenasSnap, cotSnap] = await Promise.all([
-      db.collection('ordenes').orderBy('creadoEn', 'desc').get(),
+      db.collection('ordenes').get(),
       db.collection('pdfs').get(),
       db.collection('cadenas').get(),
       db.collection('cotizaciones').get()
@@ -7179,9 +7307,16 @@ async function cargarPreventivos() {
       if (c.otNumero) cotMap['n_' + String(c.otNumero)] = cd.id;
     });
 
-    const prevOTs = ordenesSnap.docs
-      .filter(function(d){ return d.data().tipo === 'preventivo' && !_ocultoTecnico(d.data().tecnico); })
-      .map(function(d){ return { id: d.id, ...d.data() }; });
+    // Un documento por hoja: se colapsan los duplicados de la misma OT (numero+local) y se
+    // ordena por fecha real, no por el orden en que Firestore los devolvio.
+    const _dedup = _dedupeOTs(
+      ordenesSnap.docs
+        .filter(function(d){ return d.data().tipo === 'preventivo' && !_ocultoTecnico(d.data().tecnico); })
+        .map(function(d){ return { id: d.id, ...d.data() }; })
+    );
+    const prevOTs = _dedup.lista.sort(function(a, b){ return _fechaOTms(b) - _fechaOTms(a); });
+    const _nListas = prevOTs.filter(_hojaLista).length;
+    const _nPendientes = prevOTs.length - _nListas;
 
     _cargado(lista);
     lista.innerHTML = '';
@@ -7214,8 +7349,10 @@ async function cargarPreventivos() {
       btnSel.textContent = 'Seleccionar todas';
       btnSel.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;margin-bottom:8px;';
       btnSel.onclick = (function(cont){ return function(){
-        const cks = cont.querySelectorAll('input.prev-check');
-        const todas = cks.length > 0 && Array.from(cks).every(function(c){ return c.checked; });
+        // Solo las enviables: una hoja sin PDF tiene el check deshabilitado y "Seleccionar
+        // todas" no debe colarla igual (marcarla por JS saltaria el disabled).
+        const cks = Array.from(cont.querySelectorAll('input.prev-check')).filter(function(c){ return !c.disabled; });
+        const todas = cks.length > 0 && cks.every(function(c){ return c.checked; });
         cks.forEach(function(c){ c.checked = !todas; });
         actualizarSeleccionadasPrev();
       }; })(content);
@@ -7227,7 +7364,7 @@ async function cargarPreventivos() {
       }; })(content, chev);
       carp.appendChild(header); carp.appendChild(content);
       lista.appendChild(carp);
-      const f = { content: content, countEl: cnt, n: 0 };
+      const f = { content: content, countEl: cnt, n: 0, carp: carp };
       _folders[mesKey] = f;
       return f;
     }
@@ -7282,6 +7419,32 @@ async function cargarPreventivos() {
       hdr.appendChild(chkPrev); hdr.appendChild(ico); hdr.appendChild(hdrInfo); hdr.appendChild(numBadge);
       card.appendChild(hdr);
 
+      // ---- Aviso: por que esta hoja NO esta lista para entregar ----
+      // Antes una hoja sin cerrar o sin PDF se veia IGUAL que una completa: al revisar el mes
+      // habia que abrirlas una por una para descubrir cual no servia. Ahora lo dice la tarjeta.
+      const _enPausa = (ot.pausa === true || ot.estado === 'En Pausa');
+      const _sinFirma = ot.firmada !== true;
+      const _sinPdf = !(pdfCloudUrl || pdfFirestoreUrl);
+      if (_enPausa || _sinFirma || _sinPdf) {
+        const motivos = [];
+        if (_enPausa) motivos.push('sin cerrar (quedó en pausa)');
+        else if (_sinFirma) motivos.push('sin firma del administrador');
+        if (_sinPdf) motivos.push('sin PDF generado');
+        const aviso = document.createElement('div');
+        aviso.className = 'prev-hoja-incompleta';
+        aviso.style.cssText = 'margin-top:8px;padding:7px 10px;border-radius:var(--radio-sm);background:#FEF3E2;border-left:3px solid var(--naranja);font-size:11px;color:#8A5A12;line-height:1.4;';
+        aviso.textContent = '⚠ No está lista para entregar: ' + motivos.join(' · ');
+        card.appendChild(aviso);
+        // Sin PDF no hay nada que enviar: enviarla mandaria un correo vacio al supervisor.
+        if (_sinPdf) {
+          chkPrev.disabled = true;
+          chkPrev.style.cursor = 'not-allowed';
+          chkPrev.style.opacity = '0.4';
+          chkPrev.setAttribute('aria-label', 'Hoja ' + otNum + ' sin PDF: no se puede enviar');
+          chkPrev.title = 'Sin PDF: no se puede enviar';
+        }
+      }
+
       // ---- Botones ----
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
@@ -7313,8 +7476,20 @@ async function cargarPreventivos() {
       _f.countEl.textContent = _f.n + (_f.n === 1 ? ' hoja' : ' hojas');
     });
 
+    // Carpetas de mes en orden real (mes mas nuevo primero). Antes se creaban en el orden en
+    // que llegaban las OT desde Firestore: bastaba una fecha rara para dejar un mes fuera de sitio.
+    Object.keys(_folders).sort().reverse().forEach(function(k){ lista.appendChild(_folders[k].carp); });
+
+    // Contador honesto: cuantas hojas hay, cuantas se pueden entregar HOY y cuantas no.
+    // El total a secas hacia creer que las 59 estaban listas.
     const contador = document.getElementById('preventivo-contador');
-    if (contador) contador.textContent = prevOTs.length + ' hoja' + (prevOTs.length !== 1 ? 's' : '');
+    if (contador) {
+      let txt = prevOTs.length + ' hoja' + (prevOTs.length !== 1 ? 's' : '');
+      if (_nPendientes > 0) txt += ' · ' + _nListas + ' lista' + (_nListas !== 1 ? 's' : '') + ' · ' + _nPendientes + ' incompleta' + (_nPendientes !== 1 ? 's' : '');
+      if (_dedup.duplicados > 0) txt += ' · ' + _dedup.duplicados + ' duplicada' + (_dedup.duplicados !== 1 ? 's' : '') + ' unificada' + (_dedup.duplicados !== 1 ? 's' : '');
+      contador.textContent = txt;
+      window._prevContadorFull = txt;  // filtrarPreventivos() lo restaura al limpiar la busqueda
+    }
     const _prevBar = document.getElementById('prev-acciones-bar');
     if (_prevBar) _prevBar.style.display = prevOTs.length > 0 ? 'flex' : 'none';
     actualizarSeleccionadasPrev();
@@ -8087,9 +8262,13 @@ async function cargarOTsSupervisor() {
   try {
     if (_esperandoFirebase('ots-supervisor', cargarOTsSupervisor)) return;
     const db = window.firebase.firestore();
-    const snap = await db.collection('ordenes').orderBy('creadoEn', 'desc').get();
+    // Sin orderBy: excluiria en silencio las OT que no tengan el campo 'creadoEn'. Se ordena
+    // en el cliente por fecha real (ver _fechaOTms), asi ninguna OT desaparece de la vista.
+    const snap = await db.collection('ordenes').get();
     // Ocultar de la vista del supervisor las OT de cuentas ocultas (dev/pruebas).
-    const _docsVis = snap.docs.filter(function(dd){ return !_ocultoTecnico((dd.data() || {}).tecnico); });
+    const _docsVis = snap.docs
+      .filter(function(dd){ return !_ocultoTecnico((dd.data() || {}).tecnico); })
+      .sort(function(a, b){ return _fechaOTms(b.data()) - _fechaOTms(a.data()); });
     const lista = document.querySelector('#s-supervisor .content');
     const otsHoyCont = document.getElementById('sup-ots-hoy-lista') || lista;
     _cargado(otsHoyCont);
@@ -8920,7 +9099,10 @@ function filtrarPreventivos() {
     if (buscar && n > 0 && content) content.style.display = 'block';
   });
   const contador = document.getElementById('preventivo-contador');
-  if (contador) contador.textContent = visibles + ' hoja' + (visibles !== 1 ? 's' : '');
+  // Sin busqueda vuelve el resumen completo (listas / incompletas / duplicadas), no un total pelado.
+  if (contador) contador.textContent = (!buscar && window._prevContadorFull)
+    ? window._prevContadorFull
+    : visibles + ' hoja' + (visibles !== 1 ? 's' : '');
 }
 
 function limpiarFiltrosPreventivos() {
@@ -10367,6 +10549,8 @@ async function sincronizarOTsPendientes() {
         fotosAntes: urlsAntes, fotosDespues: urlsDespues,
         fotoTimbre: urlTimbre, audios: urlsAudio,
         firmada: true, firmaImagen: ot.firmaBase64,
+        // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
+        pausa: false, enEspera: false, estado: 'Terminada',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       };
       if (ot.clientId) {
