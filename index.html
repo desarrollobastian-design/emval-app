@@ -2581,6 +2581,16 @@ function cargarEjecucionScreen() {
   }
 }
 
+// Una hoja de preventivo solo es valida con la pauta ENTERA respondida. Se comprueba el largo
+// ademas de las respuestas: si el array llega vacio (se perdio al guardar, o la OT se cargo por
+// una ruta que no lo trajo) un filter() sobre [] da cero pendientes y la hoja pasaba como completa.
+// Caso #274992 CHILLAN VIEJO: se cerro y su PDF salio con los 11 casilleros en blanco.
+function _pautaCompleta(pauta) {
+  const p = pauta || [];
+  if (p.length !== SERVICIOS_PREVENTIVO.length) return false;
+  return p.every(function(s){ return s && s.respuesta; });
+}
+
 function responderServicio(idx, respuesta) {
   if (!estado.serviciosPreventivo || !estado.serviciosPreventivo[idx]) return;
   estado.serviciosPreventivo[idx].respuesta = respuesta;
@@ -2803,8 +2813,12 @@ function cerrarOT() {
   const desc = descEl ? descEl.value.trim() : '';
   // Los 5 rechazos apuntan al campo culpable (_rechazar), no solo lo nombran.
   if (estado.tipo === 'preventivo') {
-    const sinResponder = (estado.serviciosPreventivo || []).filter(function(s){ return s.respuesta === null; }).length;
-    if (sinResponder > 0) { _rechazar('Responde todos los servicios (Sí / No)', 'ejecucion-prev-content'); return; }
+    // Una pauta VACIA pasaba esta validacion: filter() sobre [] devuelve 0 sin responder, o sea
+    // "todo respondido". Asi se cerro #274992 (CHILLAN VIEJO) y su hoja de MANTENIMIENTO
+    // PREVENTIVO quedo con los 11 casilleros en blanco. Se exige la pauta completa.
+    if (!_pautaCompleta(estado.serviciosPreventivo)) {
+      _rechazar('Responde todos los servicios (Sí / No)', 'ejecucion-prev-content'); return;
+    }
     const numEqEl = document.getElementById('num-equipos');
     if (numEqEl) estado.numEquipos = numEqEl.value.trim();
   } else {
@@ -3086,6 +3100,14 @@ function _guardarCorreosPendientes(lista) {
   try { localStorage.setItem(_CORREOS_KEY, JSON.stringify(lista)); }
   catch(e) { console.warn('No se pudo guardar la cola de correos:', e); }
 }
+// Numero de OT para un correo. String(null) devuelve la cadena "null", y el asunto salia
+// literalmente "OT #null" — un correo que le llega al ADMINISTRADOR DEL LOCAL (SMU), no solo a
+// nosotros. Pasaba cuando la OT se sincronizaba desde la cola offline sin numero (CABRERO y LAJA,
+// 2026-07-24). Sin numero es preferible el vacio: se ve incompleto, no roto.
+function _numOTCorreo(n) {
+  return (n == null || n === '') ? '' : String(n);
+}
+
 function _encolarCorreo(params) {
   // Clave estable: mismo destinatario + misma OT no se encola dos veces.
   const clave = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
@@ -3152,7 +3174,7 @@ async function reintentarCorreosAhora() {
 async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
   const ok = await _enviarCorreo({
     email_admin: window.PEDRO_NOTIF_EMAIL,
-    ot_numero: String(numero),
+    ot_numero: _numOTCorreo(numero),
     local: String(local),
     fecha: String(fecha),
     tecnico: String(tecnico),
@@ -3178,16 +3200,23 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     firmaBase64 = tempC.toDataURL('image/jpeg', 0.7);
   } catch(ef) { console.warn('Error capturando firma:', ef); }
 
-  // Convertir audios a base64 para almacenamiento offline
-  const audiosBase64 = [];
-  for (let i = 0; i < vozGrabaciones.length; i++) {
-    try {
-      const ext = vozGrabaciones[i].blob.type.includes('mp4') ? 'mp4' : 'webm';
-      const b64 = await _blobToBase64(vozGrabaciones[i].blob);
-      audiosBase64.push({ data: b64, ext: ext });
-    } catch(ea) {}
-  }
+  /* ─── INSTANTANEA DEL ESTADO — TODO lo que se vaya a escribir se copia ACA, antes del primer
+     await. `estado` es un objeto global unico y compartido por TODA la app: mientras esta funcion
+     espera, el tecnico sigue usandola y lo modifica bajo los pies.
 
+     CAUSA RAIZ de las hojas de preventivo perdidas (2026-07): el objeto `otData` se armaba mas
+     abajo, DESPUES de subir las fotos a Cloudinary — decenas de segundos o minutos con mala
+     senal — y leia `estado` EN VIVO (`estado.tipo`, `estado.serviciosPreventivo`, `estado.ceco`,
+     `estado.numEquipos`). En esa ventana el tecnico ya habia vuelto e iniciado la OT siguiente del
+     mismo local, y `nuevaOT()` pone `tipo = null` y vacia la pauta. Resultado: la OT PREVENTIVA se
+     guardaba con los datos de la correctiva — `tipo:'correctivo'` (via _normTipo) y
+     `serviciosPreventivo: []` — y su hoja desaparecia. Le paso a ALVI COLON HUALPEN, UNIMARC LAS
+     VIOLETAS y UNIMARC CHACABUCO. El cliente lo describio exacto: "sobre todo en locales que
+     tienen mala senal". Cuanto peor la senal, mas ancha la ventana.
+
+     El payload de la cola offline ya se copiaba bien; por eso las OT que subian por la cola
+     quedaban correctas y estas, guardadas "online" con senal mala, no. NO leer `estado` despues
+     de este bloque. ────────────────────────────────────────────────────────────────────────── */
   const descripcionProblema = document.getElementById('desc-problema') ? document.getElementById('desc-problema').value || '' : '';
   const fotosAntesCopy = estado.fotosAntes.filter(f => f);
   const fotosDespuesCopy = estado.fotosDespues.filter(f => f);
@@ -3198,19 +3227,43 @@ async function guardarEnFirebase(otBase, desc, fecha) {
   // MISMO documento (doc(clientId)), nunca se duplica. En edición es el id real de la OT.
   const clientId = esEdicion ? estado.editandoOTId : (estado.otClientId || _uid());
 
+  const snap = {
+    local: estado.local,
+    tipo: _tipoActual(),
+    tecnico: _tecnicoActual(),
+    ceco: estado.ceco || '',
+    numEquipos: estado.numEquipos || '',
+    serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
+    cotizacionId: estado.cotizacionId || '',
+    enEspera: estado.enEspera === true,
+    emailLocal: estado.emailSucursal || estado.emailAdmin || '',
+    editandoTecnico: estado.editandoTecnico || '',
+    editandoFecha: estado.editandoFecha || ''
+  };
+
+  // Convertir audios a base64 para almacenamiento offline
+  const audiosBase64 = [];
+  for (let i = 0; i < vozGrabaciones.length; i++) {
+    try {
+      const ext = vozGrabaciones[i].blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const b64 = await _blobToBase64(vozGrabaciones[i].blob);
+      audiosBase64.push({ data: b64, ext: ext });
+    } catch(ea) {}
+  }
+
   // Payload COMPLETO (fotos/firma/timbre/audios en base64) para la cola de reintento.
   const pendPayload = {
     clientId: clientId,
-    numero: otBase.numero, local: estado.local, tipo: _tipoActual(),
-    tecnico: _tecnicoActual(), fecha: fecha,
+    numero: otBase.numero, local: snap.local, tipo: snap.tipo,
+    tecnico: snap.tecnico, fecha: fecha,
     descripcionProblema: descripcionProblema,
-    descripcionTrabajo: desc, ceco: estado.ceco || '',
-    numEquipos: estado.numEquipos || '',
-    serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
+    descripcionTrabajo: desc, ceco: snap.ceco,
+    numEquipos: snap.numEquipos,
+    serviciosPreventivo: [...snap.serviciosPreventivo],
     fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
     fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
-    cotizacionId: estado.cotizacionId || '', enEspera: estado.enEspera === true,
-    emailLocal: estado.emailSucursal || estado.emailAdmin || '',
+    cotizacionId: snap.cotizacionId, enEspera: snap.enEspera,
+    emailLocal: snap.emailLocal,
     audiosBase64: audiosBase64, savedAt: new Date().toISOString()
   };
 
@@ -3273,14 +3326,16 @@ async function guardarEnFirebase(otBase, desc, fecha) {
 
     toast('Guardando datos...');
     // Modo edicion (solo admin): actualizar el mismo documento, preservando tecnico y fecha originales.
+    // OJO: todo sale de `snap`, la instantánea tomada ANTES de las subidas. Leer `estado` acá
+    // significa leerlo minutos después, cuando ya puede ser el de OTRA OT. Ver el bloque de arriba.
     const otData = {
-      numero: otBase.numero, local: estado.local, tipo: _tipoActual(),
-      tecnico: esEdicion ? (estado.editandoTecnico || _tecnicoActual()) : _tecnicoActual(),
-      fecha: esEdicion ? (estado.editandoFecha || fecha) : fecha,
+      numero: otBase.numero, local: snap.local, tipo: snap.tipo,
+      tecnico: esEdicion ? (snap.editandoTecnico || snap.tecnico) : snap.tecnico,
+      fecha: esEdicion ? (snap.editandoFecha || fecha) : fecha,
       descripcionProblema: descripcionProblema,
-      ceco: estado.ceco || '', descripcionTrabajo: desc,
-      numEquipos: estado.numEquipos || '',
-      serviciosPreventivo: estado.serviciosPreventivo || [],
+      ceco: snap.ceco, descripcionTrabajo: desc,
+      numEquipos: snap.numEquipos,
+      serviciosPreventivo: snap.serviciosPreventivo,
       fotosAntes: urlsAntes, fotosDespues: urlsDespues,
       fotoTimbre: urlTimbre,
       firmada: true, firmaImagen: firmaBase64
@@ -3308,13 +3363,13 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     actualizarIndicadorPendientes();
 
     // Unir el recibo a la cotización solo si la OT nació de una cotización aceptada (enEspera).
-    if (!esEdicion && estado.cotizacionId && estado.enEspera === true) {
+    if (!esEdicion && snap.cotizacionId && snap.enEspera === true) {
       try {
-        await _vincularCotizacionRealizada(estado.cotizacionId, {
+        await _vincularCotizacionRealizada(snap.cotizacionId, {
           numero: otBase.numero, fecha: fecha,
           urlsAntes: urlsAntes, urlsDespues: urlsDespues,
           urlTimbre: urlTimbre, firmaBase64: firmaBase64,
-          tecnico: _tecnicoActual()
+          tecnico: snap.tecnico
         });
       } catch(evc) { console.error('Error vinculando cotizacion:', evc); }
     }
@@ -6168,6 +6223,19 @@ function _nombreArchivoPDF() {
 }
 
 async function guardarYEnviarPDF() {
+  // RED DE SEGURIDAD: nunca emitir una hoja de MANTENIMIENTO PREVENTIVO con la pauta incompleta.
+  // cerrarOT() ya lo valida, pero este camino se usa tambien para REGENERAR el PDF de una OT
+  // vieja (editarOTTerminada + guardarYEnviarPDF), y esas OT pueden traer la pauta perdida.
+  // Sin esta guarda, regenerar #274992 producia una hoja con los 11 servicios en blanco lista
+  // para mandarsela al cliente. 2026-07-28.
+  if (estado.tipo === 'preventivo' && !_pautaCompleta(estado.serviciosPreventivo)) {
+    await _avisar('Esta hoja de preventivo no tiene la pauta de servicios completa, así que el PDF saldría con los casilleros en blanco.\n\n' +
+      'OT #' + (estado.otNumero || '') + ' — ' + (estado.local || '') + '\n\n' +
+      'El técnico tiene que responder los ' + SERVICIOS_PREVENTIVO.length + ' servicios antes de generar la hoja.',
+      { titulo: 'No se puede generar la hoja' });
+    return;
+  }
+
   toast('Generando PDF...');
   const doc = await generarPDFRecepcionObra();
   if (!doc) { _error('generar el PDF', null, 'Reintenta con buena señal.'); return; }
@@ -6248,7 +6316,7 @@ async function guardarYEnviarPDF() {
     const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
     const enviado = await _enviarCorreo({
       email_admin: email,
-      ot_numero: String(estado.otNumero),
+      ot_numero: _numOTCorreo(estado.otNumero),
       local: String(estado.local || ''),
       fecha: new Date().toLocaleDateString('es-CL'),
       tecnico: String(_tecnicoActual()),
@@ -10629,7 +10697,7 @@ async function sincronizarOTsPendientes() {
       // Si falla, _enviarCorreo lo encola y se reintenta solo.
       if (ot.emailLocal && pdfUrlSync) {
         await _enviarCorreo({
-          email_admin: ot.emailLocal, ot_numero: String(ot.numero), local: String(ot.local || ''),
+          email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
           fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
           tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
           trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
