@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> 📚 **¿Vienes de Soporte (08) o no conoces el sistema?** Lee primero
+> **[BRIEF-SISTEMA-PARA-SOPORTE.md](BRIEF-SISTEMA-PARA-SOPORTE.md)** — qué hace la app, quién la usa,
+> dónde vive cada dato, qué documentos salen al cliente y qué bugs ya están cerrados. Este archivo es
+> el detalle técnico; ese es el mapa.
+
 ## Project Overview
 
 EMVAL is a Progressive Web App (PWA) for managing work orders (Órdenes de Trabajo) in Spanish. It's a single-page application built with vanilla HTML/CSS/JavaScript and Firebase.
@@ -61,6 +66,7 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - `supervisores` — Supervisor accounts
 - `facturacion` — Billing data
 - `ventas` — Sales data
+- `contadores` — Correlativos atómicos (`cot_<ddmmaa>` para el folio de cotización)
 
 ### Key Functions
 
@@ -131,6 +137,89 @@ Example: "Agregar sucursal" (add branch) form in admin panel.
 3. Uploaded to Firebase Storage at `fotos/[folder]/[timestamp].jpg`
 4. Also uploaded to Cloudinary for optimization
 5. URLs stored in Firestore document
+
+---
+
+## 🔴 LAS 4 FUENTES DE VERDAD — leer antes de decir "no existe"
+
+**Firestore NO es la única fuente.** Un trabajo ejecutado deja rastro en cuatro lugares distintos,
+y con mala señal el dato se pierde en unos y sobrevive en otros. **Nunca concluir que algo no
+existe habiendo mirado uno solo.** El orden del barrido:
+
+| # | Fuente | Qué guarda | Cómo se consulta |
+|---|---|---|---|
+| 1 | **Firestore** | El registro de la OT | REST con la API key del cliente (ver abajo) |
+| 2 | **Cloudinary** | **El PDF, aunque Firestore no lo enlace** | URL derivable del id del doc (ver abajo) |
+| 3 | **`cotizaciones.emval@gmail.com`** | Copia automática de **cada OT completada**, con enlace al PDF | Bastián tiene acceso |
+| 4 | **El dispositivo del técnico** | Cola offline (IndexedDB) + `localStorage` | Solo desde ese teléfono — ver `cola-pendientes-vive-en-el-dispositivo` |
+
+### La casilla `cotizaciones.emval@gmail.com` es parte del sistema, no un buzón
+A esa casilla llega una **copia automática de cada OT completada** con el enlace a su PDF. Es
+respaldo y confirmación de que el trabajo se ejecutó, y **sobrevive cuando Firestore pierde el
+dato**. Es lo que permitió recuperar 6 hojas de preventivo el 27-jul-2026.
+
+⚠️ **Pero el texto del correo miente.** El asunto, el cuerpo y el texto del enlace se arman con el
+estado global de la app, que para cuando se envía **ya puede ser el de otra OT**. Hubo correos que
+decían *"OT #null completada · Tipo: Correctivo · Descargar PDF de Recepción de Obra"* cuyo adjunto
+era una **hoja preventiva completa**. El PDF se genera antes del pisado, por eso está bien.
+👉 **Fiarse del archivo, nunca del texto.** El nombre del PDF es el único indicio confiable del tipo:
+
+- `<ceco>-HS <numero>-MP Transpaletas <Mes> <Año>.pdf` → **preventivo**
+- `Recepcion_Obra_OT<numero>.pdf` → **correctivo**
+
+(lo decide `_nombreArchivoPDF()`, buscar esa función en `index.html`)
+
+### Barrer Cloudinary completo sin depender del correo
+La URL se **deriva** y **funciona sin el segmento de versión** (`/v1784665781/`), que es lo que la
+hace construible. El `public_id` es el nombre de arriba + `'_' + docId.slice(-7)`:
+
+```
+https://res.cloudinary.com/dcrf29tna/raw/upload/emval/pdfs/<public_id>
+```
+
+El `<ceco>` sale del campo **`centro`** de la sucursal (ojo: `centro`, no `ceco`), y el mes es el de
+generación del PDF (≈ `creadoEn` de la OT). Con eso se prueban las ~150 OT con un `HEAD` por URL en
+un par de minutos: convierte una revisión manual de correos en un **barrido exhaustivo**. Así
+aparecieron las 3 hojas que se creían irrecuperables **y 3 más que nadie estaba buscando**.
+
+### Leer/escribir Firestore por REST
+```
+https://firestore.googleapis.com/v1/projects/emval-app/databases/(default)/documents
+```
+API key del cliente, en `index.html` (buscar `apiKey:`). Las reglas permiten lectura y escritura sin
+autenticación. Usar `select.fields` / `mask.fieldPaths` para no traer los base64 pesados
+(`firmaImagen`, `pdfData`, fotos). **Para escribir: respaldo previo + `updateMask` siempre**, y
+autorización explícita del cliente — es producción.
+
+### Por qué esta sección existe
+El 27-jul-2026 se concluyó dos veces que 3 hojas de preventivo "no se podían reconstruir por dato".
+Era cierto mirando Firestore y **falso mirando el sistema completo**: los PDF estaban en Cloudinary.
+**El cliente lo dijo en su primer mensaje** — *"está en el correo como correctivo pero al descargar
+es preventivo"* — y se descartó dos veces antes de comprobarlo. Se estuvo a punto de mandar al
+técnico a rehacer trabajo ya hecho. **La fuente la tenemos que conocer nosotros, no el cliente.**
+
+## Procedimiento: "falta un dato / se perdió un registro"
+
+Es el caso más frecuente de este proyecto. **Recorrer las 4 fuentes antes de concluir nada:**
+
+1. **Firestore** — ¿existe el documento? ¿qué campos tiene realmente? (REST, sin abrir la app)
+2. **Cloudinary** — construir la URL derivada y hacerle `HEAD`. **Un PDF puede existir sin estar
+   enlazado.** Probar la variante preventiva *y* la correctiva: el nombre revela el tipo real.
+3. **Correo de respaldo** (`cotizaciones.emval@gmail.com`) — copia de cada OT completada. Mirar
+   **la URL del enlace**, nunca el texto, que puede venir del estado de otra OT.
+4. **El dispositivo del técnico** — si nunca sincronizó, el trabajo está solo ahí.
+
+**Reglas que salieron de casos reales:**
+- ❌ Nunca decir "no existe" habiendo mirado una sola fuente. Decir **"no está en Firestore"**, que
+  es lo que efectivamente se comprobó.
+- ❌ Nunca mandar a alguien a rehacer trabajo en terreno sin haber barrido las 4.
+- ✅ Cuando el cliente afirma algo sobre sus propios datos, **comprobarlo antes de descartarlo**.
+  Él ve el sistema desde fuera y a veces desde ahí se ve mejor.
+- ✅ Un dato que "se perdió" casi nunca se perdió: se guardó **pisado por otra OT**. Ver la memoria
+  `estado-global-pisado-por-la-ot-siguiente` — con mala señal, `estado` cambia bajo los pies de un
+  guardado en vuelo.
+- ✅ Al reparar datos: respaldo previo a `08_Soporte_Postventa/Tickets/`, `updateMask`, y **no
+  inventar**. Si la pauta no está en ninguna fuente, la hoja NO se marca como completa.
 
 ## Common Development Tasks
 
@@ -219,3 +308,4 @@ These changes are useful context for understanding current state:
 - `sw.js` — Service Worker (offline caching strategy)
 - `icon.png` — App icon
 - `CLAUDE.md` — This file
+- `BRIEF-SISTEMA-PARA-SOPORTE.md` — Mapa del sistema para Soporte (08): negocio, roles, flujo, fuentes de datos, documentos al cliente, bugs cerrados

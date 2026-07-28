@@ -8715,18 +8715,25 @@ function _renderPausadasSup(snap, seccion, listaEl, countEl) {
       listaEl.innerHTML = '';
       return;
     }
-    // Ordenar por fecha de creacion (mas reciente primero); ocultar cuentas de prueba
-    const docs = snap.docs.filter(function(d){ return !_ocultoTecnico((d.data() || {}).tecnico); }).sort(function(a, b) {
-      return _msCreado(b.data().creadoEn) - _msCreado(a.data().creadoEn);
+    // Ocultar cuentas de prueba
+    const docs = snap.docs.filter(function(d){ return !_ocultoTecnico((d.data() || {}).tecnico); });
+
+    // COLAPSAR DUPLICADOS: dos documentos de la MISMA visita (mismo numero + local) son UNA
+    // tarjeta. Sin esto el supervisor ve el mismo trabajo pausado dos veces y no sabe cual
+    // retomar — le pasaba a UNIMARC LAS VIOLETAS #142079, y lo veia el cliente. La carpeta de
+    // preventivos ya usaba _dedupeOTs(); esta pantalla se habia quedado sin el.
+    const _ded = _dedupeOTs(docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }));
+    const lista = _ded.lista.sort(function(a, b) {
+      return _msCreado(b.creadoEn) - _msCreado(a.creadoEn);
     });
-    if (docs.length === 0) { seccion.style.display = 'none'; listaEl.innerHTML = ''; return; }
+    if (lista.length === 0) { seccion.style.display = 'none'; listaEl.innerHTML = ''; return; }
 
     seccion.style.display = 'block';
-    if (countEl) { countEl.style.display = ''; countEl.textContent = docs.length; }
+    if (countEl) { countEl.style.display = ''; countEl.textContent = lista.length; }
     listaEl.innerHTML = '';
 
-    docs.forEach(function(doc, idx) {
-      const card = _crearCardPausadaSup(doc.id, doc.data(), _cadenaMapSup || {});
+    lista.forEach(function(ot, idx) {
+      const card = _crearCardPausadaSup(ot.id, ot, _cadenaMapSup || {});
       card.style.animationDelay = Math.min(idx * 55, 440) + 'ms';
       listaEl.appendChild(card);
     });
@@ -10803,6 +10810,13 @@ window.addEventListener('pagehide', function() {
   guardarBorradorOTActual();
 });
 
+// Con ?pdf=<id> la pagina NO es la app: es solo un visor para abrir un PDF desde un correo.
+// Arrancar la app entera ahi (usuarios + cadenas + pausadas + los 3 sincronizadores, todos
+// pegandole a Firestore a la vez) dejaba al navegador sin recursos y el visor moria con
+// net::ERR_INSUFFICIENT_RESOURCES antes de mostrar nada: al cliente le quedaba un boton que
+// "no hace nada". El PDF estaba intacto (caso #9875 S10 TOME, 2026-07-28).
+var _soloVisorPDF = new URLSearchParams(window.location.search).get('pdf');
+
 window.addEventListener('beforeunload', function() {
   guardarBorradorOTActual();
 });
@@ -10816,6 +10830,8 @@ document.addEventListener('visibilitychange', function() {
     // offline, sin esperar los 90 s del intervalo ni depender del evento 'online' (que en
     // iOS/Safari no dispara si la app estuvo congelada en segundo plano). Las dos funciones
     // salen al instante si no hay pendientes, así que es seguro llamarlas cada vez.
+    // En modo visor (?pdf=) no: esa pestaña solo muestra un PDF, no tiene nada que subir.
+    if (_soloVisorPDF) return;
     actualizarIndicadorPendientes();
     setTimeout(sincronizarOTsPendientes, 800);
     setTimeout(sincronizarPausadasPendientes, 1200);
@@ -10841,16 +10857,19 @@ function _getUsuariosCached() {
 // Iniciar carga. Los loaders son CACHE-FIRST: pintan de inmediato desde localStorage
 // (así la app abre aunque no haya señal) y se auto-reintentan para refrescar cuando
 // Firebase esté listo. No dependen de navigator.onLine (que puede mentir sin red real).
-(function iniciarCarga() {
-  cargarUsuariosApp();
-  cargarCadenasApp();
-  cargarOTsPausadasEnCadena();
-})();
-setTimeout(function(){
-  var urlParams = new URLSearchParams(window.location.search);
-  var pdfId = urlParams.get('pdf');
-  if (pdfId) { verPDFById(pdfId); }
-}, 1500);
+// Modo visor: ver la nota donde se declara _soloVisorPDF, más arriba.
+if (!_soloVisorPDF) {
+  // Iniciar carga. Los loaders son CACHE-FIRST: pintan de inmediato desde localStorage
+  // (así la app abre aunque no haya señal) y se auto-reintentan para refrescar cuando
+  // Firebase esté listo. No dependen de navigator.onLine (que puede mentir sin red real).
+  (function iniciarCarga() {
+    cargarUsuariosApp();
+    cargarCadenasApp();
+    cargarOTsPausadasEnCadena();
+  })();
+} else {
+  setTimeout(function(){ verPDFById(_soloVisorPDF); }, 400);
+}
 
 // Registrar Service Worker
 if ('serviceWorker' in navigator) {
@@ -10863,12 +10882,16 @@ actualizarIndicadorPendientes();
 // Reintentar subir trabajo que quedó pendiente por mala señal (OTs terminadas Y pausadas):
 // al iniciar (si hay conexión) y cada 90 s como red de seguridad. No depende del evento
 // 'online' (que nunca dispara si navigator.onLine se mantuvo en true con señal muerta).
-setTimeout(sincronizarOTsPendientes, 3500);
-setTimeout(sincronizarPausadasPendientes, 3000);
-setTimeout(sincronizarCorreosPendientes, 4000);
-setInterval(sincronizarOTsPendientes, 90000);
-setInterval(sincronizarPausadasPendientes, 90000);
-setInterval(sincronizarCorreosPendientes, 90000);
+// En modo visor (?pdf=) NO corren: esa pestaña no es el teléfono de un técnico, no tiene
+// trabajo pendiente que subir, y sus peticiones competían con la carga del PDF.
+if (!_soloVisorPDF) {
+  setTimeout(sincronizarOTsPendientes, 3500);
+  setTimeout(sincronizarPausadasPendientes, 3000);
+  setTimeout(sincronizarCorreosPendientes, 4000);
+  setInterval(sincronizarOTsPendientes, 90000);
+  setInterval(sincronizarPausadasPendientes, 90000);
+  setInterval(sincronizarCorreosPendientes, 90000);
+}
 </script>
 </body>
 </html>
