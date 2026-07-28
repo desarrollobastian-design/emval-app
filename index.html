@@ -4189,6 +4189,56 @@ function calcTotalCot() {
   return { subtotal: total, descMonto: 0, total, desc: 0 };
 }
 
+/* ─── NUMERO DE COTIZACION — UN SOLO LUGAR ────────────────────────────────────────────────
+   Formato: dia(2) + mes(2) + anio(2) + correlativo del dia(2).  Ej: 13-07-2026, la 3ra -> 13072603
+
+   Antes se armaba en DOS sitios y siempre ganaba el malo:
+     · al GUARDAR se escribia el sufijo '01' HARDCODEADO -> todas las cotizaciones cargadas el
+       mismo dia nacian con el mismo numero;
+     · al generar el PDF si se calculaba un correlativo (cotSnap.size + 1), pero se usaba solo
+       para el texto impreso: el nombre del archivo y el correo leian el guardado, o sea el malo.
+   Resultado en produccion: 39 de 45 cotizaciones comparten el numero 13072601 — el dia que Pedro
+   cargo el mes entero de una sentada — y ese numero repetido LLEGO A LOS SUPERVISORES DE SMU.
+
+   Aca se asigna UNA sola vez, al guardar, y con una TRANSACCION sobre un contador por dia:
+   `cotSnap.size + 1` no es atomico (el propio codigo lo admitia: "si la lectura fallo por red y
+   ya habia una, DOS cotizaciones comparten numero"), y ademas se contaba a si misma al regenerar
+   el PDF, con lo que el numero de una misma cotizacion cambiaba entre una descarga y otra.
+
+   El dia va con cero a la izquierda a proposito: sin el, "1072601" era ambiguo — podia leerse
+   como 1-jul correlativo 01 o como 10-jul correlativo 7. Los numeros viejos de un digito quedan
+   como estan; no se renumera nada hacia atras (eso lo decide Pedro, hay documentos ya enviados).
+   ────────────────────────────────────────────────────────────────────────────────────────── */
+function _fechaCodigoHoy() {
+  const h = new Date();
+  return String(h.getDate()).padStart(2, '0') + String(h.getMonth() + 1).padStart(2, '0') + String(h.getFullYear()).slice(2);
+}
+
+async function _asignarNumeroCotizacion(db) {
+  const fechaCodigo = _fechaCodigoHoy();
+  const ref = db.collection('contadores').doc('cot_' + fechaCodigo);
+  let correlativo;
+  try {
+    correlativo = await _conTimeout(db.runTransaction(function(tx) {
+      return tx.get(ref).then(function(d) {
+        const n = ((d.exists && d.data() && d.data().n) || 0) + 1;
+        tx.set(ref, { n: n, fechaCodigo: fechaCodigo }, { merge: true });
+        return n;
+      });
+    }), 20000, 'correlativo cotizacion');
+  } catch(e) {
+    // Sin contador no se puede garantizar unicidad. Se marca el numero como PROVISORIO en vez de
+    // inventar un '01' que colisiona en silencio: asi Pedro lo ve y lo corrige antes de enviar.
+    console.error('No se pudo reservar el correlativo de cotizacion:', e);
+    return { fechaCodigo: fechaCodigo, numeroCotizacion: '', numeroProvisorio: true };
+  }
+  return {
+    fechaCodigo: fechaCodigo,
+    numeroCotizacion: fechaCodigo + String(correlativo).padStart(2, '0'),
+    numeroProvisorio: false
+  };
+}
+
 async function guardarCotizacion() {
   if (!cotizacionActual) return;
   const carpeta = document.getElementById('cot-carpeta').value.trim() || 'Sin supervisor';   // catch-all: nunca el nombre del local -> no se dispersan las carpetas
@@ -4198,6 +4248,13 @@ async function guardarCotizacion() {
   const soltar = _bloquear(document.getElementById('btn-guardar-cot'));
   try {
     const db = window.firebase.firestore();
+    // Una EDICION conserva su numero: renumerar cambiaria el folio de un documento que el
+    // supervisor quizas ya recibio. Solo una cotizacion nueva reserva correlativo.
+    const _editandoId = window._editandoCotizacionId;
+    const _num = (_editandoId && cotizacionActual.numeroCotizacion)
+      ? { fechaCodigo: cotizacionActual.fechaCodigo || _fechaCodigoHoy(),
+          numeroCotizacion: cotizacionActual.numeroCotizacion, numeroProvisorio: false }
+      : await _asignarNumeroCotizacion(db);
     const cotData = {
       otId: cotizacionActual.id,
       otNumero: cotizacionActual.numero,
@@ -4213,8 +4270,8 @@ async function guardarCotizacion() {
       descuentoMonto: totales.descMonto,
       total: totales.total,
       carpeta: carpeta,
-      fechaCodigo: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2); })(),
-      numeroCotizacion: (function(){ var h=new Date(); return String(h.getDate())+String(h.getMonth()+1).padStart(2,'0')+String(h.getFullYear()).slice(2)+'01'; })(),
+      fechaCodigo: _num.fechaCodigo,
+      numeroCotizacion: _num.numeroCotizacion,
       creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     };
     // Cotización previa: ciclo de estado propio, sin OT de origen, conserva branding de cadena
@@ -6433,12 +6490,12 @@ async function generarPDFCotizacionGuardada(cotData, options) {
     const fecha = new Date().toLocaleDateString('es-CL');
     const VERDE = [100, 180, 150];
 
-    // Numero cotizacion
-    const hoy = new Date();
-    const diaCot = String(hoy.getDate());
-    const mesCot = String(hoy.getMonth() + 1).padStart(2, '0');
-    const anioCot = String(hoy.getFullYear()).slice(2);
-    const numCot = diaCot + mesCot + anioCot + '01';
+    // Numero cotizacion: SIEMPRE el del documento guardado. Aca habia un TERCER '01'
+    // hardcodeado, y es el que mas dano hizo: esta es la funcion que genera el PDF de una
+    // cotizacion ya guardada, o sea la que corre al ENVIARLA al supervisor. Por eso los
+    // correos a SMU salieron todos con el mismo numero, con la fecha del dia del envio
+    // ademas de la del guardado.
+    const numCot = (cotData && cotData.numeroCotizacion) || '';
 
     // ---- TITULO ----
     doc.setFontSize(22); doc.setFont('helvetica', 'bold'); doc.setTextColor(0,0,0);
@@ -6782,27 +6839,12 @@ async function generarPDFCotizacion() {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, margin = 15;
   const fecha = new Date().toLocaleDateString('es-CL');
-  // Numero correlativo: dia + mes + anio(2) + correlativo(2)
-  // Ej: 29-05-2026, cotizacion 3 -> 2905263
-  const hoy = new Date();
-  const diaCot = String(hoy.getDate());
-  const mesCot = String(hoy.getMonth() + 1).padStart(2, '0');
-  const anioCot = String(hoy.getFullYear()).slice(2);
-  // Obtener correlativo del dia desde Firestore
-  let correlativo = 1;
-  try {
-    const db2 = window.firebase.firestore();
-    const hoyStr = diaCot + mesCot + anioCot;
-    const cotSnap = await db2.collection('cotizaciones')
-      .where('fechaCodigo', '==', hoyStr).get();
-    correlativo = cotSnap.size + 1;
-  } catch(ecorr) {
-    // SILENCIO-FIRMADO: sin poder contar las cotizaciones de hoy, se asume que esta es la
-    // primera. Si la lectura fallo por red y ya habia una, DOS cotizaciones comparten numero.
-    // Es preferible a no emitirla: el numero se corrige a mano y el trabajo no se detiene.
-    correlativo = 1;
-  }
-  const numCot = diaCot + mesCot + anioCot + String(correlativo).padStart(2, '0');
+  // El numero YA viene asignado desde el guardado (_asignarNumeroCotizacion, transaccion sobre
+  // un contador por dia). Aca NO se recalcula: antes se contaba `cotSnap.size + 1` en cada
+  // generacion, con dos efectos malos — la cotizacion se contaba a si misma, y el numero de un
+  // mismo documento cambiaba entre una descarga y la siguiente. El folio es del documento, no
+  // del momento en que se imprime.
+  const numCot = (cotizacionActual && cotizacionActual.numeroCotizacion) || '';
 
   // Colores
   const VERDE = [100, 180, 150];
@@ -7170,10 +7212,9 @@ async function generarPDFCotizacion() {
 
   const _servPDF2 = (document.getElementById('cot-nombre-servicio') ? document.getElementById('cot-nombre-servicio').value.trim() : '') || (cotizacionActual.nombreServicio||'');
   const _localPDF2 = (cotizacionActual.local||'').replace(/\s+/g,' ').trim();
-  // Generar numero cotizacion igual que en el PDF
-  const _hoy2 = new Date();
-  const _numCot2 = String(_hoy2.getDate()) + String(_hoy2.getMonth()+1).padStart(2,'0') + String(_hoy2.getFullYear()).slice(2) + '01';
-  const _cotN2 = cotizacionActual.numeroCotizacion || _numCot2;
+  // El numero del archivo sale del documento, nunca de la fecha de hoy: el fallback anterior
+  // volvia a armar el '01' hardcodeado, o sea el mismo numero para todas las del dia.
+  const _cotN2 = cotizacionActual.numeroCotizacion || 'SIN-NUMERO';
   const _otN2 = cotizacionActual.otNumero || '';
   const nombreArchivo = _cotN2 + ' OT ' + _otN2 + (_servPDF2 ? ' ' + _servPDF2 : '') + ' ' + _localPDF2 + '.pdf';
   doc.save(nombreArchivo);
@@ -8140,6 +8181,37 @@ function agregarFilaEmailCot(valor) {
 async function enviarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotización'); return; }
+
+  /* VERIFICACION DEL FOLIO ANTES DE ENVIAR. El numero repetido no se descubrio en la app: lo
+     vio el CLIENTE en su correo, semanas despues, cuando 39 cotizaciones ya habian salido a los
+     supervisores de SMU con el mismo 13072601. Un numero es un folio: si dos documentos lo
+     comparten, el supervisor no puede referirse a uno solo. Se revisa aca, que es el ultimo
+     punto antes de que salga de la empresa. */
+  const _sinNumero = seleccionadas.filter(function(c){ return !String(c.numeroCotizacion || '').trim(); });
+  const _vistos = {}, _repetidos = {};
+  seleccionadas.forEach(function(c){
+    const n = String(c.numeroCotizacion || '').trim();
+    if (!n) return;
+    if (_vistos[n]) _repetidos[n] = (_repetidos[n] || [_vistos[n]]).concat([c]);
+    else _vistos[n] = c;
+  });
+  const _numsRepetidos = Object.keys(_repetidos);
+  if (_sinNumero.length || _numsRepetidos.length) {
+    let msg = '';
+    if (_numsRepetidos.length) {
+      msg += 'Hay cotizaciones que comparten el mismo N°. Si se envían así, el supervisor no puede distinguirlas:\n\n' +
+        _numsRepetidos.map(function(n){
+          return '· N° ' + n + ' → ' + _repetidos[n].map(function(c){ return (c.local || '?'); }).join(', ');
+        }).join('\n') + '\n\n';
+    }
+    if (_sinNumero.length) {
+      msg += 'Y estas quedaron SIN número (no se pudo reservar el correlativo al guardarlas):\n\n' +
+        _sinNumero.map(function(c){ return '· ' + (c.local || '?') + ' · ' + (c.fecha || ''); }).join('\n') + '\n\n';
+    }
+    msg += '¿Enviar de todas formas?';
+    if (!await _confirmar(msg, { titulo: 'Revisa el N° de cotización', okTexto: 'Enviar igual', peligro: true })) return;
+  }
+
   _cotsParaEnviar = seleccionadas;
   _envioModo = 'cot';
   const _titCot = document.getElementById('modal-enviar-cot-titulo');
