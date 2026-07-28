@@ -225,9 +225,20 @@ prueba y los dos Papa Johns; el que no lleva es **ALVI CAMINO A CORONEL**.
 
 ⚠️ **Al contar hojas, el objetivo es 59, no 63.** Y ojo con el local de prueba: infla los conteos.
 
-**Ciclo:** el preventivo es **bimestral** — ene · mar · may · jul · sep · nov *(dato de negocio
-aportado por Soporte; en el sistema hay datos de jun-jul-2026)*. Cada ciclo debería producir **una
-hoja por cada uno de los 59 locales**.
+## 4.1-bis 📅 El ciclo — cuántas hojas esperar y cuándo
+
+El preventivo es **bimestral: ENE · MAR · MAY · JUL · SEP · NOV**.
+✅ **Confirmado por Pedro Arce (administrador de EMVAL) el 28-jul-2026.**
+
+> ### 📐 La cuenta del ciclo
+> **59 hojas de preventivo — una por local — cada dos meses.**
+> Si al cierre de un ciclo hay menos de 59, **falta algo y hay que buscarlo** (ver 2.6).
+
+**Próximo ciclo: SEPTIEMBRE 2026.** Julio 2026 cerró con las 59 completas.
+
+⚠️ **Ojo al contar:** las 59 son hojas **preventivas**. Las **correctivas van aparte** y no tienen
+número esperado — dependen de lo que el técnico encuentre. Mezclarlas es la forma más fácil de creer
+que sobran o faltan hojas (ver el punto 🔑 del capítulo 1).
 
 ## 4.2 Qué significa que una hoja esté "LISTA" — las 4 condiciones
 
