@@ -1764,6 +1764,49 @@ function _normTexto(s) {
     .replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+// Sucursales que cambiaron de nombre en la lista maestra DESPUES de que ya se habian cerrado OT
+// con el nombre anterior. La OT guarda el texto del local tal como estaba ese dia: si la sucursal
+// se renombra, esa OT deja de resolver contra 'cadenas' y se queda sin logo, sin CeCo y —lo grave—
+// SIN SUPERVISOR, con lo que la hoja se enviaria a nadie y sin ningun aviso.
+// Caso 2026-07: la cadena S10 paso a llamarse M10 y 6 OT de julio quedaron con el nombre viejo,
+// dos de ellas hojas preventivas ya listas para entregar (#9530 y #9453).
+// Clave en _normTexto(); valor = nombre EXACTO como esta hoy en la sucursal.
+window.ALIAS_LOCALES = window.ALIAS_LOCALES || {
+  's10 los angeles': 'M10 LOS ANGELES',
+  's10 concepcion': 'M10 CONCEPCION'
+};
+
+// Nombre canonico de un local: aplica el alias si lo hay, si no devuelve el original tal cual.
+function _localCanonico(nombre) {
+  return (window.ALIAS_LOCALES || {})[_normTexto(nombre)] || String(nombre == null ? '' : nombre);
+}
+
+// Indexa las cadenas por local para resolver cadena/CeCo/supervisor SIN depender de que el nombre
+// coincida caracter a caracter. Antes se comparaba con === contra el texto crudo: bastaba una
+// mayuscula, una tilde o un renombre para que el local "no existiera" y la hoja perdiera supervisor.
+// Devuelve mapas con la clave ya normalizada; buscar siempre con _localCanonico() + _normTexto().
+function _indexarCadenas(docs) {
+  const porLocal = {}, ceco = {}, supervisor = {};
+  docs.forEach(function(cd) {
+    const c = typeof cd.data === 'function' ? cd.data() : cd;
+    porLocal[_normTexto(c.nombre)] = c;
+    (c.sucursales || []).forEach(function(s) {
+      const nom = typeof s === 'object' ? s.nombre : s;
+      const k = _normTexto(nom);
+      porLocal[k] = c;
+      if (typeof s === 'object') {
+        if (s.centro) ceco[k] = s.centro;
+        if (s.supervisor) supervisor[k] = s.supervisor;
+      }
+    });
+  });
+  return {
+    cadena: function(local) { return porLocal[_normTexto(_localCanonico(local))] || null; },
+    ceco: function(local) { return ceco[_normTexto(_localCanonico(local))] || ''; },
+    supervisor: function(local) { return supervisor[_normTexto(_localCanonico(local))] || ''; }
+  };
+}
+
 // Identidad de una OT para detectar duplicados: numero + local. Dos documentos con la misma
 // clave son la MISMA visita guardada dos veces (pausada + cierre, o dos cierres), no dos trabajos.
 function _claveOT(ot) {
@@ -7287,17 +7330,8 @@ async function cargarPreventivos() {
       if (d.otClientId) pdfMap['c_' + d.otClientId] = info;
     });
 
-    // Index: cadenas y sucursales por nombre
-    const cadenaMap = {};
-    const cecoMapPrev = {};
-    cadenasSnap.docs.forEach(function(cd) {
-      const c = cd.data();
-      cadenaMap[c.nombre] = c;
-      (c.sucursales || []).forEach(function(s) {
-        cadenaMap[typeof s === 'object' ? s.nombre : s] = c;
-        if (typeof s === 'object' && s.nombre && s.centro) cecoMapPrev[s.nombre] = s.centro;
-      });
-    });
+    // Index: cadenas y sucursales por nombre (tolerante a mayusculas, tildes y renombres).
+    const idxPrev = _indexarCadenas(cadenasSnap.docs);
 
     // Index: cotizaciones por otId y otNumero
     const cotMap = {};
@@ -7369,18 +7403,14 @@ async function cargarPreventivos() {
       return f;
     }
     prevOTs.forEach(function(ot) {
-      const cadena = cadenaMap[ot.local] || null;
+      const cadena = idxPrev.cadena(ot.local);
       const otNum = String(ot.numero || ot.otNumero || '');
       const pdfInfo = (ot.id && pdfMap['c_' + ot.id]) || pdfMap[otNum] || null;
       // Prefiere el PDF guardado en el propio documento de la OT (p. ej. OTs sincronizadas
       // offline, sin entrada en el índice 'pdfs'); si no, cae al índice.
       const pdfCloudUrl = ot.pdfUrlCloudinary || (pdfInfo ? pdfInfo.cloudUrl : '') || '';
       const pdfFirestoreUrl = ot.pdfUrl || (pdfInfo ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfInfo.id) : '');
-      let supNombre = '';
-      if (cadena && cadena.sucursales) {
-        const suc = cadena.sucursales.find(function(s){ return (typeof s === 'object' ? s.nombre : s) === ot.local; });
-        if (suc && typeof suc === 'object') supNombre = suc.supervisor || '';
-      }
+      const supNombre = idxPrev.supervisor(ot.local);
       window._todosPreventivos[ot.id] = { id: ot.id, local: ot.local || '', tecnico: ot.tecnico || '', numero: otNum, fecha: ot.fecha || '', pdfUrl: pdfCloudUrl || pdfFirestoreUrl || '', supervisorNombre: supNombre };
 
       const card = document.createElement('div');
@@ -7402,7 +7432,7 @@ async function cargarPreventivos() {
       } else { ico.textContent = (ot.local||'?').charAt(0); }
       const hdrInfo = document.createElement('div');
       hdrInfo.style.flex = '1';
-      const cecoValPrev = ot.ceco || cecoMapPrev[ot.local] || '';
+      const cecoValPrev = ot.ceco || idxPrev.ceco(ot.local) || '';
       const cecoTag = cecoValPrev ? ' · <b>CeCo:' + cecoValPrev + '</b>' : '';
       hdrInfo.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
         + '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + cecoTag + ' · ' + (ot.tecnico||'-') + '</div>';
@@ -7889,10 +7919,24 @@ function obtenerPreventivosSeleccionados() {
   return Array.from(checks).map(function(c){ return mapa[c.dataset.prevId]; }).filter(Boolean);
 }
 
-function enviarPreventivosSeleccionados() {
+async function enviarPreventivosSeleccionados() {
   const sel = obtenerPreventivosSeleccionados();
   if (sel.length === 0) { toast('Marca al menos una hoja'); return; }
   if (sel.every(function(h){ return !h.pdfUrl; })) { toast('Las hojas marcadas aún no tienen PDF disponible'); return; }
+
+  // Hojas cuyo local no resuelve contra 'cadenas' (renombrado o eliminado en la lista maestra):
+  // se avisa ANTES de abrir el modal. Sin esto salian con el destinatario vacio y sin ningun
+  // aviso — se enviaban a nadie y se descubria cuando el supervisor reclamaba. El caso caia en
+  // el `else if (h.supervisorNombre)` de mas abajo, que NO cubre el string vacio.
+  // Caso 2026-07: #9530 y #9453, cuyo local 'S10 ...' paso a llamarse 'M10 ...'. Ver ALIAS_LOCALES.
+  const huerfanas = sel.filter(function(h){ return !h.supervisorNombre; });
+  if (huerfanas.length) {
+    await _avisar('Estas hojas no tienen supervisor asociado, porque su local ya no figura en la lista de sucursales (renombrado o eliminado):\n\n' +
+      huerfanas.map(function(h){ return '· #' + (h.numero || '') + ' — ' + (h.local || ''); }).join('\n') +
+      '\n\nSe abrirá el envío igual: escribe el correo a mano, o corrige el local en Administración.',
+      { titulo: 'Hojas sin supervisor' });
+  }
+
   _hojasParaEnviar = sel;
   _envioModo = 'hoja';
   const tit = document.getElementById('modal-enviar-cot-titulo');
