@@ -6111,8 +6111,11 @@ function verPDF() {
   if (estado.pdfUrl) {
     window.open(estado.pdfUrl, '_blank');
   } else {
+    // Congelado antes de generar: si el tecnico arranca la OT siguiente mientras se arma el PDF,
+    // el archivo que se descarga saldria con el numero (y el tipo) de la otra hoja.
+    const snapNombre = { tipo: estado.tipo, ceco: estado.ceco, otNumero: estado.otNumero };
     generarPDFRecepcionObra().then(function(doc){
-      if(doc) doc.save(_nombreArchivoPDF());
+      if(doc) doc.save(_nombreArchivoPDF(snapNombre));
     });
   }
 }
@@ -6269,29 +6272,70 @@ async function agregarFotosAlPDF(doc) {
   }
 }
 
-function _nombreArchivoPDF() {
+// `snap` es la INSTANTANEA de la OT (ver guardarYEnviarPDF). SIEMPRE pasarla: el nombre del
+// archivo es el unico indicio confiable del tipo y del numero real de la hoja, y leer `estado`
+// en vivo despues de un await lo deja con los datos de la OT siguiente. El fallback a `estado`
+// queda solo como red para una llamada sincrona.
+function _nombreArchivoPDF(snap) {
+  const s = snap || estado;
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const now = new Date();
-  if (estado.tipo === 'preventivo') {
-    const ceco = (estado.ceco || '').toString().trim();
-    return ceco + '-HS ' + (estado.otNumero || '') + '-MP Transpaletas ' + MESES[now.getMonth()] + ' ' + now.getFullYear() + '.pdf';
+  if (s.tipo === 'preventivo') {
+    const ceco = (s.ceco || '').toString().trim();
+    return ceco + '-HS ' + (s.otNumero || '') + '-MP Transpaletas ' + MESES[now.getMonth()] + ' ' + now.getFullYear() + '.pdf';
   }
-  return 'Recepcion_Obra_OT' + (estado.otNumero || '') + '.pdf';
+  return 'Recepcion_Obra_OT' + (s.otNumero || '') + '.pdf';
 }
 
 async function guardarYEnviarPDF() {
+  /* ─── INSTANTANEA DE LA OT — se copia TODO ACA, antes del primer await ───────────────────
+     Misma causa raiz que la de guardarEnFirebase (3203), en otra funcion: `estado` es global y
+     mutable, y esta funcion la arranca cerrarOT con un setTimeout SIN await (2887). Mientras
+     sube el PDF a Cloudinary — decenas de segundos con mala senal — el tecnico ya toco "Nueva
+     OT": nuevaOT() (2035) asigna OTRO numero, VACIA otClientId y pone tipo = null.
+
+     Se leia `estado.otNumero` en cuatro puntos separados por ese await, asi que el archivo
+     quedaba con el numero viejo y el registro de `pdfs` + el correo + el aviso a administracion
+     con el nuevo. Evidencia de produccion (30-jul-2026, 1,5 s entre los dos escritos):
+     `pdfs.otNumero = 535219` — numero que no existe en `ordenes` — con el archivo
+     `Recepcion_Obra_OT673113.pdf` adjunto. El 23-jul dos hojas del mismo local intercambiaron
+     numero y la segunda quedo en null. Los 4 correctivos de Jose Quiroz sin PDF enlazado tienen
+     `otClientId` VACIO: es nuevaOT() limpiandolo en pleno vuelo, no un dato que falto.
+
+     Congelar el clientId es lo que sostiene el enlace: con el escrito, el numero pasa a ser
+     cosmetico y el PDF se re-enlaza aunque el numero se cruce.
+     NO leer `estado` mas abajo — usar `snap`. ─────────────────────────────────────────────── */
+  const snap = {
+    otNumero: estado.otNumero,
+    tipo: estado.tipo,
+    ceco: estado.ceco,
+    local: estado.local,
+    tecnico: _tecnicoActual(),
+    editandoOTId: estado.editandoOTId || '',
+    otClientId: estado.otClientId || '',
+    email: estado.emailSucursal || estado.emailAdmin,
+    serviciosPreventivo: estado.serviciosPreventivo
+  };
+  // Identidad de escritura de esta OT, resuelta una sola vez (el _uid() de respaldo se congela
+  // igual: antes se recalculaba en cada lectura y salia un id distinto cada vez).
+  snap.clientId = snap.otClientId || snap.editandoOTId || _uid();
+
   // RED DE SEGURIDAD: nunca emitir una hoja de MANTENIMIENTO PREVENTIVO con la pauta incompleta.
   // cerrarOT() ya lo valida, pero este camino se usa tambien para REGENERAR el PDF de una OT
   // vieja (editarOTTerminada + guardarYEnviarPDF), y esas OT pueden traer la pauta perdida.
   // Sin esta guarda, regenerar #274992 producia una hoja con los 11 servicios en blanco lista
   // para mandarsela al cliente. 2026-07-28.
-  if (estado.tipo === 'preventivo' && !_pautaCompleta(estado.serviciosPreventivo)) {
+  if (snap.tipo === 'preventivo' && !_pautaCompleta(snap.serviciosPreventivo)) {
     await _avisar('Esta hoja de preventivo no tiene la pauta de servicios completa, así que el PDF saldría con los casilleros en blanco.\n\n' +
-      'OT #' + (estado.otNumero || '') + ' — ' + (estado.local || '') + '\n\n' +
+      'OT #' + (snap.otNumero || '') + ' — ' + (snap.local || '') + '\n\n' +
       'El técnico tiene que responder los ' + SERVICIOS_PREVENTIVO.length + ' servicios antes de generar la hoja.',
       { titulo: 'No se puede generar la hoja' });
     return;
   }
+
+  // El texto del trabajo tambien se lee del DOM DESPUES del await de Cloudinary: al iniciar la
+  // OT siguiente el campo ya esta limpio o con otra descripcion. Se copia con el resto.
+  const trabajoSnap = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
 
   toast('Generando PDF...');
   const doc = await generarPDFRecepcionObra();
@@ -6308,8 +6352,8 @@ async function guardarYEnviarPDF() {
 
   // Si la OT (nueva) está en la cola offline, guardar el PDF ahí para subirlo al
   // sincronizar y que el correo lleve el link (sin señal no se puede subir ahora).
-  if (!estado.editandoOTId && estado.otClientId) {
-    _agregarPDFaColaPendiente(estado.otClientId, pdfBase64);
+  if (!snap.editandoOTId && snap.otClientId) {
+    _agregarPDFaColaPendiente(snap.otClientId, pdfBase64);
   }
 
   // --- Subir PDF a Cloudinary como base64 (mas confiable que blob) ---
@@ -6321,7 +6365,7 @@ async function guardarYEnviarPDF() {
     formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', _nombreArchivoPDF().replace(/\.pdf$/i, '') + '_' + String(estado.otClientId || estado.editandoOTId || _uid()).slice(-7) + '.pdf');
+    formData.append('public_id', _nombreArchivoPDF(snap).replace(/\.pdf$/i, '') + '_' + String(snap.clientId).slice(-7) + '.pdf');
     const resp = await fetch(
       'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
       { method: 'POST', body: formData }
@@ -6345,10 +6389,11 @@ async function guardarYEnviarPDF() {
       const db = window.firebase.firestore();
       // Guardar PDF completo (con fotos) en Firestore
       const pdfDoc = await db.collection('pdfs').add({
-        otNumero: estado.otNumero,
-        otClientId: estado.otClientId || estado.editandoOTId || '',
-        local: estado.local,
-        tecnico: _tecnicoActual(),
+        otNumero: snap.otNumero,
+        // Identidad estable del enlace: si el numero se cruza igual, por aca se re-enlaza.
+        otClientId: snap.clientId,
+        local: snap.local,
+        tecnico: snap.tecnico,
         fecha: new Date().toLocaleDateString('es-CL'),
         pdfData: (pdfBase64 && pdfBase64.length < 900000) ? pdfBase64 : '',
         pdfUrl: '',
@@ -6356,9 +6401,13 @@ async function guardarYEnviarPDF() {
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       });
       pdfUrlFirestore = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
-      // Guardar ambas URLs: Firestore para ver en app, Cloudinary para email
-      estado.pdfUrl = pdfUrlFirestore;
-      estado.pdfUrlCloudinary = pdfUrlCloudinary || '';
+      // Guardar ambas URLs: Firestore para ver en app, Cloudinary para email.
+      // Solo si el estado SIGUE siendo el de esta OT: si el tecnico ya arranco la siguiente,
+      // escribir aca le pegaba el PDF de la hoja anterior a la nueva (verPDF abria el ajeno).
+      if ((estado.otClientId || estado.editandoOTId || '') === snap.clientId) {
+        estado.pdfUrl = pdfUrlFirestore;
+        estado.pdfUrlCloudinary = pdfUrlCloudinary || '';
+      }
       console.log('PDF guardado en Firestore:', pdfDoc.id);
     }
   } catch(e) {
@@ -6367,18 +6416,17 @@ async function guardarYEnviarPDF() {
 
   // --- Enviar email al admin del local con PDF adjunto (base64) ---
   // En una edicion de OT (solo admin) NO se reenvía correo.
-  const email = estado.emailSucursal || estado.emailAdmin;
-  if (email && !estado.editandoOTId) {
+  const email = snap.email;
+  if (email && !snap.editandoOTId) {
     toast('Enviando email con PDF...');
-    const trabajo = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
     const enviado = await _enviarCorreo({
       email_admin: email,
-      ot_numero: _numOTCorreo(estado.otNumero),
-      local: String(estado.local || ''),
+      ot_numero: _numOTCorreo(snap.otNumero),
+      local: String(snap.local || ''),
       fecha: new Date().toLocaleDateString('es-CL'),
-      tecnico: String(_tecnicoActual()),
-      tipo: estado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-      trabajo: String(trabajo),
+      tecnico: String(snap.tecnico),
+      tipo: snap.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+      trabajo: String(trabajoSnap),
       pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
     });
     toast(enviado ? 'Email enviado con PDF' : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
@@ -6391,7 +6439,7 @@ async function guardarYEnviarPDF() {
       // Enlazar el PDF por el ID del documento (clientId), NUNCA por numero: si dos OT
       // comparten numero (colision), enlazar por numero pisaba el PDF de la otra OT.
       // set({merge}) por si el doc de la OT aun no lo escribio guardarEnFirebase (mala senal).
-      const _otDocId = estado.editandoOTId || estado.otClientId;
+      const _otDocId = snap.editandoOTId || snap.otClientId;
       if (_otDocId) {
         await db.collection('ordenes').doc(_otDocId).set({
           pdfUrl: pdfUrlFirestore || '',
@@ -6399,10 +6447,10 @@ async function guardarYEnviarPDF() {
         }, { merge: true });
       } else {
         // Legacy: OT sin clientId (versiones viejas) → fallback por numero.
-        const snap = await db.collection('ordenes')
-          .where('numero', '==', estado.otNumero).get();
-        if (!snap.empty) {
-          await db.collection('ordenes').doc(snap.docs[0].id).update({
+        const legacySnap = await db.collection('ordenes')
+          .where('numero', '==', snap.otNumero).get();
+        if (!legacySnap.empty) {
+          await db.collection('ordenes').doc(legacySnap.docs[0].id).update({
             pdfUrl: pdfUrlFirestore || '',
             pdfUrlCloudinary: pdfUrlCloudinary || ''
           });
@@ -6419,12 +6467,15 @@ async function guardarYEnviarPDF() {
   // Notificacion de respaldo interno (con el link del PDF ya generado). No se envía en ediciones.
   // Si el local no tiene correo cargado, el aviso viaja en la notificacion para que el admin
   // se entere (antes fallaba mudo: nadie sabia que el local nunca recibio su OT).
-  if (!estado.editandoOTId) {
+  if (!snap.editandoOTId) {
+    // ESTE es el aviso que le llega a administracion (PEDRO_NOTIF_EMAIL) y el que quedaba con el
+    // numero de la OT siguiente: es la ultima linea de la funcion, la mas lejos del snapshot y la
+    // que mas se alcanzo a pisar. 6 de los 23 casos revisados salieron por aca.
     _notificarOTCompletada(
-      estado.otNumero, estado.local, estado.usuario, estado.tipo,
+      snap.otNumero, snap.local, snap.tecnico, snap.tipo,
       new Date().toLocaleDateString('es-CL'),
       pdfUrlCloudinary || pdfUrlFirestore || '',
-      email ? '' : 'ATENCION: el local "' + (estado.local || '') + '" no tiene correo configurado, no se le envio la OT.'
+      email ? '' : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.'
     );
   }
 
