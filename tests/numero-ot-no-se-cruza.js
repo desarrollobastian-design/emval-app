@@ -3,7 +3,7 @@
    stubs, pisando `estado` en pleno await de Cloudinary (que es lo que hace nuevaOT() cuando el
    tecnico arranca la hoja siguiente sin esperar).
 
-   Uso:  node test-numero-ot.js <ruta-al-index.html>
+   Uso:  node tests/numero-ot-no-se-cruza.js index.html   (desde la raiz del repo)
    Sale 0 si el numero sobrevive en los 4 escritos; 1 si se cruza. */
 
 const fs = require('fs');

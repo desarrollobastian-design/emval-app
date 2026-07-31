@@ -296,7 +296,14 @@ These changes are useful context for understanding current state:
 
 ## Testing & Verification
 
-- No automated tests in repo. Test manually in browser.
+- **No hay suite de tests, pero sí pruebas de regresión sueltas en `tests/`.** Se corren a mano con
+  Node, sin dependencias: extraen la función real de `index.html` por texto y la ejecutan con stubs.
+  ```
+  node tests/numero-ot-no-se-cruza.js index.html
+  ```
+  ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
+  propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
+- El resto se prueba manualmente en el navegador.
 - Open DevTools → Application → Service Worker to check offline status
 - Firebase Console to inspect/edit Firestore documents
 - Test on mobile: Use `ng serve` or `python -m http.server` to serve locally, then open on phone via local IP
@@ -309,3 +316,5 @@ These changes are useful context for understanding current state:
 - `icon.png` — App icon
 - `CLAUDE.md` — This file
 - `BRIEF-SISTEMA-PARA-SOPORTE.md` — Mapa del sistema para Soporte (08): negocio, roles, flujo, fuentes de datos, documentos al cliente, bugs cerrados
+- `tests/` — Pruebas de regresión sueltas, en Node sin dependencias (ver "Testing & Verification").
+  `numero-ot-no-se-cruza.js` — el N° de OT no se cruza entre dos hojas cerradas seguidas
