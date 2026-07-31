@@ -300,6 +300,7 @@ These changes are useful context for understanding current state:
   Node, sin dependencias: extraen la función real de `index.html` por texto y la ejecutan con stubs.
   ```
   node tests/numero-ot-no-se-cruza.js index.html
+  node tests/reparar-pdf-cruzados.test.js
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -317,4 +318,9 @@ These changes are useful context for understanding current state:
 - `CLAUDE.md` — This file
 - `BRIEF-SISTEMA-PARA-SOPORTE.md` — Mapa del sistema para Soporte (08): negocio, roles, flujo, fuentes de datos, documentos al cliente, bugs cerrados
 - `tests/` — Pruebas de regresión sueltas, en Node sin dependencias (ver "Testing & Verification").
-  `numero-ot-no-se-cruza.js` — el N° de OT no se cruza entre dos hojas cerradas seguidas
+  `numero-ot-no-se-cruza.js` — el N° de OT no se cruza entre dos hojas cerradas seguidas ·
+  `reparar-pdf-cruzados.test.js` — la decisión del reparador no toca lo que no debe
+- `tools/` — Scripts de mantención de datos de producción. **Todos simulan por defecto y solo
+  escriben con `--ejecutar`, respaldo previo y confirmación tecleada.**
+  `reparar-pdf-cruzados.js` — re-enlaza los PDF que quedaron con el número de OT cruzado antes del
+  fix del 31-jul. **Escribir requiere autorización de Pedro: es producción.**
