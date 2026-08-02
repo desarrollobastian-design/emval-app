@@ -203,6 +203,31 @@ Hubo correos que decían:
 👉 **Regla para Soporte: fiarse del archivo, nunca del texto del correo.** Abrir el enlace y mirar el
 nombre y el encabezado del PDF antes de sacar cualquier conclusión.
 
+## 3.4 📋 Las planillas de cobranza — Pedro ya no las pide, las saca él (desde el 03-ago-2026)
+
+En el panel de supervisor, botón **Planillas** (solo lo ve el rol **Administrador**). Dos pestañas,
+cada una con su **Descargar Excel**:
+
+| Pestaña | De dónde salen los datos | Qué muestra |
+|---|---|---|
+| **Preventivos** | `ordenes` de tipo preventivo | Matriz **local × bimestre**. El monto lo calcula la app: **$37.000 × transpaletas de la hoja** (`numEquipos`). La fila del pie es el estado de deuda de cada bimestre |
+| **Correctivos** | `cotizaciones` | Lista con el monto de cada cotización + las columnas **SolPed / OC / HES / Factura** que llena Pedro (se guardan solas en Firestore, en el mismo campo que usa la pantalla *Facturar*) |
+
+**Tres cosas que Soporte tiene que saber antes de responder una duda sobre estos números:**
+
+1. 🔴 **Las cotizaciones `tipoCot = previa` NO suman a la deuda.** Son presupuestos de obra sin
+   trabajo detrás; van en su propio bloque, con su propio total. Sumarlas casi duplica el número
+   ($25,1M en vez de $13,0M) y **SMU rechaza el paquete completo**, incluso lo que sí era cobrable.
+2. 🟠 **El total sube solo.** No es un archivo: se lee en el momento en que Pedro abre la pantalla.
+   Si un número no coincide con un Excel que se mandó antes, lo más probable es que **se cotizó algo
+   nuevo entremedio** — el 01-ago entraron 37 cotizaciones en una sola noche.
+3. ⚠️ **La app no sabe si los montos son netos o con IVA.** No está en ninguna fuente del sistema:
+   sale del contrato EMVAL–SMU, que es de Pedro. La pantalla lo dice en la nota del pie y **no le
+   inventa el apellido a la cifra**.
+
+También lista, sin monto, los **trabajos ejecutados que nadie ha cotizado** (al 02-ago eran 19). No
+se les estima valor a propósito: el precio lo fija quien cotiza.
+
 ---
 
 # 4. Los números del negocio

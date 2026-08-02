@@ -564,6 +564,55 @@
   .voz-item-nombre { font-size: 12px; font-weight: 600; }
   .voz-item-dur { font-size: 11px; color: var(--texto3); margin-top: 2px; }
   .voz-item audio { width: 100%; height: 32px; margin-top: 6px; }
+
+  /* ── PLANILLAS DE COBRANZA ────────────────────────────────────────────────────────────
+     Es la unica pantalla de la app con una TABLA de verdad: 12 columnas de correctivos y
+     una matriz de 6 bimestres. No cabe en un telefono y no tiene por que caber — scrollea
+     en SU contenedor (.pl-scroll), nunca el body: una pagina que se mueve en horizontal
+     mientras se rellena un campo es como se pierde el dedo de vista.
+     Las columnas de la izquierda NO se congelan con position:sticky a proposito: sobre <td>
+     dentro de un contenedor con scroll horizontal falla en Safari iOS y Pedro revisa esto
+     en su telefono. Mejor una tabla que se mueve entera que una que se rompe en la mitad. */
+  .pl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; background: white; border-radius: var(--radio); box-shadow: var(--sombra); }
+  .pl-tabla { border-collapse: collapse; width: 100%; font-size: 13px; white-space: nowrap; }
+  .pl-tabla th { background: var(--azul); color: #fff; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 9px 10px; }
+  /* El color dice de donde sale el dato: azul = lo pone la app, verde = lo calcula la app,
+     gris = lo escribe Pedro. Es la leyenda del boceto que aprobo, no decoracion. */
+  .pl-tabla th.pl-calc { background: var(--verde-btn); text-align: right; }
+  .pl-tabla th.pl-man { background: var(--gris3); }
+  .pl-tabla th.pl-mes { text-align: center; }
+  .pl-tabla td { padding: 8px 10px; border-bottom: 1px solid var(--gris2); color: var(--texto); }
+  .pl-tabla tbody tr:last-child td { border-bottom: none; }
+  .pl-tabla td.pl-loc { font-weight: 600; }
+  .pl-tabla td.pl-trab { white-space: normal; min-width: 190px; max-width: 320px; color: var(--texto2); }
+  .pl-tabla td.pl-num { font-family: 'DM Mono', monospace; }
+  .pl-tabla td.pl-money { font-family: 'DM Mono', monospace; text-align: right; font-weight: 600; }
+  .pl-tabla td.pl-cen { text-align: center; }
+  .pl-tabla td.pl-celda { text-align: center; background: var(--gris1); }
+  .pl-tabla td.pl-celda-ok { background: var(--verde-badge-fondo); }
+  .pl-ot { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700; color: var(--verde-badge); }
+  .pl-ot-monto { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--texto2); display: block; }
+  .pl-tabla tr.pl-total td { background: var(--gris2); font-weight: 700; border-bottom: none; }
+  .pl-tabla tr.pl-total td.pl-money { color: var(--verde-badge); }
+  /* 16px o iOS hace zoom al enfocar y la tabla salta de sitio (check-a11y regla 2). */
+  .pl-inp { width: 88px; padding: 6px 8px; border: 1px solid var(--gris3); border-radius: var(--radio-sm); font-size: 16px; font-family: inherit; background: var(--gris1); color: var(--texto); }
+  .pl-inp:focus { border-color: var(--azul); background: white; outline: none; }
+  .pl-badge { display: inline-block; padding: 2px 9px; border-radius: var(--radio-pill); font-size: 11px; font-weight: 700; }
+  .pl-badge-ok { background: var(--verde-badge-fondo); color: var(--verde-badge); }
+  .pl-badge-no { background: var(--naranja-badge-fondo); color: var(--naranja-btn); }
+  .pl-leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 2px 0 12px; font-size: 12px; color: var(--texto2); }
+  .pl-leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .pl-sw { width: 12px; height: 12px; border-radius: var(--radio-sm); display: inline-block; flex-shrink: 0; }
+  .pl-sw-auto { background: var(--azul); }
+  .pl-sw-calc { background: var(--verde-btn); }
+  .pl-sw-man { background: var(--gris3); }
+  .pl-nota { background: var(--ambar-fondo); border: 1px solid var(--ambar-borde); border-radius: var(--radio); padding: 12px 14px; font-size: 12px; color: var(--texto2); line-height: 1.55; margin-top: 14px; }
+  .pl-nota b { color: var(--texto); }
+  .pl-nota ul { margin: 6px 0 0; padding-left: 18px; }
+  .pl-nota li { margin: 3px 0; }
+  .pl-titulo { font-size: 12px; font-weight: 600; color: var(--texto2); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pl-anio { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 12px; }
+  .pl-anio-valor { font-size: 17px; font-weight: 700; color: var(--texto); font-family: 'DM Mono', monospace; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -1066,6 +1115,7 @@
       <button id="btn-administrar" class="btn btn-secondary btn-sm" onclick="go('s-admin');cargarAdmin();" style="font-size:12px;display:none;">Administrar</button>
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="font-size:12px;display:none;">Facturar</button>
       <button id="btn-ventas" class="btn btn-secondary btn-sm" onclick="go('s-ventas');cargarVentas();" style="font-size:12px;display:none;">Ventas</button>
+      <button id="btn-planillas" class="btn btn-secondary btn-sm" onclick="go('s-planillas');cargarPlanillas();" style="font-size:12px;display:none;">Planillas</button>
     </div>
     <!-- TRABAJOS PAUSADOS (admin/supervisor) -->
     <div id="sup-pausadas-seccion" style="display:none;margin-bottom:14px;">
@@ -1175,6 +1225,27 @@
   </div>
   <div class="content" id="ventas-content">
     <p style="font-size:12px;color:var(--texto3);text-align:center;padding:20px;">Cargando…</p>
+  </div>
+</div>
+
+<!-- ============ SCREEN: PLANILLAS DE COBRANZA ============
+     Las dos planillas que Pedro aprobo en boceto el 27-jul, ahora con datos vivos:
+     preventivos (matriz bimestral, monto calculado) y correctivos (lista con la cadena
+     SolPed -> OC -> HES -> Factura que el va llenando). Reemplaza el envio manual de un
+     archivo armado a mano cada mes. -->
+<div class="screen" id="s-planillas">
+  <div class="topbar">
+    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <h1>Planillas</h1>
+    <button class="top-action top-action-verde" onclick="descargarExcelPlanilla()">Descargar Excel</button>
+  </div>
+  <div class="content">
+    <div class="seg-tabs">
+      <button id="tab-pl-preventivos" class="seg-tab active" onclick="planillaTab('preventivos')">Preventivos</button>
+      <button id="tab-pl-correctivos" class="seg-tab" onclick="planillaTab('correctivos')">Correctivos</button>
+    </div>
+    <div id="panel-pl-preventivos"></div>
+    <div id="panel-pl-correctivos" style="display:none;"></div>
   </div>
 </div>
 </main>
@@ -1947,6 +2018,9 @@ function loginExitoso() {
     if (btnFact) btnFact.style.display = esAdmin ? 'flex' : 'none';
     var btnVentas = document.getElementById('btn-ventas');
     if (btnVentas) btnVentas.style.display = esAdmin ? 'flex' : 'none';
+    // Las planillas son la cobranza a SMU: mismo criterio que Facturar y Ventas, solo admin.
+    var btnPlanillas = document.getElementById('btn-planillas');
+    if (btnPlanillas) btnPlanillas.style.display = esAdmin ? 'flex' : 'none';
   } else {
     // No reabrir ninguna hoja sola al entrar: mostrar el inicio con los trabajos
     // pausados/borradores listados. El tecnico toca una tarjeta para continuar o
@@ -10127,6 +10201,803 @@ async function descargarExcelVentas() {
     URL.revokeObjectURL(url);
     toast('Excel ventas descargado!');
   } catch(e) { _error('generar el Excel de ventas', e); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────
+   PLANILLAS DE COBRANZA  (preventivos + correctivos)
+
+   Que reemplaza: hasta hoy el estado de deuda se armaba a mano, mirando la app y copiando
+   a una planilla. Dos veces se armo asi y las dos veces el numero cambio entre que se armo
+   y que se mando (el boceto del 27-jul decia $6.586.000; los datos reales de 5 dias despues
+   daban $8.473.000, y en correctivos entraron 37 cotizaciones nuevas en UNA noche). Un
+   archivo estatico envejece; esta pantalla se lee en el momento en que Pedro la abre.
+
+   Las dos planillas NO son la misma con un filtro, y por eso son dos pestañas:
+     - PREVENTIVOS: no se cotizan. Matriz local x bimestre; el monto lo calcula la app
+       (tarifa x transpaletas registradas en la OT). Nada manual.
+     - CORRECTIVOS: cada trabajo tiene su cotizacion con su propio monto. Lista, con la
+       cadena SolPed -> OC -> HES -> Factura que llena Pedro a medida que SMU se la manda.
+
+   Reglas que vienen de los informes de Soporte (01 y 02-ago) y NO se pueden relajar:
+     1. Las cotizaciones `tipoCot = previa` NO suman a la deuda: son presupuestos de obra
+        sin trabajo detras. Sumarlas casi duplicaba el total ($25,1M en vez de $13,0M) y
+        una planilla inflada hace que SMU rechace el paquete entero, incluso lo cobrable.
+        Van en su propio bloque, con su propio total a la vista.
+     2. Un local no se puede cobrar dos veces: se pasa _dedupeOTs antes de sumar.
+     3. Las cuentas de prueba quedan fuera (_ocultoTecnico), o la planilla que va a SMU
+        llega con la OT de Entel Talcahuano dentro.
+     4. Ningun monto se estima. Un trabajo sin cotizar se lista SIN monto, no con uno
+        parecido: el valor lo fija quien cotiza.
+   ───────────────────────────────────────────────────────────────────────────────────── */
+
+/* La tarifa vive en UN solo lugar. Es el valor por transpaleta registrado en las OT de
+   preventivo. NINGUNA fuente de la app dice si es neto o con IVA —eso esta en el contrato
+   EMVAL-SMU, que es de Pedro—, asi que la pantalla no le inventa el apellido: lo declara
+   como pregunta abierta en la nota del pie. */
+var PL_TARIFA_TRANSPALETA = 37000;
+
+/* El ciclo preventivo es BIMESTRAL. Cada columna cubre su bimestre COMPLETO, no solo el mes
+   que la etiqueta: una hoja ejecutada en agosto pertenece al ciclo de julio. Filtrar por los
+   seis meses impares habria escondido toda hoja caida en un mes par — y hoy es 2 de agosto. */
+var PL_BIMESTRES = [
+  { et: 'Ene', titulo: 'Enero-Febrero' },
+  { et: 'Mar', titulo: 'Marzo-Abril' },
+  { et: 'May', titulo: 'Mayo-Junio' },
+  { et: 'Jul', titulo: 'Julio-Agosto' },
+  { et: 'Sep', titulo: 'Septiembre-Octubre' },
+  { et: 'Nov', titulo: 'Noviembre-Diciembre' }
+];
+
+var _plCache = null;                              // datos crudos, se leen una vez por visita
+var _plTab = 'preventivos';
+var _plAnio = new Date().getFullYear();
+/* Por defecto la matriz muestra SOLO los locales con hoja en el año. Con todas las sucursales
+   del catalogo son 24 filas vacias entre medio — y una de ellas es Entel Talcahuano, que ni
+   siquiera es SMU. Un documento de cobranza con 24 filas en blanco se lee peor y se defiende
+   peor. Los locales sin preventivo no se ocultan: se cuentan en la nota del pie, que es donde
+   sirven (son visitas que faltan, no cobros). */
+var _plVerVacios = false;
+
+function _plEntero(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+function _plPesos(n) { return '$' + Math.round(n || 0).toLocaleString('es-CL'); }
+
+// Ano y mes de un documento, con la misma tolerancia de formatos que el resto de la app
+// (_fechaOTms ya sabe leer 'dd-mm-yyyy', el Timestamp de Firestore y el ISO de los borradores).
+function _plAnioMes(doc) {
+  var ms = _fechaOTms(doc);
+  if (!ms) return null;
+  var d = new Date(ms);
+  return { anio: d.getUTCFullYear(), mes: d.getUTCMonth() };
+}
+
+/* Una OT es preventiva si lo dice su tipo O si trae la pauta de 11 servicios. Lo segundo no
+   es redundante: hasta el fix del 31-jul una preventiva podia guardarse con tipo 'correctivo'
+   (el estado global se lo pisaba la OT siguiente) y la pauta es lo unico que no miente. Esas
+   hojas existen en la base y son cobrables. */
+function _plEsPreventiva(o) {
+  return _normTipo(o.tipo) === 'preventivo' || (o.serviciosPreventivo || []).length >= 11;
+}
+
+/* Una OT de una cuenta de prueba NO entra en una planilla que va a SMU. La OT de Entel
+   Talcahuano (CECO 1111, tecnico de desarrollo) aporta $0, asi que no cambia el total —
+   pero ensucia el documento con el que se cobra. Es una funcion aparte y no un filtro
+   suelto para que la prueba de regresion pueda verificar la regla. */
+function _plVisible(o) {
+  return !_ocultoTecnico(o.tecnico);
+}
+
+function planillaTab(tab) {
+  _plTab = tab;
+  ['preventivos', 'correctivos'].forEach(function(t) {
+    document.getElementById('panel-pl-' + t).style.display = (t === tab) ? 'block' : 'none';
+    document.getElementById('tab-pl-' + t).classList.toggle('active', t === tab);
+  });
+  if (_plCache) _plRender();
+}
+
+async function cargarPlanillas() {
+  if (_esperandoFirebase('planillas', cargarPlanillas)) return;
+  var cont = document.getElementById('panel-pl-' + _plTab);
+  _cargando(cont, 4);
+  try {
+    var db = window.firebase.firestore();
+    /* Se bajan las ordenes COMPLETAS (~3 MB, casi todo son firmas en base64) igual que hacen
+       "Ver OTs" y "Preventivos". Se podria pedir solo los campos utiles por REST y bajar 50
+       veces menos, pero eso saca a esta pantalla del SDK que usa toda la app. Si algun dia
+       molesta, ese es el cambio; hoy no introduce un costo que Pedro no pague ya. */
+    var res = await Promise.all([
+      db.collection('ordenes').get(),
+      db.collection('cotizaciones').get(),
+      db.collection('cadenas').get()
+    ]);
+    var ordenes = res[0].docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); })
+      .filter(_plVisible);
+    var cotizaciones = res[1].docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+
+    // Catalogo de sucursales: viven DENTRO de cada cadena, la coleccion 'locales' esta vacia.
+    var sucursales = [];
+    res[2].docs.forEach(function(d) {
+      var c = d.data();
+      (c.sucursales || []).forEach(function(s) {
+        if (!s) return;
+        var nombre = (typeof s === 'object') ? s.nombre : s;
+        if (!nombre) return;
+        sucursales.push({
+          formato: c.nombre || '',
+          nombre: nombre,
+          centro: (typeof s === 'object' && s.centro) ? s.centro : '',
+          supervisor: (typeof s === 'object' && s.supervisor) ? s.supervisor : ''
+        });
+      });
+    });
+
+    _plCache = { ordenes: ordenes, cotizaciones: cotizaciones, sucursales: sucursales };
+    _cargado(cont);
+    _plRender();
+  } catch(e) {
+    console.error(e);
+    _listaConError(document.getElementById('panel-pl-' + _plTab), cargarPlanillas);
+  }
+}
+
+function _plRender() {
+  if (_plTab === 'preventivos') _plRenderPreventivos();
+  else _plRenderCorrectivos();
+}
+
+function _plCambiarAnio(delta) {
+  _plAnio += delta;
+  _plRenderPreventivos();
+}
+
+// Tarjeta de resumen. Mismo componente que usa el panel de ventas.
+function _plTile(label, valor, detalle, clase) {
+  var d = document.createElement('div');
+  d.className = 'stat-card';
+  var v = document.createElement('div');
+  v.className = 'stat-num';
+  v.style.cssText = 'font-size:20px;' + (clase === 'ok' ? 'color:var(--verde-badge);' : (clase === 'alerta' ? 'color:var(--naranja-btn);' : ''));
+  v.textContent = valor;
+  var l = document.createElement('div');
+  l.className = 'stat-label';
+  l.textContent = label;
+  d.appendChild(v); d.appendChild(l);
+  if (detalle) {
+    var s = document.createElement('div');
+    s.style.cssText = 'font-size:12px;color:var(--texto2);margin-top:2px;';
+    s.textContent = detalle;
+    d.appendChild(s);
+  }
+  return d;
+}
+
+function _plLeyenda(items) {
+  var wrap = document.createElement('div');
+  wrap.className = 'pl-leyenda';
+  items.forEach(function(it) {
+    var s = document.createElement('span');
+    var sw = document.createElement('i');
+    sw.className = 'pl-sw pl-sw-' + it.tipo;
+    s.appendChild(sw);
+    s.appendChild(document.createTextNode(' ' + it.texto));
+    wrap.appendChild(s);
+  });
+  return wrap;
+}
+
+function _plNota(titulo, lineas, extra) {
+  var caja = document.createElement('div');
+  caja.className = 'pl-nota';
+  var t = document.createElement('div');
+  t.innerHTML = '<b>' + _escHtml(titulo) + '</b>';
+  caja.appendChild(t);
+  if (lineas && lineas.length) {
+    var ul = document.createElement('ul');
+    lineas.forEach(function(l) {
+      var li = document.createElement('li');
+      li.innerHTML = l;   // las lineas se arman aca dentro, con _escHtml sobre los datos
+      ul.appendChild(li);
+    });
+    caja.appendChild(ul);
+  }
+  if (extra) {
+    var p = document.createElement('div');
+    p.style.marginTop = '8px';
+    p.innerHTML = extra;
+    caja.appendChild(p);
+  }
+  return caja;
+}
+
+/* ── PLANILLA 1: PREVENTIVOS ─────────────────────────────────────────────────────────
+   Matriz local x bimestre. Cada celda se llena sola con el N de OT y su monto; la fila de
+   totales de abajo ES el estado de deuda del bimestre. Pedro no saca ninguna cuenta. */
+function _plDatosPreventivos() {
+  var deduped = _dedupeOTs(_plCache.ordenes.filter(_plEsPreventiva));
+  var delAnio = [];
+  deduped.lista.forEach(function(o) {
+    var fm = _plAnioMes(o);
+    if (fm && fm.anio === _plAnio) delAnio.push({ ot: o, bim: Math.floor(fm.mes / 2) });
+  });
+
+  // Una fila por sucursal del catalogo. Las OT cuyo local NO esta en el catalogo NO se
+  // descartan: se les agrega su propia fila. Un local fuera del catalogo es un hueco
+  // administrativo, no un trabajo que no se hizo — y se cobra igual.
+  var filas = {}, orden = [];
+  function fila(clave, base) {
+    if (!filas[clave]) { filas[clave] = Object.assign({ celdas: [[], [], [], [], [], []], total: 0, transp: 0, enCatalogo: false }, base); orden.push(clave); }
+    return filas[clave];
+  }
+  _plCache.sucursales.forEach(function(s) {
+    var f = fila(_normTexto(_localCanonico(s.nombre)), { formato: s.formato, nombre: s.nombre, centro: s.centro, supervisor: s.supervisor });
+    f.enCatalogo = true;
+  });
+  delAnio.forEach(function(x) {
+    var clave = _normTexto(_localCanonico(x.ot.local));
+    var f = fila(clave, { formato: '', nombre: x.ot.local || '(sin local)', centro: x.ot.ceco || '', supervisor: '' });
+    var transp = _plEntero(x.ot.numEquipos);
+    var monto = transp * PL_TARIFA_TRANSPALETA;
+    f.celdas[x.bim].push({ numero: x.ot.numero, monto: monto, transp: transp, lista: _hojaLista(x.ot), ot: x.ot });
+    f.total += monto;
+    f.transp = transp;                       // la ultima hoja manda: son los equipos vigentes
+    if (!f.centro && x.ot.ceco) f.centro = x.ot.ceco;
+  });
+
+  var lista = orden.map(function(k) { return filas[k]; });
+  lista.sort(function(a, b) {
+    var fa = (a.formato || 'zzz') + '|' + (a.nombre || '');
+    var fb = (b.formato || 'zzz') + '|' + (b.nombre || '');
+    return fa.localeCompare(fb, 'es');
+  });
+  var totalBim = [0, 0, 0, 0, 0, 0], hojas = 0, transpTotal = 0;
+  lista.forEach(function(f) {
+    f.celdas.forEach(function(celda, i) {
+      celda.forEach(function(c) { totalBim[i] += c.monto; hojas++; transpTotal += c.transp; });
+    });
+  });
+  return {
+    filas: lista, totalBim: totalBim, hojas: hojas, transpTotal: transpTotal,
+    total: totalBim.reduce(function(a, b) { return a + b; }, 0),
+    duplicados: deduped.duplicados
+  };
+}
+
+// Las filas que se muestran (y se exportan): las que tienen hoja, salvo que se pidan todas.
+// Una hoja sin transpaletas suma $0 pero SI se muestra: el trabajo se hizo.
+function _plFilasVisibles(d) {
+  if (_plVerVacios) return d.filas;
+  return d.filas.filter(function(f) {
+    return f.celdas.some(function(celda) { return celda.length > 0; });
+  });
+}
+
+function _plRenderPreventivos() {
+  var cont = document.getElementById('panel-pl-preventivos');
+  cont.innerHTML = '';
+  var d = _plDatosPreventivos();
+  window._plUltimoPreventivos = d;
+
+  // Selector de ano: la matriz es anual por naturaleza (6 bimestres).
+  var selAnio = document.createElement('div');
+  selAnio.className = 'pl-anio';
+  var bAnt = document.createElement('button');
+  bAnt.className = 'btn btn-secondary btn-sm';
+  bAnt.style.width = 'auto';
+  bAnt.textContent = '‹ ' + (_plAnio - 1);
+  bAnt.setAttribute('aria-label', 'Ver el año ' + (_plAnio - 1));
+  bAnt.onclick = function() { _plCambiarAnio(-1); };
+  var vAnio = document.createElement('div');
+  vAnio.className = 'pl-anio-valor';
+  vAnio.textContent = _plAnio;
+  var bSig = document.createElement('button');
+  bSig.className = 'btn btn-secondary btn-sm';
+  bSig.style.width = 'auto';
+  bSig.textContent = (_plAnio + 1) + ' ›';
+  bSig.setAttribute('aria-label', 'Ver el año ' + (_plAnio + 1));
+  bSig.onclick = function() { _plCambiarAnio(1); };
+  selAnio.appendChild(bAnt); selAnio.appendChild(vAnio); selAnio.appendChild(bSig);
+  cont.appendChild(selAnio);
+
+  var tiles = document.createElement('div');
+  tiles.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;';
+  tiles.appendChild(_plTile('Estado de deuda ' + _plAnio, _plPesos(d.total), d.transpTotal + ' transpaletas', 'ok'));
+  tiles.appendChild(_plTile('Hojas del año', String(d.hojas), 'OT cargadas solas'));
+  tiles.appendChild(_plTile('Tarifa', _plPesos(PL_TARIFA_TRANSPALETA), 'por transpaleta'));
+  tiles.appendChild(_plTile('Ciclo', 'Bimestral', 'mes por medio'));
+  cont.appendChild(tiles);
+
+  cont.appendChild(_plLeyenda([
+    { tipo: 'auto', texto: 'Filas y N de OT: automático (cruce por CECO)' },
+    { tipo: 'calc', texto: 'Monto: tarifa × transpaletas de la hoja' }
+  ]));
+
+  var lblVacios = document.createElement('label');
+  lblVacios.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--texto2);margin-bottom:10px;cursor:pointer;';
+  var chkVacios = document.createElement('input');
+  chkVacios.type = 'checkbox';
+  chkVacios.checked = _plVerVacios;
+  chkVacios.style.cssText = 'width:18px;height:18px;flex-shrink:0;';
+  chkVacios.onchange = function() { _plVerVacios = chkVacios.checked; _plRenderPreventivos(); };
+  lblVacios.appendChild(chkVacios);
+  lblVacios.appendChild(document.createTextNode('Mostrar también los locales sin preventivo en ' + _plAnio));
+  cont.appendChild(lblVacios);
+
+  if (!d.hojas) {
+    var vac = document.createElement('div');
+    vac.innerHTML = _vacio('Sin preventivos en ' + _plAnio, 'Cada hoja de preventivo que cierre un técnico aparece sola en esta matriz.');
+    cont.appendChild(vac);
+    return;
+  }
+
+  var scroll = document.createElement('div');
+  scroll.className = 'pl-scroll';
+  var tabla = document.createElement('table');
+  tabla.className = 'pl-tabla';
+  var thead = document.createElement('thead');
+  var trh = document.createElement('tr');
+  function th(txt, clase, titulo) {
+    var e = document.createElement('th');
+    e.textContent = txt;
+    if (clase) e.className = clase;
+    if (titulo) e.title = titulo;
+    trh.appendChild(e);
+  }
+  th('Formato'); th('CECO'); th('Local'); th('Supervisor');
+  th('N° Transp.', 'pl-calc'); th('Monto / prev.', 'pl-calc');
+  PL_BIMESTRES.forEach(function(b) { th(b.et, 'pl-mes', b.titulo); });
+  th('Total año', 'pl-calc');
+  thead.appendChild(trh);
+  tabla.appendChild(thead);
+
+  var tbody = document.createElement('tbody');
+  _plFilasVisibles(d).forEach(function(f) {
+    var tr = document.createElement('tr');
+    function td(txt, clase) {
+      var e = document.createElement('td');
+      e.textContent = txt;
+      if (clase) e.className = clase;
+      tr.appendChild(e);
+      return e;
+    }
+    td(f.formato || '—');
+    td(f.centro || '—', 'pl-num pl-cen');
+    td(f.nombre, 'pl-loc');
+    td(f.supervisor || '—');
+    td(f.transp ? String(f.transp) : '—', 'pl-num pl-cen');
+    td(f.transp ? _plPesos(f.transp * PL_TARIFA_TRANSPALETA) : '—', 'pl-money');
+    f.celdas.forEach(function(celda) {
+      var e = document.createElement('td');
+      e.className = 'pl-celda' + (celda.length ? ' pl-celda-ok' : '');
+      if (!celda.length) {
+        e.textContent = '·';
+        e.style.color = 'var(--texto3)';
+      } else {
+        celda.forEach(function(c) {
+          var n = document.createElement('span');
+          n.className = 'pl-ot';
+          n.textContent = c.numero != null ? c.numero : '—';
+          if (!c.lista) n.title = 'La hoja aún no tiene PDF listo';
+          var m = document.createElement('span');
+          m.className = 'pl-ot-monto';
+          m.textContent = c.monto ? _plPesos(c.monto) : 'sin transpaletas';
+          e.appendChild(n); e.appendChild(m);
+        });
+      }
+      tr.appendChild(e);
+    });
+    td(f.total ? _plPesos(f.total) : '—', 'pl-money');
+    tbody.appendChild(tr);
+  });
+
+  var trT = document.createElement('tr');
+  trT.className = 'pl-total';
+  var tdT = document.createElement('td');
+  tdT.colSpan = 6;
+  tdT.textContent = 'ESTADO DE DEUDA POR BIMESTRE';
+  trT.appendChild(tdT);
+  d.totalBim.forEach(function(v) {
+    var e = document.createElement('td');
+    e.className = 'pl-money';
+    e.style.textAlign = 'center';
+    e.textContent = v ? _plPesos(v) : '—';
+    trT.appendChild(e);
+  });
+  var tdTot = document.createElement('td');
+  tdTot.className = 'pl-money';
+  tdTot.textContent = _plPesos(d.total);
+  trT.appendChild(tdTot);
+  tbody.appendChild(trT);
+
+  tabla.appendChild(tbody);
+  scroll.appendChild(tabla);
+  cont.appendChild(scroll);
+
+  // --- Lo que la planilla NO puede resolver sola, dicho en vez de escondido ---
+  var sinPrev = d.filas.filter(function(f) { return f.enCatalogo && !f.total; });
+  var sinCeco = d.filas.filter(function(f) { return f.total && !f.centro; });
+  var fueraCat = d.filas.filter(function(f) { return !f.enCatalogo; });
+  var sinTransp = [];
+  d.filas.forEach(function(f) {
+    f.celdas.forEach(function(celda) {
+      celda.forEach(function(c) { if (!c.transp) sinTransp.push(f.nombre + ' (OT ' + c.numero + ')'); });
+    });
+  });
+  var lineas = [];
+  lineas.push('<b>' + _plPesos(PL_TARIFA_TRANSPALETA) + ' por transpaleta</b> es el valor registrado en las OT. La app no sabe si es neto o con IVA — eso lo define el contrato con SMU.');
+  if (sinTransp.length) lineas.push('<b>' + sinTransp.length + ' hoja(s) sin N° de transpaletas</b>, aportan $0 al total: ' + _escHtml(sinTransp.slice(0, 6).join(' · ')) + (sinTransp.length > 6 ? ' …' : ''));
+  if (sinCeco.length) lineas.push('<b>' + sinCeco.length + ' local(es) cobrados sin CECO.</b> El trabajo está hecho y el monto entra igual; falta el dato administrativo: ' + _escHtml(sinCeco.map(function(f) { return f.nombre; }).slice(0, 6).join(' · ')));
+  if (fueraCat.length) lineas.push('<b>' + fueraCat.length + ' local(es) que no están en el catálogo de sucursales</b> (se cobran igual): ' + _escHtml(fueraCat.map(function(f) { return f.nombre; }).join(' · ')));
+  if (sinPrev.length) lineas.push('<b>' + sinPrev.length + ' local(es) sin ningún preventivo en ' + _plAnio + '</b>: ' + _escHtml(sinPrev.map(function(f) { return f.nombre; }).slice(0, 10).join(' · ')) + (sinPrev.length > 10 ? ' …' : ''));
+  if (d.duplicados) lineas.push('<b>' + d.duplicados + ' hoja(s) duplicada(s) en la base se colapsaron</b> antes de sumar: un local no se cobra dos veces.');
+  cont.appendChild(_plNota('Antes de mandar esta planilla a SMU', lineas));
+}
+
+/* ── PLANILLA 2: CORRECTIVOS ─────────────────────────────────────────────────────────
+   Cada trabajo trae su monto desde su cotizacion (la coleccion 'ordenes' no guarda plata).
+   Las columnas SolPed / OC / HES / Factura se escriben aca y se guardan en el mismo campo
+   que ya usa la pantalla Facturar: es la MISMA cadena de compra, no una copia. */
+function _plDatosCorrectivos() {
+  var todas = _plCache.cotizaciones;
+  var previas = todas.filter(function(c) { return c.tipoCot === 'previa'; });
+  var cobrables = todas.filter(function(c) { return c.tipoCot !== 'previa'; });
+  function suma(a) { return a.reduce(function(s, c) { return s + (c.total || 0); }, 0); }
+  cobrables.sort(function(a, b) {
+    if (!!b.enviado !== !!a.enviado) return (a.enviado ? 1 : 0) - (b.enviado ? 1 : 0);
+    return (_fechaOTms(b) || 0) - (_fechaOTms(a) || 0);
+  });
+
+  // Trabajo ejecutado que nadie cotizo: no esta en ninguna planilla ni en ninguna factura.
+  // Se lista SIN monto — el valor lo fija quien cotiza, estimarlo seria inventarlo.
+  var conCot = {};
+  todas.forEach(function(c) { if (c.otNumero != null && c.otNumero !== '') conCot[String(c.otNumero).trim()] = true; });
+  var correctivasOT = _dedupeOTs(_plCache.ordenes.filter(function(o) { return !_plEsPreventiva(o); })).lista;
+  var sinCotizar = correctivasOT.filter(function(o) { return !conCot[String(o.numero).trim()]; })
+    .sort(function(a, b) { return (_fechaOTms(b) || 0) - (_fechaOTms(a) || 0); });
+
+  return {
+    cobrables: cobrables, previas: previas, sinCotizar: sinCotizar,
+    total: suma(cobrables), totalPrevias: suma(previas),
+    enviadas: cobrables.filter(function(c) { return c.enviado === true; }),
+    sinEnviar: cobrables.filter(function(c) { return c.enviado !== true; }),
+    sumaEnviadas: suma(cobrables.filter(function(c) { return c.enviado === true; })),
+    sumaSinEnviar: suma(cobrables.filter(function(c) { return c.enviado !== true; }))
+  };
+}
+
+function _plGuardarCampo(docId, campo, valor, input) {
+  input.disabled = true;
+  // Con timeout: sin el, una escritura que nunca responde (la señal de la bodega de Pedro)
+  // deja el campo deshabilitado para siempre y parece que la app se colgo.
+  _conTimeout(window.firebase.firestore().collection('cotizaciones').doc(docId).update((function() {
+    var o = {}; o[campo] = valor; return o;
+  })()), 15000, 'guardar ' + campo).then(function() {
+    // El cache local se actualiza tambien: si Pedro cambia de pestaña y vuelve, lo que
+    // escribio sigue ahi sin tener que volver a bajar 3 MB.
+    (_plCache.cotizaciones || []).forEach(function(c) { if (c.id === docId) c[campo] = valor; });
+    toast('Guardado');
+  }).catch(function(e) {
+    _error('guardar ' + campo.toUpperCase(), e);
+  }).then(function() { input.disabled = false; });
+}
+
+function _plRenderCorrectivos() {
+  var cont = document.getElementById('panel-pl-correctivos');
+  cont.innerHTML = '';
+  var d = _plDatosCorrectivos();
+  window._plUltimoCorrectivos = d;
+
+  var tiles = document.createElement('div');
+  tiles.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;';
+  tiles.appendChild(_plTile('Enviadas a SMU', String(d.enviadas.length), _plPesos(d.sumaEnviadas), 'ok'));
+  tiles.appendChild(_plTile('Sin enviar', String(d.sinEnviar.length), _plPesos(d.sumaSinEnviar), 'alerta'));
+  tiles.appendChild(_plTile('Deuda por correctivos', _plPesos(d.total), d.cobrables.length + ' trabajos'));
+  cont.appendChild(tiles);
+
+  cont.appendChild(_plLeyenda([
+    { tipo: 'auto', texto: 'Automático (app)' },
+    { tipo: 'calc', texto: 'Monto de la cotización' },
+    { tipo: 'man', texto: 'Lo escribe Pedro (se guarda solo)' }
+  ]));
+
+  if (!d.cobrables.length) {
+    var vac = document.createElement('div');
+    vac.innerHTML = _vacio('Aún no hay correctivos cotizados', 'Cada cotización que se genere aparece sola en esta planilla.');
+    cont.appendChild(vac);
+    return;
+  }
+
+  var buscar = document.createElement('input');
+  buscar.type = 'text';
+  buscar.setAttribute('aria-label', 'Buscar en la planilla de correctivos');
+  buscar.placeholder = 'Buscar local, trabajo, N° de OT...';
+  buscar.style.cssText = 'width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;';
+  buscar.oninput = function() {
+    var t = _normTexto(buscar.value);
+    var filas = cont.querySelectorAll('tr[data-buscar]');
+    for (var i = 0; i < filas.length; i++) {
+      filas[i].style.display = (!t || filas[i].getAttribute('data-buscar').indexOf(t) !== -1) ? '' : 'none';
+    }
+  };
+  cont.appendChild(buscar);
+
+  var scroll = document.createElement('div');
+  scroll.className = 'pl-scroll';
+  var tabla = document.createElement('table');
+  tabla.className = 'pl-tabla';
+  var thead = document.createElement('thead');
+  var trh = document.createElement('tr');
+  [['Local'], ['CeCo'], ['Trabajo'], ['N° Cotización'], ['HS (N° OT)'], ['Monto', 'pl-calc'], ['Fecha'], ['¿Enviada?'],
+   ['SolPed', 'pl-man'], ['OC', 'pl-man'], ['HES', 'pl-man'], ['Factura', 'pl-man']].forEach(function(c) {
+    var e = document.createElement('th');
+    e.textContent = c[0];
+    if (c[1]) e.className = c[1];
+    trh.appendChild(e);
+  });
+  thead.appendChild(trh);
+  tabla.appendChild(thead);
+
+  var tbody = document.createElement('tbody');
+  d.cobrables.forEach(function(c) {
+    var tr = document.createElement('tr');
+    var trabajo = c.nombreServicio || c.descripcionTrabajo || '';
+    tr.setAttribute('data-buscar', _normTexto([c.local, c.centro, trabajo, c.numeroCotizacion, c.otNumero].join(' ')));
+    function td(txt, clase) {
+      var e = document.createElement('td');
+      e.textContent = txt;
+      if (clase) e.className = clase;
+      tr.appendChild(e);
+      return e;
+    }
+    td(c.local || '—', 'pl-loc');
+    td(c.centro || '—', 'pl-num pl-cen');
+    td(trabajo, 'pl-trab');
+    td(c.numeroCotizacion || '—', 'pl-num pl-cen');
+    td(c.otNumero != null ? String(c.otNumero) : '—', 'pl-num pl-cen');
+    td(_plPesos(c.total || 0), 'pl-money');
+    td(c.fecha || '—', 'pl-cen');
+    var tdEnv = document.createElement('td');
+    tdEnv.className = 'pl-cen';
+    var badge = document.createElement('span');
+    badge.className = 'pl-badge ' + (c.enviado ? 'pl-badge-ok' : 'pl-badge-no');
+    badge.textContent = c.enviado ? 'Enviada' : 'Sin enviar';
+    tdEnv.appendChild(badge);
+    tr.appendChild(tdEnv);
+    ['solped', 'oc', 'hes', 'factura'].forEach(function(campo) {
+      var e = document.createElement('td');
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'pl-inp';
+      inp.value = c[campo] || '';
+      inp.setAttribute('aria-label', campo.toUpperCase() + ' de ' + (c.local || 'la cotización') + ' ' + (c.numeroCotizacion || ''));
+      // onchange y no oninput: se guarda cuando termina de escribir, no en cada tecla.
+      inp.onchange = (function(id, cmp, input, cot) {
+        return function() {
+          var v = input.value.trim();
+          if (v === (cot[cmp] || '')) return;
+          _plGuardarCampo(id, cmp, v, input);
+        };
+      })(c.id, campo, inp, c);
+      e.appendChild(inp);
+      tr.appendChild(e);
+    });
+    tbody.appendChild(tr);
+  });
+
+  var trT = document.createElement('tr');
+  trT.className = 'pl-total';
+  var tdL = document.createElement('td');
+  tdL.colSpan = 5;
+  tdL.textContent = 'TOTAL COBRABLE (' + d.cobrables.length + ' trabajos)';
+  trT.appendChild(tdL);
+  var tdM = document.createElement('td');
+  tdM.className = 'pl-money';
+  tdM.textContent = _plPesos(d.total);
+  trT.appendChild(tdM);
+  var tdR = document.createElement('td');
+  tdR.colSpan = 6;
+  trT.appendChild(tdR);
+  tbody.appendChild(trT);
+
+  tabla.appendChild(tbody);
+  scroll.appendChild(tabla);
+  cont.appendChild(scroll);
+
+  // --- Bloque aparte: cotizaciones previas. NO suman. ---
+  if (d.previas.length) {
+    var t1 = document.createElement('div');
+    t1.className = 'pl-titulo';
+    t1.textContent = 'Cotizaciones previas — presupuestos sin respuesta';
+    cont.appendChild(t1);
+    var aviso = document.createElement('div');
+    aviso.style.cssText = 'font-size:12px;color:var(--texto2);margin-bottom:8px;line-height:1.5;';
+    aviso.textContent = 'Son ofertas de obra enviadas a SMU, sin trabajo ejecutado detrás. NO entran en la deuda de arriba: sumarlas la infla y hace que SMU rechace el paquete completo.';
+    cont.appendChild(aviso);
+
+    var scroll2 = document.createElement('div');
+    scroll2.className = 'pl-scroll';
+    var t2 = document.createElement('table');
+    t2.className = 'pl-tabla';
+    var th2 = document.createElement('thead');
+    var tr2 = document.createElement('tr');
+    [['Local'], ['CeCo'], ['Trabajo'], ['N° Cotización'], ['Monto', 'pl-calc'], ['Fecha'], ['Estado']].forEach(function(c) {
+      var e = document.createElement('th');
+      e.textContent = c[0];
+      if (c[1]) e.className = c[1];
+      tr2.appendChild(e);
+    });
+    th2.appendChild(tr2);
+    t2.appendChild(th2);
+    var tb2 = document.createElement('tbody');
+    d.previas.forEach(function(c) {
+      var tr = document.createElement('tr');
+      function td(txt, clase) {
+        var e = document.createElement('td');
+        e.textContent = txt;
+        if (clase) e.className = clase;
+        tr.appendChild(e);
+      }
+      td(c.local || '—', 'pl-loc');
+      td(c.centro || '—', 'pl-num pl-cen');
+      td(c.nombreServicio || c.descripcionTrabajo || '', 'pl-trab');
+      td(c.numeroCotizacion || '—', 'pl-num pl-cen');
+      td(_plPesos(c.total || 0), 'pl-money');
+      td(c.fecha || '—', 'pl-cen');
+      td(c.estadoCot || 'Pendiente', 'pl-cen');
+      tb2.appendChild(tr);
+    });
+    var trP = document.createElement('tr');
+    trP.className = 'pl-total';
+    var tdP = document.createElement('td');
+    tdP.colSpan = 4;
+    tdP.textContent = 'TOTAL EN PRESUPUESTOS (no es deuda)';
+    trP.appendChild(tdP);
+    var tdPM = document.createElement('td');
+    tdPM.className = 'pl-money';
+    tdPM.textContent = _plPesos(d.totalPrevias);
+    trP.appendChild(tdPM);
+    var tdPR = document.createElement('td');
+    tdPR.colSpan = 2;
+    trP.appendChild(tdPR);
+    tb2.appendChild(trP);
+    t2.appendChild(tb2);
+    scroll2.appendChild(t2);
+    cont.appendChild(scroll2);
+  }
+
+  // --- Bloque aparte: trabajo ejecutado que nadie cotizo ---
+  if (d.sinCotizar.length) {
+    var t3 = document.createElement('div');
+    t3.className = 'pl-titulo';
+    t3.textContent = d.sinCotizar.length + ' trabajos ejecutados sin cotizar';
+    cont.appendChild(t3);
+    var aviso3 = document.createElement('div');
+    aviso3.style.cssText = 'font-size:12px;color:var(--texto2);margin-bottom:8px;line-height:1.5;';
+    aviso3.textContent = 'Están hechos en terreno y no están en ninguna planilla ni en ninguna factura. Van sin monto a propósito: el valor lo fija quien cotiza. Al cotizarlos entran solos a la deuda de arriba.';
+    cont.appendChild(aviso3);
+    var scroll3 = document.createElement('div');
+    scroll3.className = 'pl-scroll';
+    var t4 = document.createElement('table');
+    t4.className = 'pl-tabla';
+    var th4 = document.createElement('thead');
+    var tr4 = document.createElement('tr');
+    ['Fecha', 'Local', 'N° OT', 'Técnico', 'Trabajo'].forEach(function(c) {
+      var e = document.createElement('th');
+      e.textContent = c;
+      tr4.appendChild(e);
+    });
+    th4.appendChild(tr4);
+    t4.appendChild(th4);
+    var tb4 = document.createElement('tbody');
+    d.sinCotizar.forEach(function(o) {
+      var tr = document.createElement('tr');
+      function td(txt, clase) {
+        var e = document.createElement('td');
+        e.textContent = txt;
+        if (clase) e.className = clase;
+        tr.appendChild(e);
+      }
+      td(o.fecha || '—', 'pl-cen');
+      td(o.local || '—', 'pl-loc');
+      td(o.numero != null ? String(o.numero) : '—', 'pl-num pl-cen');
+      td(o.tecnico || '—');
+      td(o.descripcionTrabajo || o.descripcionProblema || '', 'pl-trab');
+      tb4.appendChild(tr);
+    });
+    t4.appendChild(tb4);
+    scroll3.appendChild(t4);
+    cont.appendChild(scroll3);
+  }
+
+  var lineas = [];
+  lineas.push('Los montos son la suma de los ítems de cada cotización, <b>sin línea de IVA</b>. La app no sabe si son netos o con IVA — eso lo define el contrato con SMU.');
+  if (d.sinEnviar.length) lineas.push('<b>' + d.sinEnviar.length + ' cotización(es) por ' + _plPesos(d.sumaSinEnviar) + ' nunca salieron a SMU.</b> La app confirma que no tienen destinatario registrado.');
+  var sinCeco = d.cobrables.filter(function(c) { return !c.centro; });
+  if (sinCeco.length) lineas.push('<b>' + sinCeco.length + ' cotización(es) sin CECO</b> — el hueco es del catálogo de sucursales, no de la planilla. Se cobran igual.');
+  lineas.push('Esta planilla muestra <b>todo lo pendiente en un solo total</b>, sin cortar por mes.');
+  cont.appendChild(_plNota('Antes de mandar esta planilla a SMU', lineas));
+}
+
+/* ── EXCEL ───────────────────────────────────────────────────────────────────────────
+   Se exporta la planilla que se está viendo. Los montos van como NUMERO, no como texto:
+   una planilla de cobranza que no se puede sumar en Excel no sirve de nada. */
+function descargarExcelPlanilla() {
+  if (!_plCache) { toast('Espera a que carguen los datos'); return; }
+  if (typeof XLSX === 'undefined') { toast('No se pudo cargar el generador de Excel. Revisa la señal.'); return; }
+  toast('Generando Excel...');
+  try {
+    var wb = XLSX.utils.book_new();
+    var nombre;
+    if (_plTab === 'preventivos') {
+      var d = _plDatosPreventivos();
+      var filas = [['Formato', 'CECO', 'Local', 'Supervisor', 'N Transpaletas', 'Monto por preventivo']
+        .concat(PL_BIMESTRES.map(function(b) { return b.et + ' (' + b.titulo + ')'; }))
+        .concat(['Total ' + _plAnio])];
+      _plFilasVisibles(d).forEach(function(f) {
+        var fila = [f.formato || '', f.centro || '', f.nombre, f.supervisor || '',
+          f.transp || '', f.transp ? f.transp * PL_TARIFA_TRANSPALETA : ''];
+        f.celdas.forEach(function(celda) {
+          fila.push(celda.length ? celda.map(function(c) { return c.numero; }).join(' / ') : '');
+        });
+        fila.push(f.total || '');
+        filas.push(fila);
+      });
+      filas.push([]);
+      var totFila = ['TOTAL', '', '', '', d.transpTotal, ''];
+      d.totalBim.forEach(function(v) { totFila.push(v || ''); });
+      totFila.push(d.total);
+      filas.push(totFila);
+      filas.push([]);
+      filas.push(['Tarifa aplicada', PL_TARIFA_TRANSPALETA, 'por transpaleta. La app no registra si es neto o con IVA: lo define el contrato con SMU.']);
+      var ws = XLSX.utils.aoa_to_sheet(filas);
+      ws['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 18 }]
+        .concat(PL_BIMESTRES.map(function() { return { wch: 20 }; })).concat([{ wch: 14 }]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Preventivos ' + _plAnio);
+      nombre = 'EMVAL_Planilla_Preventivos_' + _plAnio + '.xlsx';
+    } else {
+      var c = _plDatosCorrectivos();
+      var f1 = [['Local', 'CeCo', 'Trabajo', 'N Cotizacion', 'HS (N OT)', 'Monto', 'Fecha', 'Enviada', 'SolPed', 'OC', 'HES', 'Factura']];
+      c.cobrables.forEach(function(x) {
+        f1.push([x.local || '', x.centro || '', x.nombreServicio || x.descripcionTrabajo || '',
+          x.numeroCotizacion || '', x.otNumero != null ? x.otNumero : '', x.total || 0, x.fecha || '',
+          x.enviado ? 'Si' : 'No', x.solped || '', x.oc || '', x.hes || '', x.factura || '']);
+      });
+      f1.push([]);
+      f1.push(['TOTAL COBRABLE', '', '', '', '', c.total]);
+      f1.push(['Enviadas a SMU', c.enviadas.length, '', '', '', c.sumaEnviadas]);
+      f1.push(['Sin enviar', c.sinEnviar.length, '', '', '', c.sumaSinEnviar]);
+      f1.push([]);
+      f1.push(['Los montos son la suma de los items de cada cotizacion, sin linea de IVA. Lo define el contrato con SMU.']);
+      var ws1 = XLSX.utils.aoa_to_sheet(f1);
+      ws1['!cols'] = [{ wch: 28 }, { wch: 8 }, { wch: 45 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, ws1, 'Correctivos');
+
+      if (c.previas.length) {
+        var f2 = [['Local', 'CeCo', 'Trabajo', 'N Cotizacion', 'Monto', 'Fecha', 'Estado']];
+        c.previas.forEach(function(x) {
+          f2.push([x.local || '', x.centro || '', x.nombreServicio || x.descripcionTrabajo || '',
+            x.numeroCotizacion || '', x.total || 0, x.fecha || '', x.estadoCot || 'Pendiente']);
+        });
+        f2.push([]);
+        f2.push(['TOTAL EN PRESUPUESTOS (no es deuda)', '', '', '', c.totalPrevias]);
+        var ws2 = XLSX.utils.aoa_to_sheet(f2);
+        ws2['!cols'] = [{ wch: 28 }, { wch: 8 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, ws2, 'Previas (no suman)');
+      }
+      if (c.sinCotizar.length) {
+        var f3 = [['Fecha', 'Local', 'N OT', 'Tecnico', 'Trabajo']];
+        c.sinCotizar.forEach(function(o) {
+          f3.push([o.fecha || '', o.local || '', o.numero != null ? o.numero : '', o.tecnico || '',
+            o.descripcionTrabajo || o.descripcionProblema || '']);
+        });
+        var ws3 = XLSX.utils.aoa_to_sheet(f3);
+        ws3['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 10 }, { wch: 20 }, { wch: 60 }];
+        XLSX.utils.book_append_sheet(wb, ws3, 'Sin cotizar');
+      }
+      nombre = 'EMVAL_Planilla_Correctivos_' + new Date().getFullYear() + '.xlsx';
+    }
+    XLSX.writeFile(wb, nombre);
+    toast('Excel descargado!');
+  } catch(e) { _error('generar el Excel de la planilla', e); }
 }
 
 /* LA DURACION DEL TOAST SE CALCULA CON EL MENSAJE.
