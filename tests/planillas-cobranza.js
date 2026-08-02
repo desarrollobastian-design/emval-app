@@ -153,6 +153,16 @@ ok(sinCot.indexOf(7001) === -1, 'el trabajo que SI tiene cotizacion no aparece c
 ok(sinCot.indexOf(9001) === -1, 'una hoja preventiva no se cuenta como correctivo sin cotizar');
 ok(C.sinCotizar.every(o => o.monto === undefined), 'a los trabajos sin cotizar no se les inventa monto');
 
+// El N 9001 esta cobrado como preventivo (PENCO) y ademas como correctivo: si las dos planillas
+// llegan juntas, SMU ve el mismo numero dos veces. La app no lo arregla sola, pero avisa.
+sandbox._plCache.cotizaciones = COTIZACIONES.concat([{
+  id: 'c4', local: 'UNIMARC HUALPEN', centro: '740', nombreServicio: 'Sanitizacion estanque',
+  numeroCotizacion: '13072604', otNumero: 9001, total: 350000, fecha: '25-06-2026', enviado: true
+}]);
+const C2 = sandbox._plDatosCorrectivos();
+igual(C2.chocanConPreventivos.length, 1, 'detecta el N de OT repetido entre las dos planillas');
+igual(C2.chocanConPreventivos[0].otNumero, 9001, 'y dice cual es');
+
 // ── Cuadre contra produccion (opcional) ──────────────────────────────────────────────────────
 async function contraProduccion() {
   const KEY = (src.match(/apiKey:\s*"([^"]+)"/) || [])[1];

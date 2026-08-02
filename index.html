@@ -10654,8 +10654,24 @@ function _plDatosCorrectivos() {
   var sinCotizar = correctivasOT.filter(function(o) { return !conCot[String(o.numero).trim()]; })
     .sort(function(a, b) { return (_fechaOTms(b) || 0) - (_fechaOTms(a) || 0); });
 
+  /* Un N de OT que aparece en las DOS planillas es lo mas caro que puede pasar aca: SMU ve el
+     mismo numero cobrado dos veces y frena el paquete completo. Pasa con los registros anteriores
+     al fix del 31-jul, donde la app repitio numeros (la OT 9530 quedo en un correctivo de UNIMARC
+     HUALPEN y en un preventivo de S10 Los Angeles). La pantalla no lo puede arreglar sola —hay que
+     renumerar uno, y eso lo decide Pedro— pero SI lo puede ver antes de que salga. */
+  var numerosPreventivos = {};
+  _plCache.ordenes.filter(_plEsPreventiva).forEach(function(o) {
+    if (o.numero != null && o.numero !== '') numerosPreventivos[String(o.numero).trim()] = o.local || '';
+  });
+  var chocanConPreventivos = cobrables.filter(function(c) {
+    return c.otNumero != null && numerosPreventivos[String(c.otNumero).trim()] !== undefined;
+  }).map(function(c) {
+    return { otNumero: c.otNumero, correctivo: c.local || '', preventivo: numerosPreventivos[String(c.otNumero).trim()] };
+  });
+
   return {
     cobrables: cobrables, previas: previas, sinCotizar: sinCotizar,
+    chocanConPreventivos: chocanConPreventivos,
     total: suma(cobrables), totalPrevias: suma(previas),
     enviadas: cobrables.filter(function(c) { return c.enviado === true; }),
     sinEnviar: cobrables.filter(function(c) { return c.enviado !== true; }),
@@ -10909,6 +10925,11 @@ function _plRenderCorrectivos() {
   }
 
   var lineas = [];
+  if (d.chocanConPreventivos.length) {
+    lineas.push('<b>Ojo — ' + d.chocanConPreventivos.length + ' N° de OT está(n) en las DOS planillas.</b> Si llegan juntas a SMU, ve el mismo número cobrado dos veces: ' +
+      _escHtml(d.chocanConPreventivos.map(function(x) { return 'OT ' + x.otNumero + ' (' + x.correctivo + ' / ' + x.preventivo + ')'; }).join(' · ')) +
+      '. Conviene renumerar uno antes de enviar.');
+  }
   lineas.push('Los montos son la suma de los ítems de cada cotización, <b>sin línea de IVA</b>. La app no sabe si son netos o con IVA — eso lo define el contrato con SMU.');
   if (d.sinEnviar.length) lineas.push('<b>' + d.sinEnviar.length + ' cotización(es) por ' + _plPesos(d.sumaSinEnviar) + ' nunca salieron a SMU.</b> La app confirma que no tienen destinatario registrado.');
   var sinCeco = d.cobrables.filter(function(c) { return !c.centro; });
