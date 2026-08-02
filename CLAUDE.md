@@ -44,6 +44,7 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - `s-admin` — Admin panel (cadenas, técnicos, locales, cotizaciones, preventivos)
 - `s-supervisor` — Supervisor dashboard
 - `s-tecnico` — Technician dashboard
+- `s-planillas` — Planillas de cobranza (solo rol Administrador). Ver abajo.
 
 ### Data Flow
 
@@ -91,6 +92,19 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - `responderServicio(idx, respuesta)` — Mark service as done/no-apply
 - `notificarSupervisor()` — Send notification to supervisor
 - `enviarWhatsApp()` — Send WhatsApp message with order summary
+
+**Planillas de cobranza** (`cargarPlanillas`, `_plDatos*`, `descargarExcelPlanilla`):
+- Dos planillas distintas, **no una con filtro**: preventivos = matriz local × bimestre con monto
+  calculado (`PL_TARIFA_TRANSPALETA` × `numEquipos`); correctivos = lista con el `total` de cada
+  cotización + las columnas manuales `solped/oc/hes/factura` (mismo campo que usa *Facturar*).
+- **Reglas que no se pueden relajar** (salen de los informes de Soporte del 01 y 02-ago-2026):
+  `tipoCot === 'previa'` **no suma** y va en bloque aparte · se pasa `_dedupeOTs` antes de sumar
+  (un local no se cobra dos veces) · `_plVisible` deja fuera las cuentas de prueba · un trabajo sin
+  cotizar se lista **sin monto**, jamás con uno estimado.
+- Una hoja es preventiva por `tipo` **o** por traer la pauta de 11 servicios: las que el bug del
+  estado global guardó como `correctivo` son cobrables igual (`_plEsPreventiva`).
+- Cada columna cubre su **bimestre completo** — una hoja de agosto pertenece al ciclo de julio.
+- Cubierto por `tests/planillas-cobranza.js`.
 
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
@@ -300,6 +314,9 @@ These changes are useful context for understanding current state:
   Node, sin dependencias: extraen la función real de `index.html` por texto y la ejecutan con stubs.
   ```
   node tests/numero-ot-no-se-cruza.js index.html
+  node tests/reparar-pdf-cruzados.test.js
+  node tests/planillas-cobranza.js index.html            # offline
+  node tests/planillas-cobranza.js index.html --prod     # ademas cuadra contra produccion
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -317,4 +334,12 @@ These changes are useful context for understanding current state:
 - `CLAUDE.md` — This file
 - `BRIEF-SISTEMA-PARA-SOPORTE.md` — Mapa del sistema para Soporte (08): negocio, roles, flujo, fuentes de datos, documentos al cliente, bugs cerrados
 - `tests/` — Pruebas de regresión sueltas, en Node sin dependencias (ver "Testing & Verification").
-  `numero-ot-no-se-cruza.js` — el N° de OT no se cruza entre dos hojas cerradas seguidas
+  `numero-ot-no-se-cruza.js` — el N° de OT no se cruza entre dos hojas cerradas seguidas ·
+  `reparar-pdf-cruzados.test.js` — la decisión del reparador no toca lo que no debe ·
+  `planillas-cobranza.js` — las planillas no cobran de más (previa que no suma, local duplicado,
+  cuenta de prueba) ni se comen un trabajo (hoja de agosto, hoja con el tipo cruzado). Con
+  `--prod` cuadra los totales contra los datos reales de Firestore
+- `tools/` — Scripts de mantención de datos de producción. **Todos simulan por defecto y solo
+  escriben con `--ejecutar`, respaldo previo y confirmación tecleada.**
+  `reparar-pdf-cruzados.js` — re-enlaza los PDF que quedaron con el número de OT cruzado antes del
+  fix del 31-jul. **Escribir requiere autorización de Pedro: es producción.**
