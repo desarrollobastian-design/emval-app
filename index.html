@@ -10663,11 +10663,18 @@ function _plDatosCorrectivos() {
   _plCache.ordenes.filter(_plEsPreventiva).forEach(function(o) {
     if (o.numero != null && o.numero !== '') numerosPreventivos[String(o.numero).trim()] = o.local || '';
   });
-  var chocanConPreventivos = cobrables.filter(function(c) {
-    return c.otNumero != null && numerosPreventivos[String(c.otNumero).trim()] !== undefined;
-  }).map(function(c) {
-    return { otNumero: c.otNumero, correctivo: c.local || '', preventivo: numerosPreventivos[String(c.otNumero).trim()] };
+  /* Se agrupa POR NUMERO, no por cotizacion: la 9530 la comparten dos correctivos y un
+     preventivo, y decir "2 numeros repetidos" mandaria a Pedro a buscar un segundo que no
+     existe. Lo que el tiene que renumerar es un numero, y son las filas que lo usan. */
+  var porNumero = {};
+  cobrables.forEach(function(c) {
+    if (c.otNumero == null) return;
+    var n = String(c.otNumero).trim();
+    if (numerosPreventivos[n] === undefined) return;
+    if (!porNumero[n]) porNumero[n] = { otNumero: c.otNumero, correctivos: [], preventivo: numerosPreventivos[n] };
+    porNumero[n].correctivos.push(c.local || '(sin local)');
   });
+  var chocanConPreventivos = Object.keys(porNumero).map(function(n) { return porNumero[n]; });
 
   return {
     cobrables: cobrables, previas: previas, sinCotizar: sinCotizar,
@@ -10926,8 +10933,10 @@ function _plRenderCorrectivos() {
 
   var lineas = [];
   if (d.chocanConPreventivos.length) {
-    lineas.push('<b>Ojo — ' + d.chocanConPreventivos.length + ' N° de OT está(n) en las DOS planillas.</b> Si llegan juntas a SMU, ve el mismo número cobrado dos veces: ' +
-      _escHtml(d.chocanConPreventivos.map(function(x) { return 'OT ' + x.otNumero + ' (' + x.correctivo + ' / ' + x.preventivo + ')'; }).join(' · ')) +
+    lineas.push('<b>Ojo — ' + d.chocanConPreventivos.length + ' N° de OT ' + (d.chocanConPreventivos.length === 1 ? 'está' : 'están') + ' en las DOS planillas.</b> Si llegan juntas a SMU, ve el mismo número cobrado dos veces: ' +
+      _escHtml(d.chocanConPreventivos.map(function(x) {
+        return 'OT ' + x.otNumero + ' — correctivo de ' + x.correctivos.join(' y de ') + ', preventivo de ' + x.preventivo;
+      }).join(' · ')) +
       '. Conviene renumerar uno antes de enviar.');
   }
   lineas.push('Los montos son la suma de los ítems de cada cotización, <b>sin línea de IVA</b>. La app no sabe si son netos o con IVA — eso lo define el contrato con SMU.');
