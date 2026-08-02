@@ -124,6 +124,11 @@
   #s-supervisor .content, #s-ots-tecnicos .content, #s-ots-tecnico-detalle .content,
   #s-carpetas .content, #s-preventivos .content, #s-ventas .content, #s-facturacion .content,
   #s-admin .content { max-width: 980px; }
+  /* Planillas: 12 y 13 columnas. Encajonadas en 640px obligan a deslizar en horizontal en un
+     monitor con 1900px libres — Pedro revisa la cobranza en el computador, y una planilla que
+     se lee de a pedazos no se puede cuadrar. Aqui el limite lo pone la pantalla, no el layout;
+     en el telefono sigue mandando width:100% y la tabla scrollea en su contenedor. */
+  #s-planillas .content { max-width: 1900px; }
   /* Admin: contenedor ancho, pero controles/formularios contenidos (los forms anchos son incomodos) */
   #s-admin #form-tecnico, #s-admin #form-cadena,
   #s-admin #personal-buscar, #s-admin #cadenas-buscar { max-width: 480px; }
