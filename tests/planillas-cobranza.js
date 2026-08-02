@@ -155,13 +155,20 @@ ok(C.sinCotizar.every(o => o.monto === undefined), 'a los trabajos sin cotizar n
 
 // El N 9001 esta cobrado como preventivo (PENCO) y ademas como correctivo: si las dos planillas
 // llegan juntas, SMU ve el mismo numero dos veces. La app no lo arregla sola, pero avisa.
+// El caso real de la 9530: DOS correctivos comparten el numero con UN preventivo. Se agrupa por
+// numero — decir "2 numeros repetidos" mandaria a Pedro a buscar un segundo que no existe.
 sandbox._plCache.cotizaciones = COTIZACIONES.concat([{
   id: 'c4', local: 'UNIMARC HUALPEN', centro: '740', nombreServicio: 'Sanitizacion estanque',
   numeroCotizacion: '13072604', otNumero: 9001, total: 350000, fecha: '25-06-2026', enviado: true
+}, {
+  id: 'c5', local: 'S10 Los Angeles', centro: '', nombreServicio: 'Correctivo transpaletas',
+  numeroCotizacion: '13072605', otNumero: 9001, total: 79800, fecha: '01-07-2026', enviado: false
 }]);
 const C2 = sandbox._plDatosCorrectivos();
-igual(C2.chocanConPreventivos.length, 1, 'detecta el N de OT repetido entre las dos planillas');
+igual(C2.chocanConPreventivos.length, 1, 'un solo N de OT repetido, aunque lo usen dos cotizaciones');
 igual(C2.chocanConPreventivos[0].otNumero, 9001, 'y dice cual es');
+igual(C2.chocanConPreventivos[0].correctivos.length, 2, 'nombrando los dos correctivos que lo comparten');
+igual(C2.chocanConPreventivos[0].preventivo, 'UNIMARC PENCO', 'y contra que preventivo choca');
 
 // ── Cuadre contra produccion (opcional) ──────────────────────────────────────────────────────
 async function contraProduccion() {
