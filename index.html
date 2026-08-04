@@ -1122,6 +1122,12 @@
       <button id="btn-ventas" class="btn btn-secondary btn-sm" onclick="go('s-ventas');cargarVentas();" style="font-size:12px;display:none;">Ventas</button>
       <button id="btn-planillas" class="btn btn-secondary btn-sm" onclick="go('s-planillas');cargarPlanillas();" style="font-size:12px;display:none;">Planillas</button>
     </div>
+    <!-- AVISOS POR CORREO ATASCADOS (admin/supervisor).
+         El correo caido no se puede avisar por correo. Cada dispositivo reporta su cola a
+         Firestore y aca se ve junta: es el unico lugar donde el administrador se entera el
+         mismo dia, sin depender de que un tecnico mire un toast en su telefono. -->
+    <div id="alerta-correos" style="display:none;margin-bottom:14px;"></div>
+
     <!-- TRABAJOS PAUSADOS (admin/supervisor) -->
     <div id="sup-pausadas-seccion" style="display:none;margin-bottom:14px;">
       <div style="font-size:12px;font-weight:600;color:var(--texto2);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
@@ -1290,8 +1296,27 @@
 
 <!-- Avisos por correo encolados: misma visibilidad persistente que las OTs pendientes.
      Un toast se desvanece; una barra no. Se apila sobre la de OTs si ambas estan visibles. -->
-<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:12px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="reintentarCorreosAhora()">
-  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span> — Toca para reintentar
+<div id="correos-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:8888;background:var(--naranja-btn);color:white;padding:7px 18px;border-radius:var(--radio-pill);font-size:12px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.25);white-space:nowrap;cursor:pointer;" onclick="abrirModalCorreos()">
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> <span id="correos-texto">0 aviso(s) pendiente(s)</span><span id="correos-accion"> — Toca para ver</span>
+</div>
+
+<!-- MODAL: cola de avisos por correo. La barra antes reintentaba de una al tocarla; ahora abre
+     esto, porque cuando la cola se atasca lo primero que hace falta es VER que hay adentro y
+     desde cuando — y poder vaciarla, que es lo unico que se puede hacer desde el dispositivo. -->
+<div id="modal-correos" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalCorreos(event)">
+  <div role="dialog" aria-modal="true" aria-labelledby="modal-correos-titulo" style="background:white;border-radius:var(--radio-lg);max-width:460px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+    <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
+      <div id="modal-correos-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Avisos por correo</div>
+      <div id="modal-correos-sub" style="font-size:12px;color:var(--texto3);margin-top:2px;"></div>
+    </div>
+    <div id="modal-correos-estado" style="padding:0 18px;"></div>
+    <div id="modal-correos-lista" style="overflow-y:auto;padding:12px 18px;flex:1;"></div>
+    <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-secondary btn-sm" onclick="cerrarModalCorreos()" style="flex:1;min-width:90px;">Cerrar</button>
+      <button class="btn btn-peligro btn-sm" onclick="purgarColaCorreos().then(function(o){ if(o) cerrarModalCorreos(); })" style="flex:1;min-width:110px;">Descartar todos</button>
+      <button class="btn btn-primary btn-sm" onclick="reintentarCorreosAhora().then(abrirModalCorreos)" style="flex:1.3;min-width:120px;">Reintentar ahora</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL: Reasignar OT pausada a otro tecnico -->
@@ -1327,13 +1352,20 @@
 </div>
 
 <!-- FIREBASE SDK v9 compat -->
-<!-- EmailJS -->
-<script src="https://unpkg.com/@emailjs/browser@4/dist/email.min.js"></script>
+<!-- EmailJS — servido DESDE EL REPO, no desde unpkg (@emailjs/browser 4.4.1, 3,9 KB).
+     Con el CDN, una carga fria sin red dejaba `emailjs` en undefined: el guard evitaba que la
+     app reventara y TODO se encolaba en silencio, que es justo el modo de falla invisible que
+     costo dos dias de correo el 03-08-2026. Ademas el service worker lo precachea, asi que el
+     envio deja de depender de un tercero. Para actualizarlo:
+     curl -o vendor/emailjs-browser-4.min.js https://unpkg.com/@emailjs/browser@4/dist/email.min.js -->
+<script src="./vendor/emailjs-browser-4.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-  // Guard: sin señal el SDK de EmailJS (unpkg) no carga; que no rompa el arranque
-  // y que igual se seteen las variables de config de abajo.
+  // Guard: si aun asi el SDK no esta (cache corrupta, archivo borrado), que no rompa el arranque
+  // y que igual se seteen las variables de config de abajo. Ya no se calla: deja el motivo a la
+  // vista para que no se confunda con "no hay señal".
   if (typeof emailjs !== 'undefined') { try { emailjs.init("E4wDaLmmuBovj2s8a"); } catch(e){} }
+  else { console.error('EmailJS no cargó (vendor/emailjs-browser-4.min.js): los correos se van a encolar sin salir.'); }
   // ---- EmailJS config cotizaciones (cambiar cuando esten creados) ----
   window.EMAILJS_COT_SERVICE  = 'service_xm6dmxl';   // Gmail conectado a cotizaciones.emval@gmail.com
   window.EMAILJS_COT_TEMPLATE = 'template_63rsw4i';  // Template "Contact Us" de cotizaciones
@@ -3160,11 +3192,108 @@ async function _urlsABase64(arr) {
 // perdia el correo en silencio y para siempre: la OT quedaba guardada pero nadie se enteraba
 // de que el aviso nunca salio. Ahora el envio que falla se encola y se reintenta al volver la
 // señal, al traer la app a primer plano y cada 90 s.
+//
+// ⚠️ LO QUE COSTO EL 03-08-2026 (dos dias sin correo, Pedro mandando cotizaciones a mano por
+// WhatsApp): la cola reintentaba TODOS los pendientes cada 90 s, sin backoff y sin mirar QUE
+// error era. Son 40 intentos por aviso por hora = 960 al dia, contra un plan de EmailJS de
+// 200 correos AL MES. Basta que unos pocos avisos fallen UNA vez para quemar la cuota mensual
+// completa en menos de una hora; desde ahi muere todo el correo de la app — incluidas las
+// cotizaciones, que ni siquiera pasan por esta cola (van directo con emailjs.send). Y se
+// multiplica: cada tecnico tiene su propia cola en el localStorage de su telefono, todas
+// pegandole a la misma cuenta.
+// Por eso ahora: (1) backoff exponencial por aviso, (2) si el error NO es de red la cola se
+// DETIENE —reintentar un 429 de cuota o un 403 de credencial no lo arregla, lo empeora— y
+// (3) el atasco se reporta a Firestore para que lo vea el ADMINISTRADOR, no solo el tecnico.
 const _CORREOS_KEY = 'emval_correos_pendientes';
+const _CORREOS_BLOQUEO_KEY = 'emval_correos_bloqueo';
+const _CORREOS_PURGADOS_KEY = 'emval_correos_purgados';
 // Ventana de reintento: un aviso se sigue intentando durante 7 dias. Al vencer NO se descarta:
 // se marca `fallido` y queda visible en la barra para reintentarlo a mano.
 // (Antes se borraba tras 20 intentos con un console.warn — es decir, se perdia en silencio.)
 const _CORREOS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Backoff: 1, 2, 4, 8, 16, 32, 60, 60... min. Con el tope de 1 h son ~170 intentos en los 7 dias
+// de ventana, no 6.720. Es la diferencia entre "reintentar" y "martillar".
+const _CORREOS_BACKOFF_BASE_MS = 60 * 1000;
+const _CORREOS_BACKOFF_TOPE_MS = 60 * 60 * 1000;
+// Tras un error de cuota la cola se detiene 6 h: la cuota se libera sola con el tiempo. Un error
+// de credencial/cuenta NO se destraba solo, asi que ese bloqueo no tiene reintento automatico.
+const _CORREOS_PAUSA_CUOTA_MS = 6 * 60 * 60 * 1000;
+// Un aviso que lleva mas de esto sin salir ya no es un hipo de señal: es un atasco que alguien
+// tiene que ver el MISMO dia.
+const _CORREOS_ALERTA_MS = 15 * 60 * 1000;
+
+// Espera antes del proximo intento de UN aviso. Pura y sin estado: la prueba la corre directo.
+function _backoffCorreo(intentos) {
+  const n = Math.max(1, intentos || 1);
+  if (n > 20) return _CORREOS_BACKOFF_TOPE_MS;   // 2^n desborda mucho antes que el tope
+  return Math.min(_CORREOS_BACKOFF_TOPE_MS, _CORREOS_BACKOFF_BASE_MS * Math.pow(2, n - 1));
+}
+
+// De que murio el envio. Decide lo unico que importa: ¿se reintenta, o se corta la cola?
+//   red       → no salio del telefono (fetch rechaza con TypeError, sin .status). No gasta
+//               cuota. Se reintenta con backoff.
+//   proveedor → 5xx: falla de ellos, transitoria. Se reintenta con backoff.
+//   cuota     → 429 / "limit" / "quota": no quedan correos. Reintentar es lo PEOR que se puede
+//               hacer, y es exactamente lo que la app hacia 40 veces por hora.
+//   cuenta    → 4xx: credencial, template, cuenta bloqueada. No se arregla solo ni desde aca.
+function _clasificarErrorCorreo(e) {
+  const status = (e && typeof e.status === 'number') ? e.status : null;
+  const texto = String((e && (e.text || e.message)) || e || '');
+  const dice = /limit|quota|exceed|too many/i.test(texto);
+  let clase;
+  if (status === null || status === 0) clase = 'red';
+  else if (status === 429 || status === 402 || dice) clase = 'cuota';
+  else if (status >= 500) clase = 'proveedor';
+  else if (status >= 400) clase = 'cuenta';
+  else clase = 'proveedor';
+  return { clase: clase, status: status, texto: texto };
+}
+
+function _cargarBloqueoCorreos() {
+  try { return JSON.parse(localStorage.getItem(_CORREOS_BLOQUEO_KEY) || 'null'); } catch(e) { return null; }
+}
+function _guardarBloqueoCorreos(b) {
+  try {
+    if (b) localStorage.setItem(_CORREOS_BLOQUEO_KEY, JSON.stringify(b));
+    else localStorage.removeItem(_CORREOS_BLOQUEO_KEY);
+  } catch(e) {}
+}
+// Vigente = todavia no toca reintentar. `reintentarDespues: 0` es un bloqueo que NO se levanta
+// solo: lo levanta una persona desde la barra de avisos.
+function _bloqueoCorreosVigente() {
+  const b = _cargarBloqueoCorreos();
+  if (!b) return null;
+  if (b.reintentarDespues && Date.now() >= b.reintentarDespues) return null;
+  return b;
+}
+function _bloquearColaCorreos(err) {
+  const b = {
+    clase: err.clase, status: err.status, texto: err.texto, desde: Date.now(),
+    reintentarDespues: err.clase === 'cuota' ? Date.now() + _CORREOS_PAUSA_CUOTA_MS : 0
+  };
+  _guardarBloqueoCorreos(b);
+  console.error('Cola de correos DETENIDA (' + err.clase + ' ' + (err.status || '') + '): ' + err.texto);
+  return b;
+}
+// Lo que se le dice a una persona. "429" no le sirve a nadie en terreno.
+function _textoBloqueoCorreos(b) {
+  if (!b) return '';
+  if (b.clase === 'cuota') return 'se acabó la cuota de correos del servicio. Los avisos quedan guardados; ninguno se pierde.';
+  return 'el servicio de correo rechazó la cuenta (' + ((b.status || '') + ' ' + (b.texto || '')).trim() + '). Hay que revisarlo en el panel de EmailJS.';
+}
+
+// Id estable del dispositivo: sin el, cada recarga crearia una alerta nueva y el panel del
+// administrador se llenaria de duplicados del mismo telefono.
+function _deviceIdCorreos() {
+  try {
+    let id = localStorage.getItem('emval_device_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+      localStorage.setItem('emval_device_id', id);
+    }
+    return id;
+  } catch(e) { return 'dev_sin_storage'; }
+}
 
 // Unica funcion que conoce el service/template de EmailJS. Todo envio pasa por aqui,
 // incluida la cola de reintento (antes duplicaba los ids y se saltaba _enviarCorreo).
@@ -3187,26 +3316,36 @@ function _numOTCorreo(n) {
   return (n == null || n === '') ? '' : String(n);
 }
 
-function _encolarCorreo(params) {
+function _encolarCorreo(params, motivo) {
   // Clave estable: mismo destinatario + misma OT no se encola dos veces.
   const clave = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
   const lista = _cargarCorreosPendientes();
   if (lista.some(function(c){ return c.clave === clave; })) return;
-  lista.push({ clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false, params: params });
+  lista.push({
+    clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false,
+    proximoIntento: 0, ultimoError: motivo || '', params: params
+  });
   _guardarCorreosPendientes(lista);
-  console.warn('Correo encolado para reintento:', clave);
+  console.warn('Correo encolado para reintento:', clave, motivo || '');
   actualizarIndicadorPendientes();
+  _reportarEstadoCorreos();
 }
 
 // Envia. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
+// Con la cola detenida NI SIQUIERA lo intenta: gastar una request contra una cuota agotada solo
+// hunde mas la cuenta. El aviso se guarda igual — nunca se pierde.
 async function _enviarCorreo(params) {
-  if (typeof emailjs === 'undefined') { _encolarCorreo(params); return false; }
+  if (typeof emailjs === 'undefined') { _encolarCorreo(params, 'el servicio de correo no cargó'); return false; }
+  const bloqueo = _bloqueoCorreosVigente();
+  if (bloqueo) { _encolarCorreo(params, _textoBloqueoCorreos(bloqueo)); return false; }
   try {
     await _emailjsSend(params);
     return true;
   } catch(e) {
-    console.warn('Error enviando correo, se encola:', e);
-    _encolarCorreo(params);
+    const err = _clasificarErrorCorreo(e);
+    console.warn('Error enviando correo, se encola:', err.clase, err.status, err.texto);
+    if (err.clase === 'cuota' || err.clase === 'cuenta') _bloquearColaCorreos(err);
+    _encolarCorreo(params, ((err.status || '') + ' ' + err.texto).trim());
     return false;
   }
 }
@@ -3217,35 +3356,117 @@ async function sincronizarCorreosPendientes() {
   if (!navigator.onLine || typeof emailjs === 'undefined') return;
   const lista = _cargarCorreosPendientes();
   if (!lista.length) return;
+  // Cola detenida: no se gasta ni una request hasta que se levante (sola, si era cuota; a mano
+  // si era la cuenta). Salir aca es lo que impide que 90 s despues se repita el destrozo.
+  if (_bloqueoCorreosVigente()) { actualizarIndicadorPendientes(); return; }
+  const ahora = Date.now();
   const quedan = [];
-  let enviados = 0, vencidos = 0;
+  let enviados = 0, vencidos = 0, cortada = null;
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];
-    if (!c.creadoEn) c.creadoEn = Date.now(); // migracion de items encolados antes del TTL
-    if (c.fallido) { quedan.push(c); continue; } // ya se rindio; espera reintento manual
+    if (!c.creadoEn) c.creadoEn = ahora;          // migracion de items encolados antes del TTL
+    if (cortada) { quedan.push(c); continue; }     // la cola se corto: el resto ni se toca
+    if (c.fallido) { quedan.push(c); continue; }   // ya se rindio; espera reintento manual
+    // Backoff: este aviso todavia esta esperando su turno. (Los encolados por la version
+    // anterior no traen `proximoIntento` y se intentan de inmediato, como antes.)
+    if (c.proximoIntento && ahora < c.proximoIntento) { quedan.push(c); continue; }
     try {
       await _emailjsSend(c.params);
       enviados++;
     } catch(e) {
+      const err = _clasificarErrorCorreo(e);
       c.intentos = (c.intentos || 0) + 1;
-      if (Date.now() - c.creadoEn > _CORREOS_TTL_MS) { c.fallido = true; vencidos++; }
+      c.ultimoError = ((err.status || '') + ' ' + err.texto).trim();
+      if (err.clase === 'cuota' || err.clase === 'cuenta') {
+        // No es "no llego": es "no va a llegar por mas que insista". Se detiene TODA la cola.
+        cortada = _bloquearColaCorreos(err);
+        c.proximoIntento = cortada.reintentarDespues || (ahora + _CORREOS_BACKOFF_TOPE_MS);
+      } else {
+        c.proximoIntento = ahora + _backoffCorreo(c.intentos);
+        // El TTL solo corre para fallas transitorias: un aviso no se da por perdido porque la
+        // cuenta estuviera mal configurada una semana.
+        if (ahora - c.creadoEn > _CORREOS_TTL_MS) { c.fallido = true; vencidos++; }
+      }
       quedan.push(c);
     }
   }
   _guardarCorreosPendientes(quedan);
   if (enviados) toast(enviados + ' aviso(s) pendiente(s) enviado(s)');
   if (vencidos) toast(vencidos + ' aviso(s) no se pudieron enviar. Quedan en la barra para reintentar.');
+  if (cortada) toast('Correo detenido: ' + _textoBloqueoCorreos(cortada));
   actualizarIndicadorPendientes();
+  _reportarEstadoCorreos();
 }
 
 // Reintento manual desde la barra: da otra ventana de 7 dias a los avisos que se rindieron.
+// Tambien levanta el bloqueo: si una persona decide reintentar, es porque cree que el problema
+// de fondo ya se arreglo. Si no era asi, el primer envio vuelve a detener la cola al toque.
 async function reintentarCorreosAhora() {
   const lista = _cargarCorreosPendientes();
   if (!lista.length) return;
-  lista.forEach(function(c) { c.fallido = false; c.creadoEn = Date.now(); c.intentos = 0; });
+  _guardarBloqueoCorreos(null);
+  lista.forEach(function(c) { c.fallido = false; c.creadoEn = Date.now(); c.intentos = 0; c.proximoIntento = 0; });
   _guardarCorreosPendientes(lista);
   toast('Reintentando ' + lista.length + ' aviso(s)...');
   await sincronizarCorreosPendientes();
+}
+
+// Contencion: vaciar una cola envenenada (el localStorage es de CADA dispositivo, no hay forma
+// de limpiarlos desde el servidor). El invariante "el codigo nunca borra un aviso" sigue en pie:
+// esto es una decision humana y explicita, y aun asi no borra a ciegas — deja copia en Firestore
+// y en el propio telefono antes de vaciar.
+async function purgarColaCorreos() {
+  const lista = _cargarCorreosPendientes();
+  if (!lista.length) { toast('No hay avisos en cola'); return false; }
+  const ok = await _confirmar(
+    'Se descartarán ' + lista.length + ' aviso(s) que no lograron salir. Queda una copia guardada, pero NO se van a enviar.',
+    { titulo: 'Descartar la cola de avisos', okTexto: 'Descartar', peligro: true });
+  if (!ok) return false;
+  const respaldo = {
+    purgadoEn: new Date().toISOString(),
+    usuario: (typeof _tecnicoActual === 'function' ? _tecnicoActual() : '') || '',
+    dispositivo: _deviceIdCorreos(),
+    avisos: lista
+  };
+  try { localStorage.setItem(_CORREOS_PURGADOS_KEY, JSON.stringify(respaldo)); } catch(e) {}
+  try {
+    if (window._firebaseReady) await window.firebase.firestore().collection('correos_purgados').add(respaldo);
+  } catch(e) { console.warn('No se pudo respaldar en Firestore la cola purgada:', e); }
+  _guardarCorreosPendientes([]);
+  _guardarBloqueoCorreos(null);
+  toast(lista.length + ' aviso(s) descartado(s)');
+  actualizarIndicadorPendientes();
+  _reportarEstadoCorreos();
+  return true;
+}
+
+// El correo esta muerto: avisar POR CORREO que el correo no sale no sirve de nada. El atasco se
+// escribe en Firestore —que sigue funcionando— y el administrador lo ve en su panel. Antes el
+// unico rastro era un console.warn y un toast en el telefono del tecnico: Pedro se entero DOS
+// DIAS despues, por WhatsApp de un cliente.
+async function _reportarEstadoCorreos() {
+  try {
+    if (!window._firebaseReady || !navigator.onLine) return;
+    const lista = _cargarCorreosPendientes();
+    const bloqueo = _cargarBloqueoCorreos();
+    const ahora = Date.now();
+    const masAntiguo = lista.reduce(function(min, c){ return Math.min(min, c.creadoEn || ahora); }, ahora);
+    const fallidos = lista.filter(function(c){ return c.fallido; }).length;
+    // Un aviso que sale en dos minutos no es noticia. Se alerta si la cola esta detenida, si algo
+    // se rindio, o si el mas viejo ya lleva rato atascado.
+    const activa = lista.length > 0 && (!!bloqueo || fallidos > 0 || (ahora - masAntiguo) > _CORREOS_ALERTA_MS);
+    await window.firebase.firestore().collection('alertas').doc('correos_' + _deviceIdCorreos()).set({
+      tipo: 'correos',
+      activa: activa,
+      usuario: (typeof _tecnicoActual === 'function' ? _tecnicoActual() : '') || '',
+      dispositivo: _deviceIdCorreos(),
+      pendientes: lista.length,
+      fallidos: fallidos,
+      masAntiguo: lista.length ? new Date(masAntiguo).toISOString() : '',
+      bloqueo: bloqueo ? _textoBloqueoCorreos(bloqueo) : '',
+      actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch(e) { console.warn('No se pudo reportar el estado de la cola de correos:', e); }
 }
 
 // nota: texto de aviso que viaja en el cuerpo (ej. "el local no tiene correo configurado").
@@ -3261,7 +3482,13 @@ async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUr
     trabajo: String(nota || ''),
     pdf_url: pdfUrl || ''
   });
-  if (!ok) toast('Aviso a administración pendiente — se enviará solo al recuperar la señal.');
+  if (!ok) {
+    // Decir la verdad de POR QUE no salio. "Se enviará al recuperar la señal" era falso cuando
+    // el problema era la cuota: el tecnico se quedaba tranquilo y el aviso no salia nunca.
+    const b = _bloqueoCorreosVigente();
+    toast(b ? 'El aviso NO salió: ' + _textoBloqueoCorreos(b)
+            : 'Aviso a administración pendiente — se enviará solo al recuperar la señal.');
+  }
   return ok;
 }
 
@@ -8230,8 +8457,9 @@ async function _procesarEnvioHojas(hojas, emails) {
   let locStr = locales.slice(0, 3).join(', ');
   if (locales.length > 3) locStr += ', +' + (locales.length - 3);
   const asunto = 'Hojas de trabajo · ' + locStr + ' · ' + fecha;
+  if (typeof emailjs === 'undefined') { _avisar('El servicio de correo no está disponible en este dispositivo. Recarga la app e intenta de nuevo.'); return; }
   toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
-  let enviados = 0; const fallidos = [];
+  let enviados = 0; const fallidos = []; let corte = null;
   for (var k = 0; k < emails.length; k++) {
     const _params = {
       email_admin: emails[k], email: emails[k], name: 'EMVAL E.I.R.L.',
@@ -8242,13 +8470,23 @@ async function _procesarEnvioHojas(hojas, emails) {
       asunto: asunto, trabajo: cuerpoHtml, pdf_url: ''
     };
     try { await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _params); enviados++; }
-    catch(e) { console.error('EmailJS hoja ERROR (' + emails[k] + '):', JSON.stringify(e)); fallidos.push(emails[k]); }
+    catch(e) {
+      const err = _clasificarErrorCorreo(e);
+      console.error('EmailJS hoja ERROR (' + emails[k] + '):', err.clase, err.status, err.texto);
+      fallidos.push(emails[k]);
+      // Si el problema es la cuenta o la cuota, seguir con los demas destinatarios solo quema
+      // mas cuota y da el mismo error. Se corta y se dice POR QUE.
+      if (err.clase === 'cuota' || err.clase === 'cuenta') { corte = _bloquearColaCorreos(err); break; }
+    }
   }
   if (enviados > 0) {
     document.querySelectorAll('#lista-preventivos input.prev-check').forEach(function(c){ c.checked = false; });
     actualizarSeleccionadasPrev();
   }
-  if (fallidos.length === 0) {
+  if (corte) {
+    _avisar('No se pudo enviar: ' + _textoBloqueoCorreos(corte) + (enviados ? ' Alcanzaron a salir ' + enviados + '.' : ''),
+      { titulo: 'El correo está caído' });
+  } else if (fallidos.length === 0) {
     toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : '') + (sinPdf.length ? ' (' + sinPdf.length + ' sin PDF no se enviaron)' : ''));
   } else if (enviados > 0) {
     toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
@@ -8492,9 +8730,11 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
   const asunto = _asuntoCotizaciones(seleccionadas);
 
   // Enviar a cada destinatario en un loop (entrega individual, robusto)
+  if (typeof emailjs === 'undefined') { _avisar('El servicio de correo no está disponible en este dispositivo. Recarga la app e intenta de nuevo.'); return; }
   toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
   let enviados = 0;
   const fallidos = [];
+  let corte = null;
   for (var k = 0; k < emails.length; k++) {
     const _cotParams = {
       email_admin: emails[k],
@@ -8514,8 +8754,12 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
       await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _cotParams);
       enviados++;
     } catch(e) {
-      console.error('EmailJS cotizacion ERROR (' + emails[k] + '):', JSON.stringify(e));
+      const err = _clasificarErrorCorreo(e);
+      console.error('EmailJS cotizacion ERROR (' + emails[k] + '):', err.clase, err.status, err.texto);
       fallidos.push(emails[k]);
+      // Cuota o cuenta: insistir con el resto de los destinatarios da el mismo error y quema
+      // mas cuota. Se corta y se le dice al usuario cual es el problema de verdad.
+      if (err.clase === 'cuota' || err.clase === 'cuenta') { corte = _bloquearColaCorreos(err); break; }
     }
   }
 
@@ -8535,12 +8779,18 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
     await cargarCarpetas();
   }
 
-  if (fallidos.length === 0) {
+  if (corte) {
+    _avisar('No se pudo enviar: ' + _textoBloqueoCorreos(corte) + (enviados ? ' Alcanzaron a salir ' + enviados + '.' : ''),
+      { titulo: 'El correo está caído' });
+  } else if (fallidos.length === 0) {
     toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : ''));
   } else if (enviados > 0) {
     toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
   } else {
-    _error('enviar los correos', e, 'Revisa las direcciones e inténtalo de nuevo.');
+    // Antes esta linea pasaba `e`, que solo existe dentro del catch del loop: cuando fallaban
+    // TODOS los envios —el caso del 03-08— reventaba con ReferenceError y el usuario no veia
+    // ningun mensaje. El unico camino que importaba era el unico que estaba roto.
+    _error('enviar los correos', null, 'Fallaron los ' + fallidos.length + ' envíos. Revisa las direcciones e inténtalo de nuevo.');
   }
 }
 
@@ -8763,9 +9013,49 @@ async function cargarOTsSupervisor() {
 
     // Cargar seccion de trabajos pausados (todos los tecnicos)
     cargarPausadasSupervisor();
+    cargarAlertaCorreos();
   } catch(e) {
     console.error('Error cargando OTs:', e);
     _listaConError(document.getElementById('sup-ots-hoy-lista'), cargarOTsSupervisor);
+  }
+}
+
+// =========== AVISOS POR CORREO ATASCADOS (PANEL ADMIN/SUPERVISOR) ===========
+// Lee las alertas que cada dispositivo escribe en `alertas` cuando su cola de correos se traba.
+// Es la contraparte de _reportarEstadoCorreos(): sin esta pantalla, el reporte no lo ve nadie.
+async function cargarAlertaCorreos() {
+  const cont = document.getElementById('alerta-correos');
+  if (!cont) return;
+  if (_esperandoFirebase('alerta-correos', cargarAlertaCorreos)) return;
+  try {
+    const snap = await window.firebase.firestore().collection('alertas').where('activa', '==', true).get();
+    const filas = [];
+    snap.forEach(function(d) {
+      const a = d.data() || {};
+      if (a.tipo !== 'correos' || !a.pendientes) return;
+      filas.push(a);
+    });
+    if (!filas.length) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+    const total = filas.reduce(function(s, a){ return s + (a.pendientes || 0); }, 0);
+    let html = '<div class="card grid-full" style="border:1.5px solid var(--rojo);background:#FEF2F2;">'
+      + '<div style="font-size:15px;font-weight:700;color:var(--rojo);margin-bottom:2px;">'
+      + total + ' aviso(s) por correo sin enviar</div>'
+      + '<div style="font-size:12px;color:var(--texto2);margin-bottom:8px;">Los trabajos están guardados; lo que no salió es el correo.</div>';
+    filas.forEach(function(a) {
+      const desde = a.masAntiguo ? new Date(a.masAntiguo).toLocaleString('es-CL') : '';
+      html += '<div style="font-size:12px;color:var(--texto);border-top:1px solid #FCA5A5;padding:6px 0;">'
+        + '<strong>' + _escHtml(a.usuario || 'Dispositivo sin sesión') + '</strong> — ' + (a.pendientes || 0) + ' pendiente(s)'
+        + (a.fallidos ? ', ' + a.fallidos + ' se rindieron' : '')
+        + (desde ? '<br>El más antiguo: ' + _escHtml(desde) : '')
+        + (a.bloqueo ? '<br><span style="color:var(--rojo);">Envíos detenidos: ' + _escHtml(a.bloqueo) + '</span>' : '')
+        + '</div>';
+    });
+    html += '<button class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px;" onclick="cargarAlertaCorreos()">Actualizar</button></div>';
+    cont.innerHTML = html;
+    cont.style.display = 'block';
+  } catch(e) {
+    console.warn('No se pudieron cargar las alertas de correo:', e);
+    cont.style.display = 'none';
   }
 }
 
@@ -11636,16 +11926,87 @@ async function actualizarIndicadorPendientes() {
 function _actualizarBarraCorreos(hayBarraDeOTs) {
   var bar = document.getElementById('correos-bar');
   var texto = document.getElementById('correos-texto');
+  var accion = document.getElementById('correos-accion');
   if (!bar || !texto) return;
   var correos = _cargarCorreosPendientes();
-  if (!navigator.onLine || correos.length === 0) { bar.style.display = 'none'; return; }
+  // Sin conexion tambien se muestra: "tienes 4 avisos sin salir" es cierto igual, y ocultarlo
+  // es justo el silencio que dejo a Pedro dos dias sin enterarse.
+  if (correos.length === 0) { bar.style.display = 'none'; return; }
   var fallidos = correos.filter(function(c) { return c.fallido; }).length;
+  var bloqueo = _bloqueoCorreosVigente();
   bar.style.display = 'block';
-  bar.style.bottom = hayBarraDeOTs ? '116px' : '70px';
-  bar.style.background = fallidos ? 'var(--rojo)' : 'var(--naranja-btn)';
-  texto.textContent = fallidos
-    ? fallidos + ' aviso(s) no se enviaron'
-    : correos.length + ' aviso(s) pendiente(s)';
+  // La barra offline ya ocupa los 70px de abajo.
+  bar.style.bottom = (hayBarraDeOTs || !navigator.onLine) ? '116px' : '70px';
+  bar.style.background = (fallidos || bloqueo) ? 'var(--rojo)' : 'var(--naranja-btn)';
+  if (bloqueo) {
+    texto.textContent = correos.length + ' aviso(s) SIN ENVIAR — ' + (bloqueo.clase === 'cuota' ? 'sin cuota de correo' : 'problema de la cuenta');
+  } else if (fallidos) {
+    texto.textContent = fallidos + ' aviso(s) no se enviaron';
+  } else if (!navigator.onLine) {
+    texto.textContent = correos.length + ' aviso(s) pendiente(s) — sin conexión';
+  } else {
+    texto.textContent = correos.length + ' aviso(s) pendiente(s)';
+  }
+  if (accion) accion.textContent = ' — Toca para ver';
+}
+
+function _haceCuanto(ts) {
+  if (!ts) return 'hace un rato';
+  var min = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (min < 60) return 'hace ' + min + ' min';
+  if (min < 1440) return 'hace ' + Math.round(min / 60) + ' h';
+  return 'hace ' + Math.round(min / 1440) + ' día(s)';
+}
+
+// Que hay realmente en la cola: destinatario, OT, desde cuando y con que error murio. Sin esto,
+// la unica forma de saberlo era abrir la consola del telefono de cada tecnico.
+function abrirModalCorreos() {
+  var ov = document.getElementById('modal-correos');
+  var sub = document.getElementById('modal-correos-sub');
+  var estado = document.getElementById('modal-correos-estado');
+  var lista = document.getElementById('modal-correos-lista');
+  if (!ov || !lista) return;
+  var correos = _cargarCorreosPendientes();
+  var bloqueo = _bloqueoCorreosVigente();
+  if (sub) sub.textContent = correos.length + ' aviso(s) guardado(s) en este dispositivo';
+
+  if (estado) {
+    if (bloqueo) {
+      estado.innerHTML = '<div style="margin-top:12px;border:1.5px solid var(--rojo);background:#FEF2F2;border-radius:var(--radio-sm);padding:10px 12px;">'
+        + '<div style="font-size:13px;font-weight:700;color:var(--rojo);">Los envíos están detenidos</div>'
+        + '<div style="font-size:12px;color:var(--texto2);margin-top:3px;">El envío automático se detuvo porque ' + _escHtml(_textoBloqueoCorreos(bloqueo))
+        + ' Se detiene a propósito: seguir reintentando empeora el problema.</div></div>';
+    } else if (!navigator.onLine) {
+      estado.innerHTML = '<div style="margin-top:12px;font-size:12px;color:var(--texto2);">Sin conexión. Los avisos se enviarán solos al recuperar la señal.</div>';
+    } else {
+      estado.innerHTML = '';
+    }
+  }
+
+  if (!correos.length) {
+    lista.innerHTML = '<div style="font-size:13px;color:var(--texto2);padding:8px 0;">No hay avisos pendientes. Todo salió.</div>';
+  } else {
+    var html = '';
+    correos.forEach(function(c) {
+      var p = c.params || {};
+      var ot = p.ot_numero ? 'OT #' + _escHtml(p.ot_numero) : 'OT sin número';
+      html += '<div style="border-bottom:1px solid var(--gris2);padding:9px 0;">'
+        + '<div style="font-size:13px;font-weight:600;color:var(--texto);">' + ot + (p.local ? ' · ' + _escHtml(p.local) : '') + '</div>'
+        + '<div style="font-size:11px;color:var(--texto2);margin-top:2px;">' + _escHtml(p.email_admin || 'sin destinatario')
+        + ' · encolado ' + _haceCuanto(c.creadoEn) + ' · ' + (c.intentos || 0) + ' intento(s)'
+        + (c.fallido ? ' · <span style="color:var(--rojo);font-weight:700;">se rindió</span>' : '') + '</div>'
+        + (c.ultimoError ? '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">Último error: ' + _escHtml(String(c.ultimoError).slice(0, 120)) + '</div>' : '')
+        + '</div>';
+    });
+    lista.innerHTML = html;
+  }
+  ov.style.display = 'flex';
+}
+
+function cerrarModalCorreos(ev) {
+  if (ev && ev.target !== ev.currentTarget) return;
+  var ov = document.getElementById('modal-correos');
+  if (ov) ov.style.display = 'none';
 }
 
 async function sincronizarOTsPendientes() {

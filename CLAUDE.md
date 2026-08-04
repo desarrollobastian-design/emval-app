@@ -106,6 +106,20 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - Cada columna cubre su **bimestre completo** — una hoja de agosto pertenece al ciclo de julio.
 - Cubierto por `tests/planillas-cobranza.js`.
 
+**Cola de correos** (`_enviarCorreo`, `sincronizarCorreosPendientes`, `_clasificarErrorCorreo`):
+- Todo aviso que no logra salir se **encola en el `localStorage` del dispositivo** y se reintenta.
+  El invariante es que **el código nunca borra un aviso**: o se envía, o sigue pendiente, o queda
+  `fallido` y visible. Vaciarla es una decisión humana (`purgarColaCorreos`, con respaldo previo).
+- **Reintentar tiene costo**: cada intento gasta una request de la cuota de EmailJS (plan de
+  **200 correos/mes**). Por eso hay **backoff exponencial por aviso** (1→60 min) y la cola **se
+  detiene** si el error no es de red — un `429` de cuota o un `403` de credencial no se arreglan
+  insistiendo. Ver el bloque de comentarios sobre el 03-08-2026 en `index.html`.
+- **Las cotizaciones NO pasan por la cola** (`emailjs.send` directo), pero comparten la cuenta: si
+  la cola quema la cuota, mueren también.
+- El atasco se reporta a **Firestore (`alertas`)** y se ve en el panel de supervisor
+  (`cargarAlertaCorreos`). Avisar por correo que el correo no sale no sirve.
+- Cubierto por `tests/cola-correos-no-quema-cuota.js`.
+
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
 - `procesarFoto(e)` — Process captured photo, compress, upload
@@ -317,6 +331,7 @@ These changes are useful context for understanding current state:
   node tests/reparar-pdf-cruzados.test.js
   node tests/planillas-cobranza.js index.html            # offline
   node tests/planillas-cobranza.js index.html --prod     # ademas cuadra contra produccion
+  node tests/cola-correos-no-quema-cuota.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -338,7 +353,12 @@ These changes are useful context for understanding current state:
   `reparar-pdf-cruzados.test.js` — la decisión del reparador no toca lo que no debe ·
   `planillas-cobranza.js` — las planillas no cobran de más (previa que no suma, local duplicado,
   cuenta de prueba) ni se comen un trabajo (hoja de agosto, hoja con el tipo cruzado). Con
-  `--prod` cuadra los totales contra los datos reales de Firestore
+  `--prod` cuadra los totales contra los datos reales de Firestore ·
+  `cola-correos-no-quema-cuota.js` — la cola de correos se contiene (backoff), se DETIENE ante un
+  error de cuota o de credencial, y no pierde ningún aviso. Corre una hora simulada con reloj falso
+- `vendor/` — dependencias servidas desde el repo, no desde un CDN.
+  `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:
+  `curl -o vendor/emailjs-browser-4.min.js https://unpkg.com/@emailjs/browser@4/dist/email.min.js`
 - `tools/` — Scripts de mantención de datos de producción. **Todos simulan por defecto y solo
   escriben con `--ejecutar`, respaldo previo y confirmación tecleada.**
   `reparar-pdf-cruzados.js` — re-enlaza los PDF que quedaron con el número de OT cruzado antes del
