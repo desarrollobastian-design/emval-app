@@ -3233,16 +3233,19 @@ function _backoffCorreo(intentos) {
 //   red       → no salio del telefono (fetch rechaza con TypeError, sin .status). No gasta
 //               cuota. Se reintenta con backoff.
 //   proveedor → 5xx: falla de ellos, transitoria. Se reintenta con backoff.
-//   cuota     → 429 / "limit" / "quota": no quedan correos. Reintentar es lo PEOR que se puede
-//               hacer, y es exactamente lo que la app hacia 40 veces por hora.
+//   cuota     → 426 / 429 / texto de limite: no quedan correos. Reintentar es lo PEOR que se
+//               puede hacer, y es exactamente lo que la app hacia 40 veces por hora.
 //   cuenta    → 4xx: credencial, template, cuenta bloqueada. No se arregla solo ni desde aca.
+// El codigo que EmailJS devuelve de verdad cuando se agota el plan es `426 Monthly request quota
+// exceeded` — verificado contra la cuenta real el 04-08-2026, 11:31, con la cuota ya quemada. No
+// es 429 (ese lo tira el throttle local del SDK), asi que va explicito ademas de la heuristica.
 function _clasificarErrorCorreo(e) {
   const status = (e && typeof e.status === 'number') ? e.status : null;
   const texto = String((e && (e.text || e.message)) || e || '');
   const dice = /limit|quota|exceed|too many/i.test(texto);
   let clase;
   if (status === null || status === 0) clase = 'red';
-  else if (status === 429 || status === 402 || dice) clase = 'cuota';
+  else if (status === 426 || status === 429 || status === 402 || dice) clase = 'cuota';
   else if (status >= 500) clase = 'proveedor';
   else if (status >= 400) clase = 'cuenta';
   else clase = 'proveedor';

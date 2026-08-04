@@ -191,6 +191,8 @@ function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); }
       [ERR_CUOTA,     'cuota',     '429 Too Many Requests'],
       [ERR_CUENTA,    'cuenta',    '403 Forbidden'],
       [ERR_PROVEEDOR, 'proveedor', '503 del proveedor'],
+      // El error REAL de la cuenta de EMVAL, capturado el 04-08-2026 con la cuota ya quemada.
+      [new EmailJSResponseStatus(426, 'Monthly request quota exceeded'),      'cuota', '426 de produccion (cuota mensual)'],
       [new EmailJSResponseStatus(400, 'You have exceeded the monthly limit'), 'cuota', '400 con texto de limite'],
       [new EmailJSResponseStatus(400, 'The Public Key is invalid'),           'cuenta', '400 de credencial'],
       [new EmailJSResponseStatus(451, 'Unavailable For Headless Browser'),    'cuenta', '451 headless'],
