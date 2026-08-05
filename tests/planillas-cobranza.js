@@ -4,7 +4,9 @@
    los helpers reales de los que dependen (_dedupeOTs, _fechaOTms, _localCanonico, _hojaLista...),
    y las corre contra un set de OT y cotizaciones armado para pisar las reglas que costaron plata:
 
-     · una cotizacion `previa` sumada a la deuda la infla al doble y SMU rechaza el paquete entero
+     · una cotizacion `previa` SIN ejecutar sumada a la deuda la infla y SMU rechaza el paquete entero
+     · la misma `previa` YA EJECUTADA (fusionada con su OT) sacada de la deuda esconde plata cobrada:
+       son los dos lados del mismo criterio, y cada uno solo se ve si el otro esta en el set
      · un local cobrado dos veces (la misma OT guardada en dos documentos)
      · una hoja preventiva que quedo con tipo 'correctivo' por el bug del estado global (31-jul):
        si se la trata por el tipo, desaparece de la planilla y nadie la cobra
@@ -104,7 +106,13 @@ const COTIZACIONES = [
     numeroCotizacion: '13072602', otNumero: 7050, total: 80000, fecha: '06-07-2026', enviado: false },
   // PRESUPUESTO DE OBRA: no hay trabajo detras. No suma.
   { id: 'c3', local: 'UNIMARC HUALQUI', centro: '737', nombreServicio: 'Plan de invierno',
-    numeroCotizacion: '13072603', total: 4390000, fecha: '30-06-2026', tipoCot: 'previa', estadoCot: 'Pendiente' }
+    numeroCotizacion: '13072603', total: 4390000, fecha: '30-06-2026', tipoCot: 'previa', estadoCot: 'Pendiente' },
+  // NACIO como presupuesto y el trabajo YA SE EJECUTO: se fusiono con su OT y quedo firmada.
+  // Es deuda. El caso real es UNIMARC CARRERA (cot. 6072601, $1.475.000), que la app tenia
+  // listada como "presupuesto sin respuesta" mientras Pedro la daba por cobrada.
+  { id: 'c4-realizada', local: 'UNIMARC CARRERA', centro: '812', nombreServicio: 'Camara para bomba en anden',
+    numeroCotizacion: '13072606', otNumero: 7003, total: 1475000, fecha: '06-07-2026', enviado: true,
+    tipoCot: 'previa', estadoCot: 'Realizada' }
 ];
 
 sandbox._plCache = {
@@ -140,13 +148,28 @@ igual(porLocal['UNIMARC PENCO'].supervisor, 'C. Zapata', 'la fila trae el superv
 // ── Correctivos ──────────────────────────────────────────────────────────────────────────────
 console.log('\n  Planilla de correctivos');
 const C = sandbox._plDatosCorrectivos();
-igual(C.total, 200000, 'la deuda NO incluye la cotizacion previa');
-igual(C.cobrables.length, 2, 'dos trabajos cobrables');
-igual(C.previas.length, 1, 'la previa va en su propio bloque');
+igual(C.total, 200000 + 1475000, 'la deuda incluye la previa EJECUTADA y excluye la pendiente');
+igual(C.cobrables.length, 3, 'tres trabajos cobrables');
+igual(C.previas.length, 1, 'solo la previa sin ejecutar va al bloque aparte');
 igual(C.totalPrevias, 4390000, 'con su propio total, separado de la deuda');
-igual(C.sumaEnviadas, 120000, 'suma de enviadas');
+igual(C.sumaEnviadas, 120000 + 1475000, 'suma de enviadas');
 igual(C.sumaSinEnviar, 80000, 'suma de sin enviar');
 igual(C.sumaEnviadas + C.sumaSinEnviar, C.total, 'enviadas + sin enviar = total cobrable');
+
+/* Los DOS lados del criterio, uno por uno. Cada atajo "obvio" rompe exactamente uno de estos
+   dos, y los dos cuestan plata en direcciones opuestas: */
+const enDeuda = {};
+C.cobrables.forEach(function(c) { enDeuda[c.id] = true; });
+ok(enDeuda['c4-realizada'],
+   'la previa YA EJECUTADA entra a la deuda  (filtrar solo por tipoCot!==previa la escondia)');
+ok(C.previas.every(function(c) { return c.id !== 'c4-realizada'; }),
+   'y no queda ademas duplicada en el bloque de presupuestos');
+ok(!enDeuda['c3'], 'la previa SIN ejecutar sigue fuera de la deuda');
+ok(enDeuda['c1'] && enDeuda['c2'],
+   'las cotizaciones normales (que NO tienen el campo estadoCot) siguen en la deuda  ' +
+   '(filtrar solo por estadoCot===Realizada borraba la cobranza entera)');
+igual(C.cobrables.length + C.previas.length, sandbox._plCache.cotizaciones.length,
+   'ninguna cotizacion se pierde entre los dos bloques');
 const sinCot = C.sinCotizar.map(o => o.numero);
 ok(sinCot.indexOf(7002) !== -1, 'el trabajo ejecutado sin cotizar aparece listado');
 ok(sinCot.indexOf(7001) === -1, 'el trabajo que SI tiene cotizacion no aparece como pendiente');
@@ -211,10 +234,43 @@ async function contraProduccion() {
   igual(Pp.totalBim[3], 8473000, 'preventivos jul-ago cuadra con el informe del 01-ago ($8.473.000)');
   igual(Pp.transpTotal, 229, 'las 229 transpaletas del informe');
   igual(Pp.hojas, 59, 'las 59 hojas cobrables del informe');
-  // Informe del 02-ago: enviadas 23 = $4.374.700 (el total sube solo si Pedro sigue cotizando).
-  igual(Cc.sumaEnviadas, 4374700, 'correctivos enviados cuadra con el informe del 02-ago');
-  igual(Cc.previas.length, 6, 'las 6 cotizaciones previas siguen separadas de la deuda');
+  /* ⚠️ Estos dos numeros SUBEN solos cuando Pedro cotiza o marca una cotizacion como enviada:
+     son datos, no codigo. Iban clavados con `===` a la foto del informe del 02-ago (23 enviadas =
+     $4.374.700) y para el 05-ago ya daban $18.992.580 SIN QUE NADIE TOCARA EL CODIGO — el test
+     quedo rojo por deriva y dejo de mirarse, que es como se cuela una regresion de verdad.
+     Van como PISO: pueden crecer, nunca bajar. Si bajan, se perdio trabajo cobrable. */
+  ok(Cc.sumaEnviadas >= 4374700, 'los correctivos enviados no bajan del informe del 02-ago ($4.374.700), obtenido: $' + Cc.sumaEnviadas.toLocaleString('es-CL'));
   ok(Cc.total >= 13029680, 'la deuda cobrable no baja del total del informe ($13.029.680), obtenido: ' + Cc.total);
+
+  /* ── El criterio de cobrabilidad contra los datos REALES ─────────────────────────────────
+     Invariantes, no fotos: valen con 101 cotizaciones y con 500. Son los tres errores que
+     costaron plata, cada uno comprobado sobre produccion. */
+  const previaEjecutada = cotizaciones.filter(function(c) { return c.tipoCot === 'previa' && c.estadoCot === 'Realizada'; });
+  const previaPendiente = cotizaciones.filter(function(c) { return c.tipoCot === 'previa' && c.estadoCot !== 'Realizada'; });
+  const normales       = cotizaciones.filter(function(c) { return c.tipoCot !== 'previa'; });
+  const enDeudaProd = {};
+  Cc.cobrables.forEach(function(c) { enDeudaProd[c.id] = true; });
+
+  ok(previaEjecutada.length > 0,
+     'hay al menos una previa ya ejecutada en produccion (si no, este bloque no prueba nada)');
+  ok(previaEjecutada.every(function(c) { return enDeudaProd[c.id]; }),
+     'TODO trabajo previo ya ejecutado esta en la deuda: ' + previaEjecutada.length + ' cotizacion(es), $' +
+     previaEjecutada.reduce(function(s, c) { return s + (c.total || 0); }, 0).toLocaleString('es-CL'));
+  ok(previaPendiente.every(function(c) { return !enDeudaProd[c.id]; }),
+     'NINGUN presupuesto sin ejecutar suma a la deuda: ' + previaPendiente.length + ' cotizacion(es) fuera');
+  ok(normales.every(function(c) { return enDeudaProd[c.id]; }),
+     'las ' + normales.length + ' cotizaciones normales siguen cobrandose (no tienen estadoCot: ' +
+     'un filtro que lo exigiera se comeria $' + normales.reduce(function(s, c) { return s + (c.total || 0); }, 0).toLocaleString('es-CL') + ')');
+  igual(Cc.cobrables.length + Cc.previas.length, cotizaciones.length,
+     'ninguna cotizacion de produccion se pierde entre deuda y presupuestos');
+
+  /* Foto del 05-ago-2026, para que el numero se pueda mirar de un vistazo. Si esto falla y los
+     invariantes de arriba pasan, es que Pedro cotizo mas — se actualiza el numero. Si falla
+     junto con alguno de arriba, es una regresion del criterio. */
+  const HOY = { cobrables: 96, total: 20467580, previas: 5, totalPrevias: 10634050 };
+  ok(Cc.cobrables.length >= HOY.cobrables && Cc.total >= HOY.total,
+     'foto 05-ago: ' + HOY.cobrables + ' cobrables por $' + HOY.total.toLocaleString('es-CL') +
+     ' — hoy ' + Cc.cobrables.length + ' por $' + Cc.total.toLocaleString('es-CL'));
   console.log('           deuda correctivos hoy: $' + Cc.total.toLocaleString('es-CL') +
               '  ·  previas (no suman): $' + Cc.totalPrevias.toLocaleString('es-CL') +
               '  ·  sin cotizar: ' + Cc.sinCotizar.length + ' trabajos');

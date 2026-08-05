@@ -3030,7 +3030,20 @@ window.CORREOS_SUPERVISORES = window.CORREOS_SUPERVISORES || {
   'P. Blake': 'pblake@smu.cl',          // Pablo Roberto Blake Candia
   'R. Abedrapo': 'rabedrapog@smu.cl'    // Rodrigo Abedrapo
 };
-// Une variantes de tipeo del nombre del supervisor a la clave canónica del mapa.
+/* Une variantes de tipeo del nombre del supervisor a la clave canónica del mapa.
+
+   ⚠️ EL MAPA DE ALIAS NO ES REDUNDANTE Y NO SE PUEDE REEMPLAZAR POR NORMALIZACIÓN.
+   Son dos problemas distintos y solo uno es tipográfico:
+     · 'C.Zapata' vs 'C. Zapata'      -> un espacio. Esto SÍ lo salvaría normalizar.
+     · 'Ariel Espinoza' vs 'A. Espinoza' -> abreviatura contra nombre completo. La inicial
+       no está en el string: NINGUNA normalización (trim, tildes, espacios, minúsculas)
+       puede deducir que son la misma persona. Solo lo sabe esta entrada del mapa.
+   Si alguien la borra "porque _normTexto ya lo cubre", vuelve el bug que Pedro reportó el
+   4-ago: el mismo supervisor en dos filas, con su plata partida entre las dos.
+
+   Se usa en TODA agrupación por supervisor. El nombre viaja copiado como string dentro de
+   cada cotización (se denormaliza al guardar), así que arreglar el catálogo de sucursales
+   solo corrige las cotizaciones nuevas — el histórico se junta acá o no se junta. */
 function _normSupervisor(nombre) {
   const n = String(nombre == null ? '' : nombre).trim();
   const alias = { 'Ariel Espinoza': 'A. Espinoza', 'C.Zapata': 'C. Zapata' };
@@ -4761,7 +4774,10 @@ async function cargarCarpetas() {
       if (d.enviado) {
         itemsEnviados.push(cotItem);
       } else {
-        const c = d.carpeta || d.supervisor || d.tecnico || 'Sin asignar';
+        // Preventivo: hoy los 7 documentos con el nombre viejo tienen enviado:true, asi que
+        // no pasan por aca y esta pantalla no muestra el sintoma. Se normaliza igual para que
+        // la proxima cotizacion sin enviar con una variante de tipeo no abra una carpeta nueva.
+        const c = _normSupervisor(d.carpeta || d.supervisor || d.tecnico || 'Sin asignar');
         if (!carpetas[c]) carpetas[c] = { supervisor: c, items: [] };
         carpetas[c].items.push(cotItem);
       }
@@ -9563,6 +9579,11 @@ function filtrarCadenas() {
 }
 
 // =========== EXCEL COTIZACIONES ===========
+/* ⚠️ HOY NO LA LLAMA NADIE: ningun onclick ni ninguna funcion la referencia (el "Descargar
+   Excel" de Facturar es descargarExcelSupervisor). Se le aplican igual _esCobrable y
+   _normSupervisor: si alguien la vuelve a cablear a un boton, no puede reintroducir el
+   total inflado ni los supervisores partidos. Si se decide borrarla, va en su propio
+   commit — no mezclada con un fix de plata. */
 async function descargarExcelCotizaciones() {
   toast('Generando Excel...');
   try {
@@ -9578,7 +9599,8 @@ async function descargarExcelCotizaciones() {
     const porSupervisor = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const sup = d.carpeta || d.tecnico || 'Sin supervisor';
+      if (!_esCobrable(d)) return;
+      const sup = _normSupervisor(d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor');
       if (!porSupervisor[sup]) porSupervisor[sup] = [];
       porSupervisor[sup].push(d);
     });
@@ -9687,12 +9709,26 @@ async function cargarFacturacion() {
       lista.innerHTML = _vacio('Aún no hay cotizaciones', 'Aparecerán aquí cuando un supervisor genere la primera.');
       return;
     }
-    // Agrupar por supervisor
+    /* Agrupar por supervisor. _normSupervisor junta las variantes de tipeo del mismo nombre
+       ("Ariel Espinoza" y "A. Espinoza" son la misma persona): el nombre viaja copiado como
+       string dentro de cada cotizacion, asi que corregir el catalogo solo arregla las nuevas.
+       Sin esto, un supervisor sale en dos tarjetas con la plata partida entre las dos.
+
+       Y las previas NO ejecutadas van aparte: siguen a la vista —son oportunidad comercial
+       viva— pero fuera del total y fuera del contador "sin factura", porque nadie va a
+       facturar un presupuesto que SMU no autorizo. De aca sale tambien el Excel que Pedro
+       manda a cobrar (descargarExcelSupervisor lee grupo.items), asi que el filtro lo limpia
+       en el mismo acto. */
     const grupos = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const sup = d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor';
-      if (!grupos[sup]) grupos[sup] = { nombre: sup, items: [], total: 0, pendientes: 0 };
+      const sup = _normSupervisor(d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor');
+      if (!grupos[sup]) grupos[sup] = { nombre: sup, items: [], previas: [], total: 0, totalPrevias: 0, pendientes: 0 };
+      if (!_esCobrable(d)) {
+        grupos[sup].previas.push({ id: doc.id, ...d });
+        grupos[sup].totalPrevias += d.total || 0;
+        return;
+      }
       grupos[sup].items.push({ id: doc.id, ...d });
       grupos[sup].total += d.total || 0;
       if (!d.factura) grupos[sup].pendientes++;
@@ -9715,7 +9751,8 @@ async function cargarFacturacion() {
       nom.textContent = sup;
       const det = document.createElement('div');
       det.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      det.textContent = g.items.length + ' cotizaciones | $' + g.total.toLocaleString('es-CL');
+      det.textContent = g.items.length + ' cotizaciones | $' + g.total.toLocaleString('es-CL') +
+        (g.previas.length ? '  +' + g.previas.length + ' en presupuesto' : '');
       const pend = document.createElement('div');
       pend.style.cssText = 'font-size:11px;margin-top:2px;font-weight:600;color:' + (g.pendientes > 0 ? 'var(--naranja-btn)' : 'var(--verde-btn)') + ';';
       pend.textContent = g.pendientes > 0 ? g.pendientes + ' sin factura' : 'Al dia';
@@ -9845,8 +9882,56 @@ function abrirFactSupervisor(grupo) {
     card.appendChild(cuerpo);
     lista.appendChild(card);
   });
+
+  /* Presupuestos sin ejecutar: se muestran, no se esconden. No suman a la cobranza ni viajan
+     en el Excel que va a SMU, pero son plata que Pedro puede salir a cerrar — borrarlos de la
+     pantalla convertiria un problema de cobranza en perdida de pipeline. */
+  const previas = grupo.previas || [];
+  if (previas.length) {
+    const tit = document.createElement('div');
+    tit.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);margin:18px 0 4px;';
+    tit.textContent = 'PRESUPUESTOS PENDIENTES — NO SUMAN';
+    lista.appendChild(tit);
+    const sub = document.createElement('div');
+    sub.style.cssText = 'font-size:11px;color:var(--texto3);margin-bottom:8px;line-height:1.5;';
+    sub.textContent = 'Cotizaciones enviadas cuyo trabajo todavía no se ejecuta. Quedan fuera del total y del Excel que se manda a cobrar. Entran solas cuando la cotización se fusiona con su OT y queda Realizada.';
+    lista.appendChild(sub);
+    previas.forEach(function(d) {
+      const c = document.createElement('div');
+      c.className = 'card';
+      c.style.cssText = 'margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;opacity:0.75;';
+      const izq = document.createElement('div');
+      const loc = document.createElement('div');
+      loc.style.cssText = 'font-size:14px;font-weight:600;color:var(--texto);';
+      loc.textContent = d.local || '';
+      const det = document.createElement('div');
+      det.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
+      det.textContent = (d.nombreServicio || d.descripcionTrabajo || '') +
+        (d.numeroCotizacion ? ' | N° ' + d.numeroCotizacion : '') +
+        (d.fecha ? ' | ' + d.fecha : '');
+      izq.appendChild(loc); izq.appendChild(det);
+      const der = document.createElement('div');
+      der.style.cssText = 'text-align:right;flex-shrink:0;';
+      const mto = document.createElement('div');
+      mto.style.cssText = 'font-size:14px;font-weight:700;color:var(--texto2);';
+      mto.textContent = '$' + (d.total || 0).toLocaleString('es-CL');
+      const est = document.createElement('div');
+      est.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:2px;';
+      est.textContent = d.estadoCot || 'Pendiente';
+      der.appendChild(mto); der.appendChild(est);
+      c.appendChild(izq); c.appendChild(der);
+      lista.appendChild(c);
+    });
+    const tot = document.createElement('div');
+    tot.style.cssText = 'font-size:12px;font-weight:600;color:var(--texto2);text-align:right;padding:6px 2px 0;';
+    tot.textContent = 'Total en presupuestos (no es deuda): $' + (grupo.totalPrevias || 0).toLocaleString('es-CL');
+    lista.appendChild(tot);
+  }
 }
 
+/* El Excel que Pedro manda a cobrar a SMU. Lee grupo.items, que ya viene filtrado por
+   _esCobrable en cargarFacturacion: un presupuesto no autorizado impreso aca —aunque
+   dijera "no suma"— invita a que SMU pregunte y frene el paquete entero. */
 function descargarExcelSupervisor() {
   const grupo = window._factSupActual;
   if (!grupo || !grupo.items || grupo.items.length === 0) { toast('No hay cotizaciones para exportar'); return; }
@@ -9935,11 +10020,18 @@ async function cargarVentas() {
        datos de Chart.js, no CSS: var() no resuelve dentro de su config. */
     const COLORES_SUP = ['#1B3A6B','#2D5AA0','#27A06B','#EF9F27','#E53E3E','#6B3A1B'];
 
-    // Agrupar por supervisor y mes
+    /* Agrupar por supervisor y mes. _normSupervisor junta las variantes de tipeo del mismo
+       nombre; sin el, "Ariel Espinoza" y "A. Espinoza" salian como dos personas y partian
+       el porcentaje de cada uno (era lo que Pedro veia: 2 Ariel y 2 Carlos en 6 filas).
+       Y las previas sin ejecutar no suman, igual que en Facturar y en Planillas: si esta
+       pantalla sumara distinto que su propio Excel, volveriamos al bug que venimos a cerrar.
+       Su monto se muestra aparte, abajo, para no perder de vista el pipeline. */
     const porSup = {};
+    var totalPrevias = 0, nPrevias = 0;
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const sup = d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor';
+      if (!_esCobrable(d)) { totalPrevias += (d.total || 0); nPrevias++; return; }
+      const sup = _normSupervisor(d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor');
       if (!porSup[sup]) { porSup[sup] = new Array(12).fill(0); }
       var mesIdx = -1;
       if (d.fecha) {
@@ -10046,6 +10138,15 @@ async function cargarVentas() {
     });
     cont.appendChild(tablaCard);
 
+    // El pipeline no se esconde: no suma arriba, pero se dice cuanto es y por que.
+    if (nPrevias) {
+      const notaPrev = document.createElement('div');
+      notaPrev.style.cssText = 'font-size:11px;color:var(--texto3);margin-top:8px;line-height:1.5;';
+      notaPrev.textContent = 'No se cuentan ' + nPrevias + ' cotización(es) en presupuesto por $' +
+        totalPrevias.toLocaleString('es-CL') + ': el trabajo todavía no se ejecuta. Entran solas al ejecutarse.';
+      cont.appendChild(notaPrev);
+    }
+
     // ---- RENDERIZAR GRAFICOS con Chart.js ----
     if (typeof Chart === 'undefined') {
       var script = document.createElement('script');
@@ -10147,11 +10248,14 @@ async function descargarExcelVentas() {
     const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
     const anoActual = new Date().getFullYear();
 
-    // Agrupar montos por supervisor y mes
+    // Agrupar montos por supervisor y mes. Mismo criterio que la pantalla de Ventas que
+    // origina este Excel (_normSupervisor + _esCobrable): pantalla y archivo tienen que
+    // decir el mismo numero, o el archivo deja de servir para discutir con SMU.
     const porSup = {};
     snap.docs.forEach(function(doc) {
       const d = doc.data();
-      const sup = d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor';
+      if (!_esCobrable(d)) return;
+      const sup = _normSupervisor(d.carpeta || d.supervisor || d.tecnico || 'Sin supervisor');
       if (!porSup[sup]) {
         porSup[sup] = {};
         MESES.forEach(function(m){ porSup[sup][m] = 0; });
@@ -10261,10 +10365,12 @@ async function descargarExcelVentas() {
        cadena SolPed -> OC -> HES -> Factura que llena Pedro a medida que SMU se la manda.
 
    Reglas que vienen de los informes de Soporte (01 y 02-ago) y NO se pueden relajar:
-     1. Las cotizaciones `tipoCot = previa` NO suman a la deuda: son presupuestos de obra
-        sin trabajo detras. Sumarlas casi duplicaba el total ($25,1M en vez de $13,0M) y
-        una planilla inflada hace que SMU rechace el paquete entero, incluso lo cobrable.
-        Van en su propio bloque, con su propio total a la vista.
+     1. Una cotizacion `tipoCot = previa` suma a la deuda SOLO cuando el trabajo ya se
+        ejecuto (`estadoCot = 'Realizada'`). Mientras es un presupuesto sin trabajo detras
+        NO suma: sumarla inflaba el total un 52% y una planilla inflada hace que SMU
+        rechace el paquete entero, incluso lo cobrable. Va en su propio bloque, con su
+        propio total a la vista. El criterio unico esta en _esCobrable() — ver ahi por que
+        hacen falta los dos campos y no basta con ninguno solo.
      2. Un local no se puede cobrar dos veces: se pasa _dedupeOTs antes de sumar.
      3. Las cuentas de prueba quedan fuera (_ocultoTecnico), o la planilla que va a SMU
         llega con la OT de Entel Talcahuano dentro.
@@ -10277,6 +10383,32 @@ async function descargarExcelVentas() {
    EMVAL-SMU, que es de Pedro—, asi que la pantalla no le inventa el apellido: lo declara
    como pregunta abierta en la nota del pie. */
 var PL_TARIFA_TRANSPALETA = 37000;
+
+/* ┌── QUE COTIZACION ENTRA A LA COBRANZA ──────────────────────────────────────────────┐
+   Criterio UNICO. Lo usan las cuatro superficies que suman plata (Facturar, el Excel que
+   va a SMU, Ventas y las Planillas). Antes cada una decidia por su cuenta y daban tres
+   totales distintos para el mismo mes; que sea una sola funcion es lo que impide que la
+   pantalla que Pedro mira y el archivo que manda vuelvan a discrepar.
+
+   HACEN FALTA LOS DOS CAMPOS. `tipoCot` dice como NACIO la cotizacion y no cambia nunca;
+   `estadoCot` dice en que va. Ninguno solo sirve — los dos atajos obvios estan medidos y
+   los dos cobran mal:
+     · `tipoCot !== 'previa'` a secas  -> ESCONDE trabajo hecho. UNIMARC CARRERA (cot.
+       6072601) nacio como previa, se ejecuto, se fusiono con la OT #597587 y quedo firmada
+       y timbrada: son $1.475.000 que Pedro daba por cobrados y la app listaba como
+       "presupuesto sin respuesta".
+     · `estadoCot === 'Realizada'` a secas -> BORRA LA COBRANZA ENTERA. Las cotizaciones
+       normales NO tienen el campo `estadoCot` (95 de 101 en produccion): ese filtro deja
+       pasar 1 documento y se come $18.992.580.
+   El `||` no es estilo: es lo que impide las dos cosas a la vez. Al tocarlo, correr
+   tests/planillas-cobranza.js — cuadra el resultado contra los datos reales.
+
+   El criterio es EJECUCION, no autorizacion. Es el que uso Pedro al reportarlo:
+   "hasta que no se ejecute, yo no la agrego en la planilla". Hoy no existe en la app un
+   estado de aprobacion de SMU; si algun dia se agrega, es otra condicion, no esta.        */
+function _esCobrable(c) {
+  return !c || c.tipoCot !== 'previa' || c.estadoCot === 'Realizada';
+}
 
 /* El ciclo preventivo es BIMESTRAL. Cada columna cubre su bimestre COMPLETO, no solo el mes
    que la etiqueta: una hoja ejecutada en agosto pertenece al ciclo de julio. Filtrar por los
@@ -10680,8 +10812,10 @@ function _plRenderPreventivos() {
    que ya usa la pantalla Facturar: es la MISMA cadena de compra, no una copia. */
 function _plDatosCorrectivos() {
   var todas = _plCache.cotizaciones;
-  var previas = todas.filter(function(c) { return c.tipoCot === 'previa'; });
-  var cobrables = todas.filter(function(c) { return c.tipoCot !== 'previa'; });
+  /* Una previa YA EJECUTADA es deuda, no presupuesto: mirar solo `tipoCot` dejaba fuera de
+     la cobranza el trabajo fusionado con su OT. Ver _esCobrable(). */
+  var previas = todas.filter(function(c) { return !_esCobrable(c); });
+  var cobrables = todas.filter(_esCobrable);
   function suma(a) { return a.reduce(function(s, c) { return s + (c.total || 0); }, 0); }
   cobrables.sort(function(a, b) {
     if (!!b.enviado !== !!a.enviado) return (a.enviado ? 1 : 0) - (b.enviado ? 1 : 0);
