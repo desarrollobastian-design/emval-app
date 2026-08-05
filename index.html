@@ -2768,10 +2768,32 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       // Si ya existe firmada, la OT se cerro en otro dispositivo: no se resucita como pausada.
     } else {
       // Se conserva UNO y se colapsan los duplicados que hayan quedado de sincronizaciones previas.
-      const principal = vivos[0];
+      // CUAL sobrevive importa: antes era vivos[0] (orden indefinido de Firestore) y podia borrar
+      // el doc que una cotizacion referencia por otId, dejandola colgando (riesgo latente del par
+      // #142079). Preferencia: 1) el doc referenciado por alguna cotizacion; 2) el de creadoEn
+      // mas reciente. Si la consulta de cotizaciones falla, se cae al criterio por fecha.
+      let principal = vivos[0];
+      if (vivos.length > 1) {
+        let referenciado = null;
+        try {
+          // 'in' acepta hasta 10 ids; mas de 10 borradores vivos del mismo folio no es un caso real.
+          const idsVivos = vivos.slice(0, 10).map(function(d){ return d.id; });
+          const cotSnap = await db.collection('cotizaciones').where('otId', 'in', idsVivos).limit(1).get();
+          if (!cotSnap.empty) {
+            const otIdCot = cotSnap.docs[0].data().otId;
+            referenciado = vivos.find(function(d){ return d.id === otIdCot; }) || null;
+          }
+        } catch(e) {
+          console.warn('No se pudo consultar cotizaciones para elegir el doc a conservar:', e);
+        }
+        principal = referenciado || vivos.slice().sort(function(a, b){
+          return _creadoEnMs(b.data()) - _creadoEnMs(a.data());
+        })[0];
+      }
       if (!principal.data().creadoEn) payload.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
       await db.collection('ordenes').doc(principal.id).update(payload);
-      for (let i = 1; i < vivos.length; i++) {
+      for (let i = 0; i < vivos.length; i++) {
+        if (vivos[i].id === principal.id) continue;
         try { await db.collection('ordenes').doc(vivos[i].id).delete(); } catch(e) {}
       }
     }
@@ -7395,6 +7417,16 @@ async function cargarOTsTecnicos() {
         tecnicos[t].ots.push({ id: doc.id, ...d });
       });
     }
+
+    // Colapsar duplicados DENTRO de cada tecnico: dos documentos de la MISMA visita (mismo
+    // numero+local) son UNA tarjeta y UN conteo. Por tecnico y NO sobre la coleccion completa:
+    // dos tecnicos distintos con el mismo numero+local son trabajos reales distintos y un dedupe
+    // global ocultaria uno. El dashboard ya dedupeaba (de0b697); esta pantalla mostraba la
+    // #142079 dos veces en "Ya cotizadas" — lo veia el cliente.
+    Object.keys(tecnicos).forEach(function(t) {
+      tecnicos[t].ots = _dedupeOTs(tecnicos[t].ots).lista;
+    });
+
     const lista = document.getElementById('lista-tecnicos-ots');
     _cargado(lista);
     lista.innerHTML = '';
@@ -7837,7 +7869,12 @@ async function verOTsTecnico(nombre, grupo) {
   lista.innerHTML = '';
   // "Correctivos" solo: los preventivos viven en su propia seccion y no llevan cotizacion.
   // null/desconocido se trata como correctivo (visible y cotizable), nunca desaparece.
-  const ots = (grupo.ots || []).filter(function(o){ return o.tipo !== 'preventivo'; });
+  // Dedupe aqui TAMBIEN (no basta el de cargarOTsTecnicos): al volver de guardar una cotizacion
+  // se entra con un grupo recien leido de Firestore sin colapsar — justo el flujo donde Pedro
+  // veia la #142079 doble. Es por tecnico (grupo = un tecnico) y tras filtrar preventivos, para
+  // no colapsar un preventivo con un correctivo que compartan numero+local. Con la lista ya
+  // colapsada, "Ya cotizadas (N)" y la resta de "por cotizar" cuentan documentos unicos.
+  const ots = _dedupeOTs((grupo.ots || []).filter(function(o){ return o.tipo !== 'preventivo'; })).lista;
   if (ots.length === 0) {
     lista.innerHTML = _vacio('Aún no hay correctivos', 'Aparecerán aquí cuando este técnico cierre un correctivo.');
     return;
