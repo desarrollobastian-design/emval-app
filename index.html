@@ -1951,6 +1951,49 @@ function _hojaLista(ot) {
 }
 function _pdfDeOT(ot) { return ot.pdfUrlCloudinary || ot.pdfUrl || ''; }
 
+/* =========== PDF DE COTIZACION: VIGENTE O CADUCO — INICIO ==========================
+   El PDF es una FOTO de la cotizacion en el momento en que se genero. `pdfUrl` se guardaba una
+   vez y no se invalidaba nunca, asi que cualquier cambio posterior dejaba enlazado un documento
+   que ya no decia la verdad — y todos los caminos hacen "si hay pdfUrl, abre ese; si no, genera".
+
+   Caso real, OT #597587 (UNIMARC CARRERA, 05-08-2026): la cotizacion nacio como previa el 6-jul y
+   se genero su PDF —1 pagina, 0 imagenes—. Cuatro semanas despues se fusiono con la OT y se le
+   sumaron el numero de OT, la fecha, el tecnico y las fotos antes/despues. El pdfUrl siguio
+   apuntando al PDF del 6-jul: 28 dias mas viejo que el trabajo que describe. Los dos PDF hubo que
+   mandarlos A MANO a czapatap@smu.cl (SMU es el cliente de nuestro cliente).
+
+   Arreglar el dato en la base no arregla el documento ya emitido: hay que invalidar el archivo
+   para que se regenere. Eso es lo que hacen estas dos funciones.
+
+   El camino de EDICION normal ya regeneraba el PDF despues de guardar; los que no lo hacian son
+   los de UNION (adjuntar una previa / vincular el trabajo realizado), que es justo donde el
+   contenido cambia mas: aparecen las fotos y el numero de OT. */
+
+// Marca que el contenido cambio y el PDF que hay ya no sirve. Se mezcla en el `update`.
+function _cotPdfCaduco() {
+  return { pdfUrl: '', contenidoActualizadoEn: Date.now() };
+}
+
+// Una cotizacion ya fusionada con su OT: tiene el trabajo ejecutado encima.
+function _cotFusionada(cot) {
+  return !!(cot.otCompletadaNumero ||
+            (cot.fotosAntes && cot.fotosAntes.length) ||
+            (cot.fotosDespues && cot.fotosDespues.length));
+}
+
+// Si el PDF guardado quedo viejo. Ante la duda regenera: un PDF de mas cuesta unos segundos, uno
+// desactualizado sale de la empresa hacia SMU.
+function _pdfCotObsoleto(cot) {
+  if (!cot || !cot.pdfUrl) return false;             // no hay nada que invalidar
+  const gen = Number(cot.pdfGeneradoEn || 0);
+  const cambio = Number(cot.contenidoActualizadoEn || 0);
+  // Sin sello de generacion el PDF es anterior a este arreglo. Si ademas la cotizacion ya esta
+  // fusionada, es exactamente el caso #597587: se regenera sin tener que tocar Firestore a mano.
+  if (!gen) return cambio > 0 || _cotFusionada(cot);
+  return cambio > gen;
+}
+/* =========== PDF DE COTIZACION: VIGENTE O CADUCO — FIN ============================ */
+
 // Colapsa documentos duplicados de la MISMA OT (mismo numero+local) en uno solo, quedandose con
 // el mas completo. Existen duplicados porque una OT pausada y su cierre pudieron escribirse en
 // documentos distintos, o porque un cierre se reintento con otro id de cliente.
@@ -4718,7 +4761,9 @@ async function guardarCotizacion() {
     const _cotDataPDF = Object.assign({}, cotData, { id: savedDocId });
     generarPDFCotizacionGuardada(_cotDataPDF, { modoSubir: true }).then(function(pdfUrl) {
       if (pdfUrl && savedDocId) {
-        window.firebase.firestore().collection('cotizaciones').doc(savedDocId).update({ pdfUrl: pdfUrl })
+        // `pdfGeneradoEn`: sello para saber despues si este PDF quedo viejo. Sin el, la unica
+        // forma de saber si el documento describe la cotizacion actual era abrirlo y mirarlo.
+        window.firebase.firestore().collection('cotizaciones').doc(savedDocId).update({ pdfUrl: pdfUrl, pdfGeneradoEn: Date.now() })
           .catch(function(e){ console.warn('Error guardando pdfUrl:', e); });
       }
     }).catch(function(e){ console.warn('Error generando PDF para subir:', e); });
@@ -5005,7 +5050,8 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnPdf.textContent = 'Ver PDF';
     btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnPdf.onclick = (function(data){ return function(){
-      if (data.pdfUrl) { window.open(data.pdfUrl, '_blank'); }
+      // Antes bastaba con que EXISTIERA un pdfUrl para abrirlo, sin preguntar de cuando era.
+      if (data.pdfUrl && !_pdfCotObsoleto(data)) { window.open(data.pdfUrl, '_blank'); }
       else { generarPDFCotizacionGuardada(data); }
     }; })(it);
     const btnEdit = document.createElement('button');
@@ -8817,8 +8863,10 @@ function _asuntoCotizaciones(seleccionadas) {
 
 // Genera/sube PDFs si faltan, arma el cuerpo y envía la(s) cotización(es) a cada correo
 async function _procesarEnvioCotizaciones(seleccionadas, emails) {
-  // Si alguna cot no tiene pdfUrl, generarla y subirla ahora
-  const sinUrl = seleccionadas.filter(function(it){ return !it.pdfUrl; });
+  // Se regenera si NO hay PDF o si el que hay quedo viejo. Este es el ultimo punto antes de que
+  // el documento salga de la empresa: la #597587 mando por correo un PDF 28 dias mas antiguo que
+  // el trabajo que describia, y llego hasta SMU.
+  const sinUrl = seleccionadas.filter(function(it){ return !it.pdfUrl || _pdfCotObsoleto(it); });
   if (sinUrl.length > 0) {
     toast('Preparando PDFs (' + sinUrl.length + ')...');
     for (var si = 0; si < sinUrl.length; si++) {
@@ -8826,7 +8874,8 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
         const url = await generarPDFCotizacionGuardada(sinUrl[si], { modoSubir: true });
         if (url) {
           sinUrl[si].pdfUrl = url;
-          window.firebase.firestore().collection('cotizaciones').doc(sinUrl[si].id).update({ pdfUrl: url })
+          sinUrl[si].pdfGeneradoEn = Date.now();
+          window.firebase.firestore().collection('cotizaciones').doc(sinUrl[si].id).update({ pdfUrl: url, pdfGeneradoEn: Date.now() })
             .catch(function(e){ console.warn('pdfUrl update error:', e); });
         }
       } catch(e) { console.warn('Error generando PDF para', sinUrl[si].id, e); }
@@ -9592,7 +9641,9 @@ async function _vincularCotizacionRealizada(cotId, datos) {
   try {
     if (!cotId || !window._firebaseReady) return;
     const db = window.firebase.firestore();
-    await db.collection('cotizaciones').doc(cotId).update({
+    // `_cotPdfCaduco()`: al pegarle el trabajo ejecutado (fotos, firma, fecha) el PDF que habia
+    // quedo describiendo otra cosa. Se invalida para que el proximo "Ver PDF" o envio lo regenere.
+    await db.collection('cotizaciones').doc(cotId).update(Object.assign({
       estadoCot: 'Realizada',
       otCompletadaNumero: datos.numero || '',
       fotosAntes: datos.urlsAntes || [],
@@ -9601,7 +9652,7 @@ async function _vincularCotizacionRealizada(cotId, datos) {
       firmaImagen: datos.firmaBase64 || '',
       fechaRealizada: datos.fecha || new Date().toLocaleDateString('es-CL'),
       tecnicoRealizo: datos.tecnico || ''
-    });
+    }, _cotPdfCaduco()));
   } catch(e) {
     console.error('Error vinculando cotización realizada:', e);
   }
@@ -9655,7 +9706,10 @@ async function _confirmarAdjuntarPrevia(previa, ot, overlay, recargar) {
   const soltar = _tomar('adjuntar-previa');
   try {
     const db = window.firebase.firestore();
-    await _conTimeout(db.collection('cotizaciones').doc(previa.id).update({
+    // Este es el camino EXACTO de la #597587: la previa del 6-jul se une a la OT cuatro semanas
+    // despues. Sin `_cotPdfCaduco()` el PDF del 6-jul —sin fotos y sin numero de OT— se queda
+    // enlazado y es el que sale por correo.
+    await _conTimeout(db.collection('cotizaciones').doc(previa.id).update(Object.assign({
       otId: ot.id,
       otNumero: otNum,
       estadoCot: 'Realizada',
@@ -9666,7 +9720,7 @@ async function _confirmarAdjuntarPrevia(previa, ot, overlay, recargar) {
       fotosDespues: ot.fotosDespues || [],
       fotoTimbre: ot.fotoTimbre || null,
       firmaImagen: ot.firmaImagen || ''
-    }), 25000, 'adjuntar previa');
+    }, _cotPdfCaduco())), 25000, 'adjuntar previa');
     try { await db.collection('ordenes').doc(ot.id).update({ cotizacionId: previa.id }); } catch(e) {}
     toast('✓ Cotización adjuntada a la OT #' + otNum);
     if (overlay && overlay.parentNode) document.body.removeChild(overlay);
