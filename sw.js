@@ -1,4 +1,4 @@
-const CACHE_NAME = 'emval-v35';
+const CACHE_NAME = 'emval-v37';
 // El SDK de EmailJS se precachea junto al shell: si se baja recien cuando hace falta enviar,
 // una carga fria sin red deja `emailjs` en undefined y todo se encola en silencio.
 const APP_SHELL = [
