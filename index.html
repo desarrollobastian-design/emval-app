@@ -3300,8 +3300,27 @@ function _deviceIdCorreos() {
 
 // Unica funcion que conoce el service/template de EmailJS. Todo envio pasa por aqui,
 // incluida la cola de reintento (antes duplicaba los ids y se saltaba _enviarCorreo).
-function _emailjsSend(params) {
-  return emailjs.send('service_xm6dmxl', 'template_agzfcux', params);
+//
+// El comentario de arriba decia "todo envio pasa por aqui" y era FALSO: las cotizaciones y las
+// hojas de trabajo llamaban a emailjs.send() directo con otro template, fuera de la cola. Quien
+// leyera esta funcion daba por cubierto un camino que no lo estaba — y ese camino es justo el que
+// uso Pedro el 03-08-2026 cuando el correo se perdio. Por eso ahora recibe el template: para que
+// la afirmacion vuelva a ser verdad en vez de borrarse el comentario.
+const _EMAILJS_SERVICE_OT  = 'service_xm6dmxl';
+const _EMAILJS_TEMPLATE_OT = 'template_agzfcux';   // aviso de OT completada
+function _emailjsSend(params, service, template) {
+  return emailjs.send(service || _EMAILJS_SERVICE_OT, template || _EMAILJS_TEMPLATE_OT, params);
+}
+
+// Clave de deduplicacion en la cola. El aviso de OT conserva la clave historica
+// (destinatario|OT) para no duplicar los avisos que ya estan encolados en los telefonos con la
+// version anterior. Cotizaciones y hojas suman template y asunto: sin el asunto, dos envios
+// distintos del mismo dia al mismo destinatario colisionarian y el segundo se descartaria en
+// silencio, que es exactamente el modo de falla que esta cola existe para evitar.
+function _claveCorreo(params, template) {
+  const base = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
+  if (!template || template === _EMAILJS_TEMPLATE_OT) return base;
+  return template + '|' + base + '|' + String(params.asunto || '');
 }
 
 function _cargarCorreosPendientes() {
@@ -3319,14 +3338,18 @@ function _numOTCorreo(n) {
   return (n == null || n === '') ? '' : String(n);
 }
 
-function _encolarCorreo(params, motivo) {
-  // Clave estable: mismo destinatario + misma OT no se encola dos veces.
-  const clave = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
+// `opts`: { service, template, post }. `post` es lo que hay que hacer en la base DESPUES de que
+// el correo salga de verdad (marcar la cotizacion como enviada). Viaja con el aviso porque el
+// envio puede ocurrir manana, desde la cola, cuando el modal que lo origino ya no existe.
+function _encolarCorreo(params, motivo, opts) {
+  opts = opts || {};
+  const clave = _claveCorreo(params, opts.template);
   const lista = _cargarCorreosPendientes();
   if (lista.some(function(c){ return c.clave === clave; })) return;
   lista.push({
     clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false,
-    proximoIntento: 0, ultimoError: motivo || '', params: params
+    proximoIntento: 0, ultimoError: motivo || '', params: params,
+    service: opts.service || '', template: opts.template || '', post: opts.post || null
   });
   _guardarCorreosPendientes(lista);
   console.warn('Correo encolado para reintento:', clave, motivo || '');
@@ -3334,23 +3357,71 @@ function _encolarCorreo(params, motivo) {
   _reportarEstadoCorreos();
 }
 
+// Saca de la cola un aviso que YA salio por otra via. Es el unico borrado que no viola el
+// invariante "nunca se pierde un aviso": se descarta porque llego, no porque se rindio. Sin esto,
+// reintentar a mano una cotizacion que fallo la mandaria DOS veces —una ahora y otra desde la
+// cola— y los correos repetidos son un problema que este cliente ya sufrio en julio.
+function _desencolarCorreo(clave) {
+  const lista = _cargarCorreosPendientes();
+  const quedan = lista.filter(function(c){ return c.clave !== clave; });
+  if (quedan.length === lista.length) return;
+  _guardarCorreosPendientes(quedan);
+  actualizarIndicadorPendientes();
+}
+
+// Lo que hay que escribir en la base cuando el correo efectivamente sale. Se ejecuta tanto en el
+// envio directo como al despachar desde la cola: si no, una cotizacion enviada desde la cola
+// quedaria marcada como "no enviada" para siempre y volveria a aparecer por cobrar.
+async function _ejecutarPostCorreo(post) {
+  if (!post || post.tipo !== 'cotizacion') return;
+  const ids = post.ids || [];
+  const emails = post.emails || [];
+  if (!ids.length || !emails.length) return;
+  try {
+    if (!window._firebaseReady) return;
+    const db = window.firebase.firestore();
+    for (var i = 0; i < ids.length; i++) {
+      await db.collection('cotizaciones').doc(ids[i]).update({
+        enviado: true,
+        emailsEnviados: window.firebase.firestore.FieldValue.arrayUnion.apply(null, emails)
+      });
+    }
+  } catch(e) { console.warn('No se pudo marcar la cotizacion como enviada:', e); }
+}
+
 // Envia. Si falla o EmailJS no esta disponible, encola en vez de perderlo.
 // Con la cola detenida NI SIQUIERA lo intenta: gastar una request contra una cuota agotada solo
 // hunde mas la cuenta. El aviso se guarda igual — nunca se pierde.
-async function _enviarCorreo(params) {
-  if (typeof emailjs === 'undefined') { _encolarCorreo(params, 'el servicio de correo no cargó'); return false; }
+//
+// Devuelve el detalle del fallo porque quien envia a VARIOS destinatarios necesita saber si
+// conviene seguir con el resto: un 426 de cuota da el mismo error en los 5 correos siguientes.
+async function _enviarCorreoConDetalle(params, opts) {
+  opts = opts || {};
+  if (typeof emailjs === 'undefined') {
+    _encolarCorreo(params, 'el servicio de correo no cargó', opts);
+    return { ok: false, err: null, bloqueo: null };
+  }
   const bloqueo = _bloqueoCorreosVigente();
-  if (bloqueo) { _encolarCorreo(params, _textoBloqueoCorreos(bloqueo)); return false; }
+  if (bloqueo) { _encolarCorreo(params, _textoBloqueoCorreos(bloqueo), opts); return { ok: false, err: null, bloqueo: bloqueo }; }
   try {
-    await _emailjsSend(params);
-    return true;
+    await _emailjsSend(params, opts.service, opts.template);
+    // Salio: si una version anterior de este mismo aviso quedo encolada, ya no corresponde.
+    _desencolarCorreo(_claveCorreo(params, opts.template));
+    await _ejecutarPostCorreo(opts.post);
+    return { ok: true, err: null, bloqueo: null };
   } catch(e) {
     const err = _clasificarErrorCorreo(e);
     console.warn('Error enviando correo, se encola:', err.clase, err.status, err.texto);
-    if (err.clase === 'cuota' || err.clase === 'cuenta') _bloquearColaCorreos(err);
-    _encolarCorreo(params, ((err.status || '') + ' ' + err.texto).trim());
-    return false;
+    let b = null;
+    if (err.clase === 'cuota' || err.clase === 'cuenta') b = _bloquearColaCorreos(err);
+    _encolarCorreo(params, ((err.status || '') + ' ' + err.texto).trim(), opts);
+    return { ok: false, err: err, bloqueo: b };
   }
+}
+
+async function _enviarCorreo(params, opts) {
+  const r = await _enviarCorreoConDetalle(params, opts);
+  return r.ok;
 }
 
 // Reintenta la cola. Sale de inmediato si no hay nada, asi que es seguro llamarla seguido.
@@ -3374,8 +3445,11 @@ async function sincronizarCorreosPendientes() {
     // anterior no traen `proximoIntento` y se intentan de inmediato, como antes.)
     if (c.proximoIntento && ahora < c.proximoIntento) { quedan.push(c); continue; }
     try {
-      await _emailjsSend(c.params);
+      // El service/template viajan con el aviso: la cola ya no despacha solo avisos de OT, y
+      // mandar una cotizacion por el template del aviso llegaria con el cuerpo en blanco.
+      await _emailjsSend(c.params, c.service, c.template);
       enviados++;
+      await _ejecutarPostCorreo(c.post);
     } catch(e) {
       const err = _clasificarErrorCorreo(e);
       c.intentos = (c.intentos || 0) + 1;
@@ -8472,14 +8546,26 @@ async function _procesarEnvioHojas(hojas, emails) {
       tipo: 'Hoja de trabajo', cantidad: String(conPdf.length),
       asunto: asunto, trabajo: cuerpoHtml, pdf_url: ''
     };
-    try { await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _params); enviados++; }
-    catch(e) {
-      const err = _clasificarErrorCorreo(e);
-      console.error('EmailJS hoja ERROR (' + emails[k] + '):', err.clase, err.status, err.texto);
-      fallidos.push(emails[k]);
-      // Si el problema es la cuenta o la cuota, seguir con los demas destinatarios solo quema
-      // mas cuota y da el mismo error. Se corta y se dice POR QUE.
-      if (err.clase === 'cuota' || err.clase === 'cuenta') { corte = _bloquearColaCorreos(err); break; }
+    // Por la cola, igual que el aviso de OT: lo que no sale queda guardado y se reintenta solo.
+    // Antes esta linea era un emailjs.send() directo y el correo se perdia con un toast.
+    const r = await _enviarCorreoConDetalle(_params, {
+      service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE
+    });
+    if (r.ok) { enviados++; continue; }
+    fallidos.push(emails[k]);
+    // Si el problema es la cuenta o la cuota, seguir con los demas destinatarios solo quema
+    // mas cuota y da el mismo error. Se corta y se dice POR QUE. Los que faltan NO se pierden:
+    // se encolan abajo para que salgan cuando el servicio vuelva.
+    if (r.bloqueo || (r.err && (r.err.clase === 'cuota' || r.err.clase === 'cuenta'))) {
+      corte = r.bloqueo || _bloqueoCorreosVigente();
+      for (var kf = k + 1; kf < emails.length; kf++) {
+        const _pend = Object.assign({}, _params, { email_admin: emails[kf], email: emails[kf] });
+        _encolarCorreo(_pend, _textoBloqueoCorreos(corte), {
+          service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE
+        });
+        fallidos.push(emails[kf]);
+      }
+      break;
     }
   }
   if (enviados > 0) {
@@ -8487,14 +8573,15 @@ async function _procesarEnvioHojas(hojas, emails) {
     actualizarSeleccionadasPrev();
   }
   if (corte) {
-    _avisar('No se pudo enviar: ' + _textoBloqueoCorreos(corte) + (enviados ? ' Alcanzaron a salir ' + enviados + '.' : ''),
+    _avisar('No se pudo enviar: ' + _textoBloqueoCorreos(corte) + (enviados ? ' Alcanzaron a salir ' + enviados + '.' : '') +
+      ' Las hojas quedaron guardadas y se envían solas cuando el correo vuelva.',
       { titulo: 'El correo está caído' });
   } else if (fallidos.length === 0) {
     toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : '') + (sinPdf.length ? ' (' + sinPdf.length + ' sin PDF no se enviaron)' : ''));
   } else if (enviados > 0) {
-    toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
+    toast('Enviado a ' + enviados + '; quedó pendiente ' + fallidos.join(', ') + ' — se reenvía solo');
   } else {
-    toast('No se pudo enviar. Revisa las direcciones e inténtalo de nuevo.');
+    toast('No se pudo enviar ahora. Quedó guardado y se reenvía solo al volver el correo.');
   }
 }
 
@@ -8753,47 +8840,53 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
       trabajo: cuerpoHtml,
       pdf_url: ''
     };
-    try {
-      await emailjs.send(window.EMAILJS_COT_SERVICE, window.EMAILJS_COT_TEMPLATE, _cotParams);
-      enviados++;
-    } catch(e) {
-      const err = _clasificarErrorCorreo(e);
-      console.error('EmailJS cotizacion ERROR (' + emails[k] + '):', err.clase, err.status, err.texto);
-      fallidos.push(emails[k]);
-      // Cuota o cuenta: insistir con el resto de los destinatarios da el mismo error y quema
-      // mas cuota. Se corta y se le dice al usuario cual es el problema de verdad.
-      if (err.clase === 'cuota' || err.clase === 'cuenta') { corte = _bloquearColaCorreos(err); break; }
+    // `post`: marcar la cotizacion como enviada es parte del envio, no del momento en que se
+    // apreto el boton. Viaja con el aviso para que tambien se cumpla si sale desde la cola
+    // manana — si no, la cotizacion se enviaria de verdad y seguiria figurando como pendiente.
+    const _post = { tipo: 'cotizacion', ids: seleccionadas.map(function(it){ return it.id; }), emails: [emails[k]] };
+    const r = await _enviarCorreoConDetalle(_cotParams, {
+      service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE, post: _post
+    });
+    if (r.ok) { enviados++; continue; }
+    fallidos.push(emails[k]);
+    // Cuota o cuenta: insistir con el resto de los destinatarios da el mismo error y quema
+    // mas cuota. Se corta y se le dice al usuario cual es el problema de verdad. Los que
+    // faltaban se encolan igual: el correo se atrasa, no se pierde.
+    if (r.bloqueo || (r.err && (r.err.clase === 'cuota' || r.err.clase === 'cuenta'))) {
+      corte = r.bloqueo || _bloqueoCorreosVigente();
+      for (var kf = k + 1; kf < emails.length; kf++) {
+        const _pend = Object.assign({}, _cotParams, { email_admin: emails[kf], email: emails[kf] });
+        _encolarCorreo(_pend, _textoBloqueoCorreos(corte), {
+          service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE,
+          post: { tipo: 'cotizacion', ids: _post.ids, emails: [emails[kf]] }
+        });
+        fallidos.push(emails[kf]);
+      }
+      break;
     }
   }
 
+  // El marcado en Firestore lo hace ahora `_ejecutarPostCorreo`, por cada envio que sale de
+  // verdad. Aca solo queda refrescar la pantalla.
   if (enviados > 0) {
-    // Marcar como enviado + registrar destinatarios en Firestore
-    const db = window.firebase.firestore();
-    for (var ei = 0; ei < seleccionadas.length; ei++) {
-      try {
-        await db.collection('cotizaciones').doc(seleccionadas[ei].id).update({
-          enviado: true,
-          emailsEnviados: window.firebase.firestore.FieldValue.arrayUnion.apply(null, emails)
-        });
-      } catch(e) { console.warn('No se pudo marcar enviado:', seleccionadas[ei].id, e); }
-    }
     document.querySelectorAll('#lista-carpetas input[type=checkbox]').forEach(function(c){ c.checked = false; });
     actualizarBarraAcciones();
     await cargarCarpetas();
   }
 
   if (corte) {
-    _avisar('No se pudo enviar: ' + _textoBloqueoCorreos(corte) + (enviados ? ' Alcanzaron a salir ' + enviados + '.' : ''),
+    _avisar('No se pudo enviar: ' + _textoBloqueoCorreos(corte) + (enviados ? ' Alcanzaron a salir ' + enviados + '.' : '') +
+      ' Las cotizaciones quedaron guardadas y se envían solas cuando el correo vuelva.',
       { titulo: 'El correo está caído' });
   } else if (fallidos.length === 0) {
     toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : ''));
   } else if (enviados > 0) {
-    toast('Enviado a ' + enviados + '; falló: ' + fallidos.join(', '));
+    toast('Enviado a ' + enviados + '; quedó pendiente ' + fallidos.join(', ') + ' — se reenvía solo');
   } else {
     // Antes esta linea pasaba `e`, que solo existe dentro del catch del loop: cuando fallaban
     // TODOS los envios —el caso del 03-08— reventaba con ReferenceError y el usuario no veia
     // ningun mensaje. El unico camino que importaba era el unico que estaba roto.
-    _error('enviar los correos', null, 'Fallaron los ' + fallidos.length + ' envíos. Revisa las direcciones e inténtalo de nuevo.');
+    _error('enviar los correos', null, 'No salió ningún correo. Quedaron guardados y se reenvían solos; los ves en la barra de avisos.');
   }
 }
 
@@ -11992,9 +12085,12 @@ function abrirModalCorreos() {
     var html = '';
     correos.forEach(function(c) {
       var p = c.params || {};
-      var ot = p.ot_numero ? 'OT #' + _escHtml(p.ot_numero) : 'OT sin número';
+      // Las cotizaciones y las hojas traen `asunto` y pueden no tener OT: mostrarlas como
+      // "OT sin número" no le dice nada a quien esta mirando por que no salio su cotizacion.
+      var ot = p.asunto ? _escHtml(p.asunto)
+             : (p.ot_numero ? 'OT #' + _escHtml(p.ot_numero) : 'OT sin número');
       html += '<div style="border-bottom:1px solid var(--gris2);padding:9px 0;">'
-        + '<div style="font-size:13px;font-weight:600;color:var(--texto);">' + ot + (p.local ? ' · ' + _escHtml(p.local) : '') + '</div>'
+        + '<div style="font-size:13px;font-weight:600;color:var(--texto);">' + ot + (p.local && !p.asunto ? ' · ' + _escHtml(p.local) : '') + '</div>'
         + '<div style="font-size:11px;color:var(--texto2);margin-top:2px;">' + _escHtml(p.email_admin || 'sin destinatario')
         + ' · encolado ' + _haceCuanto(c.creadoEn) + ' · ' + (c.intentos || 0) + ' intento(s)'
         + (c.fallido ? ' · <span style="color:var(--rojo);font-weight:700;">se rindió</span>' : '') + '</div>'

@@ -49,6 +49,8 @@ function montar(errorDelServidor) {
     static now() { return AHORA; }
   }
 
+  const enviadosPor = [];   // [service, template] de cada request que SI se despacho
+
   const sandbox = {
     Date: DateFalso,
     localStorage: {
@@ -58,8 +60,9 @@ function montar(errorDelServidor) {
     },
     navigator: { onLine: true },
     emailjs: {
-      async send() {
+      async send(service, template) {
         requests++;
+        enviadosPor.push([service, template]);
         const e = typeof errorDelServidor === 'function' ? errorDelServidor(requests) : errorDelServidor;
         if (e) throw e;
         return { status: 200, text: 'OK' };
@@ -70,7 +73,24 @@ function montar(errorDelServidor) {
     actualizarIndicadorPendientes(){},
     _reportarEstadoCorreos(){},
     _tecnicoActual: () => 'Jose Quiroz',
-    window: { _firebaseReady: false }
+    // Firestore falso: registra los `update` para poder comprobar que una cotizacion despachada
+    // DESDE LA COLA tambien queda marcada como enviada. Si no, el correo sale y la cotizacion
+    // sigue figurando como pendiente de envio.
+    window: {
+      _firebaseReady: true,
+      _updates: [],
+      firebase: {
+        firestore: Object.assign(function() {
+          return {
+            collection: col => ({
+              doc: id => ({
+                update: async data => { sandbox.window._updates.push({ col, id, data }); }
+              })
+            })
+          };
+        }, { FieldValue: { arrayUnion: function() { return { arrayUnion: Array.from(arguments) }; } } })
+      }
+    }
   };
 
   const nombres = Object.keys(sandbox);
@@ -83,14 +103,18 @@ function montar(errorDelServidor) {
       bloqueo: _cargarBloqueoCorreos,
       bloqueoVigente: _bloqueoCorreosVigente,
       clasificar: _clasificarErrorCorreo,
-      backoff: _backoffCorreo
+      backoff: _backoffCorreo,
+      desencolar: _desencolarCorreo,
+      clave: _claveCorreo
     };
   `)(...nombres.map(n => sandbox[n]));
 
   return {
     api,
     reqs: () => requests,
-    reset: () => { requests = 0; },
+    reset: () => { requests = 0; enviadosPor.length = 0; },
+    despachos: () => enviadosPor,
+    updates: () => sandbox.window._updates,
     avanzar: ms => { AHORA += ms; },
     ahora: () => AHORA
   };
@@ -213,6 +237,59 @@ function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); }
     chequear(b(1) === 1 && b(2) === 2 && b(3) === 4, 'el backoff no duplica: ' + [b(1), b(2), b(3)].join(', ') + ' min');
     chequear(b(50) === b(7) && b(50) <= 60, 'el backoff no tiene tope o desborda: ' + b(50) + ' min al intento 50');
     console.log('7) Backoff: ' + [1,2,3,4,5,6,7,8].map(b).join(', ') + ' min (tope ' + b(50) + ')');
+  }
+
+  // ── 8. Una COTIZACION que no sale queda en la cola, con su propio template ──────────────────
+  // El 03-08 este camino no tenia red: llamaba a emailjs.send() directo y el correo se perdia
+  // con un toast. Y al reintentarlo desde la cola, mandarlo con el template del aviso de OT
+  // llegaria con el cuerpo en blanco: el template lo tiene que llevar el aviso, no la funcion.
+  {
+    const ctx = montar(req => (req === 1 ? ERR_RED : null));
+    const COT = { service: 'service_xm6dmxl', template: 'template_63rsw4i',
+                  post: { tipo: 'cotizacion', ids: ['cot_abc'], emails: ['czapatap@smu.cl'] } };
+    const params = { email_admin: 'czapatap@smu.cl', ot_numero: '597587',
+                     asunto: 'Cotización · UNIMARC CARRERA · 05-08-2026', trabajo: '<p>...</p>' };
+    const ok = await ctx.api.enviar(params, COT);
+    chequear(ok === false, 'el primer envio debia fallar (sin señal)');
+    chequear(ctx.api.cola().length === 1, 'la cotizacion se perdio: no quedo en la cola');
+    chequear(ctx.api.cola()[0].template === 'template_63rsw4i', 'el aviso encolado no guardo su template');
+    chequear(ctx.updates().length === 0, 'no se puede marcar "enviado" una cotizacion que no salio');
+
+    // Sin reset(): el contador de requests es lo que decide que el 2do intento salga bien.
+    ctx.avanzar(2 * 60 * 1000);          // pasa el primer backoff
+    await ctx.api.sincronizar();
+    const d = ctx.despachos()[1] || [];
+    console.log('8) Cotizacion encolada y reintentada con ' + (d[1] || '(ninguno)'));
+    chequear(d[1] === 'template_63rsw4i', 'la cola reintento con el template equivocado: ' + d[1]);
+    chequear(ctx.api.cola().length === 0, 'la cotizacion no salio de la cola tras enviarse');
+    chequear(ctx.updates().length === 1 && ctx.updates()[0].id === 'cot_abc',
+      'la cotizacion salio desde la cola pero quedo marcada como NO enviada');
+  }
+
+  // ── 9. Reenvio manual que SI sale: no puede quedar un duplicado esperando en la cola ─────────
+  // Los correos repetidos ya fueron un problema con este cliente en julio. Si el usuario
+  // reintenta a mano y sale, el encolado de ese mismo aviso ya no corresponde.
+  {
+    const ctx = montar(req => (req === 1 ? ERR_RED : null));
+    const COT = { service: 'service_xm6dmxl', template: 'template_63rsw4i' };
+    const params = { email_admin: 'admin@unimarc.cl', ot_numero: '142079', asunto: 'Cotización · LAS VIOLETAS' };
+    await ctx.api.enviar(params, COT);
+    chequear(ctx.api.cola().length === 1, 'no se encolo el fallo inicial');
+    const ok2 = await ctx.api.enviar(params, COT);          // el usuario reintenta a mano y sale
+    console.log('9) Reenvio manual exitoso: quedan ' + ctx.api.cola().length + ' en cola (deben ser 0)');
+    chequear(ok2 === true, 'el reenvio manual debia salir');
+    chequear(ctx.api.cola().length === 0, 'quedo un duplicado en cola: se enviaria dos veces el mismo correo');
+  }
+
+  // ── 10. La clave del aviso de OT no cambia (los ya encolados no se duplican al actualizar) ───
+  {
+    const ctx = montar(null);
+    const p = { email_admin: 'pedro@emval.cl', ot_numero: '9429' };
+    chequear(ctx.api.clave(p) === 'pedro@emval.cl|9429', 'la clave historica del aviso de OT cambio: los avisos ya encolados se duplicarian');
+    chequear(ctx.api.clave(p, 'template_agzfcux') === 'pedro@emval.cl|9429', 'el template del aviso de OT no debe alterar la clave');
+    const distinta = ctx.api.clave(p, 'template_63rsw4i') !== ctx.api.clave(p, 'template_agzfcux');
+    console.log('10) Claves: OT estable, cotizacion separada → ' + (distinta ? 'ok' : 'COLISION'));
+    chequear(distinta, 'una cotizacion y un aviso de OT del mismo destinatario comparten clave: uno se descartaria');
   }
 
   console.log('');
