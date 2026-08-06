@@ -6551,9 +6551,17 @@ async function verPDFById(pdfId) {
     const doc = await db.collection('pdfs').doc(pdfId).get();
     if (!doc.exists) { await _avisar('No encontramos el PDF de esta OT. Puede que aún no se haya subido.', { titulo: 'PDF no encontrado' }); return; }
     const data = doc.data();
-    // Si tiene URL de Cloudinary usar esa, sino usar pdfData base64
-    if (data.pdfUrl && data.pdfUrl.includes('cloudinary')) {
-      window.open(data.pdfUrl, '_blank');
+    // Si tiene URL de Cloudinary usar esa, sino usar pdfData base64.
+    //
+    // Este atajo NUNCA se tomaba. El registro se crea con `pdfUrl: ''` a proposito y la URL real
+    // va en `pdfUrlCloudinary` (ver donde se hace el add a 'pdfs'), pero aca se leia `pdfUrl`:
+    // siempre vacio, para TODAS las OT. Resultado: se caia al camino de abajo, que abre una
+    // SEGUNDA ventana emergente y le incrusta un data: de ~180 KB. En Chrome de Android eso se
+    // bloquea o no renderiza, y esa ventana no tiene una direccion que se pueda compartir — que
+    // es justo lo que Pedro necesitaba para mandarle el documento a SMU (05-08-2026).
+    const urlDirecta = data.pdfUrlCloudinary || data.pdfUrl || '';
+    if (urlDirecta && urlDirecta.includes('cloudinary')) {
+      window.open(urlDirecta, '_blank');
       return;
     }
     const win = window.open('', '_blank');
@@ -8368,7 +8376,11 @@ async function verOTsTecnico(nombre, grupo) {
 
     // Boton Ver PDF: URL propia de la OT; si no tiene, fallback al indice de 'pdfs'
     // por numero (el PDF existe aunque el documento de la OT haya perdido su URL).
-    let urlParaVer = ot.pdfUrl || ot.pdfUrlCloudinary || '';
+    // `_pdfDeOT` prefiere el PDF real de Cloudinary; aca se preguntaba al reves (`ot.pdfUrl`
+    // primero), y ese campo guarda el link A LA APP (.../?pdf=<id>), no un PDF. Por eso el boton
+    // entregaba una direccion que abre la aplicacion entera: al tecnico le funciona —la app arma
+    // el documento en su telefono— y al que la recibe por fuera no le sirve de nada.
+    let urlParaVer = _pdfDeOT(ot);
     if (!urlParaVer) {
       const _pinfoT = (ot.id && pdfMapT['c_' + ot.id]) || pdfMapT[String(ot.numero || ot.otNumero || '')];
       if (_pinfoT) {
