@@ -1022,6 +1022,7 @@
     <div id="prev-acciones-bar" style="display:none;gap:8px;align-items:center;margin-bottom:10px;padding:10px 12px;background:var(--gris1);border-radius:var(--radio-sm);">
       <span id="prev-seleccionadas-count" style="font-size:12px;color:var(--texto2);flex:1;">0 seleccionadas</span>
       <button id="prev-enviar-btn" onclick="enviarPreventivosSeleccionados()" disabled style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap;opacity:0.5;">Enviar hojas</button>
+      <button id="prev-compartir-btn" onclick="compartirPreventivosSeleccionados()" disabled style="background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap;opacity:0.5;">Compartir</button>
     </div>
     <div id="lista-preventivos"></div>
   </div>
@@ -1036,6 +1037,7 @@
   <div id="cot-acciones-bar" style="display:none;padding:10px 16px;background:white;border-bottom:1px solid var(--gris2);display:none;gap:8px;align-items:center;">
     <span id="cot-seleccionadas-count" style="font-size:12px;color:var(--texto2);flex:1;">0 seleccionadas</span>
     <button onclick="enviarCotizacionesSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:500;">Enviar email</button>
+    <button onclick="compartirCotizacionesSeleccionadas()" style="background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:500;">Compartir</button>
     <button onclick="eliminarCotizacionesSeleccionadas()" style="background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:500;">Eliminar</button>
   </div>
   <div class="content">
@@ -1343,10 +1345,40 @@
     <div style="overflow-y:auto;padding:14px 18px;flex:1;">
       <div id="modal-enviar-cot-lista"></div>
       <button type="button" onclick="agregarFilaEmailCot('')" style="width:100%;background:transparent;color:var(--azul);border:1.5px dashed var(--azul);border-radius:var(--radio-sm);padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;">+ Agregar otro correo</button>
+      <!-- Comentario del envio: solo se muestra para cotizaciones (_envioModo === 'cot'). -->
+      <div id="modal-enviar-cot-comentario-wrap" style="margin-top:14px;">
+        <label for="modal-enviar-cot-comentario" style="font-size:12px;font-weight:600;color:var(--texto2);display:block;margin-bottom:5px;">Comentario para el correo (opcional)</label>
+        <textarea id="modal-enviar-cot-comentario" rows="3" maxlength="1000" placeholder="Ej.: Se adjunta cotización actualizada con el descuento conversado." style="width:100%;box-sizing:border-box;border:1px solid var(--gris3);border-radius:var(--radio-sm);padding:8px 10px;font-size:16px;font-family:inherit;resize:vertical;" oninput="_contarComentarioCot()"></textarea>
+        <div id="modal-enviar-cot-comentario-cont" style="font-size:11px;color:var(--texto3);text-align:right;margin-top:3px;">0/1000</div>
+      </div>
     </div>
     <div style="padding:12px 18px;border-top:1px solid var(--gris2);display:flex;gap:8px;">
       <button onclick="cerrarModalEnviarCot()" style="flex:1;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
       <button id="modal-enviar-cot-btn" onclick="confirmarEnviarCot()" style="flex:1.4;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: compartir — RESPALDO para cuando el navegador no tiene menú nativo (PC de escritorio).
+     No reemplaza al menú del sistema: solo aparece cuando ese menú no existe o falla. Un botón
+     que no hace nada al tocarlo es peor que no tenerlo. -->
+<div id="modal-compartir" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalCompartir(event)">
+  <div role="dialog" aria-modal="true" aria-labelledby="modal-compartir-titulo" aria-describedby="modal-compartir-sub" style="background:white;border-radius:var(--radio-lg);max-width:400px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+    <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
+      <div id="modal-compartir-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Compartir</div>
+      <div id="modal-compartir-sub" style="font-size:12px;color:var(--texto3);margin-top:2px;word-break:break-word;"></div>
+    </div>
+    <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px;">
+      <button type="button" class="btn-whatsapp" onclick="_compartirPor('whatsapp')" style="border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">WhatsApp</button>
+      <button type="button" onclick="_compartirPor('correo')" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">Correo</button>
+      <button type="button" onclick="_compartirPor('copiar')" style="background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">Copiar enlace</button>
+      <button type="button" id="modal-compartir-abrir" onclick="_compartirPor('abrir')" style="background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">Abrir el PDF</button>
+    </div>
+    <div style="padding:0 18px 12px;">
+      <div style="font-size:11px;color:var(--texto3);line-height:1.45;">Esto manda el <strong>enlace al PDF</strong>. Para el envío formal que queda registrado, usa el botón <strong>Enviar email</strong>.</div>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid var(--gris2);">
+      <button type="button" onclick="cerrarModalCompartir()" style="width:100%;background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">Cerrar</button>
     </div>
   </div>
 </div>
@@ -3458,11 +3490,17 @@ async function _ejecutarPostCorreo(post) {
   try {
     if (!window._firebaseReady) return;
     const db = window.firebase.firestore();
+    // El comentario se guarda junto con el envio para que quede el registro de QUE se le dijo al
+    // supervisor, no solo que se le mando. Si la cotizacion se reenvia con otro comentario, gana
+    // el ultimo: es el que refleja lo que el cliente tiene en su bandeja.
+    const comentario = (post.comentario || '').trim();
     for (var i = 0; i < ids.length; i++) {
-      await db.collection('cotizaciones').doc(ids[i]).update({
+      const _campos = {
         enviado: true,
         emailsEnviados: window.firebase.firestore.FieldValue.arrayUnion.apply(null, emails)
-      });
+      };
+      if (comentario) { _campos.comentarioEnvio = comentario; _campos.comentarioEnvioEn = Date.now(); }
+      await db.collection('cotizaciones').doc(ids[i]).update(_campos);
     }
   } catch(e) { console.warn('No se pudo marcar la cotizacion como enviada:', e); }
 }
@@ -3881,6 +3919,316 @@ function enviarWhatsApp() {
     `Trabajo: ${document.getElementById('desc-trabajo').value}`
   );
   window.open(`https://wa.me/?text=${msg}`, '_blank');
+}
+
+// =========== COMPARTIR DOCUMENTOS (menu nativo del telefono) ===========
+/* Pedido de Pedro, 12-08-2026: "la opcion de compartir que tienen todas las apps, para mandarla
+   por WhatsApp o por correo". Es la Web Share API: el menu del sistema, con el PDF adjunto.
+
+   TRES REGLAS QUE NO SE PUEDEN RELAJAR. Las tres salen de errores ya vividos ACA:
+
+   1. SOLO SE COMPARTE UN PDF DE VERDAD. `ot.pdfUrl` guarda el link A LA APP (.../?pdf=<id>), no
+      un documento. A Pedro le abria bien —la app arma el PDF en su telefono— y a SMU, que lo
+      recibe por fuera, le daba 404. Es el caso de la OT #597587 del 05-08-2026, y es justo el
+      escenario de compartir. Por eso `_esPDFCompartible()` decide, y lo que no pasa esa prueba
+      NO se ofrece. Vigilado por tests/link-pdf-es-compartible.js.
+   2. NO SE COMPARTE UN PDF VIEJO. La misma #597587 mando un PDF 28 dias mas antiguo que el
+      trabajo que describia. Compartir es una salida al cliente igual que el correo, asi que
+      pasa por la misma regeneracion (`_pdfCotObsoleto`) antes de abrir el menu.
+   3. COMPARTIR NO GASTA CUOTA DE EMAILJS. El plan es de 200 correos/mes y la cola ya lo quemo
+      una vez (03-08-2026). Este camino no toca EmailJS ni la cola: sale por el sistema.
+
+   Sin monto en el texto A PROPOSITO: una cifra suelta viajando por WhatsApp no dice si es neta o
+   con IVA. El PDF si lo dice. El texto identifica el documento; el documento pone los numeros. */
+
+var _COMPARTIR_TIMEOUT_MS = 15000;   // fetch del PDF: en terreno, sin corte queda colgado
+var _compartirActual = null;         // { docs, titulo, texto, enlaces }
+
+// Compartible = apunta al PDF. El link a la app abre la aplicacion entera, no el documento.
+function _esPDFCompartible(url) {
+  var u = (url || '').toString().trim();
+  if (!u) return false;
+  if (u.indexOf('?pdf=') !== -1) return false;      // es la app
+  if (u.indexOf('github.io') !== -1) return false;  // idem
+  return /^https:\/\//i.test(u);
+}
+
+// Cloudinary sirve el raw sin extension; agregarsela hace que llegue como .pdf al que lo recibe.
+function _urlPDFDescarga(url) {
+  var u = (url || '').toString().trim();
+  if (!u) return '';
+  return /\.pdf($|\?)/i.test(u) ? u : u + '.pdf';
+}
+
+// El nombre bueno ya viaja en la URL: el public_id se arma con _nombreArchivoPDF / _slugPDFCot.
+// Sacarlo de ahi evita que el archivo compartido se llame distinto al que ya conoce el cliente.
+function _nombreDesdeURL(url, porDefecto) {
+  try {
+    var limpio = (url || '').toString().split('?')[0].split('#')[0];
+    var ultimo = decodeURIComponent(limpio.substring(limpio.lastIndexOf('/') + 1));
+    if (!ultimo) return porDefecto || 'documento.pdf';
+    return /\.pdf$/i.test(ultimo) ? ultimo : ultimo + '.pdf';
+  } catch(e) { return porDefecto || 'documento.pdf'; }
+}
+
+/* Baja el PDF para adjuntarlo DE VERDAD (no solo el enlace). Devuelve null y sigue de largo si
+   no se puede: sin senal, con CORS cerrado o en un navegador que no comparte archivos, el
+   enlace es un resultado util — quedarse sin compartir nada, no. */
+async function _archivosParaCompartir(docs) {
+  if (typeof File === 'undefined' || !navigator.canShare) return null;
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var corte = ctrl ? setTimeout(function(){ ctrl.abort(); }, _COMPARTIR_TIMEOUT_MS) : null;
+  try {
+    var files = [];
+    for (var i = 0; i < docs.length; i++) {
+      var resp = await fetch(_urlPDFDescarga(docs[i].url), ctrl ? { signal: ctrl.signal } : undefined);
+      if (!resp.ok) return null;
+      var blob = await resp.blob();
+      if (!blob || !blob.size) return null;
+      files.push(new File([blob], docs[i].nombre, { type: 'application/pdf' }));
+    }
+    return navigator.canShare({ files: files }) ? files : null;
+  } catch(e) {
+    console.warn('No se pudo adjuntar el PDF; se comparte el enlace:', e);
+    return null;
+  } finally { if (corte) clearTimeout(corte); }
+}
+
+/* Abre el menu de compartir del sistema con uno o varios PDF.
+   docs: [{ url, nombre }] · opts: { titulo, texto } */
+async function compartirDocumentos(docs, opts) {
+  opts = opts || {};
+  var validos = (docs || []).filter(function(d){ return d && _esPDFCompartible(d.url); });
+  if (!validos.length) {
+    await _avisar('Este documento todavía no tiene un PDF que se pueda compartir.\n\n' +
+      'Abre primero "Ver PDF": eso lo genera y lo sube. Después el botón Compartir va a funcionar.\n\n' +
+      'Si acabas de cerrar la OT sin señal, el PDF sube solo cuando el teléfono vuelva a tener internet.',
+      { titulo: 'Sin PDF para compartir' });
+    return false;
+  }
+  validos = validos.map(function(d){
+    return { url: d.url, nombre: d.nombre || _nombreDesdeURL(d.url) };
+  });
+
+  var titulo = opts.titulo || 'EMVAL E.I.R.L.';
+  var enlaces = validos.map(function(d){ return _urlPDFDescarga(d.url); }).join('\n');
+  var texto = (opts.texto || titulo);
+  _compartirActual = { docs: validos, titulo: titulo, texto: texto, enlaces: enlaces };
+
+  // Sin menu nativo (tipico en PC): se abre el propio, con las mismas salidas.
+  if (!navigator.share) { _abrirModalCompartir(); return true; }
+
+  toast('Preparando para compartir...');
+  var files = await _archivosParaCompartir(validos);
+  try {
+    if (files) {
+      // Con archivos NO va `url`: algunas plataformas descartan el adjunto si ademas hay enlace.
+      await navigator.share({ files: files, title: titulo, text: texto });
+    } else if (validos.length === 1) {
+      await navigator.share({ title: titulo, text: texto, url: _urlPDFDescarga(validos[0].url) });
+    } else {
+      await navigator.share({ title: titulo, text: texto + '\n\n' + enlaces });
+    }
+    return true;
+  } catch(e) {
+    // Cerrar el menu NO es un error: el usuario decidio no compartir. No se le avisa nada.
+    if (e && e.name === 'AbortError') return false;
+    // El resto si es una falla real. La mas comun: iOS invalida el gesto del toque despues de un
+    // await largo (bajar el PDF) y rechaza con NotAllowedError. En vez de dejarlo sin nada, se
+    // abre el menu propio, que no necesita gesto vigente.
+    console.warn('navigator.share falló; se abre el menú propio:', e);
+    _abrirModalCompartir();
+    return true;
+  }
+}
+
+// Azucar para el caso de siempre: un solo documento.
+function compartirPDF(opts) {
+  opts = opts || {};
+  return compartirDocumentos([{ url: opts.url, nombre: opts.nombre }], opts);
+}
+
+function _abrirModalCompartir() {
+  var c = _compartirActual;
+  var sub = document.getElementById('modal-compartir-sub');
+  if (sub) sub.textContent = c ? (c.docs.length === 1 ? c.docs[0].nombre : c.docs.length + ' documentos') : '';
+  // "Abrir el PDF" no tiene sentido con varios: abrir N pestanas lo bloquea el navegador.
+  var btnAbrir = document.getElementById('modal-compartir-abrir');
+  if (btnAbrir) btnAbrir.style.display = (c && c.docs.length === 1) ? 'block' : 'none';
+  _modalMostrar('modal-compartir', 'flex', cerrarModalCompartir);
+}
+
+function cerrarModalCompartir(ev) {
+  if (ev && ev.target !== ev.currentTarget) return;
+  _modalOcultar('modal-compartir');
+}
+
+async function _compartirPor(via) {
+  var c = _compartirActual;
+  if (!c) { cerrarModalCompartir(); return; }
+  var cuerpo = c.texto + '\n\n' + c.enlaces;
+  if (via === 'whatsapp') {
+    window.open('https://wa.me/?text=' + encodeURIComponent(cuerpo), '_blank');
+  } else if (via === 'correo') {
+    // mailto abre el cliente de correo del equipo. No pasa por EmailJS: no gasta cuota.
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(c.titulo) + '&body=' + encodeURIComponent(cuerpo);
+  } else if (via === 'copiar') {
+    await _copiarAlPortapapeles(c.enlaces);
+  } else if (via === 'abrir') {
+    window.open(_urlPDFDescarga(c.docs[0].url), '_blank');
+  }
+  cerrarModalCompartir();
+}
+
+// navigator.clipboard no existe en http ni en navegadores viejos: queda el camino clasico.
+async function _copiarAlPortapapeles(txt) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(txt);
+      toast('Enlace copiado');
+      return true;
+    }
+  } catch(e) { /* sigue al camino de abajo */ }
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast(ok ? 'Enlace copiado' : 'No se pudo copiar el enlace');
+    return ok;
+  } catch(e) { toast('No se pudo copiar el enlace'); return false; }
+}
+
+// ---- Compartir una COTIZACION ----
+/* Devuelve la URL del PDF vigente, regenerandolo si no hay o si quedo viejo. Es la MISMA regla
+   que aplica el envio por correo (_procesarEnvioCotizaciones): compartir tambien es una salida
+   al cliente, y un PDF de hace 28 dias es igual de malo por WhatsApp que por correo. */
+async function _asegurarPDFCotizacion(cot) {
+  if (!cot) return '';
+  var url = cot.pdfUrl || '';
+  if (url && !_pdfCotObsoleto(cot)) return url;
+  url = await generarPDFCotizacionGuardada(cot, { modoSubir: true });
+  if (url) {
+    cot.pdfUrl = url;
+    cot.pdfGeneradoEn = Date.now();
+    try {
+      window.firebase.firestore().collection('cotizaciones').doc(cot.id)
+        .update({ pdfUrl: url, pdfGeneradoEn: Date.now() })
+        .catch(function(e){ console.warn('pdfUrl update error (compartir):', e); });
+    } catch(e) { console.warn('Firebase no disponible al guardar pdfUrl (compartir):', e); }
+  }
+  return url || '';
+}
+
+async function compartirCotizacion(cot) {
+  if (!cot) return;
+  var clave = 'compartir-cot:' + (cot.id || '');
+  if (_ocupado(clave)) return;
+  var soltar = _tomar(clave);
+  try {
+    if (!cot.pdfUrl || _pdfCotObsoleto(cot)) toast('Preparando el PDF...');
+    var url = await _asegurarPDFCotizacion(cot);
+    await compartirPDF({
+      url: url,
+      nombre: _slugPDFCot(cot) + '.pdf',
+      titulo: _asuntoCotizaciones([cot]),
+      texto: _textoCompartirCot(cot)
+    });
+  } finally { soltar(); }
+}
+
+// Compartir TODAS las cotizaciones marcadas, en un solo menu. Mismo criterio que "Enviar email".
+async function compartirCotizacionesSeleccionadas() {
+  const sel = obtenerCotizacionesSeleccionadas();
+  if (sel.length === 0) { toast('Selecciona al menos una cotización'); return; }
+  if (_ocupado('compartir-cots')) return;
+  const soltar = _tomar('compartir-cots');
+  try {
+    const pendientes = sel.filter(function(c){ return !c.pdfUrl || _pdfCotObsoleto(c); });
+    if (pendientes.length) toast('Preparando PDFs (' + pendientes.length + ')...');
+    const docs = [];
+    for (var i = 0; i < sel.length; i++) {
+      const url = await _asegurarPDFCotizacion(sel[i]);
+      if (url) docs.push({ url: url, nombre: _slugPDFCot(sel[i]) + '.pdf' });
+    }
+    await compartirDocumentos(docs, {
+      titulo: _asuntoCotizaciones(sel),
+      texto: sel.length === 1 ? _textoCompartirCot(sel[0])
+        : sel.length + ' cotizaciones — EMVAL E.I.R.L.'
+    });
+  } finally { soltar(); }
+}
+
+// Compartir las HOJAS marcadas. Solo las que tienen PDF real; las demas se nombran, no se callan.
+async function compartirPreventivosSeleccionados() {
+  const sel = obtenerPreventivosSeleccionados();
+  if (sel.length === 0) { toast('Marca al menos una hoja'); return; }
+  const conPdf = sel.filter(function(h){ return h && _esPDFCompartible(h.pdfUrl); });
+  const sinPdf = sel.filter(function(h){ return !h || !_esPDFCompartible(h.pdfUrl); });
+  if (sinPdf.length) {
+    await _avisar('Estas hojas no tienen todavía un PDF que se pueda compartir:\n\n' +
+      sinPdf.map(function(h){ return '· #' + ((h && h.numero) || '?') + ' — ' + ((h && h.local) || ''); }).join('\n') +
+      '\n\n' + (conPdf.length ? 'Se compartirán las otras ' + conPdf.length + '.' : 'No hay ninguna que compartir.'),
+      { titulo: 'Hojas sin PDF' });
+  }
+  if (!conPdf.length) return;
+  if (conPdf.length === 1) { await compartirHoja(conPdf[0]); return; }
+  await compartirDocumentos(
+    conPdf.map(function(h){ return { url: h.pdfUrl, nombre: _nombreDesdeURL(h.pdfUrl, 'Hoja_de_trabajo.pdf') }; }),
+    {
+      titulo: conPdf.length + ' hojas de trabajo · EMVAL E.I.R.L.',
+      texto: conPdf.length + ' hojas de trabajo — Mantenimiento preventivo de transpaletas\nEMVAL E.I.R.L.'
+    }
+  );
+}
+
+function _textoCompartirCot(cot) {
+  cot = cot || {};
+  var p = ['Cotización — EMVAL E.I.R.L.'];
+  if (cot.local) p.push('Local: ' + cot.local);
+  if (cot.numeroCotizacion) p.push('N° cotización: ' + cot.numeroCotizacion);
+  if (cot.nombreServicio) p.push('Servicio: ' + cot.nombreServicio);
+  if (cot.fecha) p.push('Fecha: ' + cot.fecha);
+  return p.join('\n');
+}
+
+// ---- Compartir una HOJA de trabajo (preventivo) ----
+async function compartirHoja(h) {
+  if (!h) return;
+  var p = ['Hoja de trabajo — Mantenimiento preventivo de transpaletas', 'EMVAL E.I.R.L.'];
+  if (h.local) p.push('Local: ' + h.local);
+  if (h.numero) p.push('N° OT: ' + h.numero);
+  if (h.fecha) p.push('Fecha: ' + h.fecha);
+  await compartirPDF({
+    url: h.pdfUrl || '',
+    nombre: _nombreDesdeURL(h.pdfUrl, 'Hoja_de_trabajo.pdf'),
+    titulo: 'Hoja de trabajo' + (h.local ? ' · ' + h.local : '') + (h.numero ? ' · N° ' + h.numero : ''),
+    texto: p.join('\n')
+  });
+}
+
+// ---- Compartir el PDF de una OT (recepcion de obra) ----
+// `urlResuelta` es la que la lista ya calculo (incluye el respaldo por el indice de 'pdfs').
+// Se prefiere `_pdfDeOT` igual que el boton Ver PDF: nunca el link a la app.
+async function compartirOT(ot, urlResuelta) {
+  ot = ot || {};
+  var url = _pdfDeOT(ot) || urlResuelta || '';
+  var num = ot.numero || ot.otNumero || '';
+  var esPrev = _normTipo ? (_normTipo(ot.tipo) === 'preventivo') : (ot.tipo === 'preventivo');
+  var p = [(esPrev ? 'Hoja de trabajo — Mantenimiento preventivo' : 'Recepción de obra') + ' — EMVAL E.I.R.L.'];
+  if (ot.local) p.push('Local: ' + ot.local);
+  if (num) p.push('N° OT: ' + num);
+  if (ot.fecha) p.push('Fecha: ' + ot.fecha);
+  await compartirPDF({
+    url: url,
+    nombre: _nombreDesdeURL(url, (esPrev ? 'Hoja_de_trabajo' : 'Recepcion_Obra_OT' + num) + '.pdf'),
+    titulo: (esPrev ? 'Hoja de trabajo' : 'Recepción de obra') + (num ? ' · OT ' + num : '') + (ot.local ? ' · ' + ot.local : ''),
+    texto: p.join('\n')
+  });
 }
 
 // =========== NOTA DE VOZ ===========
@@ -5045,7 +5393,9 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
       rowContent.appendChild(envDiv);
     }
     const btnsRow = document.createElement('div');
-    btnsRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+    // flex-wrap: con "Compartir" ya son tres o cuatro botones; en un telefono angosto la fila
+    // se parte en vez de aplastarlos hasta que no se lea la etiqueta.
+    btnsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
     const btnPdf = document.createElement('button');
     btnPdf.textContent = 'Ver PDF';
     btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
@@ -5058,7 +5408,14 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnEdit.textContent = 'Editar';
     btnEdit.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnEdit.onclick = (function(data){ return function(){ editarCotizacion(data); }; })(it);
+    // Compartir: abre el menu del sistema (WhatsApp, correo, lo que tenga el telefono).
+    // No pasa por EmailJS, asi que no gasta de los 200 correos/mes del plan.
+    const btnShare = document.createElement('button');
+    btnShare.textContent = 'Compartir';
+    btnShare.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+    btnShare.onclick = (function(data){ return function(){ compartirCotizacion(data); }; })(it);
     btnsRow.appendChild(btnPdf);
+    btnsRow.appendChild(btnShare);
     btnsRow.appendChild(btnEdit);
     if (it.tipoCot === 'previa' && it.estadoCot === 'Pendiente') {
       const btnAcept = document.createElement('button');
@@ -8122,7 +8479,7 @@ async function cargarPreventivos() {
 
       // ---- Botones ----
       const btns = document.createElement('div');
-      btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
+      btns.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
 
       // Descargar: usa Cloudinary URL si existe, si no, abre Firestore PDF
       if (pdfCloudUrl || pdfFirestoreUrl) {
@@ -8136,6 +8493,20 @@ async function cargarPreventivos() {
           a.click();
         }; })(pdfCloudUrl, pdfFirestoreUrl);
         btns.appendChild(btnDesc);
+      }
+
+      /* Compartir: SOLO con el PDF de Cloudinary. `pdfFirestoreUrl` es el link a la app
+         (.../?pdf=<id>) — sirve para VER la hoja en este telefono, pero al supervisor de SMU le
+         llega un 404. Ese fue el caso de la #597587. Si la hoja solo tiene ese link, el boton no
+         aparece: mejor sin boton que con uno que manda algo que no se puede abrir. */
+      if (_esPDFCompartible(pdfCloudUrl)) {
+        const btnComp = document.createElement('button');
+        btnComp.textContent = 'Compartir';
+        btnComp.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnComp.onclick = (function(h){ return function(){ compartirHoja(h); }; })({
+          pdfUrl: pdfCloudUrl, local: ot.local || '', numero: otNum, fecha: ot.fecha || ''
+        });
+        btns.appendChild(btnComp);
       }
 
       // Preventivos NO llevan cotización: la hoja solo se envía. (Se quitó "+ Cotización".)
@@ -8363,7 +8734,8 @@ async function verOTsTecnico(nombre, grupo) {
 
     // Botones PDF y Cotizacion
     const btns = document.createElement('div');
-    btns.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+    // flex-wrap: con "Compartir" la fila llega a cuatro botones en una OT en pausa ya cotizada.
+    btns.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;';
 
     // Boton Continuar si está en pausa
     if (ot.estado === 'En Pausa' || ot.pausa) {
@@ -8405,6 +8777,17 @@ async function verOTsTecnico(nombre, grupo) {
         }
       }; })(urlParaVer);
       btns.appendChild(btnPdf);
+
+      /* Compartir: solo si lo que hay es el PDF. Cuando `urlParaVer` es el link a la app, Ver PDF
+         sigue sirviendo —lo abre aca dentro— pero compartirlo manda un 404 al que lo reciba.
+         Es exactamente lo que le paso a Pedro con SMU el 05-08-2026. */
+      if (_esPDFCompartible(urlParaVer)) {
+        const btnCompOT = document.createElement('button');
+        btnCompOT.textContent = 'Compartir';
+        btnCompOT.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
+        btnCompOT.onclick = (function(o, u){ return function(){ compartirOT(o, u); }; })(ot, urlParaVer);
+        btns.appendChild(btnCompOT);
+      }
     }
 
     // Boton segun si ya tiene cotizacion
@@ -8556,6 +8939,8 @@ function actualizarSeleccionadasPrev() {
   if (count) count.textContent = marcadas.length + ' seleccionada' + (marcadas.length !== 1 ? 's' : '');
   const btn = document.getElementById('prev-enviar-btn');
   if (btn) { btn.disabled = marcadas.length === 0; btn.style.opacity = marcadas.length === 0 ? '0.5' : '1'; }
+  const btnComp = document.getElementById('prev-compartir-btn');
+  if (btnComp) { btnComp.disabled = marcadas.length === 0; btnComp.style.opacity = marcadas.length === 0 ? '0.5' : '1'; }
 }
 
 function toggleSeleccionarTodasPrev() {
@@ -8612,6 +8997,7 @@ async function enviarPreventivosSeleccionados() {
   });
   if (prefill.length === 0) prefill.push('');
   prefill.forEach(function(em){ agregarFilaEmailCot(em); });
+  _prepararComentarioCot(false);
   _modalMostrar('modal-enviar-cot', 'flex', cerrarModalEnviarCot);
   if (sinCorreo.length) toast('Sin correo configurado para: ' + sinCorreo.join(', ') + '. Agrégalo abajo.');
 }
@@ -8747,6 +9133,37 @@ function agregarFilaEmailCot(valor) {
   cont.appendChild(row);
 }
 
+// El comentario lo escribe una persona y viaja DENTRO del HTML del correo. Sin escapar, un
+// "<" o un "&" del texto rompen el cuerpo, y un tag pegado desde otro lado se ejecutaria en el
+// cliente de correo del supervisor. Se escapa siempre, aunque el que escriba sea el administrador.
+function _escaparHtmlCorreo(txt) {
+  return (txt == null ? '' : String(txt))
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Contador del textarea de comentario (el maxlength ya corta; esto solo lo hace visible)
+function _contarComentarioCot() {
+  const ta = document.getElementById('modal-enviar-cot-comentario');
+  const out = document.getElementById('modal-enviar-cot-comentario-cont');
+  if (!ta || !out) return;
+  out.textContent = (ta.value || '').length + '/1000';
+}
+
+// Deja el campo de comentario vacio y decide si se ve. Solo aplica a cotizaciones: las hojas de
+// trabajo usan el MISMO modal y no lo llevan, y un campo visible que no viaja a ningun lado es
+// peor que no tenerlo.
+function _prepararComentarioCot(visible) {
+  const wrap = document.getElementById('modal-enviar-cot-comentario-wrap');
+  const ta = document.getElementById('modal-enviar-cot-comentario');
+  if (ta) ta.value = '';
+  if (wrap) wrap.style.display = visible ? 'block' : 'none';
+  _contarComentarioCot();
+}
+
 async function enviarCotizacionesSeleccionadas() {
   const seleccionadas = obtenerCotizacionesSeleccionadas();
   if (seleccionadas.length === 0) { toast('Selecciona al menos una cotización'); return; }
@@ -8797,6 +9214,7 @@ async function enviarCotizacionesSeleccionadas() {
   });
   if (prefill.length === 0) prefill.push('');
   prefill.forEach(function(em){ agregarFilaEmailCot(em); });
+  _prepararComentarioCot(true);
   _modalMostrar('modal-enviar-cot', 'flex', cerrarModalEnviarCot);
 }
 
@@ -8821,9 +9239,13 @@ function confirmarEnviarCot() {
   });
   if (invalido) { toast('Correo inválido: ' + invalido); return; }
   if (emails.length === 0) { toast('Agrega al menos un correo'); return; }
+  // Se lee ANTES de cerrar el modal: cerrarlo no borra el textarea, pero el orden importa si
+  // manana alguien limpia el formulario al ocultarlo.
+  const taCom = document.getElementById('modal-enviar-cot-comentario');
+  const comentario = taCom ? (taCom.value || '').trim() : '';
   cerrarModalEnviarCot();
   if (_envioModo === 'hoja') { _procesarEnvioHojas(_hojasParaEnviar, emails); }
-  else { _procesarEnvioCotizaciones(_cotsParaEnviar, emails); }
+  else { _procesarEnvioCotizaciones(_cotsParaEnviar, emails, comentario); }
 }
 
 // Normaliza un texto para usarlo como nombre de archivo (sin tildes, espacios->_)
@@ -8873,8 +9295,11 @@ function _asuntoCotizaciones(seleccionadas) {
   return seleccionadas.length + ' cotizaciones · ' + locStr + ' · ' + fecha;
 }
 
-// Genera/sube PDFs si faltan, arma el cuerpo y envía la(s) cotización(es) a cada correo
-async function _procesarEnvioCotizaciones(seleccionadas, emails) {
+// Genera/sube PDFs si faltan, arma el cuerpo y envía la(s) cotización(es) a cada correo.
+// `comentario` es el texto libre que el administrador escribe en el modal antes de enviar: viaja
+// en el cuerpo del correo y queda guardado en la cotización. Es opcional.
+async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
+  comentario = (comentario || '').trim();
   // Se regenera si NO hay PDF o si el que hay quedo viejo. Este es el ultimo punto antes de que
   // el documento salga de la empresa: la #597587 mando por correo un PDF 28 dias mas antiguo que
   // el trabajo que describia, y llego hasta SMU.
@@ -8925,8 +9350,18 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
       '</div>';
   });
 
+  // El comentario va ARRIBA de las cotizaciones: es lo que el administrador quiere que se lea
+  // primero, y abajo del total nadie lo ve. Escapado y con los saltos de linea respetados.
+  const comentarioHtml = comentario
+    ? '<div style="border-left:4px solid #1B3A6B;background:#F4F6FB;border-radius:8px;padding:12px 14px;margin-bottom:14px;">' +
+        '<div style="font-size:11px;font-weight:700;color:#1B3A6B;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Comentario</div>' +
+        '<div style="font-size:14px;color:#222;line-height:1.5;">' + _escaparHtmlCorreo(comentario).replace(/\n/g, '<br>') + '</div>' +
+      '</div>'
+    : '';
+
   const cuerpoHtml =
     '<p style="font-size:15px;color:#222;">Estimado/a:<br>Le compartimos <strong>' + seleccionadas.length + '</strong> cotización(es) de <strong>EMVAL E.I.R.L.</strong>:</p>' +
+    comentarioHtml +
     itemsHtml +
     '<p style="font-size:15px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
   // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
@@ -8957,7 +9392,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
     // `post`: marcar la cotizacion como enviada es parte del envio, no del momento en que se
     // apreto el boton. Viaja con el aviso para que tambien se cumpla si sale desde la cola
     // manana — si no, la cotizacion se enviaria de verdad y seguiria figurando como pendiente.
-    const _post = { tipo: 'cotizacion', ids: seleccionadas.map(function(it){ return it.id; }), emails: [emails[k]] };
+    const _post = { tipo: 'cotizacion', ids: seleccionadas.map(function(it){ return it.id; }), emails: [emails[k]], comentario: comentario };
     const r = await _enviarCorreoConDetalle(_cotParams, {
       service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE, post: _post
     });
@@ -8972,7 +9407,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails) {
         const _pend = Object.assign({}, _cotParams, { email_admin: emails[kf], email: emails[kf] });
         _encolarCorreo(_pend, _textoBloqueoCorreos(corte), {
           service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE,
-          post: { tipo: 'cotizacion', ids: _post.ids, emails: [emails[kf]] }
+          post: { tipo: 'cotizacion', ids: _post.ids, emails: [emails[kf]], comentario: comentario }
         });
         fallidos.push(emails[kf]);
       }

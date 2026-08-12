@@ -114,11 +114,46 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   **200 correos/mes**). Por eso hay **backoff exponencial por aviso** (1→60 min) y la cola **se
   detiene** si el error no es de red — un `429` de cuota o un `403` de credencial no se arreglan
   insistiendo. Ver el bloque de comentarios sobre el 03-08-2026 en `index.html`.
-- **Las cotizaciones NO pasan por la cola** (`emailjs.send` directo), pero comparten la cuenta: si
-  la cola quema la cuota, mueren también.
+- 🔄 **Las cotizaciones y las hojas de trabajo SÍ pasan por la cola** desde el commit `9e7801f`
+  (antes iban con `emailjs.send` directo y se perdían con un toast). Lo que sale directo hoy: nada
+  de esos dos flujos. Comparten la cuenta con el resto: si la cola quema la cuota, mueren también.
+- Lo que hay que escribir en la base **cuando el correo sale de verdad** viaja en `opts.post` y lo
+  ejecuta `_ejecutarPostCorreo`, no el momento en que se apretó el botón. Si se agrega un dato
+  nuevo al envío, va ahí — si no, sale desde la cola mañana y no queda registrado.
 - El atasco se reporta a **Firestore (`alertas`)** y se ve en el panel de supervisor
   (`cargarAlertaCorreos`). Avisar por correo que el correo no sale no sirve.
 - Cubierto por `tests/cola-correos-no-quema-cuota.js`.
+
+**Comentario del administrador al enviar una cotización** (`_prepararComentarioCot`,
+`_escaparHtmlCorreo`, `_procesarEnvioCotizaciones`):
+- Campo de texto libre en el modal de envío. Va en el cuerpo del correo **arriba** de las
+  cotizaciones y queda guardado en la cotización (`comentarioEnvio` + `comentarioEnvioEn`).
+- **Se escapa siempre** aunque lo escriba el administrador: el texto viaja dentro del HTML del
+  correo y un `<` sin escapar rompe el cuerpo en la bandeja del supervisor de SMU.
+- El modal **es el mismo** que el de las hojas de trabajo (`_envioModo`), que NO llevan comentario:
+  ahí el campo se oculta. Un campo visible que no viaja a ningún lado es peor que no tenerlo.
+- El bloque HTML vive en la zona **CSS-EXPORTADO**: literales, nunca `var(--…)`.
+- Cubierto por `tests/comentario-en-correo-cotizacion.js`.
+
+**Compartir por WhatsApp / correo / lo que tenga el teléfono** (`compartirDocumentos`,
+`compartirPDF`, `_esPDFCompartible`, `compartirCotizacion`, `compartirHoja`, `compartirOT`):
+- Botón **Compartir** en cotizaciones, hojas de preventivo y OT terminadas. Usa la **Web Share
+  API** (`navigator.share`): abre el menú del sistema con el **PDF adjunto de verdad**, no un link
+  suelto. Pedido de Pedro el 12-08-2026.
+- **Solo se comparte un PDF real.** `ot.pdfUrl` guarda el link a la **app** (`…/?pdf=<id>`), que a
+  quien lo recibe por fuera le da 404 — caso #597587. `_esPDFCompartible()` lo rechaza, y donde no
+  hay PDF **el botón no se dibuja**. Mismo invariante que `tests/link-pdf-es-compartible.js`.
+- **Pasa por la misma regeneración que el correo** (`_asegurarPDFCotizacion` → `_pdfCotObsoleto`):
+  compartir es una salida al cliente igual que el envío, y un PDF viejo es igual de malo por
+  WhatsApp que por correo.
+- ⚠️ **No toca EmailJS ni la cola: no gasta de los 200 correos/mes.** Si alguna vez hace falta que
+  compartir mande un correo, va por `mailto:` (lo abre el cliente del equipo), nunca por EmailJS.
+- **Sin monto en el texto, a propósito:** una cifra suelta en WhatsApp no dice si es neta o c/IVA.
+  El texto identifica el documento; los números los pone el PDF.
+- Degrada en orden: **archivo adjunto → enlace → menú propio** (`modal-compartir`, para PC de
+  escritorio y para cuando iOS invalida el gesto tras bajar el PDF). Cerrar el menú (`AbortError`)
+  no es un error y no muestra nada.
+- Cubierto por `tests/compartir-manda-el-pdf.js`.
 
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
@@ -332,6 +367,10 @@ These changes are useful context for understanding current state:
   node tests/planillas-cobranza.js index.html            # offline
   node tests/planillas-cobranza.js index.html --prod     # ademas cuadra contra produccion
   node tests/cola-correos-no-quema-cuota.js index.html
+  node tests/comentario-en-correo-cotizacion.js index.html
+  node tests/compartir-manda-el-pdf.js index.html
+  node tests/link-pdf-es-compartible.js index.html
+  node tests/pdf-cotizacion-no-queda-viejo.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -355,7 +394,12 @@ These changes are useful context for understanding current state:
   cuenta de prueba) ni se comen un trabajo (hoja de agosto, hoja con el tipo cruzado). Con
   `--prod` cuadra los totales contra los datos reales de Firestore ·
   `cola-correos-no-quema-cuota.js` — la cola de correos se contiene (backoff), se DETIENE ante un
-  error de cuota o de credencial, y no pierde ningún aviso. Corre una hora simulada con reloj falso
+  error de cuota o de credencial, y no pierde ningún aviso. Corre una hora simulada con reloj falso ·
+  `comentario-en-correo-cotizacion.js` — el comentario que escribe el administrador llega al correo
+  escapado (un `<` no abre un tag) y con sus saltos de línea, viaja en el `post` para que la cola
+  también lo registre, y no se le ofrece a las hojas de trabajo, que comparten el modal ·
+  `compartir-manda-el-pdf.js` — el botón Compartir manda el PDF (nunca el link a la app), regenera
+  el que quedó viejo, no gasta cuota de EmailJS, y cerrar el menú no se trata como error
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:
   `curl -o vendor/emailjs-browser-4.min.js https://unpkg.com/@emailjs/browser@4/dist/email.min.js`
