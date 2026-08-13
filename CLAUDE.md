@@ -155,6 +155,48 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   no es un error y no muestra nada.
 - Cubierto por `tests/compartir-manda-el-pdf.js`.
 
+**Firma y timbre de EMVAL en la cotización** (`FIRMA_EMVAL`, `_dibujarFirmaEmval`,
+`tools/embeber-firma-emval.js`):
+- Toda cotización sale impresa con la firma y el timbre de EMVAL. Pedido de Pedro el 13-08-2026.
+- ⚠️ **No confundir con el timbre que ya existía.** `estado.fotoTimbre` y `otData.firmaImagen` son
+  del **RECEPTOR** — el local de SMU que recibe el trabajo, fotografiado y firmado en cada visita.
+  Este es el de **EMVAL como emisor**: imagen fija, la misma siempre, y no la captura nadie.
+- **Va en base64 dentro de `index.html`**, no como archivo aparte: el PDF se genera en el teléfono
+  del técnico y muchas veces sin señal, así que algo que haya que ir a buscar por red saldría en
+  blanco justo en terreno. 🔒 **Consecuencia: la firma es públicamente extraíble** del código
+  fuente de la app. Es inevitable si el PDF debe funcionar offline, pero es decisión del cliente.
+- **Se dibuja en dos generadores** (`generarPDFCotizacionGuardada` y `generarPDFCotizacion`).
+  ⚠️ **La segunda no la llama nadie** — es un duplicado huérfano (verificado 13-08-2026: su única
+  aparición en el archivo es su propia definición). Se firma igual para que, si alguien la
+  reconecta, no reaparezca una cotización sin firma que nadie asocie a este cambio.
+- **El alto lo calcula `_altoFirmaCot(totY)`, no es fijo.** La descripción del trabajo es texto
+  libre y empuja la tabla hacia abajo: con 8+ líneas, una firma de alto fijo terminaría fuera de
+  la A4 y **jsPDF no avisa — recorta en silencio**. La función topa la firma en los 281 mm y bajo
+  8 mm devuelve 0 (mejor sin firma que una mancha ilegible). La nota de validez sigue a la firma
+  (`totY + 8 + altoFirma`) y **sin firma vuelve a `totY + 30`**, el layout de siempre.
+- **Medido con pdf.js sobre PDF reales** (13-08-2026): descripción normal → firma de 38 mm, nota
+  en 274 mm; descripción larga → 38 mm, nota en 284; descripción extrema → la firma **se achica
+  sola** a 28 mm y la nota queda en 289, con 8 mm de margen al borde. A los 23 mm iniciales el
+  timbre no se alcanzaba a leer, y el pie de la hoja tenía 29-39 mm sin usar.
+- **Nunca bota el PDF.** Sin imagen cargada no dibuja nada (la cotización sale como antes, sin un
+  recuadro vacío que parezca error de impresión); si `addImage` falla, se emite igual sin firma.
+- 🔴 **`addImage` va con alias y compresión `'FAST'` — no es opcional.** Sin eso jsPDF incrusta el
+  PNG en crudo y la cotización pasa de **26 KB a 1,24 MB** (medido 13-08-2026). Ese PDF lo sube el
+  técnico desde el teléfono y muchas veces con mala señal: con compresión queda en **102 KB**.
+- Para cargar o reemplazar la imagen: `node tools/embeber-firma-emval.js <archivo.png>` (simula) y
+  `--ejecutar` para escribir. Mide el archivo y guarda el `ratio` para no deformar la firma.
+  Acepta PNG y JPEG; la limpia (recorte + fondo blanco) se hace aparte, ver abajo.
+- **Cómo se preparó la imagen** (13-08-2026): la foto de WhatsApp venía 900×1600 con el papel de
+  fondo, trazos ajenos arriba y un hueco grande entre firma y timbre — sin tratar habría salido a
+  12,9 × 23 mm, ilegible. Se recortaron firma y timbre por separado, se juntaron con 45 px de
+  separación (el bloque pasa a ser más ancho que alto, y eso lo agranda en el PDF) y se blanqueó
+  el papel con umbral de luminancia **135** — medido, no adivinado: el papel estaba en 145-185 y
+  la tinta bajo 110. Resultado: 580×526, ratio 1,1027.
+- 🔒 **Los archivos fuente (`firma-emval.jpeg`, `firma-emval-limpia.png`) están en `.gitignore`.**
+  La firma ya viaja pública dentro de `index.html` y eso es inevitable, pero un PNG suelto en el
+  repo es una descarga directa. Viven en el disco de Bastián.
+- Cubierto por `tests/cotizacion-lleva-firma-emval.js`.
+
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
 - `procesarFoto(e)` — Process captured photo, compress, upload
@@ -371,6 +413,7 @@ These changes are useful context for understanding current state:
   node tests/compartir-manda-el-pdf.js index.html
   node tests/link-pdf-es-compartible.js index.html
   node tests/pdf-cotizacion-no-queda-viejo.js index.html
+  node tests/cotizacion-lleva-firma-emval.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -399,7 +442,11 @@ These changes are useful context for understanding current state:
   escapado (un `<` no abre un tag) y con sus saltos de línea, viaja en el `post` para que la cola
   también lo registre, y no se le ofrece a las hojas de trabajo, que comparten el modal ·
   `compartir-manda-el-pdf.js` — el botón Compartir manda el PDF (nunca el link a la app), regenera
-  el que quedó viejo, no gasta cuota de EmailJS, y cerrar el menú no se trata como error
+  el que quedó viejo, no gasta cuota de EmailJS, y cerrar el menú no se trata como error ·
+  `cotizacion-lleva-firma-emval.js` — la firma de EMVAL se dibuja en **los dos** generadores de
+  cotización, cabe en el hueco bajo el TOTAL NETO (lee el hueco del código, no lo asume), no se
+  deforma ni se estira, no dibuja nada si no hay imagen cargada, y una imagen corrupta no bota
+  el PDF. No mezcla la firma del emisor con la del receptor
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:
   `curl -o vendor/emailjs-browser-4.min.js https://unpkg.com/@emailjs/browser@4/dist/email.min.js`
@@ -407,3 +454,5 @@ These changes are useful context for understanding current state:
   escriben con `--ejecutar`, respaldo previo y confirmación tecleada.**
   `reparar-pdf-cruzados.js` — re-enlaza los PDF que quedaron con el número de OT cruzado antes del
   fix del 31-jul. **Escribir requiere autorización de Pedro: es producción.**
+  `embeber-firma-emval.js` — mete la firma y timbre de EMVAL en `index.html` como base64, midiendo
+  el archivo para no deformarla. No toca producción: escribe un archivo del repo, con respaldo.

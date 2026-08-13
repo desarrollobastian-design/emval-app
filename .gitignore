@@ -6,3 +6,12 @@
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Imagenes fuente de la firma y timbre de EMVAL.
+# La firma YA viaja publica dentro de index.html (en base64) porque el PDF tiene que generarse
+# sin señal en terreno; eso es inevitable. Pero un PNG suelto en el repo es una descarga
+# directa, mas facil de encontrar y reutilizar que un base64 dentro de 900 KB de HTML.
+# Se guardan en el disco de Bastian, no en el repo. Para regenerar: tools/embeber-firma-emval.js
+firma-emval.jpeg
+firma-emval-limpia.png
+index.html.antes-de-firma-*.bak
