@@ -197,6 +197,45 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   repo es una descarga directa. Viven en el disco de Bastián.
 - Cubierto por `tests/cotizacion-lleva-firma-emval.js`.
 
+**Pendientes y materiales — nota interna del técnico** (`pend-materiales`, `estado.pendientesMateriales`):
+- Campo de texto libre **solo en preventivos**, debajo de "Observaciones". Lo escribe el técnico en
+  terreno (*"faltaron 2 neumáticos"*) y lo lee **solo el rol Administrador** en el detalle de la OT.
+  Pedido de Lucas vía Pedro el 13-08-2026.
+- 🔴 **El invariante es que NO sale al cliente**: ni en el PDF de la hoja, ni en el correo al
+  supervisor de SMU, ni en la copia a `cotizaciones.emval@gmail.com`. Si se filtra, EMVAL le está
+  avisando por escrito a SMU que el trabajo quedó incompleto — lo contrario de para lo que se pidió.
+- ⚠️ **No se llama "Observaciones técnicas" a propósito.** En preventivos el campo de ARRIBA se
+  llama *"Observaciones"* y **ese sí se imprime**. Dos nombres casi iguales, uno público y otro
+  interno, es cómo un pendiente termina en la hoja del cliente. El nombre no comparte ninguna
+  palabra con el de arriba, y el aviso amarillo junto al campo no es decoración: es lo único que le
+  dice al técnico, mientras escribe, que esto no lo lee el local.
+- **Es opcional**: nunca bloquea el cierre de la OT. Un técnico sin señal no puede quedar atrapado.
+- Se lee del DOM **dentro de la instantánea de `guardarEnFirebase`**, antes del primer `await` —
+  misma regla que todo lo demás (ver `estado-global-pisado-por-la-ot-siguiente`).
+- **Si el tipo no es preventivo se vacía**, no solo se oculta: si el técnico escribió un pendiente y
+  después cambió el tipo, ese texto no puede quedar colgado dentro de una OT correctiva.
+- Viaja por los 5 eslabones donde una OT sobrevive: pausa, retomar, cola offline (write-ahead),
+  escritura en Firestore y subida diferida desde la cola.
+- 🔒 **"Privado" es privado en la interfaz, no un secreto**: Firestore se lee sin autenticación.
+- **Es de TODOS los técnicos**, no solo de quien lo pidió: se muestra por `estado.tipo`, sin ninguna
+  condición de usuario.
+- ✅ **PROBADO de punta a punta el 13-08-2026** con el arnés de `probar-emval-sin-tocar-produccion`
+  (Playwright + Firebase/EmailJS stubeados): se cerró un preventivo completo y el pendiente quedó en
+  el `set` de `ordenes`, **no** en las 56 líneas que jsPDF dibujó en la hoja, **no** en el registro
+  de `pdfs`, y **no** en ninguno de los 2 correos.
+  ⚠️ **Al medir el PDF, comprobar primero que el PDF se generó** (que aparezcan la pauta y el
+  encabezado): en el primer intento el espía rompió `doc.text` y el PDF salió vacío — "el campo no
+  aparece" era cierto y no probaba nada. Un espía sin línea de control da falsos negativos.
+- ✅ **PROBADO en teléfono Android emulado** (Pixel 7, 412×839, DPR 2.625, touch; y Galaxy S5 de
+  360 px): se escribe con el teclado del teléfono sin desbordar la pantalla, y **se cerró la hoja
+  SIN SEÑAL** — el pendiente quedó en la cola del dispositivo (IndexedDB) y subió completo al
+  recuperar señal. Es el escenario que perdió las hojas de julio, así que es el que hay que repetir
+  ante cualquier cambio en este campo. Script: `scratchpad/prueba-telefono.js` de la sesión.
+  📌 Hallazgo colateral, **preexistente y ajeno a este campo**: cerrando sin señal, la app igual
+  intenta escribir el registro de `pdfs` y el `pdfUrl` de la orden — en producción esas dos
+  escrituras fallan calladas. Encaja con `pdf-en-cloudinary-fuente-paralela`. No se tocó.
+- Cubierto por `tests/pendientes-materiales-no-sale-al-cliente.js`.
+
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
 - `procesarFoto(e)` — Process captured photo, compress, upload
@@ -414,6 +453,7 @@ These changes are useful context for understanding current state:
   node tests/link-pdf-es-compartible.js index.html
   node tests/pdf-cotizacion-no-queda-viejo.js index.html
   node tests/cotizacion-lleva-firma-emval.js index.html
+  node tests/pendientes-materiales-no-sale-al-cliente.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -446,7 +486,11 @@ These changes are useful context for understanding current state:
   `cotizacion-lleva-firma-emval.js` — la firma de EMVAL se dibuja en **los dos** generadores de
   cotización, cabe en el hueco bajo el TOTAL NETO (lee el hueco del código, no lo asume), no se
   deforma ni se estira, no dibuja nada si no hay imagen cargada, y una imagen corrupta no bota
-  el PDF. No mezcla la firma del emisor con la del receptor
+  el PDF. No mezcla la firma del emisor con la del receptor ·
+  `pendientes-materiales-no-sale-al-cliente.js` — la nota interna del técnico no se imprime en la
+  hoja ni viaja en el correo, solo aparece en preventivos, solo la ve el Administrador (ni el
+  Supervisor ni el técnico), se lee antes del primer `await`, sobrevive los 5 eslabones de
+  persistencia, y la etiqueta no puede volver a decir "Observaciones"
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:
   `curl -o vendor/emailjs-browser-4.min.js https://unpkg.com/@emailjs/browser@4/dist/email.min.js`

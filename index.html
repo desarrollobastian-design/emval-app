@@ -841,6 +841,22 @@
       <textarea id="desc-trabajo" placeholder="Describe detalladamente lo que se hizo..." oninput="estado.descripcion=this.value;programarAutoguardadoOT()"></textarea>
     </div>
 
+    <!-- PENDIENTES Y MATERIALES — interno de EMVAL, solo preventivos.
+         NO se llama "Observaciones tecnicas" A PROPOSITO: el campo de arriba se llama
+         "Observaciones" en preventivos y ESE SI se imprime en la hoja que recibe SMU. Dos
+         nombres casi iguales, uno publico y otro interno, es como un pendiente termina impreso
+         al cliente. El nombre elegido no comparte ninguna palabra con el de arriba.
+         El aviso amarillo no es decoracion: es lo unico que le dice al tecnico, en el momento
+         de escribir, que esto no lo va a leer el local. -->
+    <div class="field" id="pend-materiales-wrap" style="display:none;">
+      <label for="pend-materiales">Pendientes y materiales</label>
+      <div style="display:flex;gap:6px;align-items:flex-start;background:#FEF3C7;color:#78350F;border-radius:var(--radio-sm);padding:8px 10px;font-size:11px;line-height:1.45;margin-bottom:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span><b>Solo lo ve EMVAL.</b> No sale en la hoja de trabajo ni le llega al supervisor del local.</span>
+      </div>
+      <textarea id="pend-materiales" maxlength="1000" placeholder="Ej: Faltaron 2 neumáticos para la transpaleta N°2. Quedó pendiente para la próxima visita." oninput="estado.pendientesMateriales=this.value;programarAutoguardadoOT()"></textarea>
+    </div>
+
     <div class="field">
       <label>Fotos del trabajo</label>
       <div class="foto-grid" id="grid-despues"></div>
@@ -1528,6 +1544,7 @@ function _crearOTPausadaDesdeEstado() {
     descripcionProblema: estado.descripProblema || '',
     descripcion: estado.descripcion || '',
     descripcionTrabajo: estado.descripcion || '',
+    pendientesMateriales: estado.pendientesMateriales || '',
     fotosAntes: estado.fotosAntes || [],
     fotosDespues: estado.fotosDespues || [],
     fotoTimbre: estado.fotoTimbre || null,
@@ -1602,6 +1619,7 @@ function _cargarEstadoDesdeOTGuardada(ot) {
   estado.direccion = ot.direccion || '';
   estado.descripProblema = ot.descripcionProblema || ot.descripProblema || '';
   estado.descripcion = ot.descripcionTrabajo || ot.descripcion || '';
+  estado.pendientesMateriales = ot.pendientesMateriales || '';
   estado.cadenaNombre = ot.cadena || '';
   estado.cadenaLogo = ot.cadenaLogo || '';
   estado.cadenaColor = ot.cadenaColor || '';
@@ -1821,6 +1839,7 @@ let estado = {
   serviciosPreventivo: [],
   tipo: null,
   descripProblema: '',
+  pendientesMateriales: '',   // interno EMVAL, solo preventivos: NO viaja al PDF ni al correo
   fotosAntes: [null,null,null,null],
   fotosDespues: [null,null,null,null],
   fotoTimbre: null,
@@ -2239,6 +2258,7 @@ function nuevaOT() {
   estado.ceco = null;
   estado.descripcion = '';
   estado.descripProblema = '';
+  estado.pendientesMateriales = '';
   estado.cadenaNombre = '';
   estado.cadenaLogo = '';
   estado.cadenaColor = '';
@@ -2750,6 +2770,16 @@ function cargarEjecucionScreen() {
     if (descTA) descTA.placeholder = 'Describe detalladamente lo que se hizo...';
   }
 
+  // "Pendientes y materiales": SOLO preventivos. Si el trabajo no es preventivo se oculta Y SE
+  // VACIA el estado — si el tecnico empezo como preventivo, escribio un pendiente y despues
+  // cambio el tipo, ese texto no puede quedar colgado viajando dentro de una OT correctiva.
+  const pendWrap = document.getElementById('pend-materiales-wrap');
+  const pendTA = document.getElementById('pend-materiales');
+  const esPrev = estado.tipo === 'preventivo';
+  if (pendWrap) pendWrap.style.display = esPrev ? 'block' : 'none';
+  if (!esPrev) estado.pendientesMateriales = '';
+  if (pendTA) pendTA.value = esPrev ? (estado.pendientesMateriales || '') : '';
+
   // Restaurar descripción guardada (al continuar OT pausada)
   if (descTA) descTA.value = estado.descripcion || '';
 
@@ -2843,6 +2873,7 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       descripcionProblema: ot.descripcionProblema || '',
       descripcion: ot.descripcion || '',
       descripcionTrabajo: ot.descripcionTrabajo || ot.descripcion || '',
+      pendientesMateriales: ot.pendientesMateriales || '',
       numEquipos: ot.numEquipos || '',
       serviciosPreventivo: ot.serviciosPreventivo || [],
       fotosAntes: urlsAntes,
@@ -2970,6 +3001,15 @@ function pausarOT() {
     otPausada.hora = hora;
     otPausada.descripcion = desc;
     otPausada.descripcionTrabajo = desc;
+    // Se relee del DOM como `desc`: el oninput mantiene `estado` al dia, pero si el ultimo
+    // tecleo no alcanzo a disparar, la pausa se llevaria el texto viejo. Solo en preventivos.
+    if (estado.tipo === 'preventivo') {
+      const pendPausaEl = document.getElementById('pend-materiales');
+      if (pendPausaEl) estado.pendientesMateriales = pendPausaEl.value.trim();
+      otPausada.pendientesMateriales = estado.pendientesMateriales || '';
+    } else {
+      otPausada.pendientesMateriales = '';
+    }
     otPausada.autoDraft = false;
     otPausada.firmada = false;
     otPausada.pendienteSync = true;   // se limpia cuando llega a Firestore (ver _sincronizarPausadaFirebase)
@@ -3717,6 +3757,11 @@ async function guardarEnFirebase(otBase, desc, fecha) {
      quedaban correctas y estas, guardadas "online" con senal mala, no. NO leer `estado` despues
      de este bloque. ────────────────────────────────────────────────────────────────────────── */
   const descripcionProblema = document.getElementById('desc-problema') ? document.getElementById('desc-problema').value || '' : '';
+  // Pendientes y materiales: se lee del DOM ACA, dentro de la instantanea, por la misma razon que
+  // todo lo demas. Solo en preventivos — en cualquier otro tipo se guarda vacio, nunca lo que haya
+  // quedado en el textarea.
+  const _pendEl = document.getElementById('pend-materiales');
+  const pendientesMateriales = (_tipoActual() === 'preventivo' && _pendEl) ? (_pendEl.value || '').trim() : '';
   const fotosAntesCopy = estado.fotosAntes.filter(f => f);
   const fotosDespuesCopy = estado.fotosDespues.filter(f => f);
   const fotoTimbreCopy = estado.fotoTimbre;
@@ -3757,6 +3802,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     tecnico: snap.tecnico, fecha: fecha,
     descripcionProblema: descripcionProblema,
     descripcionTrabajo: desc, ceco: snap.ceco,
+    pendientesMateriales: pendientesMateriales,
     numEquipos: snap.numEquipos,
     serviciosPreventivo: [...snap.serviciosPreventivo],
     fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
@@ -3833,6 +3879,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       fecha: esEdicion ? (snap.editandoFecha || fecha) : fecha,
       descripcionProblema: descripcionProblema,
       ceco: snap.ceco, descripcionTrabajo: desc,
+      pendientesMateriales: pendientesMateriales,
       numEquipos: snap.numEquipos,
       serviciosPreventivo: snap.serviciosPreventivo,
       fotosAntes: urlsAntes, fotosDespues: urlsDespues,
@@ -8753,6 +8800,23 @@ async function verOTsTecnico(nombre, grupo) {
       card.appendChild(descDiv);
     }
 
+    // Pendientes y materiales — SOLO el administrador. El rol Supervisor no lo ve (decision de
+    // Pedro, 13-08-2026). Va con textContent, no innerHTML: lo escribe un tecnico en terreno y
+    // no tiene por que ser HTML valido.
+    if (estado.cargo === 'Administrador' && ot.pendientesMateriales) {
+      const pendDiv = document.createElement('div');
+      pendDiv.style.cssText = 'padding:8px 10px;margin-top:8px;background:#FEF3C7;border-left:3px solid var(--naranja);border-radius:var(--radio-sm);';
+      const pendTit = document.createElement('div');
+      pendTit.style.cssText = 'font-size:11px;font-weight:700;color:#78350F;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px;';
+      pendTit.textContent = 'Pendientes y materiales';
+      const pendTxt = document.createElement('div');
+      pendTxt.style.cssText = 'font-size:12px;color:#78350F;line-height:1.5;white-space:pre-wrap;';
+      pendTxt.textContent = ot.pendientesMateriales;
+      pendDiv.appendChild(pendTit);
+      pendDiv.appendChild(pendTxt);
+      card.appendChild(pendDiv);
+    }
+
     // Stats fotos
     const statsDiv = document.createElement('div');
     statsDiv.style.cssText = 'display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--gris2);font-size:12px;color:var(--texto3);';
@@ -12896,6 +12960,7 @@ async function sincronizarOTsPendientes() {
         tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
         descripcionProblema: ot.descripcionProblema || '',
         ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
+        pendientesMateriales: ot.pendientesMateriales || '',
         numEquipos: ot.numEquipos || '',
         serviciosPreventivo: ot.serviciosPreventivo || [],
         fotosAntes: urlsAntes, fotosDespues: urlsDespues,
