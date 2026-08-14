@@ -70,6 +70,14 @@ async function correr(otInicial, etiqueta) {
     async agregarFotosAlPDF(){},
     document: { getElementById: id => id === 'desc-trabajo' ? { value: pisado ? '' : 'Cambio de rodamiento' } : null },
 
+    // Guardias de tiempo (13-08-2026): desde el fix del cuelgue sin señal, guardarYEnviarPDF
+    // envuelve TODA llamada a la nube. Sin estos dos en el sandbox, cada llamada lanzaba un
+    // ReferenceError que los try/catch de la funcion se tragaban, y el test reportaba "null"
+    // en todo — un falso positivo del arnes, no un cruce de numeros.
+    // Transparentes a proposito: lo que este test vigila es el numero de la OT, no el timeout.
+    _conTimeout: p => p,
+    _fetchConTimeout: (url, opts) => sandbox.fetch(url, opts),
+
     // El await largo: aca es donde el tecnico toca "Nueva OT".
     async fetch(url, opts) {
       for (const [k, v] of opts.body._campos) if (k === 'public_id') escritos.publicId = v;

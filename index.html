@@ -4181,7 +4181,7 @@ async function compartirCotizacion(cot) {
     var url = await _asegurarPDFCotizacion(cot);
     await compartirPDF({
       url: url,
-      nombre: _slugPDFCot(cot) + '.pdf',
+      nombre: _nombrePDFCot(cot),
       titulo: _asuntoCotizaciones([cot]),
       texto: _textoCompartirCot(cot)
     });
@@ -4200,7 +4200,7 @@ async function compartirCotizacionesSeleccionadas() {
     const docs = [];
     for (var i = 0; i < sel.length; i++) {
       const url = await _asegurarPDFCotizacion(sel[i]);
-      if (url) docs.push({ url: url, nombre: _slugPDFCot(sel[i]) + '.pdf' });
+      if (url) docs.push({ url: url, nombre: _nombrePDFCot(sel[i]) });
     }
     await compartirDocumentos(docs, {
       titulo: _asuntoCotizaciones(sel),
@@ -5115,6 +5115,12 @@ async function guardarCotizacion() {
       otId: cotizacionActual.id,
       otNumero: cotizacionActual.numero,
       local: cotizacionActual.local,
+      // Local sin la cadena adelante ("S10 Chillan 2" -> "Chillan 2"), para el nombre del PDF.
+      // Se DENORMALIZA aca a proposito: el catalogo de cadenas puede no estar cargado el dia que
+      // se genere o se comparta el archivo, y entonces la MISMA cotizacion saldria con dos
+      // nombres distintos segun por donde se abriera. El nombre de un documento no puede depender
+      // de que una pantalla se haya visitado antes.
+      localCorto: _localSinCadena(cotizacionActual.local, cotizacionActual.cadena || ''),
       centro: cotizacionActual.centroSucursal || '',
       tecnico: cotizacionActual.tecnico,
       fecha: cotizacionActual.fecha,
@@ -5448,7 +5454,10 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnPdf.onclick = (function(data){ return function(){
       // Antes bastaba con que EXISTIERA un pdfUrl para abrirlo, sin preguntar de cuando era.
-      if (data.pdfUrl && !_pdfCotObsoleto(data)) { window.open(data.pdfUrl, '_blank'); }
+      // `_urlDescargaCot` no cambia el archivo: le pega el nombre bueno a la descarga. Los PDF
+      // subidos ANTES del 14-08-2026 tienen el public_id viejo y esto los renombra igual, que es
+      // lo unico que se puede hacer sin volver a subir 45 archivos a produccion.
+      if (data.pdfUrl && !_pdfCotObsoleto(data)) { window.open(_urlDescargaCot(data), '_blank'); }
       else { generarPDFCotizacionGuardada(data); }
     }; })(it);
     const btnEdit = document.createElement('button');
@@ -5514,7 +5523,10 @@ async function cargarCarpetas() {
       const d = doc.data();
       const cotItem = { id: doc.id, otId: d.otId || '', otNumero: d.otNumero, local: d.local, fecha: d.fecha, total: d.total,
         descripcionTrabajo: d.descripcionTrabajo, nombreServicio: d.nombreServicio || '', items: d.items, tecnico: d.tecnico,
+        // localCorto va SI O SI: esta pantalla arma el objeto campo por campo, y lo que no se
+        // copie aca no existe para el boton Ver PDF ni para Compartir, por mas que este guardado.
         descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '',
+        localCorto: d.localCorto || '',
         carpeta: d.carpeta || '', supervisor: d.supervisor || '',
         pdfUrl: d.pdfUrl || '', enviado: d.enviado || false,
         tipoCot: d.tipoCot || '', estadoCot: d.estadoCot || '',
@@ -7245,9 +7257,13 @@ async function guardarYEnviarPDF() {
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
     formData.append('public_id', _nombreArchivoPDF(snap).replace(/\.pdf$/i, '') + '_' + String(snap.clientId).slice(-7) + '.pdf');
-    const resp = await fetch(
+    // _fetchConTimeout, igual que el gemelo de la cola (_subirPDFaCloudinary): un fetch pelado
+    // no se rinde nunca con la señal MUERTA (que no es lo mismo que sin señal — navigator.onLine
+    // sigue en true) y deja el cierre de la OT esperando en terreno.
+    const resp = await _fetchConTimeout(
       'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
-      { method: 'POST', body: formData }
+      { method: 'POST', body: formData },
+      30000
     );
     const data = await resp.json();
     if (data.secure_url) {
@@ -7267,7 +7283,12 @@ async function guardarYEnviarPDF() {
     if (window._firebaseReady) {
       const db = window.firebase.firestore();
       // Guardar PDF completo (con fotos) en Firestore
-      const pdfDoc = await db.collection('pdfs').add({
+      // _conTimeout — ESTE ERA EL CUELGUE. Sin el, cerrando sin señal el add() del SDK no
+      // resuelve ni rechaza (lo dice el comentario de _conTimeout) y la funcion se quedaba
+      // parada AQUI para siempre: no se enviaba el correo al local, no se disparaba
+      // _notificarOTCompletada, y ninguno de los dos llegaba siquiera a su cola de reintento.
+      // La hoja se veia cerrada en el telefono y administracion nunca se enteraba. 13-08-2026.
+      const pdfDoc = await _conTimeout(db.collection('pdfs').add({
         otNumero: snap.otNumero,
         // Identidad estable del enlace: si el numero se cruza igual, por aca se re-enlaza.
         otClientId: snap.clientId,
@@ -7278,7 +7299,7 @@ async function guardarYEnviarPDF() {
         pdfUrl: '',
         pdfUrlCloudinary: pdfUrlCloudinary || '',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-      });
+      }), 25000, 'add pdf');
       pdfUrlFirestore = 'https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfDoc.id;
       // Guardar ambas URLs: Firestore para ver en app, Cloudinary para email.
       // Solo si el estado SIGUE siendo el de esta OT: si el tecnico ya arranco la siguiente,
@@ -7320,26 +7341,32 @@ async function guardarYEnviarPDF() {
       // set({merge}) por si el doc de la OT aun no lo escribio guardarEnFirebase (mala senal).
       const _otDocId = snap.editandoOTId || snap.otClientId;
       if (_otDocId) {
-        await db.collection('ordenes').doc(_otDocId).set({
+        await _conTimeout(db.collection('ordenes').doc(_otDocId).set({
           pdfUrl: pdfUrlFirestore || '',
           pdfUrlCloudinary: pdfUrlCloudinary || ''
-        }, { merge: true });
+        }, { merge: true }), 25000, 'enlazar pdf en OT');
       } else {
         // Legacy: OT sin clientId (versiones viejas) → fallback por numero.
-        const legacySnap = await db.collection('ordenes')
-          .where('numero', '==', snap.otNumero).get();
+        const legacySnap = await _conTimeout(db.collection('ordenes')
+          .where('numero', '==', snap.otNumero).get(), 25000, 'buscar OT legacy');
         if (!legacySnap.empty) {
-          await db.collection('ordenes').doc(legacySnap.docs[0].id).update({
+          await _conTimeout(db.collection('ordenes').doc(legacySnap.docs[0].id).update({
             pdfUrl: pdfUrlFirestore || '',
             pdfUrlCloudinary: pdfUrlCloudinary || ''
-          });
+          }), 25000, 'enlazar pdf en OT legacy');
         }
       }
     } catch(e) {
       // SILENCIO-FIRMADO: el PDF ya existe, ya se subio y ya va camino del correo. Esto solo
       // enlaza la URL en el documento de la orden. Si falla, el supervisor abre el PDF desde
       // el correo. Interrumpir el cierre de la OT por esto seria peor que el fallo.
+      //
+      // PERO callar no es lo mismo que perder. Antes esto moria en un console.error y el PDF
+      // quedaba en Cloudinary sin que Firestore lo enlazara nunca — la memoria
+      // `pdf-en-cloudinary-fuente-paralela` es la lista de los que terminaron asi. El enlace
+      // se encola en el dispositivo y se reintenta solo al recuperar la señal. 13-08-2026.
       console.error('Error actualizando URL PDF en orden:', e);
+      _encolarEnlacePDF(snap.editandoOTId || snap.otClientId, pdfUrlFirestore, pdfUrlCloudinary);
     }
   }
 
@@ -7815,6 +7842,12 @@ async function generarPDFCotizacionGuardada(cotData, options) {
       } catch(eu) { console.warn('Error subiendo PDF cot a Cloudinary:', eu); }
       return null;
     }
+    /* ⚠️ Este camino ABRE el PDF, no lo descarga, y un blob no lleva nombre de archivo: si desde
+       el visor del navegador se aprieta "guardar", sale con el id del blob y no con el nombre de
+       `_nombrePDFCot`. Se deja asi a proposito — el boton dice "Ver PDF" y cambiarlo a descarga
+       es cambiarle el comportamiento a Pedro sin que lo haya pedido. Solo cae aca la cotizacion
+       que todavia no tiene PDF subido o que quedo obsoleta; apenas se envia o se comparte, se
+       sube a Cloudinary y desde ahi ya sale con el nombre bueno. */
     const blobUrl = doc.output('bloburl');
     window.open(blobUrl, '_blank');
     toast('Abriendo PDF...');
@@ -8212,14 +8245,13 @@ async function generarPDFCotizacion() {
     toast('Cotización lista (sin datos de OT)');
   }
 
+  /* El nombre lo arma `_nombrePDFCot`, el mismo que usa el generador que de verdad emite hoy.
+     Antes esta funcion tenia su PROPIA version del formato (decia "OT" donde el resto dice "HS",
+     y pegaba el local con la cadena adentro). Dos formatos para el mismo documento es como
+     empiezan los archivos que nadie encuentra: si alguien reconecta esta funcion —hoy no la
+     llama nadie— los nombres salen iguales a los de siempre. */
   const _servPDF2 = (document.getElementById('cot-nombre-servicio') ? document.getElementById('cot-nombre-servicio').value.trim() : '') || (cotizacionActual.nombreServicio||'');
-  const _localPDF2 = (cotizacionActual.local||'').replace(/\s+/g,' ').trim();
-  // El numero del archivo sale del documento, nunca de la fecha de hoy: el fallback anterior
-  // volvia a armar el '01' hardcodeado, o sea el mismo numero para todas las del dia.
-  const _cotN2 = cotizacionActual.numeroCotizacion || 'SIN-NUMERO';
-  const _otN2 = cotizacionActual.otNumero || '';
-  const nombreArchivo = _cotN2 + ' OT ' + _otN2 + (_servPDF2 ? ' ' + _servPDF2 : '') + ' ' + _localPDF2 + '.pdf';
-  doc.save(nombreArchivo);
+  doc.save(_nombrePDFCot(Object.assign({}, cotizacionActual, { nombreServicio: _servPDF2 })));
   toast('PDF completo descargado');
 }
 
@@ -9394,17 +9426,119 @@ function _slugTexto(txt) {
     .substring(0, 60);
 }
 
-// Nombre de archivo descriptivo para el PDF de una cotización
-function _slugPDFCot(cot) {
+/* ─── NOMBRE DEL PDF DE UNA COTIZACION ────────────────────────────────────────────────────────
+   Pedido de Pedro, 14-08-2026. Formato:
+
+       <N° cotizacion> HS <N° OT> <servicio> <local>.pdf
+       31082601 HS 9464 Cambio de lamas Chillan 2.pdf
+
+   Es el formato con el que Pedro archiva a mano desde ANTES de que existiera la app, y el orden
+   no es decorativo: el folio va primero porque es lo unico irrepetible y ordenable — una carpeta
+   ordenada por nombre queda ordenada por dia y por correlativo del dia. El nombre viejo
+   (`Cotizacion_<local>_<servicio>_<fecha>`) empezaba con la misma palabra en las 45, asi que
+   ordenar la carpeta no servia de nada.
+
+   ⚠️ SIN N° DE OT SE OMITE EL BLOQUE "HS ..." ENTERO, no se deja vacio. Una cotizacion previa se
+   emite ANTES de que exista la OT (`otNumero: ''`, puesto a proposito al guardar), y un "HS"
+   suelto sin numero se lee como un dato que se perdio, que es justo lo contrario.
+
+   ⚠️ El folio se toma tal cual lo dejo `_asignarNumeroCotizacion` — ddmmaa + correlativo del dia,
+   con transaccion. Aca NO se recalcula ni se rearma: ese fue el bug del '01' hardcodeado que
+   mando 39 cotizaciones con el mismo numero a los supervisores de SMU.
+   ─────────────────────────────────────────────────────────────────────────────────────────── */
+
+// El local sin el nombre de la cadena adelante: "S10 Chillan 2" -> "Chillan 2".
+// La cadena sale de lo que YA esta en memoria; nunca se sale a buscarla a la red: esto corre
+// mientras se genera un PDF, muchas veces en el telefono de un tecnico y sin senal.
+// Sin catalogo cargado devuelve el nombre COMPLETO — un nombre largo se entiende igual, uno
+// cortado a medias ("S10" a secas) no dice de que local es.
+function _localSinCadena(local, cadenaNombre) {
+  const l = String(local == null ? '' : local).trim();
+  if (!l) return '';
+  let cad = String(cadenaNombre == null ? '' : cadenaNombre).trim();
+  if (!cad) {
+    const m = window._cadenasMapaCot && window._cadenasMapaCot[l];
+    cad = (m && m.nombre) || '';
+  }
+  if (!cad) return l;
+  if (l.toLowerCase().indexOf(cad.toLowerCase() + ' ') !== 0) return l;
+  // Lo que queda tiene que decir algo: una sucursal que se llama igual que su cadena se deja entera.
+  return l.slice(cad.length).trim() || l;
+}
+
+// Recorta a lo mas `max` caracteres, pero por la ultima palabra COMPLETA. Cortar a ciegas dejaba
+// nombres como "...y circuito d LOMAS SAN ANDRES", que se lee como un archivo corrupto.
+function _recortarPalabras(txt, max) {
+  const t = String(txt == null ? '' : txt).trim();
+  if (t.length <= max) return t;
+  const corte = t.substring(0, max);
+  const esp = corte.lastIndexOf(' ');
+  // Sin espacios en los primeros `max` (una sola palabra larguisima) se corta igual: mejor un
+  // nombre feo que uno de 300 caracteres que el sistema de archivos rechaza entero.
+  return (esp > max * 0.5 ? corte.substring(0, esp) : corte).trim();
+}
+
+// Nombre para LEER, con espacios. El identificador para Cloudinary se deriva de este en
+// _slugPDFCot, que si va sin espacios. Son dos cosas distintas a proposito.
+function _nombrePDFCot(cot) {
   cot = cot || {};
-  const local = _slugTexto(cot.local || 'cotizacion');
-  const servicio = _slugTexto(cot.nombreServicio || cot.descripcionTrabajo || '');
-  let fechaIso = '';
-  try { fechaIso = new Date().toISOString().slice(0, 10); } catch(e) { fechaIso = ''; }
-  let nombre = 'Cotizacion_' + local;
-  if (servicio) nombre += '_' + servicio;
-  if (fechaIso) nombre += '_' + fechaIso;
-  return nombre.substring(0, 100);
+  const partes = [];
+  // Sin folio queda 'SIN-NUMERO' bien visible: es el sintoma de que el contador no respondio al
+  // guardar (_asignarNumeroCotizacion marca esas como provisorias). Se ve y se corrige antes de
+  // enviarla; un nombre que disimula el hueco la manda a SMU sin numero.
+  partes.push(String(cot.numeroCotizacion || '').trim() || 'SIN-NUMERO');
+  // El 0 se descarta igual que el vacio: no existe la OT 0, y `otNumero` llega como numero desde
+  // Firestore (integerValue), asi que un 0 pasaria el filtro de string y estamparia un "HS 0".
+  const ot = String(cot.otNumero == null ? '' : cot.otNumero).trim();
+  if (ot && ot !== '0') { partes.push('HS'); partes.push(ot); }
+  const servicio = String(cot.nombreServicio || cot.descripcionTrabajo || '').trim();
+  if (servicio) partes.push(_recortarPalabras(servicio, 45));
+  const local = String(cot.localCorto || '').trim() || _localSinCadena(cot.local, cot.cadena);
+  if (local) partes.push(local);
+  /* SIN TILDES NI Ñ, y no es cosmetica: el nombre viaja dentro de la URL de Cloudinary como
+     `fl_attachment:<nombre>` y un caracter fuera de ASCII la hace responder 400 — o sea, la
+     descarga se ROMPE, no es que salga fea.
+     ✅ Comprobado con HEAD contra produccion (14-08-2026): "Destape baño" devolvia 400 e "inline";
+     ya normalizado devuelve 200 con el nombre puesto. Es ademas lo que pide la regla de nombres
+     de archivo de CorexOn (sin tildes) y lo que hace Pedro a mano en sus 4 ejemplos.
+     Los caracteres de la segunda linea los RECHAZAN Windows y Android en un nombre de archivo, y
+     la descripcion del trabajo es texto libre: basta un "cambio 1/2 pulgada" para no poder
+     guardar el archivo. */
+  return partes.join(' ')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^\x20-\x7E]+/g, '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ').trim() + '.pdf';
+}
+
+// public_id de Cloudinary: el mismo nombre, sin espacios. Un public_id con espacios viaja como
+// %20 y ensucia la URL en el correo, en el enlace y en cualquier lugar que la muestre cruda.
+// El sufijo unico lo agrega quien sube (ver generarPDFCotizacionGuardada): sin el, regenerar el
+// PDF de una cotizacion pisaria el anterior, y el preset de subida no garantiza sobrescritura.
+function _slugPDFCot(cot) {
+  const base = _nombrePDFCot(cot).replace(/\.pdf$/i, '');
+  return base
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .substring(0, 90) || 'Cotizacion';
+}
+
+/* Cloudinary entrega el archivo con el nombre del public_id, que va sin espacios por fuerza. Para
+   que la DESCARGA llegue con el nombre de arriba se usa `fl_attachment`, que fija el
+   Content-Disposition sin tocar el archivo ni volver a subirlo.
+   ✅ Verificado con HEAD contra un PDF real de produccion (14-08-2026):
+        Content-Disposition: attachment; filename="01082604 HS 301143 Correctivo transpaletas Chillan.pdf"
+   ⚠️ Si la URL no es de Cloudinary —el link a la app (.../?pdf=<id>), o un PDF en Firestore— se
+   devuelve TAL CUAL. Meterle una transformacion a una URL que no es de Cloudinary la rompe, y un
+   link roto es mucho peor que un nombre feo. */
+function _urlDescargaCot(cot) {
+  const url = String((cot && cot.pdfUrl) || '');
+  const marca = '/raw/upload/';
+  const i = url.indexOf(marca);
+  if (i === -1) return url;
+  const nombre = _nombrePDFCot(cot).replace(/\.pdf$/i, '');
+  return url.slice(0, i + marca.length) + 'fl_attachment:' + encodeURIComponent(nombre) + '/' + url.slice(i + marca.length);
 }
 
 // Asunto descriptivo y buscable para el correo de cotizaciones
@@ -12744,6 +12878,72 @@ async function _agregarPDFaColaPendiente(clientId, pdfBase64) {
   } catch(e) { console.warn('No se pudo guardar PDF en la cola:', e); }
 }
 
+/* ENLACE DEL PDF PENDIENTE — la escritura que fallaba callada.
+   Caso que la cola de OT no cubre: la OT SI se guardo en Firestore (habia señal) y la señal se
+   cayo despues, durante la subida del PDF. La OT no queda en la cola de pendientes —ya esta en la
+   nube— asi que nadie reintenta el enlace: el PDF existe en Cloudinary y el documento de la orden
+   nunca lo apunta. Es exactamente el escenario de `pdf-en-cloudinary-fuente-paralela`.
+   Invariante, igual que en la cola de correos: el codigo NUNCA borra un enlace que no logro
+   aplicarse. O se escribe, o sigue pendiente. */
+var _KEY_ENLACES_PDF = 'emval_enlaces_pdf_pendientes';
+
+function _leerEnlacesPDFPendientes() {
+  try { return JSON.parse(localStorage.getItem(_KEY_ENLACES_PDF) || '[]'); } catch(e) { return []; }
+}
+
+function _escribirEnlacesPDFPendientes(lista) {
+  try { localStorage.setItem(_KEY_ENLACES_PDF, JSON.stringify(lista || [])); } catch(e) {}
+}
+
+function _encolarEnlacePDF(otDocId, pdfUrl, pdfUrlCloudinary) {
+  if (!otDocId) return;                                   // sin doc no hay a que enlazar
+  if (!pdfUrl && !pdfUrlCloudinary) return;               // sin URL no hay nada que enlazar
+  try {
+    // Por otDocId: si el tecnico regenera el PDF de la misma OT, el enlace bueno es el ultimo.
+    var lista = _leerEnlacesPDFPendientes().filter(function(it){ return it.otDocId !== otDocId; });
+    lista.push({
+      otDocId: otDocId,
+      pdfUrl: pdfUrl || '',
+      pdfUrlCloudinary: pdfUrlCloudinary || '',
+      creadoEn: Date.now()
+    });
+    _escribirEnlacesPDFPendientes(lista);
+  } catch(e) { console.warn('No se pudo encolar el enlace del PDF:', e); }
+}
+
+async function sincronizarEnlacesPDFPendientes() {
+  if (!navigator.onLine || !window._firebaseReady) return;
+  var lista = _leerEnlacesPDFPendientes();
+  if (!lista.length) return;
+  var db = window.firebase.firestore();
+  var quedan = [];
+  for (var i = 0; i < lista.length; i++) {
+    var it = lista[i];
+    try {
+      /* update(), NUNCA set({merge}) como en el camino directo: aca la OT puede no existir
+         todavia en Firestore (sigue en la cola del dispositivo). Un set con merge la CREARIA
+         con dos campos y nada mas — una orden fantasma, sin numero ni tipo, colandose en las
+         listas. update() falla con not-found y el enlace se queda esperando a que la OT suba. */
+      /* SOLO los campos que traen valor. Un enlace encolado puede tener una sola de las dos
+         URLs (Cloudinary subio y el registro de 'pdfs' no, o al reves). Escribir la otra como
+         '' pisaria con vacio un enlace que ya estaba bueno en el documento — el reintento
+         dejaria la OT peor que antes de reintentar. */
+      var _campos = {};
+      if (it.pdfUrl) _campos.pdfUrl = it.pdfUrl;
+      if (it.pdfUrlCloudinary) _campos.pdfUrlCloudinary = it.pdfUrlCloudinary;
+      if (!Object.keys(_campos).length) continue;   // nada que escribir: se descarta
+      await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
+        25000, 'reintento enlace pdf');
+      console.log('Enlace de PDF aplicado a la OT', it.otDocId);
+    } catch(e) {
+      // No se aplico: sigue pendiente. Se reintenta en el proximo ciclo.
+      console.warn('Enlace de PDF sigue pendiente (' + it.otDocId + '):', e && e.message);
+      quedan.push(it);
+    }
+  }
+  _escribirEnlacesPDFPendientes(quedan);
+}
+
 function _abrirDBOffline() {
   return new Promise(function(resolve, reject) {
     var req = indexedDB.open('emval_offline', 1);
@@ -12983,8 +13183,14 @@ async function sincronizarOTsPendientes() {
       if (ot.pdfBase64) {
         pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot.numero, ot.clientId)) || '';
         if (pdfUrlSync && ot.clientId) {
-          try { await db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }); }
-          catch(e) { console.warn('No se pudo guardar pdfUrl en la OT (sync):', e); }
+          // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
+          // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
+          // se encola en vez de perderse — misma razon que en guardarYEnviarPDF.
+          try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
+          catch(e) {
+            console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
+            _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
+          }
         }
       }
 
@@ -13027,6 +13233,8 @@ window.addEventListener('online', function() {
   setTimeout(sincronizarOTsPendientes, 2000);
   setTimeout(sincronizarPausadasPendientes, 2500);
   setTimeout(sincronizarCorreosPendientes, 3000);
+  // Ultimo: la OT tiene que existir en Firestore antes de que su enlace se pueda aplicar.
+  setTimeout(sincronizarEnlacesPDFPendientes, 3500);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -13062,6 +13270,7 @@ document.addEventListener('visibilitychange', function() {
     setTimeout(sincronizarOTsPendientes, 800);
     setTimeout(sincronizarPausadasPendientes, 1200);
     setTimeout(sincronizarCorreosPendientes, 1600);
+    setTimeout(sincronizarEnlacesPDFPendientes, 2000);
   }
 });
 
@@ -13114,9 +13323,11 @@ if (!_soloVisorPDF) {
   setTimeout(sincronizarOTsPendientes, 3500);
   setTimeout(sincronizarPausadasPendientes, 3000);
   setTimeout(sincronizarCorreosPendientes, 4000);
+  setTimeout(sincronizarEnlacesPDFPendientes, 4500);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);
+  setInterval(sincronizarEnlacesPDFPendientes, 90000);
 }
 </script>
 </body>
