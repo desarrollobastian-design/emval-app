@@ -236,6 +236,85 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   escrituras fallan calladas. Encaja con `pdf-en-cloudinary-fuente-paralela`. No se tocó.
 - Cubierto por `tests/pendientes-materiales-no-sale-al-cliente.js`.
 
+**Nombre del PDF de la cotización** (`_nombrePDFCot`, `_localSinCadena`, `_slugPDFCot`,
+`_urlDescargaCot`):
+- Formato pedido por Pedro el 14-08-2026, el mismo con que archiva a mano desde antes de la app:
+  `<N° cotización> HS <N° OT> <servicio> <local>.pdf` → `31082601 HS 9464 Cambio de lamas Chillan 2.pdf`.
+  El nombre viejo empezaba con `Cotizacion_` en las 103, así que ordenar la carpeta no servía.
+- 🔴 **Sin N° de OT se omite el bloque `HS …` entero**, no se deja vacío. Una **previa** se emite
+  antes de que exista la OT (`otNumero: ''`, puesto a propósito al guardar): un `HS` suelto se lee
+  como un dato que se perdió. El `0` se descarta igual que el vacío — `otNumero` llega de Firestore
+  como número y un `0` pasaría el filtro de string.
+- **El folio se copia, nunca se rearma.** Es `ddmmaa` + correlativo **del día** y **global**
+  (`contadores/cot_<ddmmaa>`, transacción) — no es por supervisor ni por local. Rearmarlo fue el
+  bug del `'01'` hardcodeado. Sin folio el nombre dice `SIN-NUMERO`: el hueco se ve y se corrige
+  antes de enviar.
+- 🔴 **Sin tildes ni ñ, y no es cosmética.** El nombre viaja dentro de la URL como
+  `fl_attachment:<nombre>` y un carácter fuera de ASCII hace que Cloudinary responda **400**: la
+  descarga se rompe, no sale fea. Medido con `HEAD` contra producción (14-08-2026): *"Destape baño"*
+  daba `400 / inline`; normalizado da `200` con el nombre puesto.
+- **El nombre que se ve y el `public_id` son dos cosas distintas.** El `public_id` va sin espacios
+  y con sufijo único (regenerar un PDF no puede pisar el anterior: el preset no garantiza
+  sobrescritura); el nombre bonito se pega en la descarga con `fl_attachment`, que **no vuelve a
+  subir nada**. Efecto colateral bueno: **los PDF viejos también se descargan con el nombre nuevo**.
+- `localCorto` se **denormaliza al guardar** la cotización. Recortar la cadena depende de
+  `window._cadenasMapaCot`, que solo se puebla al abrir la pantalla de cotizaciones: sin
+  denormalizar, el mismo documento salía con dos nombres según por dónde se abriera. **Sin catálogo
+  se devuelve el nombre completo**, jamás uno cortado a medias.
+- ⚠️ **El camino "Ver PDF" de una cotización sin PDF subido u obsoleta abre un blob y no lleva
+  nombre.** Se dejó así: el botón dice *Ver*, y pasarlo a descarga es cambiarle el comportamiento a
+  Pedro sin que lo pidiera. Al enviarla o compartirla se sube y ahí sale con el nombre bueno.
+- ⚠️ **`cargarCarpetas()` arma cada tarjeta campo por campo**, así que lo que no se copie ahí no
+  existe para el botón. `localCorto` se quedó fuera en el primer intento y el campo guardado no
+  llegaba nunca. Apareció al **preparar** la prueba en navegador —trazando la ruta real hasta el
+  botón—, no al correrla y tampoco en el test unitario, que le pasaba el campo a mano.
+- ✅ **PROBADO en Chromium, 14-08-2026** (`tests/offline/prueba-nombre-pdf.js`): login real como
+  Administrador, panel, Cotizaciones y click en **Ver PDF**; se mide el nombre del archivo que
+  descarga el navegador. Salen `01082604 HS 301143 Correctivo transpaletas Chillan.pdf` y
+  `01082605 Cambio de lamas Chillan 2.pdf`. **Contraprueba contra `f0b4c2b`** (anterior al cambio):
+  bajan los `Cotizacion_Alvi_Chillan_…` de siempre y el guion falla.
+- ✅ **PROBADO además contra las 103 cotizaciones reales** (lectura por REST + `HEAD` a Cloudinary):
+  0 nombres inválidos, 0 repetidos entre documentos distintos, y el `Content-Disposition` vuelve
+  con el nombre exacto.
+- Cubierto por `tests/nombre-pdf-cotizacion.js` (unitario) y `tests/offline/prueba-nombre-pdf.js`
+  (flujo real).
+
+**Cerrar sin señal: guardias de tiempo y el enlace del PDF** (`_conTimeout`, `_fetchConTimeout`,
+`_encolarEnlacePDF`, `sincronizarEnlacesPDFPendientes`):
+- 🔴 **Toda llamada a Firestore va envuelta en `_conTimeout`, sin excepción.** No es estilo: con
+  mala señal el SDK **no resuelve ni rechaza** — se queda colgado. Un `await` sin guardia mata
+  todo lo que viene después en esa función, en silencio y sin error en consola.
+- 📍 Eso fue exactamente lo que pasó en `guardarYEnviarPDF` hasta el 13-08-2026: el `add()` a
+  `pdfs` colgaba el cierre y **nunca corrían el correo al local ni `_notificarOTCompletada`** —
+  ni siquiera llegaban a entrar en su cola de reintento, que existe justo para eso. La hoja se
+  veía cerrada en el teléfono y administración no se enteraba. La regla estaba escrita desde
+  antes (ver el comentario de `_conTimeout`); ese sitio simplemente se quedó fuera de la lista.
+- **Cloudinary va con `_fetchConTimeout`**, nunca `fetch` pelado: con la señal *muerta* (que no es
+  lo mismo que sin señal — `navigator.onLine` sigue en `true`) un `fetch` no se rinde nunca.
+- **El enlace del PDF que no se logra escribir se encola en el dispositivo** y se reintenta en el
+  mismo ciclo que las otras colas. Cubre el caso que la cola de OT no cubre: la OT **sí** se
+  guardó (había señal) y la señal se cayó después, durante el PDF — nadie reintentaba y el PDF
+  quedaba en Cloudinary sin que Firestore lo apuntara (`pdf-en-cloudinary-fuente-paralela`).
+- ⚠️ **El reintento usa `update()`, jamás `set({merge})`.** La OT puede no existir todavía en
+  Firestore (sigue en la cola del teléfono) y un merge la **crearía** con dos campos sueltos: una
+  orden fantasma, sin número ni tipo, colándose en las listas. `update()` falla con `not-found` y
+  el enlace espera a que la OT suba.
+- ⚠️ **El reintento escribe solo los campos con valor.** Un enlace encolado puede traer una sola
+  de las dos URLs; escribir la otra como `''` pisaría un enlace bueno y dejaría la OT **peor** que
+  antes de reintentar.
+- Invariante, igual que en la cola de correos: **el código nunca borra un enlace que no se aplicó.**
+- ✅ **PROBADO en Chromium con un teléfono emulado (Pixel 7), 13-08-2026**, cerrando una OT
+  correctiva completa por la interfaz (foto, firma en el canvas, timbre) con Firestore y EmailJS
+  espiados y Cloudinary interceptado — cero riesgo para producción y cero cuota gastada:
+  - **Sin señal:** a los 25 s el timeout corta el cuelgue y **salen los 2 correos** (local +
+    administración) con el número correcto. **Contraprueba contra el código de antes del fix: a
+    los 130 s seguían 0 correos**, colgado para siempre en `add:pdfs`.
+  - **Señal intermitente** (Cloudinary sube, Firestore cae): el enlace queda encolado y al volver
+    la señal se aplica con **solo** `pdfUrlCloudinary`, sin pisar nada con `''`.
+  - **Enlace reintentado antes de que la OT exista:** `update()` lo rechaza con `not-found`, el
+    enlace **sigue pendiente** y **no se crea ninguna orden fantasma**.
+- Cubierto por `tests/enlace-pdf-no-se-pierde-sin-senal.js`.
+
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
 - `procesarFoto(e)` — Process captured photo, compress, upload
@@ -454,9 +533,20 @@ These changes are useful context for understanding current state:
   node tests/pdf-cotizacion-no-queda-viejo.js index.html
   node tests/cotizacion-lleva-firma-emval.js index.html
   node tests/pendientes-materiales-no-sale-al-cliente.js index.html
+  node tests/enlace-pdf-no-se-pierde-sin-senal.js index.html
+  node tests/nombre-pdf-cotizacion.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
+- **`tests/offline/` — la única prueba que ejecuta el flujo real** (Playwright + Chromium, teléfono
+  emulado): cierra una OT completa por la interfaz y le corta la señal justo antes de cerrar.
+  Firebase/EmailJS espiados y Cloudinary interceptado: no toca producción ni gasta cuota.
+  Ver `tests/offline/README.md`. **Repetirla ante cualquier cambio en el cierre de la OT, en las
+  colas de reintento o en la subida/enlace del PDF.**
+  ⚠️ **Va en subcarpeta a propósito:** necesita dependencias, así que no puede quedar junto a los
+  `tests/*.js`, que corren sueltos con Node.
+  🔑 **La contraprueba (`prefix.html`, generada de un commit anterior al fix) no es opcional:** si
+  el guion pasa igual contra el código viejo, no está midiendo lo que dice medir.
 - El resto se prueba manualmente en el navegador.
 - Open DevTools → Application → Service Worker to check offline status
 - Firebase Console to inspect/edit Firestore documents
@@ -490,7 +580,23 @@ These changes are useful context for understanding current state:
   `pendientes-materiales-no-sale-al-cliente.js` — la nota interna del técnico no se imprime en la
   hoja ni viaja en el correo, solo aparece en preventivos, solo la ve el Administrador (ni el
   Supervisor ni el técnico), se lee antes del primer `await`, sobrevive los 5 eslabones de
-  persistencia, y la etiqueta no puede volver a decir "Observaciones"
+  persistencia, y la etiqueta no puede volver a decir "Observaciones" ·
+  `enlace-pdf-no-se-pierde-sin-senal.js` — ninguna llamada a la nube dentro de `guardarYEnviarPDF`
+  queda sin guardia de tiempo (el cuelgue que mataba el correo al local y el aviso a
+  administración), el enlace que no se pudo escribir se encola en vez de perderse, el reintento
+  usa `update()` y no crea órdenes fantasma, no pisa con vacío un enlace bueno, y lo que no se
+  aplica sigue pendiente ·
+  `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
+  el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
+  ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
+  descarga devuelve 400), la descripción larga se corta por palabra entera, recortar la cadena
+  nunca se come el local, el nombre no cambia según qué pantalla se haya abierto antes, y
+  `_urlDescargaCot` no toca el link a la app
+- `tests/offline/` — arnés Playwright con la app real (`preparar.js` arma el sitio con los espías).
+  `prueba-offline.js` corre los escenarios A/B/C del cierre sin señal ·
+  `prueba-nombre-pdf.js` baja una cotización como Administrador y mide el nombre del archivo que
+  descarga el navegador (Cloudinary de verdad: son 2 GET públicos, no gastan cuota).
+  Su `sitio/` no se versiona.
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:
   `curl -o vendor/emailjs-browser-4.min.js https://unpkg.com/@emailjs/browser@4/dist/email.min.js`

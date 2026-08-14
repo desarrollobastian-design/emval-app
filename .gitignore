@@ -15,3 +15,9 @@ desktop.ini
 firma-emval.jpeg
 firma-emval-limpia.png
 index.html.antes-de-firma-*.bak
+
+# Copias generadas de la app para la prueba offline (~900 KB cada una). Se rehacen con
+# `node tests/offline/preparar.js`; versionarlas seria guardar el mismo index.html dos veces.
+tests/offline/sitio/
+tests/offline/*.png
+!tests/offline/foto-prueba.png
