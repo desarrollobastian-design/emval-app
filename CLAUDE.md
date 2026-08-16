@@ -124,6 +124,66 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   (`cargarAlertaCorreos`). Avisar por correo que el correo no sale no sirve.
 - Cubierto por `tests/cola-correos-no-quema-cuota.js`.
 
+**El aviso que llegó dos veces** (`_emailjsSend`, `_idDespacho`, `_yaDespachado`, `_paramsReenvio`,
+`posibleEnvio`):
+- Caso **OT #614727** (14 y 15-08-2026): Pedro recibió dos veces *"OT #614727 completada — UNIMARC
+  QUILLÓN"* y creyó que se había duplicado el trabajo. **No se duplicó**: en `ordenes` hay UNA sola
+  OT 614727 y su `updateTime` quedó congelado en el minuto del cierre. Se duplicó el **aviso**.
+- **Causa:** el POST a EmailJS llegó al servidor y el correo salió, pero la respuesta no volvió al
+  teléfono. El `await` rechazó con un `TypeError` sin `.status`, que se clasificaba `red` =
+  *"no salió, reintentalo"*, y el aviso se encoló. Al día siguiente la cola lo despachó.
+  📍 Fechado al minuto: `alertas/correos_dev_i352ho73w3rz` reportó `pendientes: 0` a las **16:59:12
+  del 15-08** — y ese reporte solo puede venir de un ciclo que tenía avisos y los despachó, porque
+  `sincronizarCorreosPendientes` hace `return` antes de reportar si la cola está vacía.
+- 🔑 **El diagnóstico de fondo:** la cola garantizaba *"ningún aviso se pierde"* y **nunca prometió
+  *"ninguno se manda dos veces"***. Son dos invariantes distintos y faltaba el segundo.
+- 🔴 **`clase` y `ambiguo` responden preguntas distintas, y confundirlas fue el bug.** `clase`
+  decide *si se reintenta o se corta la cola* (no cambió: es la regla que salvó la cuota el
+  03-08). `ambiguo` decide *si el POST alcanzó a llegar* — y por tanto si el reenvío va marcado.
+- **`_emailjsSend` ahora tiene guardia de tiempo** y mide cuánto tardó en morir: un rechazo casi
+  instantáneo es *"la conexión nunca se estableció"*; uno lento es *"pudo haber salido"*. Era la
+  **única llamada de red de la app sin guardia**, contra la regla que el propio proyecto ya tenía
+  escrita. El `then` que engancha el envío lento **no es adorno**: sin él, la guardia recién
+  agregada *fabricaría* dudas que se resuelven gratis cuando el POST contesta 200 tarde.
+- **Libro de despachos** (`localStorage`, 30 días): qué avisos ya salieron desde este teléfono.
+  Sobrevive a que el ítem salga de la cola, que es donde la memoria se perdía — la dedupe por
+  `clave` solo existe mientras el aviso está encolado. Cierra además el **otro** camino al
+  duplicado: `guardarYEnviarPDF` y `sincronizarOTsPendientes` notifican los dos, y ahora comparten
+  identidad por el `clientId` de la OT (`sello`), no por el número, que puede venir vacío.
+- 🔴 **El duplicado NO se elimina del todo, y es a propósito.** Distinguir *"no salió"* de *"salió y
+  no supe"* es imposible desde el cliente y EmailJS **no acepta clave de idempotencia** (revisado
+  el payload del vendor). La política es **ante la duda se manda, pero MARCADO**: un aviso perdido
+  es un trabajo ejecutado que administración no ve ni factura (julio, 59 locales); un duplicado es
+  1 request de 200 y un susto. **Lo que se elimina no es el duplicado: es el "creo que se duplicó
+  el trabajo".**
+- **La marca va en `ot_numero`**, que es el campo que el template pone en el **asunto**: se ve en
+  la lista de la bandeja *sin abrir el correo*, que es exactamente donde Pedro se confundió. El
+  número completo se conserva, así que buscar `614727` en Gmail sigue encontrando los dos.
+  Se eligió no depender de editar la plantilla en el panel de EmailJS: un fix que solo funciona si
+  alguien entra a un panel externo es un fix a medias.
+- **Sin señal declarada (`navigator.onLine === false`) ya no se intenta el POST**: se encola
+  directo. Saca del conjunto dudoso el fracaso más frecuente —así la mayoría de los reenvíos salen
+  limpios, sin marca— y de paso no gasta cuota contra una red que se sabe caída.
+- **Cerrojo de reentrada** en `sincronizarCorreosPendientes`: son **cinco** gatillos (`online`,
+  primer plano, arranque, intervalo de 90 s y el botón) y cualquiera puede entrar mientras otro
+  está parado en un POST colgado. Y la cola **se relee y se fusiona** al guardar, no se pisa con la
+  copia rancia del ciclo: pisarla resucitaba avisos ya despachados.
+- ⚠️ **El reintento manual NO borra la duda.** Quien aprieta *Reintentar* pide otra ventana de
+  7 días, no declara que el aviso jamás salió: eso no lo sabe nadie.
+- ⚠️ **La barra dice "pueden haber salido", no "no se enviaron".** Rojo + *"no se enviaron"* es una
+  orden implícita de reenviar, y el técnico la obedece — fabricando el duplicado a mano.
+- ✅ **PROBADO de punta a punta en Chromium (Pixel 7), 16-08-2026** con
+  `tests/offline/prueba-duplicado.js`: se cerró una OT completa por la interfaz con el correo
+  configurado para *salir y fallar*, se **recargó la página** (el técnico cerró la app) y al volver
+  salieron exactamente 2 reenvíos, los dos marcados `"893937 (REENVIO)"`; un tercer ciclo mandó 0.
+  **Contraprueba contra `e8519a5`:** el reenvío sale `"260218"` idéntico al original — el correo
+  del 15-08 16:59 — y el guion falla.
+- 📌 **Lo que queda abierto:** `_CORREOS_MS_CONEXION` (1500 ms) se eligió a ojo. Por eso la alerta
+  ahora reporta `msFallos` y `ambiguos`: **calibrarlo con la red real de los técnicos en 2 semanas**
+  (≈ 30-08-2026). Equivocarse solo pone o saca una marca; nunca pierde un aviso.
+- Cubierto por `tests/aviso-no-sale-dos-veces.js` (unitario, 11 casos) y
+  `tests/offline/prueba-duplicado.js` (flujo real).
+
 **Comentario del administrador al enviar una cotización** (`_prepararComentarioCot`,
 `_escaparHtmlCorreo`, `_procesarEnvioCotizaciones`):
 - Campo de texto libre en el modal de envío. Va en el cuerpo del correo **arriba** de las
@@ -535,6 +595,7 @@ These changes are useful context for understanding current state:
   node tests/pendientes-materiales-no-sale-al-cliente.js index.html
   node tests/enlace-pdf-no-se-pierde-sin-senal.js index.html
   node tests/nombre-pdf-cotizacion.js index.html
+  node tests/aviso-no-sale-dos-veces.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -586,6 +647,14 @@ These changes are useful context for understanding current state:
   administración), el enlace que no se pudo escribir se encola en vez de perderse, el reintento
   usa `update()` y no crea órdenes fantasma, no pisa con vacío un enlace bueno, y lo que no se
   aplica sigue pendiente ·
+  `aviso-no-sale-dos-veces.js` — el aviso de OT no se manda dos veces: el envío que pudo haber
+  salido se reenvía **una** vez y **marcado**, el que nunca salió se reenvía limpio, el que
+  confirma tarde se desencola solo, los dos productores (cierre y cola offline) mandan uno solo,
+  dos ciclos solapados gastan una request, un aviso desencolado no resucita, los encolados por la
+  versión anterior salen sin marca, dos avisos sin número no se tapan, el reintento manual conserva
+  la marca y el corte por cuota sigue intacto. **Trae línea de control**: si el guion no llega al
+  final se declara en falla, porque contra el código anterior el envío se cuelga para siempre y un
+  guion que muere en silencio parece uno que aprueba ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
@@ -595,7 +664,10 @@ These changes are useful context for understanding current state:
 - `tests/offline/` — arnés Playwright con la app real (`preparar.js` arma el sitio con los espías).
   `prueba-offline.js` corre los escenarios A/B/C del cierre sin señal ·
   `prueba-nombre-pdf.js` baja una cotización como Administrador y mide el nombre del archivo que
-  descarga el navegador (Cloudinary de verdad: son 2 GET públicos, no gastan cuota).
+  descarga el navegador (Cloudinary de verdad: son 2 GET públicos, no gastan cuota) ·
+  `prueba-duplicado.js` reproduce el caso 614727 — el cierre FUNCIONA y lo único que se rompe es la
+  confirmación del correo (`__CORREO_MODO = 'sale-y-falla'`), con una **recarga de página** en el
+  medio que simula el día que pasó entre un correo y el otro.
   Su `sitio/` no se versiona.
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:

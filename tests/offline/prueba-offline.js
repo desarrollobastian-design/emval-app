@@ -112,18 +112,28 @@ const log = (...a) => console.log(...a);
       correos: window.__CORREOS.length,
       colgadas: window.__COLGADAS.slice(),
       pantalla: (([...document.querySelectorAll('.screen')].find(x => x.classList.contains('active')) || {}).id) || '?',
-      colaCorreos: (JSON.parse(localStorage.getItem('emval_cola_correos') || '[]') || []).length,
+      // La clave real de la cola de correos es `emval_correos_pendientes` (_CORREOS_KEY). Este
+      // contador leia 'emval_cola_correos', que no existe: mostraba 0 siempre y no medía nada.
+      colaCorreos: (JSON.parse(localStorage.getItem('emval_correos_pendientes') || '[]') || []).length,
       colaEnlaces: (JSON.parse(localStorage.getItem('emval_enlaces_pdf_pendientes') || '[]') || []).length,
     }));
     const t = Math.round((Date.now() - t0) / 1000);
     const linea = 'correos=' + s.correos + ' colgadas=' + s.colgadas.length + ' colaCorreos=' + s.colaCorreos + ' colaEnlaces=' + s.colaEnlaces + ' pantalla=' + s.pantalla;
     if (linea !== ultimo) { log('  [' + t + 's] ' + linea); ultimo = linea; }
-    if (s.correos >= 2) break;                       // local + administracion: la cadena completa
+    // Local + administracion: la cadena completa. Lo que se mide es que los DOS avisos lleguen a
+    // su cola de reintento — que es el invariante—, no que se intente el POST.
+    // 🔄 16-08-2026: sin señal DECLARADA (navigator.onLine === false) la app ya no le pega al
+    // servidor; encola directo. Gastar 2 requests de las 200 del mes contra una red que se sabe
+    // caida no servia de nada. Por eso el escenario A ahora corta por `colaCorreos`, no por
+    // `correos`: el aviso entra en la cola en el mismo segundo 26 en que antes salia el POST.
+    if (s.correos >= 2 || s.colaCorreos >= 2) break;
     await page.waitForTimeout(1500);
   }
 
   const fin = await page.evaluate(() => ({
     correos: window.__CORREOS.map(c => ({ a: c.params && c.params.email_admin, ot: c.params && c.params.ot_numero })),
+    colaCorreos: (JSON.parse(localStorage.getItem('emval_correos_pendientes') || '[]') || [])
+      .map(c => ({ a: c.params && c.params.email_admin, ot: c.params && c.params.ot_numero })),
     colgadas: window.__COLGADAS,
     escrituras: window.__ESCRITURAS.filter(e => e.op).map(e => e.op + ':' + e.coleccion + (e.docId ? '/' + e.docId : '')),
     colaEnlaces: JSON.parse(localStorage.getItem('emval_enlaces_pdf_pendientes') || '[]'),
@@ -131,6 +141,8 @@ const log = (...a) => console.log(...a);
 
   log('\nRESULTADO (' + Math.round((Date.now() - t0) / 1000) + 's despues de tocar "Cerrar y generar OT")');
   log('  correos que alcanzaron a intentarse: ' + fin.correos.length + '  ' + JSON.stringify(fin.correos));
+  // Lo que de verdad importa en el escenario A: los 2 avisos existen y se van a reintentar solos.
+  log('  avisos a salvo en la cola de reintento: ' + fin.colaCorreos.length + '  ' + JSON.stringify(fin.colaCorreos));
   log('  llamadas que quedaron colgadas: ' + fin.colgadas.length + '  [' + fin.colgadas.join(', ') + ']');
   log('  escrituras intentadas: ' + JSON.stringify(fin.escrituras));
   log('  cola de enlaces de PDF: ' + JSON.stringify(fin.colaEnlaces));

@@ -3372,6 +3372,46 @@ const _CORREOS_PAUSA_CUOTA_MS = 6 * 60 * 60 * 1000;
 // tiene que ver el MISMO dia.
 const _CORREOS_ALERTA_MS = 15 * 60 * 1000;
 
+/* ─── EL AVISO QUE SE MANDO DOS VECES — caso OT #614727, 14 y 15-08-2026 ──────────────────────
+   Pedro recibio DOS correos "OT #614727 completada" con un dia de diferencia y creyo que se
+   habia duplicado el trabajo. No se duplico: en `ordenes` hay UNA sola OT 614727 (UNIMARC
+   QUILLON, 14-08 17:38) y no se toco despues. Lo que se mando dos veces fue el AVISO.
+
+   Como: al cerrar la hoja en Quillon —local de señal pesima— el POST a EmailJS LLEGO al
+   servidor y el correo SALIO (Pedro lo recibio el 14), pero la respuesta no volvio al telefono.
+   El `await` rechazo con un TypeError sin `.status`, que `_clasificarErrorCorreo` clasifica
+   'red' = "no salio, reintentalo", y el aviso se encolo. Al dia siguiente el tecnico abrio la
+   app, la cola despacho y salio el segundo correo. Quedo fechado al minuto: el doc
+   `alertas/correos_dev_i352ho73w3rz` reporto `pendientes: 0` a las 16:59:12 del 15-08, y ese
+   reporte SOLO puede venir de un ciclo que tenia avisos y los despacho.
+
+   El diagnostico de fondo: la cola garantizaba "ningun aviso se pierde" y nunca prometio
+   "ningun aviso se manda dos veces". Son dos invariantes distintos y faltaba el segundo.
+
+   🔴 Lo que NO se puede arreglar: distinguir "el POST no salio" de "salio y no supe" es
+   fisicamente imposible desde el cliente, y EmailJS no acepta clave de idempotencia (revisado
+   el payload del vendor: no hay donde ponerla). Asi que la politica es explicita y es la que
+   protege lo caro: ANTE LA DUDA SE MANDA, PERO MARCADO. Un aviso perdido es un trabajo
+   ejecutado que administracion no ve ni factura —lo de julio, 59 locales—; un duplicado es
+   1 request de 200 y un susto, y el susto lo apaga la marca en el asunto. Lo que este cambio
+   elimina no es el duplicado: es el "creo que se duplico el trabajo". ────────────────────── */
+// Guardia de tiempo del envio. Era la UNICA llamada de red de la app sin una (Firestore va con
+// _conTimeout, Cloudinary con _fetchConTimeout) y el SDK de EmailJS no trae timeout propio: con
+// la señal muerta el POST cuelga hasta que se rinde el TCP, y el tecnico espera con el telefono
+// en la mano en medio del pasillo.
+const _CORREOS_ESPERA_MS = 20000;
+// Bajo esto, un rechazo es "la conexion no se llego a establecer" → el POST no salio y
+// reintentar es gratis. Por encima, el servidor pudo haberlo despachado.
+// ⚠️ El numero es PROVISIONAL: se calibra con los tiempos reales que ahora reporta la alerta
+// (`msFallos`), no a ojo. Equivocarse solo pone o saca una marca; jamas pierde un aviso.
+const _CORREOS_MS_CONEXION = 1500;
+// Libro de despachos de ESTE telefono: que avisos ya salieron con exito. Sobrevive a que el
+// item salga de la cola, que es justo donde la memoria se perdia — la dedupe por `clave` solo
+// existe mientras el aviso esta encolado, y los dos productores del mismo aviso (el cierre de
+// la OT y la cola offline) no se veian entre si.
+const _CORREOS_DESPACHADOS_KEY = 'emval_correos_despachados';
+const _CORREOS_DESPACHADOS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 // Espera antes del proximo intento de UN aviso. Pura y sin estado: la prueba la corre directo.
 function _backoffCorreo(intentos) {
   const n = Math.max(1, intentos || 1);
@@ -3389,6 +3429,11 @@ function _backoffCorreo(intentos) {
 // El codigo que EmailJS devuelve de verdad cuando se agota el plan es `426 Monthly request quota
 // exceeded` — verificado contra la cuenta real el 04-08-2026, 11:31, con la cuota ya quemada. No
 // es 429 (ese lo tira el throttle local del SDK), asi que va explicito ademas de la heuristica.
+//
+// 🔑 `clase` y `ambiguo` responden preguntas DISTINTAS, y confundirlas fue el bug del 15-08-2026:
+//   clase   → ¿se reintenta, o se corta la cola?      (no cambia: es la regla que salvo la cuota)
+//   ambiguo → ¿el POST alcanzo a llegar al servidor?  (nuevo: decide si el reenvio va MARCADO)
+// El 5xx entra como ambiguo a proposito: EmailJS pudo despachar el correo y fallar al responder.
 function _clasificarErrorCorreo(e) {
   const status = (e && typeof e.status === 'number') ? e.status : null;
   const texto = String((e && (e.text || e.message)) || e || '');
@@ -3399,7 +3444,8 @@ function _clasificarErrorCorreo(e) {
   else if (status >= 500) clase = 'proveedor';
   else if (status >= 400) clase = 'cuenta';
   else clase = 'proveedor';
-  return { clase: clase, status: status, texto: texto };
+  const ambiguo = (!!e && e._fase === 'en-duda') || clase === 'proveedor';
+  return { clase: clase, status: status, texto: texto, ambiguo: ambiguo, ms: (e && e._ms) || 0 };
 }
 
 function _cargarBloqueoCorreos() {
@@ -3458,8 +3504,43 @@ function _deviceIdCorreos() {
 // la afirmacion vuelva a ser verdad en vez de borrarse el comentario.
 const _EMAILJS_SERVICE_OT  = 'service_xm6dmxl';
 const _EMAILJS_TEMPLATE_OT = 'template_agzfcux';   // aviso de OT completada
-function _emailjsSend(params, service, template) {
-  return emailjs.send(service || _EMAILJS_SERVICE_OT, template || _EMAILJS_TEMPLATE_OT, params);
+// Envia y, si muere, deja anotado en el error CUANDO murio. Es lo unico que permite separar dos
+// fracasos que hasta el 15-08-2026 iban en la misma bolsa 'red' y se trataban igual:
+//   `_fase: 'no-salio'` → rechazo casi instantaneo: la conexion nunca se establecio. Reintentar
+//                         es gratis y no puede duplicar nada.
+//   `_fase: 'en-duda'`  → tardo, o vencio la guardia de tiempo: el POST pudo llegar y el correo
+//                         pudo haber salido. Es EXACTAMENTE el caso de la OT 614727.
+// El `then` de mas abajo no es adorno: sin el, la guardia de tiempo que se acaba de agregar
+// FABRICA dudas que se podian resolver gratis. Si el envio contesta 200 despues del timeout, se
+// desencola solo y el aviso no se reenvia nunca.
+function _emailjsSend(params, service, template, alConfirmarTarde) {
+  const t0 = Date.now();
+  const envio = emailjs.send(service || _EMAILJS_SERVICE_OT, template || _EMAILJS_TEMPLATE_OT, params);
+  if (typeof alConfirmarTarde === 'function') {
+    envio.then(function(){ try { alConfirmarTarde(); } catch(e) {} }, function(){});
+  }
+  let tid = null;
+  const guardia = new Promise(function(_, rechazar) {
+    tid = setTimeout(function() {
+      const e = new Error('El correo no confirmo en ' + Math.round(_CORREOS_ESPERA_MS / 1000) + ' s');
+      e._fase = 'en-duda';
+      rechazar(e);
+    }, _CORREOS_ESPERA_MS);
+  });
+  return Promise.race([envio, guardia]).then(
+    function(r) { if (tid) clearTimeout(tid); return r; },
+    function(e) {
+      if (tid) clearTimeout(tid);
+      // Cuanto tardo en morir. Se reporta a la alerta para poder calibrar _CORREOS_MS_CONEXION
+      // con la red real de los tecnicos en vez de dejarlo en el numero que se eligio a ojo.
+      try { if (e && !e._ms) e._ms = Date.now() - t0; } catch(_e) {}
+      // Un error CON status llego del servidor: la peticion viajo entera, se sabe que paso.
+      // La fase solo hace falta cuando no hay status, que es el error de red mudo.
+      if (!e || typeof e._fase === 'string' || typeof (e && e.status) === 'number') throw e;
+      try { e._fase = (Date.now() - t0) < _CORREOS_MS_CONEXION ? 'no-salio' : 'en-duda'; } catch(_e) {}
+      throw e;
+    }
+  );
 }
 
 // Clave de deduplicacion en la cola. El aviso de OT conserva la clave historica
@@ -3471,6 +3552,79 @@ function _claveCorreo(params, template) {
   const base = String(params.email_admin || '') + '|' + String(params.ot_numero || '');
   if (!template || template === _EMAILJS_TEMPLATE_OT) return base;
   return template + '|' + base + '|' + String(params.asunto || '');
+}
+
+// Identidad del DESPACHO, que no es lo mismo que la clave de la cola. La clave vive mientras el
+// aviso esta encolado; esta sobrevive al despacho y por eso puede impedir que otro productor
+// mande lo mismo mañana. `opts.sello` la fija desde afuera: el aviso de una OT se identifica por
+// el clientId de esa OT, que es estable, y no por su numero, que puede venir vacio.
+// ⚠️ Devuelve '' cuando la identidad esta incompleta (aviso de OT sin sello y sin numero). Sin
+// eso, TODOS los avisos sin numero al mismo destinatario colapsarian en un solo id y el segundo
+// se descartaria en silencio — que es como se perdieron CABRERO y LAJA el 24-07-2026. Ante la
+// duda se prefiere el duplicado a la perdida.
+function _idDespacho(params, opts) {
+  opts = opts || {};
+  let id;
+  if (opts.sello) id = String(opts.sello);
+  else {
+    const clave = _claveCorreo(params, opts.template);
+    if (!String(params.ot_numero || '') && (!opts.template || opts.template === _EMAILJS_TEMPLATE_OT)) return '';
+    id = clave;
+  }
+  return id.replace(/[^A-Za-z0-9@._|-]/g, '_').slice(0, 200);
+}
+function _cargarDespachados() {
+  try { return JSON.parse(localStorage.getItem(_CORREOS_DESPACHADOS_KEY) || '{}') || {}; } catch(e) { return {}; }
+}
+function _yaDespachado(id) {
+  if (!id) return false;
+  const t = _cargarDespachados()[id];
+  return !!t && (Date.now() - t) < _CORREOS_DESPACHADOS_TTL_MS;
+}
+function _marcarDespachado(id) {
+  if (!id) return;
+  try {
+    const libro = _cargarDespachados();
+    const ahora = Date.now();
+    libro[id] = ahora;
+    // Poda: el libro no puede crecer para siempre en el telefono de un tecnico.
+    Object.keys(libro).forEach(function(k){ if ((ahora - libro[k]) > _CORREOS_DESPACHADOS_TTL_MS) delete libro[k]; });
+    localStorage.setItem(_CORREOS_DESPACHADOS_KEY, JSON.stringify(libro));
+  } catch(e) { console.warn('No se pudo anotar el despacho del correo:', e); }
+}
+
+// Cuanto tardan en morir los envios de ESTE telefono. Es la unica forma de calibrar
+// _CORREOS_MS_CONEXION con la red real de un tecnico en terreno en vez de dejarlo en el numero
+// que se eligio a ojo. Se guardan los ultimos 5 y viajan en la alerta.
+function _anotarMsFallo(err) {
+  try {
+    if (!err || !err.ms) return;
+    const k = 'emval_correos_ms';
+    const l = JSON.parse(localStorage.getItem(k) || '[]');
+    l.push({ ms: err.ms, clase: err.clase, onLine: !!navigator.onLine });
+    localStorage.setItem(k, JSON.stringify(l.slice(-5)));
+  } catch(e) {}
+}
+
+// Lo que se manda cuando un aviso que PUDO haber salido se reenvia igual. La politica es "ante
+// la duda se manda", asi que el trabajo de esta funcion es que el segundo correo no se lea como
+// un trabajo nuevo — que es lo unico que se rompio de verdad el 15-08-2026.
+//
+// La marca va en `ot_numero` porque ese campo es el que el template pone en el ASUNTO: se ve en
+// la lista de la bandeja, SIN abrir el correo, que es exactamente donde Pedro se confundio. El
+// numero sigue completo dentro del texto, asi que buscar "614727" en Gmail los encuentra los dos.
+// Ademas va en el cuerpo (`trabajo`) por si el asunto del template cambia algun dia.
+// 🔑 Se eligio no depender de editar la plantilla en el panel de EmailJS: un fix que solo
+// funciona si alguien entra a un panel externo es un fix a medias.
+function _paramsReenvio(params, item) {
+  const copia = {};
+  for (const k in params) if (Object.prototype.hasOwnProperty.call(params, k)) copia[k] = params[k];
+  const cuando = item && item.intentadoEn ? new Date(item.intentadoEn).toLocaleDateString('es-CL') : '';
+  copia.ot_numero = String(params.ot_numero || '') + ' (REENVIO)';
+  copia.trabajo = 'AVISO: este correo es un REENVIO del mismo trabajo' +
+    (cuando ? ' del ' + cuando : '') + ', no es un trabajo nuevo. Se reenvia porque el envio ' +
+    'original no se pudo confirmar.\n\n' + String(params.trabajo || '');
+  return copia;
 }
 
 function _cargarCorreosPendientes() {
@@ -3491,18 +3645,33 @@ function _numOTCorreo(n) {
 // `opts`: { service, template, post }. `post` es lo que hay que hacer en la base DESPUES de que
 // el correo salga de verdad (marcar la cotizacion como enviada). Viaja con el aviso porque el
 // envio puede ocurrir manana, desde la cola, cuando el modal que lo origino ya no existe.
-function _encolarCorreo(params, motivo, opts) {
+// `amb`: el envio que fallo pudo haber salido igual. No cambia si se reintenta —eso lo decide
+// `clase`— sino COMO: un aviso con `posibleEnvio` se reenvia MARCADO. Antes los dos casos iban
+// en la misma bolsa y por eso el reenvio del 15-08 llego indistinguible del original.
+function _encolarCorreo(params, motivo, opts, amb) {
   opts = opts || {};
   const clave = _claveCorreo(params, opts.template);
+  const desp = _idDespacho(params, opts);
+  // Este telefono ya despacho este aviso con exito: encolarlo es programar el duplicado.
+  if (_yaDespachado(desp)) { console.warn('Aviso ya despachado, no se encola:', desp); return; }
   const lista = _cargarCorreosPendientes();
-  if (lista.some(function(c){ return c.clave === clave; })) return;
+  const ya = lista.filter(function(c){ return c.clave === clave; })[0];
+  if (ya) {
+    // Ya estaba encolado: no se duplica el item, pero la duda SUBE y nunca baja. Si en algun
+    // intento el POST pudo haber salido, todos los reenvios siguientes van marcados.
+    if (amb && !ya.posibleEnvio) { ya.posibleEnvio = true; ya.intentadoEn = ya.intentadoEn || Date.now(); }
+    if (!ya.despacho) ya.despacho = desp;
+    _guardarCorreosPendientes(lista);
+    return;
+  }
   lista.push({
     clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false,
     proximoIntento: 0, ultimoError: motivo || '', params: params,
-    service: opts.service || '', template: opts.template || '', post: opts.post || null
+    service: opts.service || '', template: opts.template || '', post: opts.post || null,
+    despacho: desp, posibleEnvio: !!amb, intentadoEn: amb ? Date.now() : 0
   });
   _guardarCorreosPendientes(lista);
-  console.warn('Correo encolado para reintento:', clave, motivo || '');
+  console.warn('Correo encolado para reintento:', clave, motivo || '', amb ? '(pudo haber salido)' : '');
   actualizarIndicadorPendientes();
   _reportarEstadoCorreos();
 }
@@ -3511,7 +3680,11 @@ function _encolarCorreo(params, motivo, opts) {
 // invariante "nunca se pierde un aviso": se descarta porque llego, no porque se rindio. Sin esto,
 // reintentar a mano una cotizacion que fallo la mandaria DOS veces —una ahora y otra desde la
 // cola— y los correos repetidos son un problema que este cliente ya sufrio en julio.
-function _desencolarCorreo(clave) {
+// `id`: ademas de sacarlo de la cola, se anota en el libro de despachos. Sacarlo de la cola solo
+// olvidaba: el OTRO productor del mismo aviso (la cola de OT y el cierre mandan los dos) volvia a
+// encolarlo mañana como si nada. El libro es lo que hace que ese olvido no se repita.
+function _desencolarCorreo(clave, id) {
+  if (id) _marcarDespachado(id);
   const lista = _cargarCorreosPendientes();
   const quedan = lista.filter(function(c){ return c.clave !== clave; });
   if (quedan.length === lista.length) return;
@@ -3553,24 +3726,45 @@ async function _ejecutarPostCorreo(post) {
 // conviene seguir con el resto: un 426 de cuota da el mismo error en los 5 correos siguientes.
 async function _enviarCorreoConDetalle(params, opts) {
   opts = opts || {};
+  const desp = _idDespacho(params, opts);
+  // Este telefono ya despacho este mismo aviso: no se le pega al servidor de nuevo. Cubre el
+  // caso de los DOS productores —el cierre de la OT y la cola offline mandan el mismo aviso— y
+  // ademas devuelve gratis una request de las 200 del mes.
+  if (_yaDespachado(desp)) { console.warn('Aviso ya despachado, no se reenvia:', desp); return { ok: true, err: null, bloqueo: null }; }
   if (typeof emailjs === 'undefined') {
-    _encolarCorreo(params, 'el servicio de correo no cargó', opts);
+    _encolarCorreo(params, 'el servicio de correo no cargó', opts, false);
     return { ok: false, err: null, bloqueo: null };
   }
   const bloqueo = _bloqueoCorreosVigente();
-  if (bloqueo) { _encolarCorreo(params, _textoBloqueoCorreos(bloqueo), opts); return { ok: false, err: null, bloqueo: bloqueo }; }
+  if (bloqueo) { _encolarCorreo(params, _textoBloqueoCorreos(bloqueo), opts, false); return { ok: false, err: null, bloqueo: bloqueo }; }
+  // Sin señal DECLARADA el POST no sale: es el fracaso mas frecuente y el mas barato de
+  // clasificar. Sacarlo del monton dudoso hace que la mayoria de los reenvios salgan limpios,
+  // sin marca. (navigator.onLine miente al reves —dice true con la señal muerta— pero cuando
+  // dice false no hay red, y eso si es de fiar.)
+  if (navigator.onLine === false) {
+    _encolarCorreo(params, 'sin conexión', opts, false);
+    return { ok: false, err: null, bloqueo: null };
+  }
+  // Identificador del aviso, para que dos copias del mismo correo se puedan reconocer como una
+  // sola. Hoy el template lo ignora; el dia que se quiera ver en el pie es un minuto en el panel
+  // de EmailJS y cero codigo. Tambien habilita una regla en el Gmail de Pedro sin tocar la app.
+  if (desp && !params.msg_id) params.msg_id = desp;
+  const clave = _claveCorreo(params, opts.template);
   try {
-    await _emailjsSend(params, opts.service, opts.template);
+    // El tercer argumento resuelve la duda cuando el envio confirma DESPUES de la guardia de
+    // tiempo: llega tarde, pero llega, y entonces no hay nada que reenviar.
+    await _emailjsSend(params, opts.service, opts.template, function() { _desencolarCorreo(clave, desp); });
     // Salio: si una version anterior de este mismo aviso quedo encolada, ya no corresponde.
-    _desencolarCorreo(_claveCorreo(params, opts.template));
+    _desencolarCorreo(clave, desp);
     await _ejecutarPostCorreo(opts.post);
     return { ok: true, err: null, bloqueo: null };
   } catch(e) {
     const err = _clasificarErrorCorreo(e);
-    console.warn('Error enviando correo, se encola:', err.clase, err.status, err.texto);
+    console.warn('Error enviando correo, se encola:', err.clase, err.status, err.texto, err.ambiguo ? '(pudo haber salido)' : '');
+    _anotarMsFallo(err);
     let b = null;
     if (err.clase === 'cuota' || err.clase === 'cuenta') b = _bloquearColaCorreos(err);
-    _encolarCorreo(params, ((err.status || '') + ' ' + err.texto).trim(), opts);
+    _encolarCorreo(params, ((err.status || '') + ' ' + err.texto).trim(), opts, err.ambiguo);
     return { ok: false, err: err, bloqueo: b };
   }
 }
@@ -3580,36 +3774,60 @@ async function _enviarCorreo(params, opts) {
   return r.ok;
 }
 
+// Cerrojo de reentrada. Son CINCO gatillos los que llaman a la cola —el evento `online`, volver
+// a primer plano, el arranque, el intervalo de 90 s y el boton de reintentar— y cualquiera puede
+// entrar mientras otro esta parado en un POST colgado. Sin cerrojo, dos ciclos superpuestos
+// despachan el mismo aviso dos veces: el duplicado que este cambio existe para evitar.
+let _sincronizandoCorreos = false;
+
 // Reintenta la cola. Sale de inmediato si no hay nada, asi que es seguro llamarla seguido.
-// Invariante: NUNCA se borra un aviso. O se envia, o sigue pendiente, o queda `fallido` y visible.
+// Invariante 1: NUNCA se borra un aviso. O se envia, o sigue pendiente, o queda `fallido` y visible.
+// Invariante 2 (nuevo, 16-08-2026): un aviso que PUDO haber salido no se reenvia mudo — sale
+// marcado como reenvio. Ver el bloque del caso 614727 arriba.
 async function sincronizarCorreosPendientes() {
   if (!navigator.onLine || typeof emailjs === 'undefined') return;
+  if (_sincronizandoCorreos) return;
   const lista = _cargarCorreosPendientes();
   if (!lista.length) return;
   // Cola detenida: no se gasta ni una request hasta que se levante (sola, si era cuota; a mano
   // si era la cuenta). Salir aca es lo que impide que 90 s despues se repita el destrozo.
   if (_bloqueoCorreosVigente()) { actualizarIndicadorPendientes(); return; }
+  _sincronizandoCorreos = true;
   const ahora = Date.now();
   const quedan = [];
   let enviados = 0, vencidos = 0, cortada = null;
+  try {
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];
     if (!c.creadoEn) c.creadoEn = ahora;          // migracion de items encolados antes del TTL
+    // Migracion de los avisos encolados por la version anterior: no traen la marca de duda, y
+    // se migran a `false` A PROPOSITO. Salen una vez y sin marca, igual que hoy: el dia del
+    // despliegue no puede haber una tanda de correos marcados por avisos viejos.
+    if (c.posibleEnvio === undefined) c.posibleEnvio = false;
+    if (!c.despacho) c.despacho = _idDespacho(c.params, c);
     if (cortada) { quedan.push(c); continue; }     // la cola se corto: el resto ni se toca
     if (c.fallido) { quedan.push(c); continue; }   // ya se rindio; espera reintento manual
+    // Ya salio por la otra via (el cierre de la OT y esta cola mandan el mismo aviso). Se
+    // descarta porque llego, no porque se rindio: el invariante sigue en pie.
+    if (_yaDespachado(c.despacho)) { continue; }
     // Backoff: este aviso todavia esta esperando su turno. (Los encolados por la version
     // anterior no traen `proximoIntento` y se intentan de inmediato, como antes.)
     if (c.proximoIntento && ahora < c.proximoIntento) { quedan.push(c); continue; }
     try {
       // El service/template viajan con el aviso: la cola ya no despacha solo avisos de OT, y
       // mandar una cotizacion por el template del aviso llegaria con el cuerpo en blanco.
-      await _emailjsSend(c.params, c.service, c.template);
+      const envio = c.posibleEnvio ? _paramsReenvio(c.params, c) : c.params;
+      await _emailjsSend(envio, c.service, c.template);
+      _marcarDespachado(c.despacho);
       enviados++;
       await _ejecutarPostCorreo(c.post);
     } catch(e) {
       const err = _clasificarErrorCorreo(e);
+      _anotarMsFallo(err);
       c.intentos = (c.intentos || 0) + 1;
       c.ultimoError = ((err.status || '') + ' ' + err.texto).trim();
+      // La duda solo sube. Un aviso que alguna vez pudo salir se reenvia marcado para siempre.
+      if (err.ambiguo && !c.posibleEnvio) { c.posibleEnvio = true; c.intentadoEn = c.intentadoEn || ahora; }
       if (err.clase === 'cuota' || err.clase === 'cuenta') {
         // No es "no llego": es "no va a llegar por mas que insista". Se detiene TODA la cola.
         cortada = _bloquearColaCorreos(err);
@@ -3623,12 +3841,38 @@ async function sincronizarCorreosPendientes() {
       quedan.push(c);
     }
   }
-  _guardarCorreosPendientes(quedan);
+  // ⚠️ NO se pisa la cola con esta copia: se relee y se fusiona. Este ciclo tiene la lista tal
+  // como estaba al empezar, y en el medio pudo pasar de todo —un cierre de OT encolando un aviso
+  // nuevo, o un `_desencolarCorreo` sacando uno que ya salio—. Pisar con la copia rancia
+  // resucitaba avisos ya despachados, que se mandaban una tercera vez.
+  _fusionarCorreosPendientes(quedan);
+  } finally { _sincronizandoCorreos = false; }
   if (enviados) toast(enviados + ' aviso(s) pendiente(s) enviado(s)');
   if (vencidos) toast(vencidos + ' aviso(s) no se pudieron enviar. Quedan en la barra para reintentar.');
   if (cortada) toast('Correo detenido: ' + _textoBloqueoCorreos(cortada));
   actualizarIndicadorPendientes();
   _reportarEstadoCorreos();
+}
+
+// Guarda el resultado de un ciclo sin perder lo que haya cambiado mientras corria. Regla: manda
+// el disco para saber QUE avisos existen (lo que se encolo o desencolo en el medio) y manda el
+// ciclo para el ESTADO de los que toco (intentos, backoff, marca de duda). Y un aviso ya
+// despachado no vuelve, venga de donde venga.
+function _fusionarCorreosPendientes(procesados) {
+  const enDisco = _cargarCorreosPendientes();
+  const porClave = {};
+  procesados.forEach(function(c){ porClave[c.clave] = c; });
+  const vistos = {};
+  const final = [];
+  enDisco.forEach(function(d) {
+    if (vistos[d.clave]) return;
+    vistos[d.clave] = true;
+    const c = porClave[d.clave];
+    if (c) { final.push(c); return; }
+    // No estaba en este ciclo: se encolo mientras corriamos. Se respeta tal cual.
+    if (!_yaDespachado(d.despacho)) final.push(d);
+  });
+  _guardarCorreosPendientes(final);
 }
 
 // Reintento manual desde la barra: da otra ventana de 7 dias a los avisos que se rindieron.
@@ -3638,9 +3882,14 @@ async function reintentarCorreosAhora() {
   const lista = _cargarCorreosPendientes();
   if (!lista.length) return;
   _guardarBloqueoCorreos(null);
+  // ⚠️ NO se toca `posibleEnvio` ni `intentadoEn`. Quien aprieta Reintentar esta pidiendo otra
+  // ventana de 7 dias, no declarando que el aviso jamas salio: eso no lo sabe nadie. Si el aviso
+  // pudo haber salido, el reenvio manual sale marcado igual que el automatico.
   lista.forEach(function(c) { c.fallido = false; c.creadoEn = Date.now(); c.intentos = 0; c.proximoIntento = 0; });
   _guardarCorreosPendientes(lista);
-  toast('Reintentando ' + lista.length + ' aviso(s)...');
+  const dudosos = lista.filter(function(c){ return c.posibleEnvio; }).length;
+  toast('Reintentando ' + lista.length + ' aviso(s)...' +
+    (dudosos ? ' ' + dudosos + ' ya se había(n) intentado: si sale(n), va(n) marcado(s) como reenvío.' : ''));
   await sincronizarCorreosPendientes();
 }
 
@@ -3685,9 +3934,12 @@ async function _reportarEstadoCorreos() {
     const ahora = Date.now();
     const masAntiguo = lista.reduce(function(min, c){ return Math.min(min, c.creadoEn || ahora); }, ahora);
     const fallidos = lista.filter(function(c){ return c.fallido; }).length;
+    const ambiguos = lista.filter(function(c){ return c.posibleEnvio; }).length;
     // Un aviso que sale en dos minutos no es noticia. Se alerta si la cola esta detenida, si algo
     // se rindio, o si el mas viejo ya lleva rato atascado.
     const activa = lista.length > 0 && (!!bloqueo || fallidos > 0 || (ahora - masAntiguo) > _CORREOS_ALERTA_MS);
+    let msFallos = [];
+    try { msFallos = JSON.parse(localStorage.getItem('emval_correos_ms') || '[]'); } catch(e) {}
     await window.firebase.firestore().collection('alertas').doc('correos_' + _deviceIdCorreos()).set({
       tipo: 'correos',
       activa: activa,
@@ -3695,6 +3947,11 @@ async function _reportarEstadoCorreos() {
       dispositivo: _deviceIdCorreos(),
       pendientes: lista.length,
       fallidos: fallidos,
+      // Cuantos avisos pudieron haber salido ya. Si este numero crece, la señal de ese tecnico
+      // esta matando envios a medio camino y hay que mirarlo — es el sintoma del caso 614727.
+      ambiguos: ambiguos,
+      // Tiempos reales de los ultimos fallos, para calibrar _CORREOS_MS_CONEXION con datos.
+      msFallos: JSON.stringify(msFallos),
       masAntiguo: lista.length ? new Date(masAntiguo).toISOString() : '',
       bloqueo: bloqueo ? _textoBloqueoCorreos(bloqueo) : '',
       actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
@@ -3704,7 +3961,11 @@ async function _reportarEstadoCorreos() {
 
 // nota: texto de aviso que viaja en el cuerpo (ej. "el local no tiene correo configurado").
 // Igual que el correo a la sucursal, este aviso dice la verdad cuando no logra salir.
-async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota) {
+// `clientId`: identidad ESTABLE de la OT. Los dos productores de este aviso —el cierre
+// (guardarYEnviarPDF) y la cola offline (sincronizarOTsPendientes)— pasan el mismo, asi que el
+// libro de despachos reconoce que es el mismo aviso aunque salgan con horas de diferencia. Antes
+// la unica identidad era el numero de OT, que ademas puede venir vacio (CABRERO y LAJA, 24-07).
+async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota, clientId) {
   const ok = await _enviarCorreo({
     email_admin: window.PEDRO_NOTIF_EMAIL,
     ot_numero: _numOTCorreo(numero),
@@ -3714,7 +3975,7 @@ async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUr
     tipo: tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
     trabajo: String(nota || ''),
     pdf_url: pdfUrl || ''
-  });
+  }, clientId ? { sello: 'ot_' + clientId + '__admin' } : undefined);
   if (!ok) {
     // Decir la verdad de POR QUE no salio. "Se enviará al recuperar la señal" era falso cuando
     // el problema era la cuota: el tecnico se quedaba tranquilo y el aviso no salia nunca.
@@ -7328,7 +7589,9 @@ async function guardarYEnviarPDF() {
       tipo: snap.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
       trabajo: String(trabajoSnap),
       pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
-    });
+      // El sello lleva el destinatario: este correo va al LOCAL y el otro a administracion. Son
+      // dos avisos distintos del mismo trabajo y no se pueden tapar entre si.
+    }, snap.clientId ? { sello: 'ot_' + snap.clientId + '__local' } : undefined);
     toast(enviado ? 'Email enviado con PDF' : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
   }
 
@@ -7381,7 +7644,8 @@ async function guardarYEnviarPDF() {
       snap.otNumero, snap.local, snap.tecnico, snap.tipo,
       new Date().toLocaleDateString('es-CL'),
       pdfUrlCloudinary || pdfUrlFirestore || '',
-      email ? '' : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.'
+      email ? '' : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.',
+      snap.clientId
     );
   }
 
@@ -13037,6 +13301,7 @@ function _actualizarBarraCorreos(hayBarraDeOTs) {
   // es justo el silencio que dejo a Pedro dos dias sin enterarse.
   if (correos.length === 0) { bar.style.display = 'none'; return; }
   var fallidos = correos.filter(function(c) { return c.fallido; }).length;
+  var ambiguos = correos.filter(function(c) { return c.posibleEnvio; }).length;
   var bloqueo = _bloqueoCorreosVigente();
   bar.style.display = 'block';
   // La barra offline ya ocupa los 70px de abajo.
@@ -13046,6 +13311,10 @@ function _actualizarBarraCorreos(hayBarraDeOTs) {
     texto.textContent = correos.length + ' aviso(s) SIN ENVIAR — ' + (bloqueo.clase === 'cuota' ? 'sin cuota de correo' : 'problema de la cuenta');
   } else if (fallidos) {
     texto.textContent = fallidos + ' aviso(s) no se enviaron';
+  // "No se enviaron" en rojo es una orden implicita de reenviar, y el tecnico la obedece. Cuando
+  // el aviso PUDO haber salido, decirle eso es empujarlo a fabricar el duplicado a mano.
+  } else if (ambiguos) {
+    texto.textContent = ambiguos + ' aviso(s) pueden haber salido — si se reenvían, van marcados';
   } else if (!navigator.onLine) {
     texto.textContent = correos.length + ' aviso(s) pendiente(s) — sin conexión';
   } else {
@@ -13102,6 +13371,9 @@ function abrirModalCorreos() {
         + '<div style="font-size:11px;color:var(--texto2);margin-top:2px;">' + _escHtml(p.email_admin || 'sin destinatario')
         + ' · encolado ' + _haceCuanto(c.creadoEn) + ' · ' + (c.intentos || 0) + ' intento(s)'
         + (c.fallido ? ' · <span style="color:var(--rojo);font-weight:700;">se rindió</span>' : '') + '</div>'
+        // Decirle la verdad a quien mira: no es "no salió", es "no se pudo confirmar". La
+        // diferencia es la que hace que no lo reenvie a mano creyendo que no llego.
+        + (c.posibleEnvio ? '<div style="font-size:11px;color:var(--naranja);margin-top:2px;font-weight:600;">Puede haber salido: no se pudo confirmar. Si se reenvía, va marcado como reenvío.</div>' : '')
         + (c.ultimoError ? '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">Último error: ' + _escHtml(String(c.ultimoError).slice(0, 120)) + '</div>' : '')
         + '</div>';
     });
@@ -13207,18 +13479,21 @@ async function sincronizarOTsPendientes() {
       // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
       // Si falla, _enviarCorreo lo encola y se reintenta solo.
       if (ot.emailLocal && pdfUrlSync) {
+        // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
+        // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
         await _enviarCorreo({
           email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
           fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
           tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
           trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
-        });
+        }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
       }
 
       await _eliminarOTPendiente(ot.id);
       toast('OT #' + ot.numero + ' sincronizada ✓');
       _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha, pdfUrlSync,
-        ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.');
+        ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
+        ot.clientId);
     } catch(err) {
       console.error('Error sincronizando OT pendiente:', err);
       _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');

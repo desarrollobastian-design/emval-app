@@ -120,6 +120,22 @@ window.emailjs = {
   init: function(){},
   send: function(servicio, plantilla, params) {
     window.__CORREOS.push({ servicio: servicio, plantilla: plantilla, params: params, en: Date.now(), offline: window.__OFFLINE });
+    /* __CORREO_MODO reproduce el caso OT #614727 (14/15-08-2026), que ningun modo anterior
+       podia montar: el POST LLEGA al servidor, EmailJS manda el correo, y la respuesta muere en
+       el camino. Para la app es un fallo; para el destinatario es un correo entregado. Ese
+       desacuerdo es el que generaba el duplicado al dia siguiente.
+         'sale-y-falla' → el correo queda registrado en __CORREOS (o sea: SALIO) y aun asi la
+                          promesa rechaza, con el retardo de __CORREO_MS para que la app lo
+                          clasifique como "pudo haber salido" y no como "no salio".
+         'cuelga'       → no resuelve nunca: la señal muerta de verdad.
+       Por defecto no cambia nada, para que prueba-offline.js siga midiendo lo mismo. */
+    var modo = window.__CORREO_MODO || '';
+    if (modo === 'cuelga') return new Promise(function(){});
+    if (modo === 'sale-y-falla') {
+      return new Promise(function(_, rechazar) {
+        setTimeout(function(){ rechazar(new TypeError('Failed to fetch')); }, window.__CORREO_MS || 3000);
+      });
+    }
     if (window.__OFFLINE) return Promise.reject(new Error('Network Error'));   // como EmailJS sin red
     return Promise.resolve({ status: 200, text: 'OK' });
   }
