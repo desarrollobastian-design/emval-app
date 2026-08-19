@@ -2043,6 +2043,34 @@ function _pdfCotObsoleto(cot) {
   if (!gen) return cambio > 0 || _cotFusionada(cot);
   return cambio > gen;
 }
+// Cuándo se generó el PDF que se va a mandar, en texto corto para el correo. El supervisor de
+// SMU recibe dos correos casi iguales de la misma cotización —el original y el corregido— y no
+// tiene cómo distinguirlos: el enlace de cada correo apunta para siempre al PDF de ese día, y
+// abrir el viejo creyendo que es el nuevo es exactamente lo que pasó con la 19082601 el
+// 19-08-2026. La fecha del documento es lo único que los separa sin abrirlos.
+function _fechaCortaCot(ts) {
+  const n = Number(ts || 0);
+  if (!n) return '';
+  const d = new Date(n);
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0'), mm = String(d.getMonth() + 1).padStart(2, '0');
+  return dd + '-' + mm + '-' + d.getFullYear() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+// Si esta cotización ya salió antes, y si lo que sale ahora es un documento DISTINTO del que
+// se mandó la vez pasada. Se compara contra `pdfEnviadoGen` —la versión que efectivamente
+// viajó— y no contra la fecha del envío: reenviar el mismo PDF a otro supervisor no es una
+// corrección, y decirle "CORREGIDA" a algo que no cambió es tan confuso como no decir nada.
+function _estadoReemisionCot(cot) {
+  if (!cot || !cot.enviado) return { reemision: false, corregida: false, antes: 0 };
+  const gen = Number(cot.pdfGeneradoEn || 0);
+  const yaViajo = Number(cot.pdfEnviadoGen || 0);
+  // Sin `pdfEnviadoGen` la cotización es anterior a este registro: no se puede saber qué versión
+  // viajó, así que se avisa igual. Un aviso de más se lee; un PDF viejo confundido con el nuevo
+  // se firma.
+  return { reemision: true, corregida: !yaViajo || gen > yaViajo, antes: Number(cot.enviadoEn || cot.comentarioEnvioEn || 0) };
+}
+
 /* =========== PDF DE COTIZACION: VIGENTE O CADUCO — FIN ============================ */
 
 // Colapsa documentos duplicados de la MISMA OT (mismo numero+local) en uno solo, quedandose con
@@ -3713,6 +3741,22 @@ async function _ejecutarPostCorreo(post) {
         emailsEnviados: window.firebase.firestore.FieldValue.arrayUnion.apply(null, emails)
       };
       if (comentario) { _campos.comentarioEnvio = comentario; _campos.comentarioEnvioEn = Date.now(); }
+      // QUE se mando, no solo que se mando. Sin esto no hay forma de responder "¿el correo del
+      // martes llevaba la version corregida?" — y esa pregunta ya se hizo (caso 19082601).
+      // Va con la fecha del envio y no la del boton: si sale desde la cola manana, se registra
+      // cuando salio de verdad, igual que el resto del `post`.
+      _campos.enviadoEn = Number(post.envioEn) || Date.now();
+      const _v = (post.viaja || {})[ids[i]];
+      if (_v) {
+        _campos.pdfUrlEnviado = _v.url || '';
+        _campos.pdfEnviadoGen = Number(_v.gen || 0);
+        _campos.totalEnviado = Number(_v.total || 0);
+        try {
+          _campos.enviosCot = window.firebase.firestore.FieldValue.arrayUnion({
+            en: _campos.enviadoEn, url: _v.url || '', gen: Number(_v.gen || 0), total: Number(_v.total || 0)
+          });
+        } catch (e) { /* el historial es un extra: si no se puede, el envio se marca igual */ }
+      }
       await db.collection('cotizaciones').doc(ids[i]).update(_campos);
     }
   } catch(e) { console.warn('No se pudo marcar la cotizacion como enviada:', e); }
@@ -9917,8 +9961,21 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
     const trabajo = (it.descripcionTrabajo || '').trim();
     const numCot = (it.numeroCotizacion || '').toString().trim();
     const total = '$' + (it.total || 0).toLocaleString('es-CL');
+    // La versión viaja en el texto del enlace, no solo en el aviso: es lo que se ve al pasar por
+    // encima y lo que queda si el correo se reenvía a alguien más.
+    const _ver = _fechaCortaCot(it.pdfGeneradoEn);
+    const _re = _estadoReemisionCot(it);
+    const avisoVersion = _re.reemision
+      ? '<div style="margin-top:10px;padding:8px 10px;background:#FFF4E5;border-left:4px solid #EF9F27;border-radius:6px;font-size:12px;color:#7A4E00;">' +
+          '<strong>' + (_re.corregida ? 'COTIZACIÓN CORREGIDA' : 'REENVÍO DEL MISMO DOCUMENTO') + '</strong>' +
+          (_ver ? ' &middot; versión del ' + _ver : '') +
+          (_re.corregida
+            ? (_re.antes ? ' &mdash; reemplaza la enviada el ' + _fechaCortaCot(_re.antes) : ' &mdash; reemplaza la versión enviada anteriormente')
+            : '') +
+        '</div>'
+      : '';
     const verPdf = it.pdfUrl
-      ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar PDF</a>'
+      ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar PDF' + (_ver ? ' (v. ' + _ver + ')' : '') + '</a>'
       : '';
     itemsHtml +=
       '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
@@ -9927,6 +9984,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
         (numCot ? '<div style="margin-top:2px;font-size:12px;color:#444;">N° cotización: ' + numCot + '</div>' : '') +
         (trabajo ? '<div style="margin-top:2px;font-size:12px;color:#444;">Trabajo: ' + trabajo + '</div>' : '') +
         '<div style="margin-top:2px;font-size:12px;color:#444;">Total: ' + total + '</div>' +
+        avisoVersion +
         verPdf +
       '</div>';
   });
@@ -9946,6 +10004,14 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
     itemsHtml +
     '<p style="font-size:15px;font-weight:700;color:#1B3A6B;">Total general: $' + resumenTotal.toLocaleString('es-CL') + '</p>';
   // ── CSS-EXPORTADO: FIN ───────────────────────────────────────────────────────────────
+
+  // Qué documento viaja en ESTE envío. Se calcula una sola vez, fuera del bucle de
+  // destinatarios, para que los dos correos del mismo envío registren la misma entrada.
+  const _envioEn = Date.now();
+  const _loQueViaja = {};
+  seleccionadas.forEach(function(it){
+    _loQueViaja[it.id] = { url: it.pdfUrl || '', gen: Number(it.pdfGeneradoEn || 0), total: Number(it.total || 0) };
+  });
 
   const asunto = _asuntoCotizaciones(seleccionadas);
 
@@ -9973,7 +10039,8 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
     // `post`: marcar la cotizacion como enviada es parte del envio, no del momento en que se
     // apreto el boton. Viaja con el aviso para que tambien se cumpla si sale desde la cola
     // manana — si no, la cotizacion se enviaria de verdad y seguiria figurando como pendiente.
-    const _post = { tipo: 'cotizacion', ids: seleccionadas.map(function(it){ return it.id; }), emails: [emails[k]], comentario: comentario };
+    const _post = { tipo: 'cotizacion', ids: seleccionadas.map(function(it){ return it.id; }), emails: [emails[k]], comentario: comentario,
+                    envioEn: _envioEn, viaja: _loQueViaja };
     const r = await _enviarCorreoConDetalle(_cotParams, {
       service: window.EMAILJS_COT_SERVICE, template: window.EMAILJS_COT_TEMPLATE, post: _post
     });

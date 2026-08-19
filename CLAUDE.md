@@ -380,6 +380,37 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - Cubierto por `tests/texto-cotizacion-no-se-corta.js` (unitario, con las métricas reales de
   Helvetica) y `tests/offline/prueba-texto-cotizacion.js` (PDF real).
 
+**Qué versión de la cotización llegó al cliente** (`_fechaCortaCot`, `_estadoReemisionCot`,
+`pdfUrlEnviado`, `pdfEnviadoGen`, `enviadoEn`, `enviosCot`):
+- Caso **19082601** (19-08-2026): Pedro envió la cotización el 18, se la pidieron corregida, la
+  corrigió el 19 (de `1 × $800.000` a `50 × $16.000`) y la reenvió. Después abrió un correo, vio
+  *cantidad 1* y concluyó que la corrección no había salido.
+- 🔬 **El PDF corregido SÍ se generó y SÍ quedó enlazado** — bajado de Cloudinary y leído: dice
+  `50 × $16.000`, subido a las 09:40:49, con el correo saliendo a las 09:41:27. Lo que Pedro
+  miró fue el correo del día anterior.
+- 🔑 **Y eso no es un descuido suyo, es del diseño:** el correo manda un **enlace**, no un adjunto,
+  y cada regeneración sube un archivo **nuevo** a Cloudinary (sufijo único, ver el nombre del PDF).
+  El correo del 18 seguirá mostrando la versión vieja **para siempre**. Dos correos casi idénticos
+  en la bandeja del supervisor de SMU y ninguna forma de distinguirlos sin abrirlos.
+- **La tarjeta del correo ahora declara su versión**: el enlace dice `Ver / Descargar PDF (v.
+  19-08-2026 09:40)` y, si la cotización ya había salido antes, un aviso naranja arriba del botón:
+  *COTIZACIÓN CORREGIDA · versión del … — reemplaza la enviada el …*.
+- ⚠️ **Distingue corregir de reenviar.** Se compara contra `pdfEnviadoGen` —la versión que
+  efectivamente viajó— y no contra la fecha del envío: mandarle el mismo PDF a otro supervisor
+  dice *REENVÍO DEL MISMO DOCUMENTO*. Decir "corregida" de algo que no cambió confunde igual que
+  no decir nada, y un aviso que miente se deja de leer.
+- 🔴 **Ahora queda registrado QUÉ se envió, no solo a quién.** `pdfUrlEnviado` + `pdfEnviadoGen` +
+  `totalEnviado` + el historial `enviosCot`. Sin eso no había forma de responder *"¿el correo del
+  martes llevaba la versión corregida?"* — y esa pregunta ya se hizo.
+- **Viaja en el `post`**, con la fecha del envío calculada **una sola vez** fuera del bucle de
+  destinatarios: si el correo sale desde la cola mañana, se registra igual y los dos correos del
+  mismo envío no quedan como dos envíos distintos.
+- El bloque HTML vive en la zona **CSS-EXPORTADO**: literales, nunca `var(--…)`.
+- ⚠️ **Lo que este cambio NO hace:** el PDF viejo sigue existiendo y accesible. Se decidió así el
+  19-08 — el histórico de qué se envió cada día es la prueba ante SMU. La alternativa (un nombre
+  fijo por cotización, que el enlace viejo muestre siempre la última versión) se descartó.
+- Cubierto por `tests/cotizacion-dice-que-version-va.js`.
+
 **Cerrar sin señal: guardias de tiempo y el enlace del PDF** (`_conTimeout`, `_fetchConTimeout`,
 `_encolarEnlacePDF`, `sincronizarEnlacesPDFPendientes`):
 - 🔴 **Toda llamada a Firestore va envuelta en `_conTimeout`, sin excepción.** No es estilo: con
@@ -638,6 +669,7 @@ These changes are useful context for understanding current state:
   node tests/nombre-pdf-cotizacion.js index.html
   node tests/aviso-no-sale-dos-veces.js index.html
   node tests/texto-cotizacion-no-se-corta.js index.html
+  node tests/cotizacion-dice-que-version-va.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -697,6 +729,11 @@ These changes are useful context for understanding current state:
   la marca y el corte por cuota sigue intacto. **Trae línea de control**: si el guion no llega al
   final se declara en falla, porque contra el código anterior el envío se cuelga para siempre y un
   guion que muere en silencio parece uno que aprueba ·
+  `cotizacion-dice-que-version-va.js` — el correo dice qué versión de la cotización lleva: la
+  primera vez no avisa nada, una reemisión con documento nuevo dice CORREGIDA y a cuál reemplaza,
+  un reenvío del mismo PDF no se anuncia como corrección, una cotización anterior al registro avisa
+  igual, el envío queda guardado (qué PDF y de cuándo) y viaja en el `post` para que también se
+  registre si sale desde la cola ·
   `texto-cotizacion-no-se-corta.js` — el texto de un ítem se imprime COMPLETO en la cotización: no
   se pierde ninguna línea, cada una cabe en su columna (se mide con las métricas reales de
   Helvetica, no se asume), las columnas suman el ancho útil de la hoja, una fila de una línea
