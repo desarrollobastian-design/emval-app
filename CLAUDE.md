@@ -339,6 +339,47 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - Cubierto por `tests/nombre-pdf-cotizacion.js` (unitario) y `tests/offline/prueba-nombre-pdf.js`
   (flujo real).
 
+**El texto del ítem se imprime completo** (`_colsCot`, `_lineasItemCot`, `_altoFilaCot`,
+`_dibujarTablaItemsCot`):
+- Caso **cotización 19082601** (19-08-2026, UNIMARC Pioneros): a SMU le llegó *"Reparación de piso
+  en pasillo central y venta asistida **50**"* — sin el *"palmetas de 50x50cm."*— y en el ítem de al
+  lado se comió la cantidad entera. La tabla dibujaba `splitTextToSize(...)` y de ahí **solo la**
+  **`[0]`**: la fila medía 7 mm fijos y no cabía una segunda línea. **jsPDF no avisa: dibuja la
+  primera y calla**, igual que recorta la firma en silencio.
+- 📊 **No era un caso aislado:** al barrer las 132 cotizaciones de producción, **11 tenían al menos
+  un ítem cortado** (14 ítems; 13 de 2 líneas y 1 de 3).
+- 🔴 **El técnico no tiene cómo notarlo.** La vista previa de la app es HTML y ahí el texto **sí**
+  se ve completo (`vistaPreviaCotizacion` hace salto de línea solo). Lo que se corta es el PDF, que
+  es justo lo único que ve el cliente. Por eso el invariante se vigila en el PDF, no en la pantalla.
+- **Fila de alto variable**, como la tabla de servicios del preventivo: se dibujan todas las líneas
+  y la fila crece (2 líneas → 9,8 mm). El texto que no cabe **nunca se recorta**; si los ítems no
+  caben en la hoja se abre una **hoja de continuación**.
+- 🔑 **El cuerpo conserva sus 98 mm** (los 14 × 7 mm de siempre) quitando filas vacías de relleno,
+  y el sobrante de menos de media fila se lo come la última fila con contenido. Así **el TOTAL**
+  **NETO, la firma y la nota de validez no se mueven** ni medio milímetro — medido en el PDF real:
+  TOTAL NETO en 233 mm y nota en 279 mm, idénticos antes y después del cambio.
+- **Las columnas ahora suman los 180 mm** de ancho útil. Sumaban 172: la última celda quedaba coja
+  y por eso el título *Total* y los montos salían corridos de su columna. Los 12 mm que le sobraban
+  a *Real* —una columna que solo dice "cu"— pasaron a *Detalle*, que es donde faltaban: con eso 6
+  de los 14 textos largos de producción dejan de partirse en dos.
+- ⚠️ **La medición va antes de dibujar y con la fuente ya fijada.** `splitTextToSize` mide con la
+  fuente activa, y en negrita el mismo texto ocupa más: medir con una y dibujar con otra es como no
+  medir.
+- **Un solo sitio para los dos generadores.** El bug estaba duplicado porque la tabla estaba copiada
+  en `generarPDFCotizacionGuardada` y en la huérfana `generarPDFCotizacion`. Ahora las dos llaman a
+  `_dibujarTablaItemsCot`, y el test exige que ninguna vuelva a tocar `item.desc` por su cuenta.
+- ✅ **PROBADO de punta a punta en Chromium, 19-08-2026** con `tests/offline/prueba-texto-cotizacion.js`:
+  se genera el PDF con el jsPDF real y se **abre el archivo** para leer qué quedó escrito y en qué
+  coordenada. Salen las 4 líneas completas, dentro de la columna Detalle.
+  **Contraprueba contra `7845adf`:** salen 2 líneas, cortadas exactamente donde muestra la foto de
+  Pedro, y el guion falla.
+- ⚠️ **Queda pendiente, y NO se tocó:** el nombre del local se sigue cortando a 16 caracteres en las
+  hojas (`substring(0,16)` — 25 de los 50 locales, y `UNIMARC CHILLAN 1/2/4/VIEJO` salen los cuatro
+  como `"UNIMARC CHILLAN "`), y en la página 2 del PDF de cotización el campo *Dirección* imprime el
+  local otra vez. Decisión de Bastián el 19-08: este arreglo cubre solo la tabla de la cotización.
+- Cubierto por `tests/texto-cotizacion-no-se-corta.js` (unitario, con las métricas reales de
+  Helvetica) y `tests/offline/prueba-texto-cotizacion.js` (PDF real).
+
 **Cerrar sin señal: guardias de tiempo y el enlace del PDF** (`_conTimeout`, `_fetchConTimeout`,
 `_encolarEnlacePDF`, `sincronizarEnlacesPDFPendientes`):
 - 🔴 **Toda llamada a Firestore va envuelta en `_conTimeout`, sin excepción.** No es estilo: con
@@ -596,6 +637,7 @@ These changes are useful context for understanding current state:
   node tests/enlace-pdf-no-se-pierde-sin-senal.js index.html
   node tests/nombre-pdf-cotizacion.js index.html
   node tests/aviso-no-sale-dos-veces.js index.html
+  node tests/texto-cotizacion-no-se-corta.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -655,6 +697,12 @@ These changes are useful context for understanding current state:
   la marca y el corte por cuota sigue intacto. **Trae línea de control**: si el guion no llega al
   final se declara en falla, porque contra el código anterior el envío se cuelga para siempre y un
   guion que muere en silencio parece uno que aprueba ·
+  `texto-cotizacion-no-se-corta.js` — el texto de un ítem se imprime COMPLETO en la cotización: no
+  se pierde ninguna línea, cada una cabe en su columna (se mide con las métricas reales de
+  Helvetica, no se asume), las columnas suman el ancho útil de la hoja, una fila de una línea
+  sigue midiendo 7 mm con su texto en y+5, el cuerpo conserva sus 98 mm para que el TOTAL NETO y
+  la firma no se muevan, con 30 ítems se abre hoja nueva en vez de recortar, y los dos
+  generadores dibujan por la misma función ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
@@ -668,6 +716,9 @@ These changes are useful context for understanding current state:
   `prueba-duplicado.js` reproduce el caso 614727 — el cierre FUNCIONA y lo único que se rompe es la
   confirmación del correo (`__CORREO_MODO = 'sale-y-falla'`), con una **recarga de página** en el
   medio que simula el día que pasó entre un correo y el otro.
+  `prueba-texto-cotizacion.js` genera el PDF de la cotización 19082601 con el jsPDF real, lo abre
+  y lee qué texto quedó y en qué coordenada — mide además que el TOTAL NETO y la nota de validez
+  no se movieron, comparando contra la versión anterior ·
   Su `sitio/` no se versiona.
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:

@@ -7721,6 +7721,136 @@ function _dibujarFirmaEmval(doc, x, yTop, altoMax, anchoMax) {
   }
 }
 
+
+// ---- Tabla de items de la cotizacion --------------------------------------------------------
+// 🔴 El invariante: el texto de un item se imprime COMPLETO. Hasta el 19-08-2026 aca se dibujaba
+// solo `splitTextToSize(...)[0]` — la primera linea — y el resto se perdia en silencio, porque la
+// fila media 7mm fijos y no cabia mas. jsPDF no avisa de eso: dibuja la primera linea y calla.
+// La cotizacion 19082601 salio a SMU diciendo "...venta asistida 50" y se comio "palmetas de
+// 50x50cm."; en el item de al lado se comio la cantidad entera. 11 de las 132 cotizaciones
+// emitidas tenian al menos un item cortado, y el tecnico no tiene como notarlo: la vista previa
+// de la app es HTML y ahi el texto SI se ve completo. Mismo patron que la firma recortada en
+// silencio, y misma regla: si el alto es fijo y el texto no, el texto se pierde.
+//
+// Columnas: suman EXACTOS los 180mm utiles de la hoja (210 - 15 de margen por lado). Antes
+// sumaban 172 y la ultima celda quedaba coja — por eso el titulo 'Total' y los montos salian
+// corridos de su columna. Los 12mm que le sobraban a 'Real' (una columna que solo dice "cu") se
+// le pasaron a 'Detalle', que es donde faltaban: con eso 6 de los 14 textos largos que hay en
+// produccion dejan de partirse en dos lineas.
+function _colsCot(margin) {
+  var ancho = [12, 92, 14, 30, 32];
+  var x = [margin];
+  for (var i = 0; i < ancho.length - 1; i++) x.push(x[i] + ancho[i]);
+  return { ancho: ancho, x: x };
+}
+
+var _COT_FILA_H = 7;         // alto de una fila de una sola linea: el de siempre
+var _COT_INTERLINEA = 3.6;   // separacion entre lineas dentro de una misma celda
+var _COT_CUERPO_H = 98;      // 14 filas x 7mm — lo que el cuerpo media antes de poder crecer
+var _COT_Y_LIMITE = 235;     // el cuerpo no puede terminar mas abajo: debajo van la fila Total,
+                             // los costos, el TOTAL NETO, la firma y la nota de validez, que
+                             // ocupan 55mm hasta el borde util de la A4. Ver _altoFirmaCot.
+
+// Cuantas lineas ocupa la descripcion de un item con la fuente activa, y cuanto mide su fila.
+function _lineasItemCot(doc, desc, anchoCol) {
+  var t = String(desc == null ? '' : desc).trim();
+  if (!t) return [''];
+  var l = doc.splitTextToSize(t, anchoCol - 4);   // 2mm de aire a cada lado del texto
+  return (l && l.length) ? l : [''];
+}
+
+function _altoFilaCot(nLineas) {
+  return Math.max(_COT_FILA_H, nLineas * _COT_INTERLINEA + 2.6);
+}
+
+// Dibuja el cuerpo de la tabla de items y devuelve la Y donde sigue la fila Total.
+// Vive aparte porque los DOS generadores de cotizacion la dibujaban con codigo duplicado, y por
+// eso el texto cortado estaba duplicado tambien. Un solo sitio = un solo arreglo.
+function _dibujarTablaItemsCot(doc, items, tabY, margin, W, VERDE) {
+  var cols = _colsCot(margin), ancho = cols.ancho, x = cols.x;
+  var anchoTabla = W - margin * 2;
+  var lista = (items || []).filter(function (it) { return !!it; });
+
+  function encabezado(y) {
+    doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+    doc.rect(margin, y, anchoTabla, _COT_FILA_H, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+    ['Cantidad', 'Detalle', 'Real', '$ unitario', 'Total'].forEach(function (h, i) {
+      doc.text(h, x[i] + ancho[i] / 2, y + 5, { align: 'center' });
+    });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
+    return y + _COT_FILA_H;
+  }
+
+  function marco(y, alto) {
+    doc.setDrawColor(200, 200, 200);
+    doc.rect(margin, y, anchoTabla, alto);
+    var xAcc = margin;
+    for (var i = 0; i < ancho.length - 1; i++) { xAcc += ancho[i]; doc.line(xAcc, y, xAcc, y + alto); }
+  }
+
+  // Se mide TODO antes de dibujar: hay que saber cuanto ocupan los items para repartir las filas
+  // vacias y para descubrir a tiempo si hay que abrir una hoja de continuacion.
+  // La fuente se fija ANTES de medir: splitTextToSize mide con la que este activa, y en bold el
+  // mismo texto ocupa mas — medir con una y dibujar con otra es como no medir.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  var filas = lista.map(function (it) {
+    var lineas = _lineasItemCot(doc, it.desc, ancho[1]);
+    return { item: it, lineas: lineas, alto: _altoFilaCot(lineas.length) };
+  });
+
+  // El sobrante de menos de media fila se lo come la ultima fila con contenido: una franja de
+  // 2mm entre el ultimo item y la fila Total se ve en la hoja impresa como un error.
+  var altoItems = filas.reduce(function (s, f) { return s + f.alto; }, 0);
+  var resto = _COT_CUERPO_H - altoItems;
+  if (filas.length && resto > 0 && resto < _COT_FILA_H / 2) filas[filas.length - 1].alto += resto;
+
+  var y = encabezado(tabY);
+  var inicio = y, hojaNueva = false;
+
+  filas.forEach(function (f) {
+    // No cabe en lo que queda de hoja: la tabla sigue en una nueva. Recortar el texto para que
+    // quepa seria volver al bug que este bloque existe para arreglar.
+    // (Un item de ~55 lineas no cabe ni en una hoja vacia; a esa altura ya no es una cotizacion.)
+    if (y + f.alto > _COT_Y_LIMITE) {
+      doc.addPage();
+      y = encabezado(20); inicio = y; hojaNueva = true;
+    }
+    marco(y, f.alto);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
+    // En una fila de 7mm esto da y+5: exactamente donde caian estos textos antes de que las
+    // filas pudieran crecer. La cotizacion de siempre no se mueve ni medio milimetro.
+    var medio = y + f.alto / 2 + 1.5;
+    doc.text(String(f.item.qty || 1), x[0] + ancho[0] / 2, medio, { align: 'center' });
+    var base = medio - (f.lineas.length - 1) * _COT_INTERLINEA / 2;
+    f.lineas.forEach(function (ln, li) { doc.text(ln, x[1] + 2, base + li * _COT_INTERLINEA); });
+    doc.text('cu', x[2] + ancho[2] / 2, medio, { align: 'center' });
+    doc.text('$ ' + (f.item.precio || 0).toLocaleString('es-CL'), x[3] + ancho[3] - 2, medio, { align: 'right' });
+    var tot = (f.item.qty || 1) * (f.item.precio || 0);
+    doc.text('$ ' + tot.toLocaleString('es-CL'), x[4] + ancho[4] - 2, medio, { align: 'right' });
+    y += f.alto;
+  });
+
+  // Filas vacias con guiones: las que Pedro ya conoce. Se estiran o encogen un poco para que el
+  // cuerpo conserve sus 98mm de siempre — asi el TOTAL NETO, la firma y la nota de validez
+  // quedan donde estan hoy aunque un item ocupe tres lineas. Si los items ya llenaron el cuerpo,
+  // no se rellena nada. Repartir el sobrante entre varias filas parejas evita la franja de 2mm
+  // al final, que en la hoja impresa se ve como un error.
+  var sobra = (inicio + _COT_CUERPO_H) - y;
+  if (!hojaNueva && sobra >= _COT_FILA_H / 2) {
+    var n = Math.max(1, Math.round(sobra / _COT_FILA_H));
+    var h = sobra / n;
+    for (var k = 0; k < n; k++) {
+      marco(y, h);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(180, 180, 180);
+      doc.text('-', x[3] + ancho[3] - 2, y + h / 2 + 1.5, { align: 'right' });
+      doc.text('-', x[4] + ancho[4] - 2, y + h / 2 + 1.5, { align: 'right' });
+      doc.setTextColor(0, 0, 0);
+      y += h;
+    }
+  }
+  return y;
+}
 // =========== PDF COTIZACION ===========
 async function generarPDFCotizacionGuardada(cotData, options) {
   toast('Generando PDF...');
@@ -7824,41 +7954,11 @@ async function generarPDFCotizacionGuardada(cotData, options) {
 
     // ---- TABLA ITEMS ----
     const tabY = secY + 8 + descBoxH + 6;
-    const colAncho = [12, 80, 20, 30, 30];
-    const colX = [margin];
-    for (var ci = 0; ci < colAncho.length - 1; ci++) colX.push(colX[ci] + colAncho[ci]);
-    const rowH = 7;
-    doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
-    doc.rect(margin, tabY, W - margin*2, rowH, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
-    ['Cantidad','Detalle','Real','$ unitario','Total'].forEach(function(h,i){ doc.text(h, colX[i]+colAncho[i]/2, tabY+5, {align:'center'}); });
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(0,0,0);
-    var maxFilas = 14;
+    const _colsA = _colsCot(margin);
+    const colAncho = _colsA.ancho, colX = _colsA.x;
+    const rowH = _COT_FILA_H;
     var items = cotData.items || [];
-    for (var fi = 0; fi < maxFilas; fi++) {
-      var rowY = tabY + rowH + (fi * rowH);
-      doc.setDrawColor(200,200,200);
-      doc.rect(margin, rowY, W - margin*2, rowH);
-      var xAcc = margin;
-      for (var ci2 = 0; ci2 < colAncho.length - 1; ci2++) { xAcc += colAncho[ci2]; doc.line(xAcc, rowY, xAcc, rowY + rowH); }
-      var item = items[fi];
-      if (item) {
-        doc.setFontSize(8);
-        doc.text(String(item.qty||1), colX[0]+colAncho[0]/2, rowY+5, {align:'center'});
-        var descI = doc.splitTextToSize(item.desc||'', colAncho[1]-2);
-        doc.text(descI[0]||'', colX[1]+2, rowY+5);
-        doc.text('cu', colX[2]+colAncho[2]/2, rowY+5, {align:'center'});
-        doc.text('$ '+(item.precio||0).toLocaleString('es-CL'), colX[3]+colAncho[3]-2, rowY+5, {align:'right'});
-        var totI = (item.qty||1)*(item.precio||0);
-        doc.text('$ '+totI.toLocaleString('es-CL'), colX[4]+colAncho[4]-2, rowY+5, {align:'right'});
-      } else {
-        doc.setTextColor(180,180,180);
-        doc.text('-', colX[3]+colAncho[3]-2, rowY+5, {align:'right'});
-        doc.text('-', colX[4]+colAncho[4]-2, rowY+5, {align:'right'});
-        doc.setTextColor(0,0,0);
-      }
-    }
-    var afterTabY = tabY + rowH + (maxFilas * rowH);
+    var afterTabY = _dibujarTablaItemsCot(doc, items, tabY, margin, W, VERDE);
     var total = items.reduce(function(s,i){ return s+(i.qty||1)*(i.precio||0); }, 0);
     doc.setFillColor(240,240,240);
     doc.rect(margin, afterTabY, W - margin*2, rowH, 'F');
@@ -8219,63 +8319,10 @@ async function generarPDFCotizacion() {
 
   // ---- TABLA ITEMS ----
   const tabY = secY + 8 + descBoxH + 6;
-  const colAncho = [12, 80, 20, 30, 30];
-  const colX = [margin];
-  for (var ci = 0; ci < colAncho.length - 1; ci++) colX.push(colX[ci] + colAncho[ci]);
-  const rowH = 7;
-
-  // Header tabla
-  doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
-  doc.rect(margin, tabY, W - margin*2, rowH, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(255,255,255);
-  var headers = ['Cantidad', 'Detalle', 'Real', '$ unitario', 'Total'];
-  headers.forEach(function(h, i) {
-    doc.text(h, colX[i] + colAncho[i]/2, tabY + 5, { align: 'center' });
-  });
-
-  // Filas items
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(0,0,0);
-  var maxFilas = 14;
-  for (var fi = 0; fi < maxFilas; fi++) {
-    var rowY = tabY + rowH + (fi * rowH);
-    doc.setDrawColor(200,200,200);
-    doc.rect(margin, rowY, W - margin*2, rowH);
-    // Separadores de columna
-    var xAcc = margin;
-    for (var ci2 = 0; ci2 < colAncho.length - 1; ci2++) {
-      xAcc += colAncho[ci2];
-      doc.line(xAcc, rowY, xAcc, rowY + rowH);
-    }
-    var item = itemsCot[fi];
-    if (item) {
-      doc.setFontSize(8);
-      // Numero fila
-      doc.text(String(fi+1), colX[0] + colAncho[0]/2, rowY + 5, { align: 'center' });
-      // Cantidad
-      doc.text(String(item.qty || 1), colX[0] + colAncho[0]/2, rowY + 5, { align: 'center' });
-      // Descripcion
-      var descItem = doc.splitTextToSize(item.desc || '', colAncho[1] - 2);
-      doc.text(descItem[0] || '', colX[1] + 2, rowY + 5);
-      // Unidad
-      doc.text('cu', colX[2] + colAncho[2]/2, rowY + 5, { align: 'center' });
-      // Precio unitario
-      doc.text('$ ' + (item.precio||0).toLocaleString('es-CL'), colX[3] + colAncho[3] - 2, rowY + 5, { align: 'right' });
-      // Total item
-      var totalItem = (item.qty||1) * (item.precio||0);
-      doc.text('$ ' + totalItem.toLocaleString('es-CL'), colX[4] + colAncho[4] - 2, rowY + 5, { align: 'right' });
-    } else {
-      // Filas vacias con guiones
-      doc.setTextColor(180,180,180);
-      doc.text('-', colX[3] + colAncho[3] - 2, rowY + 5, { align: 'right' });
-      doc.text('-', colX[4] + colAncho[4] - 2, rowY + 5, { align: 'right' });
-      doc.setTextColor(0,0,0);
-    }
-  }
-
-  var afterTabY = tabY + rowH + (maxFilas * rowH);
+  const _colsB = _colsCot(margin);
+  const colAncho = _colsB.ancho, colX = _colsB.x;
+  const rowH = _COT_FILA_H;
+  var afterTabY = _dibujarTablaItemsCot(doc, itemsCot, tabY, margin, W, VERDE);
 
   // Fila TOTAL tabla
   doc.setFillColor(240,240,240);
