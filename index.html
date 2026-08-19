@@ -2032,10 +2032,28 @@ function _cotFusionada(cot) {
             (cot.fotosDespues && cot.fotosDespues.length));
 }
 
+// Version del FORMATO del PDF de cotizacion — como se DIBUJA el documento, no que dice.
+// Un PDF subido es un archivo estatico: el arreglo del texto cortado (19-08-2026) no toca los
+// 132 que ya estaban en Cloudinary, y sin este sello la app tampoco los regeneraba, porque
+// `_pdfCotObsoleto` solo miraba si habia cambiado el CONTENIDO. Efecto: Pedro reenviaba la
+// cotizacion arreglada y le seguia saliendo cortada, con el fix ya desplegado. Subir este numero
+// al cambiar el dibujo hace que el proximo Ver PDF / envio / compartir lo regenere solo.
+var _PDF_COT_FORMATO = 2;   // 2 = 19-08-2026, el texto del item se imprime completo
+
+// Los campos que acompanan a TODO pdfUrl que se guarde. Van juntos a proposito: son tres los
+// sitios que suben un PDF de cotizacion, y el que se olvide el sello deja un PDF sin version,
+// que para la app es igual que uno viejo.
+function _camposPDFCot(url) {
+  return { pdfUrl: url, pdfGeneradoEn: Date.now(), pdfFormato: _PDF_COT_FORMATO };
+}
+
 // Si el PDF guardado quedo viejo. Ante la duda regenera: un PDF de mas cuesta unos segundos, uno
 // desactualizado sale de la empresa hacia SMU.
 function _pdfCotObsoleto(cot) {
   if (!cot || !cot.pdfUrl) return false;             // no hay nada que invalidar
+  // Dibujado por una version anterior de la app: el documento es viejo aunque el contenido no
+  // haya cambiado ni un caracter. Sin `pdfFormato` es anterior al sello, o sea formato 1.
+  if (Number(cot.pdfFormato || 1) < _PDF_COT_FORMATO) return true;
   const gen = Number(cot.pdfGeneradoEn || 0);
   const cambio = Number(cot.contenidoActualizadoEn || 0);
   // Sin sello de generacion el PDF es anterior a este arreglo. Si ademas la cotizacion ya esta
@@ -4467,9 +4485,10 @@ async function _asegurarPDFCotizacion(cot) {
   if (url) {
     cot.pdfUrl = url;
     cot.pdfGeneradoEn = Date.now();
+    cot.pdfFormato = _PDF_COT_FORMATO;
     try {
       window.firebase.firestore().collection('cotizaciones').doc(cot.id)
-        .update({ pdfUrl: url, pdfGeneradoEn: Date.now() })
+        .update(_camposPDFCot(url))
         .catch(function(e){ console.warn('pdfUrl update error (compartir):', e); });
     } catch(e) { console.warn('Firebase no disponible al guardar pdfUrl (compartir):', e); }
   }
@@ -5469,7 +5488,7 @@ async function guardarCotizacion() {
       if (pdfUrl && savedDocId) {
         // `pdfGeneradoEn`: sello para saber despues si este PDF quedo viejo. Sin el, la unica
         // forma de saber si el documento describe la cotizacion actual era abrirlo y mirarlo.
-        window.firebase.firestore().collection('cotizaciones').doc(savedDocId).update({ pdfUrl: pdfUrl, pdfGeneradoEn: Date.now() })
+        window.firebase.firestore().collection('cotizaciones').doc(savedDocId).update(_camposPDFCot(pdfUrl))
           .catch(function(e){ console.warn('Error guardando pdfUrl:', e); });
       }
     }).catch(function(e){ console.warn('Error generando PDF para subir:', e); });
@@ -9937,7 +9956,8 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
         if (url) {
           sinUrl[si].pdfUrl = url;
           sinUrl[si].pdfGeneradoEn = Date.now();
-          window.firebase.firestore().collection('cotizaciones').doc(sinUrl[si].id).update({ pdfUrl: url, pdfGeneradoEn: Date.now() })
+          sinUrl[si].pdfFormato = _PDF_COT_FORMATO;
+          window.firebase.firestore().collection('cotizaciones').doc(sinUrl[si].id).update(_camposPDFCot(url))
             .catch(function(e){ console.warn('pdfUrl update error:', e); });
         }
       } catch(e) { console.warn('Error generando PDF para', sinUrl[si].id, e); }

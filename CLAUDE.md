@@ -377,6 +377,18 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   hojas (`substring(0,16)` — 25 de los 50 locales, y `UNIMARC CHILLAN 1/2/4/VIEJO` salen los cuatro
   como `"UNIMARC CHILLAN "`), y en la página 2 del PDF de cotización el campo *Dirección* imprime el
   local otra vez. Decisión de Bastián el 19-08: este arreglo cubre solo la tabla de la cotización.
+- 🔴 **Un PDF ya subido NO se arregla solo, y por poco eso deja el arreglo inservible.** Pedro volvió
+  a abrir su cotización con el fix ya desplegado y le seguía saliendo cortada: el PDF estaba en
+  Cloudinary desde antes del despliegue, y un PDF es un archivo estático. Peor, al reenviarla
+  tampoco se regeneraba — `_pdfCotObsoleto` solo miraba si había cambiado el **contenido**, y lo que
+  cambió fue el **formato**. Por eso existe `_PDF_COT_FORMATO`: al subir ese número, todo PDF
+  anterior queda obsoleto y el próximo *Ver PDF* / envío / compartir lo vuelve a dibujar.
+  👉 **Al cambiar cómo se dibuja el PDF hay que subir `_PDF_COT_FORMATO`**, o el cliente no ve el
+  cambio por ningún camino. Los tres sitios que guardan un `pdfUrl` escriben el sello vía
+  `_camposPDFCot()`; el que se olvide deja un PDF sin versión, que se regeneraría en cada envío.
+  ⚠️ Esto le agregó a `_pdfCotObsoleto` una **segunda razón para caducar**, y por eso hubo que
+  actualizar los casos de `tests/pdf-cotizacion-no-queda-viejo.js`: sus fixtures no traían sello y
+  el test exigía justamente que NO se regenerara el PDF que le salía cortado a Pedro.
 - Cubierto por `tests/texto-cotizacion-no-se-corta.js` (unitario, con las métricas reales de
   Helvetica) y `tests/offline/prueba-texto-cotizacion.js` (PDF real).
 
@@ -670,6 +682,7 @@ These changes are useful context for understanding current state:
   node tests/aviso-no-sale-dos-veces.js index.html
   node tests/texto-cotizacion-no-se-corta.js index.html
   node tests/cotizacion-dice-que-version-va.js index.html
+  node tests/pdf-cotizacion-con-formato-viejo-se-regenera.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -729,6 +742,10 @@ These changes are useful context for understanding current state:
   la marca y el corte por cuota sigue intacto. **Trae línea de control**: si el guion no llega al
   final se declara en falla, porque contra el código anterior el envío se cuelga para siempre y un
   guion que muere en silencio parece uno que aprueba ·
+  `pdf-cotizacion-con-formato-viejo-se-regenera.js` — un PDF dibujado por una versión anterior de la
+  app se regenera solo: sin `pdfFormato` está obsoleto, con el formato vigente no se regenera de
+  gratis (cada regeneración es una subida desde el teléfono del técnico), y los tres sitios que
+  guardan un `pdfUrl` escriben el sello ·
   `cotizacion-dice-que-version-va.js` — el correo dice qué versión de la cotización lleva: la
   primera vez no avisa nada, una reemisión con documento nuevo dice CORREGIDA y a cuál reemplaza,
   un reenvío del mismo PDF no se anuncia como corrección, una cotización anterior al registro avisa

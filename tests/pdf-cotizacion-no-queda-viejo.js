@@ -22,6 +22,12 @@ const j = src.indexOf(HASTA);
 if (i < 0 || j < 0) throw new Error('No se encontro el bloque de vigencia del PDF en index.html');
 const cod = src.slice(i, j);
 
+// 19-08-2026: `_pdfCotObsoleto` gano una SEGUNDA razon para caducar — el formato del PDF, o sea
+// como se dibuja el documento. Un PDF sin `pdfFormato` fue dibujado antes del sello y por lo tanto
+// es viejo aunque su contenido no haya cambiado nunca. Por eso los casos que aqui significan
+// "PDF vigente" tienen que traerlo: sin el, este test exigiria que NO se regenere justo el PDF que
+// le salia cortado a Pedro. Ver tests/pdf-cotizacion-con-formato-viejo-se-regenera.js.
+const FORMATO = Number((src.match(/var\s+_PDF_COT_FORMATO\s*=\s*(\d+)/) || [0, 1])[1]);
 const api = new Function(cod + `
   return { caduco: _cotPdfCaduco, obsoleto: _pdfCotObsoleto, fusionada: _cotFusionada };
 `)();
@@ -57,8 +63,8 @@ console.log('PDF de cotizacion — vigente o caduco\n');
 
 // ── 2. Una cotizacion normal, sin fusionar, no se regenera al pedo ───────────────────────────
 {
-  const normal = { id: 'cot_x', pdfUrl: 'https://.../cot.pdf' };
-  const conSello = { id: 'cot_y', pdfUrl: 'https://.../cot.pdf', pdfGeneradoEn: AGO3 };
+  const normal = { id: 'cot_x', pdfUrl: 'https://.../cot.pdf', pdfFormato: FORMATO };
+  const conSello = { id: 'cot_y', pdfUrl: 'https://.../cot.pdf', pdfGeneradoEn: AGO3, pdfFormato: FORMATO };
   console.log('2) Cotizacion intacta: ' + (!api.obsoleto(normal) && !api.obsoleto(conSello) ? 'se reusa ✓' : 'regenera de mas ✗'));
   chequear(!api.obsoleto(normal), 'una cotizacion sin fusionar se regeneraria sin motivo');
   chequear(!api.obsoleto(conSello), 'un PDF con sello y sin cambios posteriores no debe regenerarse');
@@ -67,7 +73,7 @@ console.log('PDF de cotizacion — vigente o caduco\n');
 // ── 3. Con sello: manda la cronologia, no la existencia del archivo ──────────────────────────
 {
   const viejo  = { pdfUrl: 'u', pdfGeneradoEn: JUL6, contenidoActualizadoEn: AGO3 };
-  const nuevo  = { pdfUrl: 'u', pdfGeneradoEn: AGO3, contenidoActualizadoEn: JUL6 };
+  const nuevo  = { pdfUrl: 'u', pdfGeneradoEn: AGO3, contenidoActualizadoEn: JUL6, pdfFormato: FORMATO };
   console.log('3) Sello vs cambio: PDF anterior al cambio → ' + (api.obsoleto(viejo) ? 'caduco ✓' : '✗') +
               ' · PDF posterior → ' + (!api.obsoleto(nuevo) ? 'vigente ✓' : '✗'));
   chequear(api.obsoleto(viejo), 'un PDF generado ANTES del ultimo cambio debe darse por caduco');
