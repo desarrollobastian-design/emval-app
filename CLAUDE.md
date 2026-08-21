@@ -104,7 +104,63 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - Una hoja es preventiva por `tipo` **o** por traer la pauta de 11 servicios: las que el bug del
   estado global guardó como `correctivo` son cobrables igual (`_plEsPreventiva`).
 - Cada columna cubre su **bimestre completo** — una hoja de agosto pertenece al ciclo de julio.
+- 🔀 **Cada planilla es de UN cliente** y se elige en la barra de arriba — ver el bloque siguiente.
 - Cubierto por `tests/planillas-cobranza.js`.
+
+**Un cliente, una planilla** (`PL_CADENAS_SMU`, `_plClienteDe`, `_plDelCliente`, `_plTarifaPreventiva`):
+- Pedido de Pedro el **21-08-2026**, el día que empezó a cargar trabajos en las bodegas de Entel:
+  *"no quiero que los trabajos de Entel u otras cadenas se mezclen con la planilla que hacemos por
+  Unimarc, Mayorista, Súper 10 (…) si es Papa John's, que sea una planilla aparte"*. Hasta ese día
+  la pantalla bajaba **todo** y lo sumaba junto: su cotización de Megacentro Hualpén ($420.000,
+  creada esa misma mañana) iba a entrar en el paquete que se le manda a SMU.
+- 🔑 **CLIENTE ≠ CADENA, y confundirlos rompe el pedido en las dos direcciones.** Unimarc, Alvi,
+  S10 y M10 son **cuatro cadenas y un solo cliente** (SMU): separarlas partiría en cuatro la
+  planilla que Pedro usa hoy. Entel es otro cliente, Papa John's otro. Confirmado por escrito el
+  21-08: *"Así es"*.
+- 🔴 **El default es SEPARAR, no agrupar.** `PL_CADENAS_SMU` es una lista explícita de cuatro y todo
+  lo demás sale con planilla propia sin tocar código. Al revés —una lista de "los que van aparte"—
+  cada cliente nuevo caería dentro de SMU en silencio, que es el bug que se estaba arreglando. Si
+  SMU suma un formato nuevo hay que agregarlo ahí; mientras tanto el error es **una planilla de más
+  a la vista, no un cobro mezclado**.
+- **La cadena se resuelve en cascada**, y los tres pasos hacen falta:
+  1. **el catálogo `cadenas`** — es el maestro, y el único que sabe que *"Megacentro Hualpén"* es de
+     Entel: su nombre no lo dice por ningún lado, así que cualquier separación que mire el texto del
+     local lo manda al cliente equivocado.
+  2. **el campo `cadena` del documento** — respaldo. **No alcanza solo:** lo traen **10 de 133**
+     cotizaciones y **4 de 201** OT (medido el 21-08). Es el mismo error que ya costó caro con
+     `estadoCot` en `_esCobrable()`.
+  3. **el nombre del local** (`PL_RE_SMU`), que solo rescata SMU. Tampoco es opcional: **2 locales
+     reales no resuelven contra el catálogo** —`UNIMARC LOS PIONEROS` y `UNIMARC HUALPEN`, que ahí
+     figuran como *"UNIMARC Pioneros"* y *"UNIMARC HUALPEN Bulgaria"*— y arrastran **$740.000** en
+     cotizaciones. Sin este paso esa plata sale de la planilla de SMU.
+- ⚠️ **Lo que no se puede atribuir va a "Sin clasificar", visible y en ámbar** — nunca repartido a
+  ojo. Su vista explica cómo cerrarlo (agregar la sucursal al catálogo). Adivinarle el cliente a un
+  documento de cobranza es peor que dejar el hueco a la vista.
+- 🔴 **`PL_TARIFA_TRANSPALETA` es del contrato EMVAL-SMU y de nadie más.** Pedro confirmó el 21-08
+  que Entel lleva *"solo trabajos correctivos"*. Un cliente sin tarifa lista sus hojas **sin monto**;
+  aplicarle la de SMU sería inventarle un precio a otro contrato. Es la regla *"ningún monto se
+  estima"* aplicada al cliente. Los tiles *Tarifa* y *Ciclo* también dicen "sin contrato": el ciclo
+  bimestral tampoco es de todos.
+- ⚠️ **La pestaña de preventivos NO se esconde para esos clientes.** Si algún día se cierra una hoja
+  preventiva de Entel, tiene que verse — esconder una lista por lo que se espera que traiga es como
+  desapareció el trabajo de las OT con `tipo` null.
+- **El choque de N° de OT se avisa solo dentro del mismo cliente**: dos paquetes que van a empresas
+  distintas pueden repetir un número sin que nadie vea el mismo cobro dos veces.
+- **El Excel lleva el cliente en el nombre** (`EMVAL_Planilla_Correctivos_Entel_2026.xlsx`), sin
+  tildes ni espacios. ⚠️ La **fila de título interna se agrega solo cuando el cliente no es SMU**: la
+  de SMU es la que ya está en uso y la que SMU recibe, y correrle la tabla una fila es cambiarle el
+  documento a alguien que no lo pidió.
+- ✅ **PROBADO en Chromium contra los 334 documentos reales de producción** (leídos por REST y
+  sembrados en el arnés; Firestore y EmailJS espiados, cero escrituras y cero cuota): la barra sale
+  **SMU 330 · Entel 1**, la deuda de SMU queda en $26.578.580 **sin** los $420.000 de Entel, la
+  vista de Entel los muestra en su bloque de previas, y los cuatro Excel bajan con su nombre
+  correcto. **Contraprueba por mutación** (4 regresiones simuladas — sin rescate por nombre, sin
+  filtro, lista negra en vez de blanca, tarifa de SMU para todos): el test las detecta las 4.
+- ⚠️ **Lo que este cambio NO hace:** *Facturar*, la vista de facturación y el Excel al supervisor
+  (líneas ~11157, ~11588, ~11812) **siguen sumando todos los clientes juntos**. Hoy la fuga real ahí
+  es $0 —la única cotización no-SMU es una `previa` y `_esCobrable` la excluye— pero se materializa
+  cuando pase a `Realizada`. Decisión de Bastián el 21-08: este cambio cubre solo las Planillas.
+- Cubierto por `tests/planillas-no-mezclan-clientes.js`.
 
 **Cola de correos** (`_enviarCorreo`, `sincronizarCorreosPendientes`, `_clasificarErrorCorreo`):
 - Todo aviso que no logra salir se **encola en el `localStorage` del dispositivo** y se reintenta.
@@ -683,6 +739,7 @@ These changes are useful context for understanding current state:
   node tests/texto-cotizacion-no-se-corta.js index.html
   node tests/cotizacion-dice-que-version-va.js index.html
   node tests/pdf-cotizacion-con-formato-viejo-se-regenera.js index.html
+  node tests/planillas-no-mezclan-clientes.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -711,6 +768,12 @@ These changes are useful context for understanding current state:
 - `tests/` — Pruebas de regresión sueltas, en Node sin dependencias (ver "Testing & Verification").
   `numero-ot-no-se-cruza.js` — el N° de OT no se cruza entre dos hojas cerradas seguidas ·
   `reparar-pdf-cruzados.test.js` — la decisión del reparador no toca lo que no debe ·
+  `planillas-no-mezclan-clientes.js` — cada planilla es de un cliente: la cotización de Entel no
+  entra en el paquete de SMU, pero las CUATRO cadenas de SMU siguen en UNA sola planilla; un local
+  desconocido no cae en SMU por defecto; el catálogo le gana al campo `cadena` del documento y el
+  nombre del local rescata los 2 locales de SMU que el catálogo no resuelve; un cliente sin tarifa
+  lista sus preventivos sin monto y su pestaña no se esconde; el choque de N° de OT solo se avisa
+  dentro del mismo paquete; y sumando todas las planillas vuelven todas las cotizaciones ·
   `planillas-cobranza.js` — las planillas no cobran de más (previa que no suma, local duplicado,
   cuenta de prueba) ni se comen un trabajo (hoja de agosto, hoja con el tipo cruzado). Con
   `--prod` cuadra los totales contra los datos reales de Firestore ·

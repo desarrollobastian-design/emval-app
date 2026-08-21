@@ -617,6 +617,19 @@
   .pl-nota li { margin: 3px 0; }
   .pl-titulo { font-size: 12px; font-weight: 600; color: var(--texto2); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
   .pl-anio { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 12px; }
+  /* Selector de CLIENTE. Va sobre las pestañas y no dentro: Preventivos/Correctivos son dos
+     vistas del mismo cliente, no dos clientes. Puesto al reves, Pedro cambiaria de cliente sin
+     darse cuenta al cambiar de pestaña — y esta pantalla existe justo para que no se mezclen. */
+  .pl-clientes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .pl-cli { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: var(--radio-pill); border: 1px solid var(--gris3); background: white; color: var(--texto2); font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; }
+  .pl-cli:hover { border-color: var(--azul-claro); color: var(--texto); }
+  .pl-cli.active { background: var(--azul); border-color: var(--azul); color: #fff; }
+  .pl-cli-n { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: var(--radio-pill); background: var(--gris2); color: var(--texto2); }
+  .pl-cli.active .pl-cli-n { background: rgba(255,255,255,0.22); color: #fff; }
+  /* "Sin clasificar" se pinta en ambar y no en gris: es un hueco que hay que cerrar antes de
+     cobrar, no una opcion mas del menu. */
+  .pl-cli-sin { border-color: var(--ambar-borde); background: var(--ambar-fondo); color: var(--naranja-btn); }
+  .pl-cli-sin.active { background: var(--naranja-btn); border-color: var(--naranja-btn); color: #fff; }
   .pl-anio-valor { font-size: 17px; font-weight: 700; color: var(--texto); font-family: 'DM Mono', monospace; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1269,6 +1282,7 @@
     <button class="top-action top-action-verde" onclick="descargarExcelPlanilla()">Descargar Excel</button>
   </div>
   <div class="content">
+    <div id="pl-clientes" class="pl-clientes"></div>
     <div class="seg-tabs">
       <button id="tab-pl-preventivos" class="seg-tab active" onclick="planillaTab('preventivos')">Preventivos</button>
       <button id="tab-pl-correctivos" class="seg-tab" onclick="planillaTab('correctivos')">Correctivos</button>
@@ -11931,6 +11945,9 @@ async function descargarExcelVentas() {
         llega con la OT de Entel Talcahuano dentro.
      4. Ningun monto se estima. Un trabajo sin cotizar se lista SIN monto, no con uno
         parecido: el valor lo fija quien cotiza.
+     5. Los clientes NO se mezclan (21-08-2026). Cada planilla es de UN cliente y se elige en
+        la barra de arriba. SMU son cuatro cadenas —Unimarc, Alvi, S10 y M10— y una sola
+        planilla; Entel y Papa Johns van por su cuenta. Ver el bloque UN CLIENTE, UNA PLANILLA.
    ───────────────────────────────────────────────────────────────────────────────────── */
 
 /* La tarifa vive en UN solo lugar. Es el valor por transpaleta registrado en las OT de
@@ -11965,6 +11982,83 @@ function _esCobrable(c) {
   return !c || c.tipoCot !== 'previa' || c.estadoCot === 'Realizada';
 }
 
+/* ┌── UN CLIENTE, UNA PLANILLA ────────────────────────────────────────────────────────┐
+   Pedido de Pedro el 21-08-2026, el mismo dia que empezo a cargar trabajos de las bodegas
+   de Entel: "no quiero que los trabajos de Entel u otras cadenas se mezclen con la planilla
+   que hacemos por Unimarc, Mayorista, Super 10". Hasta ese dia esta pantalla bajaba TODO y
+   lo sumaba junto: la cotizacion de Megacentro Hualpen ($420.000, creada esa misma manana)
+   iba a entrar en el paquete que se le manda a SMU.
+
+   🔑 CLIENTE != CADENA, y confundirlos rompe el pedido en las dos direcciones. Unimarc,
+   Alvi, S10 y M10 son cuatro cadenas y UN solo cliente (SMU): separarlas partiria en cuatro
+   la planilla que Pedro usa hoy, que es lo contrario de lo que pidio. Entel es otro cliente,
+   Papa Johns otro. Confirmado por Pedro por escrito el 21-08: "Asi es".
+
+   🔴 EL DEFAULT ES SEPARAR, NO AGRUPAR. SMU es una lista explicita de cuatro cadenas y todo
+   lo demas sale con planilla propia sin tocar codigo. Al reves —una lista de "los que van
+   aparte"— cada cliente nuevo caeria dentro de SMU en silencio, que es exactamente el bug
+   que se esta arreglando. Si SMU suma un formato nuevo hay que agregarlo aca; mientras
+   tanto el error es una planilla de mas a la vista, no un cobro mezclado.                */
+var PL_CADENAS_SMU = ['unimarc', 'alvi', 's10', 'm10'];
+var PL_CLIENTE_SMU = 'SMU';
+var PL_CLIENTE_SIN = 'Sin clasificar';
+
+/* Rescate por el nombre del local. NO es redundante con el catalogo: medido contra
+   produccion el 21-08-2026, 2 locales con trabajo no resuelven contra `cadenas`
+   —"UNIMARC LOS PIONEROS" y "UNIMARC HUALPEN", que en el catalogo figuran como
+   "UNIMARC Pioneros" y "UNIMARC HUALPEN Bulgaria"— y arrastran $740.000 en cotizaciones.
+   Sin este paso esa plata sale de la planilla de SMU y cae en "Sin clasificar", que es
+   justo donde Pedro no la va a buscar.
+   ⚠️ Solo rescata SMU. Un local de otro cliente que no este en el catalogo se queda sin
+   clasificar A PROPOSITO: adivinarle el cliente a un documento de cobranza es peor que
+   dejar el hueco a la vista. */
+var PL_RE_SMU = /^(unimarc|alvi|s10|m10|super\s*10|mayorista\s*10)\b/;
+
+/* Nombre de la cadena de un documento. Dos fuentes, en orden de confiabilidad:
+   1. El catalogo `cadenas` — es el maestro, y es el UNICO que sabe que "Megacentro Hualpen"
+      es de Entel: su nombre no lo dice por ningun lado. Cualquier separacion que mire el
+      texto del local lo manda al cliente equivocado.
+   2. El campo `cadena` del propio documento — respaldo. NO alcanza solo: lo traen 10 de 133
+      cotizaciones y 4 de 201 OT (medido el 21-08-2026). Es el mismo error que ya costo caro
+      con `estadoCot` en _esCobrable(): un campo que la mayoria de los documentos historicos
+      no tiene no puede ser el criterio. */
+function _plCadenaDoc(doc, idx) {
+  if (!doc) return '';
+  var c = (idx && idx.cadena) ? idx.cadena(doc.local) : null;
+  if (c && c.nombre) return c.nombre;
+  if (doc.cadena) return String(doc.cadena);
+  return '';
+}
+
+// "entel" esta escrito en minuscula en el catalogo. En una planilla que se le manda a un
+// cliente eso se lee como un error de la app, asi que se capitaliza — pero SOLO si viene
+// todo en minusculas: "Papa Johns", "M10" y "S10" ya estan como se deben leer.
+function _plNombreCliente(cad) {
+  var s = String(cad == null ? '' : cad).trim();
+  if (!s || s !== s.toLowerCase()) return s;
+  return s.replace(/\b[a-z]/g, function(m) { return m.toUpperCase(); });
+}
+
+function _plClienteDe(doc, idx) {
+  var cad = _plCadenaDoc(doc, idx);
+  if (cad && PL_CADENAS_SMU.indexOf(_normTexto(cad)) !== -1) return PL_CLIENTE_SMU;
+  if (cad) return _plNombreCliente(cad);
+  if (PL_RE_SMU.test(_normTexto(_localCanonico(doc && doc.local)))) return PL_CLIENTE_SMU;
+  return PL_CLIENTE_SIN;
+}
+
+/* La tarifa por transpaleta es del contrato EMVAL-SMU y de nadie mas. Pedro confirmo el
+   21-08-2026 que Entel lleva "solo trabajos correctivos": no hay preventivo contratado, y
+   por lo tanto no hay valor por transpaleta que aplicar. Un cliente sin tarifa lista sus
+   hojas SIN monto, nunca con el de SMU — seria inventarle un precio a otro contrato. Es la
+   regla 4 de esta pantalla (ningun monto se estima) aplicada al cliente.
+   ⚠️ La pestaña de preventivos NO se esconde para esos clientes: si algun dia se cierra una
+   hoja preventiva de Entel, tiene que verse. Esconder una lista por lo que se espera que
+   traiga es como desaparecio el trabajo de las OT con tipo null. */
+function _plTarifaPreventiva(cliente) {
+  return cliente === PL_CLIENTE_SMU ? PL_TARIFA_TRANSPALETA : 0;
+}
+
 /* El ciclo preventivo es BIMESTRAL. Cada columna cubre su bimestre COMPLETO, no solo el mes
    que la etiqueta: una hoja ejecutada en agosto pertenece al ciclo de julio. Filtrar por los
    seis meses impares habria escondido toda hoja caida en un mes par — y hoy es 2 de agosto. */
@@ -11979,6 +12073,10 @@ var PL_BIMESTRES = [
 
 var _plCache = null;                              // datos crudos, se leen una vez por visita
 var _plTab = 'preventivos';
+/* Arranca en SMU: es el 98% del volumen (326 de 334 documentos el 21-08-2026) y es la
+   planilla que Pedro venia usando. Que el default sea otro le cambiaria la pantalla de
+   siempre por una vacia. */
+var _plCliente = PL_CLIENTE_SMU;
 var _plAnio = new Date().getFullYear();
 /* Por defecto la matriz muestra SOLO los locales con hoja en el año. Con todas las sucursales
    del catalogo son 24 filas vacias entre medio — y una de ellas es Entel Talcahuano, que ni
@@ -12015,6 +12113,58 @@ function _plVisible(o) {
   return !_ocultoTecnico(o.tecnico);
 }
 
+// Filtro por el cliente que se esta viendo. Se pasa a .filter() tal cual.
+function _plDelCliente(x) {
+  return x && x._cliente === _plCliente;
+}
+
+/* Los clientes que se ofrecen salen de LOS DATOS, no de una lista fija: una cadena nueva
+   aparece sola en la barra apenas tiene su primer trabajo. SMU va siempre y va primera
+   aunque no tenga nada —es la planilla de referencia y una barra que la esconde parece una
+   app rota—; "Sin clasificar" va ultima y solo si tiene algo que mostrar. */
+function _plClientes() {
+  var cuenta = {};
+  function sumar(k) { if (!cuenta[k]) cuenta[k] = 0; cuenta[k]++; }
+  (_plCache.ordenes || []).forEach(function(o) { sumar(o._cliente); });
+  (_plCache.cotizaciones || []).forEach(function(c) { sumar(c._cliente); });
+  var otros = Object.keys(cuenta).filter(function(k) {
+    return k !== PL_CLIENTE_SMU && k !== PL_CLIENTE_SIN;
+  }).sort(function(a, b) { return a.localeCompare(b, 'es'); });
+  var lista = [{ nombre: PL_CLIENTE_SMU, n: cuenta[PL_CLIENTE_SMU] || 0 }];
+  otros.forEach(function(k) { lista.push({ nombre: k, n: cuenta[k] }); });
+  if (cuenta[PL_CLIENTE_SIN]) lista.push({ nombre: PL_CLIENTE_SIN, n: cuenta[PL_CLIENTE_SIN], sin: true });
+  return lista;
+}
+
+function planillaCliente(nombre) {
+  _plCliente = nombre;
+  _plRender();
+}
+
+function _plRenderClientes() {
+  var cont = document.getElementById('pl-clientes');
+  if (!cont) return;
+  cont.innerHTML = '';
+  var lista = _plClientes();
+  // Con un solo cliente la barra no aporta nada: es la pantalla de siempre.
+  if (lista.length < 2) return;
+  lista.forEach(function(c) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pl-cli' + (c.sin ? ' pl-cli-sin' : '') + (c.nombre === _plCliente ? ' active' : '');
+    b.setAttribute('aria-pressed', c.nombre === _plCliente ? 'true' : 'false');
+    b.setAttribute('aria-label', 'Ver la planilla de ' + c.nombre + ', ' + c.n + ' documentos');
+    if (c.sin) b.title = 'Trabajos cuyo local no esta en el catalogo de sucursales y no se pudo determinar a que cliente se le cobran. Hay que asignarlos antes de cobrarlos.';
+    b.appendChild(document.createTextNode(c.nombre));
+    var n = document.createElement('span');
+    n.className = 'pl-cli-n';
+    n.textContent = c.n;
+    b.appendChild(n);
+    b.onclick = (function(nom) { return function() { planillaCliente(nom); }; })(c.nombre);
+    cont.appendChild(b);
+  });
+}
+
 function planillaTab(tab) {
   _plTab = tab;
   ['preventivos', 'correctivos'].forEach(function(t) {
@@ -12043,6 +12193,11 @@ async function cargarPlanillas() {
       .filter(_plVisible);
     var cotizaciones = res[1].docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
 
+    /* El indice local -> cadena es el mismo que usa el resto de la app para resolver CeCo y
+       supervisor: tolera mayusculas, tildes y renombres (ver _indexarCadenas). Comparar el
+       texto del local con === era como se perdian locales antes. */
+    var idx = _indexarCadenas(res[2].docs);
+
     // Catalogo de sucursales: viven DENTRO de cada cadena, la coleccion 'locales' esta vacia.
     var sucursales = [];
     res[2].docs.forEach(function(d) {
@@ -12055,10 +12210,19 @@ async function cargarPlanillas() {
           formato: c.nombre || '',
           nombre: nombre,
           centro: (typeof s === 'object' && s.centro) ? s.centro : '',
-          supervisor: (typeof s === 'object' && s.supervisor) ? s.supervisor : ''
+          supervisor: (typeof s === 'object' && s.supervisor) ? s.supervisor : '',
+          // La sucursal hereda el cliente de SU cadena, sin pasar por el nombre del local.
+          _cliente: _plClienteDe({ cadena: c.nombre }, null)
         });
       });
     });
+
+    /* El cliente se resuelve UNA vez al cargar y viaja pegado al documento (`_cliente`, con
+       guion bajo: es un campo de memoria, no de Firestore — nada de esta pantalla escribe el
+       documento completo, solo campos sueltos por _plGuardarCampo). Recalcularlo en cada
+       render costaria un lookup por documento cada vez que Pedro cambia de pestaña. */
+    ordenes.forEach(function(o) { o._cliente = _plClienteDe(o, idx); });
+    cotizaciones.forEach(function(c) { c._cliente = _plClienteDe(c, idx); });
 
     _plCache = { ordenes: ordenes, cotizaciones: cotizaciones, sucursales: sucursales };
     _cargado(cont);
@@ -12070,6 +12234,7 @@ async function cargarPlanillas() {
 }
 
 function _plRender() {
+  _plRenderClientes();
   if (_plTab === 'preventivos') _plRenderPreventivos();
   else _plRenderCorrectivos();
 }
@@ -12142,7 +12307,8 @@ function _plNota(titulo, lineas, extra) {
    Matriz local x bimestre. Cada celda se llena sola con el N de OT y su monto; la fila de
    totales de abajo ES el estado de deuda del bimestre. Pedro no saca ninguna cuenta. */
 function _plDatosPreventivos() {
-  var deduped = _dedupeOTs(_plCache.ordenes.filter(_plEsPreventiva));
+  var tarifa = _plTarifaPreventiva(_plCliente);
+  var deduped = _dedupeOTs(_plCache.ordenes.filter(_plEsPreventiva).filter(_plDelCliente));
   var delAnio = [];
   deduped.lista.forEach(function(o) {
     var fm = _plAnioMes(o);
@@ -12157,7 +12323,7 @@ function _plDatosPreventivos() {
     if (!filas[clave]) { filas[clave] = Object.assign({ celdas: [[], [], [], [], [], []], total: 0, transp: 0, enCatalogo: false }, base); orden.push(clave); }
     return filas[clave];
   }
-  _plCache.sucursales.forEach(function(s) {
+  _plCache.sucursales.filter(_plDelCliente).forEach(function(s) {
     var f = fila(_normTexto(_localCanonico(s.nombre)), { formato: s.formato, nombre: s.nombre, centro: s.centro, supervisor: s.supervisor });
     f.enCatalogo = true;
   });
@@ -12165,7 +12331,9 @@ function _plDatosPreventivos() {
     var clave = _normTexto(_localCanonico(x.ot.local));
     var f = fila(clave, { formato: '', nombre: x.ot.local || '(sin local)', centro: x.ot.ceco || '', supervisor: '' });
     var transp = _plEntero(x.ot.numEquipos);
-    var monto = transp * PL_TARIFA_TRANSPALETA;
+    // Sin tarifa contratada el monto es 0 y la hoja se lista SIN monto: el trabajo se ve,
+    // el precio no se inventa. Ver _plTarifaPreventiva().
+    var monto = transp * tarifa;
     f.celdas[x.bim].push({ numero: x.ot.numero, monto: monto, transp: transp, lista: _hojaLista(x.ot), ot: x.ot });
     f.total += monto;
     f.transp = transp;                       // la ultima hoja manda: son los equipos vigentes
@@ -12185,7 +12353,7 @@ function _plDatosPreventivos() {
     });
   });
   return {
-    filas: lista, totalBim: totalBim, hojas: hojas, transpTotal: transpTotal,
+    filas: lista, totalBim: totalBim, hojas: hojas, transpTotal: transpTotal, tarifa: tarifa,
     total: totalBim.reduce(function(a, b) { return a + b; }, 0),
     duplicados: deduped.duplicados
   };
@@ -12200,9 +12368,25 @@ function _plFilasVisibles(d) {
   });
 }
 
+/* Lo que cae en "Sin clasificar" no es un cliente: es trabajo cuyo local no esta en el
+   catalogo y que la app no puede atribuirle a nadie. Se muestra en su propia vista y con
+   instrucciones, en vez de repartirlo a ojo entre las planillas que se cobran. */
+function _plAvisoSinClasificar(cont) {
+  if (_plCliente !== PL_CLIENTE_SIN) return;
+  var a = document.createElement('div');
+  a.className = 'pl-nota';
+  a.style.marginTop = '0';
+  a.style.marginBottom = '14px';
+  a.innerHTML = '<b>Estos trabajos todavía no se le pueden cobrar a nadie.</b> Su local no está en el catálogo de sucursales, así que la app no sabe de qué cliente son y no los suma a ninguna planilla. ' +
+    'Para cerrarlo: entrá a <b>Cadenas</b> en el panel de administrador y agregá esa sucursal a la cadena que corresponde. ' +
+    'Apenas quede en el catálogo, el trabajo aparece solo en la planilla de su cliente — no hay que volver a tocarlo acá.';
+  cont.appendChild(a);
+}
+
 function _plRenderPreventivos() {
   var cont = document.getElementById('panel-pl-preventivos');
   cont.innerHTML = '';
+  _plAvisoSinClasificar(cont);
   var d = _plDatosPreventivos();
   window._plUltimoPreventivos = d;
 
@@ -12229,15 +12413,26 @@ function _plRenderPreventivos() {
 
   var tiles = document.createElement('div');
   tiles.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;';
-  tiles.appendChild(_plTile('Estado de deuda ' + _plAnio, _plPesos(d.total), d.transpTotal + ' transpaletas', 'ok'));
+  /* Sin tarifa contratada el total NO es "$0": es "no se sabe". Un $0 en un tile de deuda se
+     lee como "no me deben nada", que es una afirmacion que esta pantalla no puede hacer. */
+  if (d.tarifa) {
+    tiles.appendChild(_plTile('Estado de deuda ' + _plAnio, _plPesos(d.total), d.transpTotal + ' transpaletas', 'ok'));
+  } else {
+    tiles.appendChild(_plTile('Estado de deuda ' + _plAnio, '—', 'sin tarifa de preventivo'));
+  }
   tiles.appendChild(_plTile('Hojas del año', String(d.hojas), 'OT cargadas solas'));
-  tiles.appendChild(_plTile('Tarifa', _plPesos(PL_TARIFA_TRANSPALETA), 'por transpaleta'));
-  tiles.appendChild(_plTile('Ciclo', 'Bimestral', 'mes por medio'));
+  tiles.appendChild(_plTile('Tarifa', d.tarifa ? _plPesos(d.tarifa) : 'Sin contrato', d.tarifa ? 'por transpaleta' : 'preventivo no contratado'));
+  // El ciclo bimestral tambien es del contrato de SMU: anunciarselo a un cliente que no tiene
+  // preventivo contratado es afirmar algo que nadie acordo.
+  tiles.appendChild(d.tarifa
+    ? _plTile('Ciclo', 'Bimestral', 'mes por medio')
+    : _plTile('Ciclo', '—', 'sin preventivo contratado'));
   cont.appendChild(tiles);
 
   cont.appendChild(_plLeyenda([
     { tipo: 'auto', texto: 'Filas y N de OT: automático (cruce por CECO)' },
-    { tipo: 'calc', texto: 'Monto: tarifa × transpaletas de la hoja' }
+    // Sin tarifa, la leyenda de siempre contradice al aviso de al lado y gana la que mas se lee.
+    { tipo: 'calc', texto: d.tarifa ? 'Monto: tarifa × transpaletas de la hoja' : 'Monto: no se calcula — sin tarifa contratada' }
   ]));
 
   var lblVacios = document.createElement('label');
@@ -12253,7 +12448,9 @@ function _plRenderPreventivos() {
 
   if (!d.hojas) {
     var vac = document.createElement('div');
-    vac.innerHTML = _vacio('Sin preventivos en ' + _plAnio, 'Cada hoja de preventivo que cierre un técnico aparece sola en esta matriz.');
+    vac.innerHTML = d.tarifa
+      ? _vacio('Sin preventivos en ' + _plAnio, 'Cada hoja de preventivo que cierre un técnico aparece sola en esta matriz.')
+      : _vacio(_plCliente + ' no tiene preventivos', _plCliente + ' trabaja solo con correctivos: no hay mantención por transpaleta contratada. Si algún día se cierra una hoja de preventivo suya, aparece igual acá — sin monto, hasta que se defina la tarifa.');
     cont.appendChild(vac);
     return;
   }
@@ -12293,7 +12490,7 @@ function _plRenderPreventivos() {
     td(f.nombre, 'pl-loc');
     td(f.supervisor || '—');
     td(f.transp ? String(f.transp) : '—', 'pl-num pl-cen');
-    td(f.transp ? _plPesos(f.transp * PL_TARIFA_TRANSPALETA) : '—', 'pl-money');
+    td((f.transp && d.tarifa) ? _plPesos(f.transp * d.tarifa) : '—', 'pl-money');
     f.celdas.forEach(function(celda) {
       var e = document.createElement('td');
       e.className = 'pl-celda' + (celda.length ? ' pl-celda-ok' : '');
@@ -12352,13 +12549,17 @@ function _plRenderPreventivos() {
     });
   });
   var lineas = [];
-  lineas.push('<b>' + _plPesos(PL_TARIFA_TRANSPALETA) + ' por transpaleta</b> es el valor registrado en las OT. La app no sabe si es neto o con IVA — eso lo define el contrato con SMU.');
+  if (d.tarifa) {
+    lineas.push('<b>' + _plPesos(d.tarifa) + ' por transpaleta</b> es el valor registrado en las OT. La app no sabe si es neto o con IVA — eso lo define el contrato con ' + _escHtml(_plCliente) + '.');
+  } else {
+    lineas.push('<b>Estas hojas van sin monto.</b> ' + _escHtml(_plCliente) + ' no tiene tarifa de preventivo contratada, y la de SMU es de otro contrato: aplicársela sería inventarle un precio. El trabajo se ve igual; el valor lo pone quien cotiza.');
+  }
   if (sinTransp.length) lineas.push('<b>' + sinTransp.length + ' hoja(s) sin N° de transpaletas</b>, aportan $0 al total: ' + _escHtml(sinTransp.slice(0, 6).join(' · ')) + (sinTransp.length > 6 ? ' …' : ''));
   if (sinCeco.length) lineas.push('<b>' + sinCeco.length + ' local(es) cobrados sin CECO.</b> El trabajo está hecho y el monto entra igual; falta el dato administrativo: ' + _escHtml(sinCeco.map(function(f) { return f.nombre; }).slice(0, 6).join(' · ')));
   if (fueraCat.length) lineas.push('<b>' + fueraCat.length + ' local(es) que no están en el catálogo de sucursales</b> (se cobran igual): ' + _escHtml(fueraCat.map(function(f) { return f.nombre; }).join(' · ')));
   if (sinPrev.length) lineas.push('<b>' + sinPrev.length + ' local(es) sin ningún preventivo en ' + _plAnio + '</b>: ' + _escHtml(sinPrev.map(function(f) { return f.nombre; }).slice(0, 10).join(' · ')) + (sinPrev.length > 10 ? ' …' : ''));
   if (d.duplicados) lineas.push('<b>' + d.duplicados + ' hoja(s) duplicada(s) en la base se colapsaron</b> antes de sumar: un local no se cobra dos veces.');
-  cont.appendChild(_plNota('Antes de mandar esta planilla a SMU', lineas));
+  cont.appendChild(_plNota('Antes de mandar esta planilla a ' + _plCliente, lineas));
 }
 
 /* ── PLANILLA 2: CORRECTIVOS ─────────────────────────────────────────────────────────
@@ -12366,7 +12567,7 @@ function _plRenderPreventivos() {
    Las columnas SolPed / OC / HES / Factura se escriben aca y se guardan en el mismo campo
    que ya usa la pantalla Facturar: es la MISMA cadena de compra, no una copia. */
 function _plDatosCorrectivos() {
-  var todas = _plCache.cotizaciones;
+  var todas = _plCache.cotizaciones.filter(_plDelCliente);
   /* Una previa YA EJECUTADA es deuda, no presupuesto: mirar solo `tipoCot` dejaba fuera de
      la cobranza el trabajo fusionado con su OT. Ver _esCobrable(). */
   var previas = todas.filter(function(c) { return !_esCobrable(c); });
@@ -12381,7 +12582,7 @@ function _plDatosCorrectivos() {
   // Se lista SIN monto — el valor lo fija quien cotiza, estimarlo seria inventarlo.
   var conCot = {};
   todas.forEach(function(c) { if (c.otNumero != null && c.otNumero !== '') conCot[String(c.otNumero).trim()] = true; });
-  var correctivasOT = _dedupeOTs(_plCache.ordenes.filter(function(o) { return !_plEsPreventiva(o); })).lista;
+  var correctivasOT = _dedupeOTs(_plCache.ordenes.filter(function(o) { return !_plEsPreventiva(o) && _plDelCliente(o); })).lista;
   var sinCotizar = correctivasOT.filter(function(o) { return !conCot[String(o.numero).trim()]; })
     .sort(function(a, b) { return (_fechaOTms(b) || 0) - (_fechaOTms(a) || 0); });
 
@@ -12391,7 +12592,10 @@ function _plDatosCorrectivos() {
      HUALPEN y en un preventivo de S10 Los Angeles). La pantalla no lo puede arreglar sola —hay que
      renumerar uno, y eso lo decide Pedro— pero SI lo puede ver antes de que salga. */
   var numerosPreventivos = {};
-  _plCache.ordenes.filter(_plEsPreventiva).forEach(function(o) {
+  /* Solo los preventivos DE ESTE CLIENTE: dos planillas que van a empresas distintas pueden
+     repetir un numero sin que nadie vea el mismo cobro dos veces. Lo que hay que avisar es el
+     choque dentro del paquete que se manda junto. */
+  _plCache.ordenes.filter(_plEsPreventiva).filter(_plDelCliente).forEach(function(o) {
     if (o.numero != null && o.numero !== '') numerosPreventivos[String(o.numero).trim()] = o.local || '';
   });
   /* Se agrupa POR NUMERO, no por cotizacion: la 9530 la comparten dos correctivos y un
@@ -12437,12 +12641,13 @@ function _plGuardarCampo(docId, campo, valor, input) {
 function _plRenderCorrectivos() {
   var cont = document.getElementById('panel-pl-correctivos');
   cont.innerHTML = '';
+  _plAvisoSinClasificar(cont);
   var d = _plDatosCorrectivos();
   window._plUltimoCorrectivos = d;
 
   var tiles = document.createElement('div');
   tiles.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;';
-  tiles.appendChild(_plTile('Enviadas a SMU', String(d.enviadas.length), _plPesos(d.sumaEnviadas), 'ok'));
+  tiles.appendChild(_plTile('Enviadas a ' + _plCliente, String(d.enviadas.length), _plPesos(d.sumaEnviadas), 'ok'));
   tiles.appendChild(_plTile('Sin enviar', String(d.sinEnviar.length), _plPesos(d.sumaSinEnviar), 'alerta'));
   tiles.appendChild(_plTile('Deuda por correctivos', _plPesos(d.total), d.cobrables.length + ' trabajos'));
   cont.appendChild(tiles);
@@ -12453,11 +12658,28 @@ function _plRenderCorrectivos() {
     { tipo: 'man', texto: 'Lo escribe Pedro (se guarda solo)' }
   ]));
 
-  if (!d.cobrables.length) {
+  /* 🔴 El "no hay nada" solo corta cuando NO HAY NADA: ni cobrables, ni previas, ni trabajo
+     ejecutado sin cotizar. Antes cortaba con `return` apenas faltaban cobrables, y se llevaba
+     por delante los DOS bloques de abajo.
+     Con una sola planilla nunca se noto —SMU siempre tuvo cobrables— pero al separar por cliente
+     salta a la vista: la planilla de Entel decia "Aún no hay correctivos cotizados" teniendo la
+     cotizacion de $420.000 de Megacentro Hualpen adentro. Un cliente que abre su planilla y la ve
+     vacia concluye que su trabajo se perdio. Encontrado el 21-08-2026 preparando el demo para
+     Pedro, no por un test: los datos estaban bien, lo que fallaba era el dibujo. */
+  if (!d.cobrables.length && !d.previas.length && !d.sinCotizar.length) {
     var vac = document.createElement('div');
-    vac.innerHTML = _vacio('Aún no hay correctivos cotizados', 'Cada cotización que se genere aparece sola en esta planilla.');
+    vac.innerHTML = _vacio('Aún no hay correctivos en ' + _plCliente, 'Cada cotización que se genere aparece sola en esta planilla.');
     cont.appendChild(vac);
     return;
+  }
+
+  if (!d.cobrables.length) {
+    // Sin deuda, pero con algo abajo: se dice, y se sigue dibujando.
+    var sinDeuda = document.createElement('div');
+    sinDeuda.style.cssText = 'font-size:13px;color:var(--texto2);margin:4px 0 14px;line-height:1.5;';
+    sinDeuda.textContent = 'Todavía no hay nada cobrable en ' + _plCliente +
+      '. Lo que hay más abajo son presupuestos y trabajos sin cotizar: cuando se ejecuten o se coticen, suben solos a la deuda.';
+    cont.appendChild(sinDeuda);
   }
 
   var buscar = document.createElement('input');
@@ -12472,7 +12694,7 @@ function _plRenderCorrectivos() {
       filas[i].style.display = (!t || filas[i].getAttribute('data-buscar').indexOf(t) !== -1) ? '' : 'none';
     }
   };
-  cont.appendChild(buscar);
+  if (d.cobrables.length) cont.appendChild(buscar);
 
   var scroll = document.createElement('div');
   scroll.className = 'pl-scroll';
@@ -12554,7 +12776,7 @@ function _plRenderCorrectivos() {
 
   tabla.appendChild(tbody);
   scroll.appendChild(tabla);
-  cont.appendChild(scroll);
+  if (d.cobrables.length) cont.appendChild(scroll);
 
   // --- Bloque aparte: cotizaciones previas. NO suman. ---
   if (d.previas.length) {
@@ -12564,7 +12786,7 @@ function _plRenderCorrectivos() {
     cont.appendChild(t1);
     var aviso = document.createElement('div');
     aviso.style.cssText = 'font-size:12px;color:var(--texto2);margin-bottom:8px;line-height:1.5;';
-    aviso.textContent = 'Son ofertas de obra enviadas a SMU, sin trabajo ejecutado detrás. NO entran en la deuda de arriba: sumarlas la infla y hace que SMU rechace el paquete completo.';
+    aviso.textContent = 'Son ofertas de obra enviadas a ' + _plCliente + ', sin trabajo ejecutado detrás. NO entran en la deuda de arriba: sumarlas la infla y hace que ' + _plCliente + ' rechace el paquete completo.';
     cont.appendChild(aviso);
 
     var scroll2 = document.createElement('div');
@@ -12664,23 +12886,40 @@ function _plRenderCorrectivos() {
 
   var lineas = [];
   if (d.chocanConPreventivos.length) {
-    lineas.push('<b>Ojo — ' + d.chocanConPreventivos.length + ' N° de OT ' + (d.chocanConPreventivos.length === 1 ? 'está' : 'están') + ' en las DOS planillas.</b> Si llegan juntas a SMU, ve el mismo número cobrado dos veces: ' +
+    lineas.push('<b>Ojo — ' + d.chocanConPreventivos.length + ' N° de OT ' + (d.chocanConPreventivos.length === 1 ? 'está' : 'están') + ' en las DOS planillas.</b> Si llegan juntas a ' + _escHtml(_plCliente) + ', ve el mismo número cobrado dos veces: ' +
       _escHtml(d.chocanConPreventivos.map(function(x) {
         return 'OT ' + x.otNumero + ' — correctivo de ' + x.correctivos.join(' y de ') + ', preventivo de ' + x.preventivo;
       }).join(' · ')) +
       '. Conviene renumerar uno antes de enviar.');
   }
-  lineas.push('Los montos son la suma de los ítems de cada cotización, <b>sin línea de IVA</b>. La app no sabe si son netos o con IVA — eso lo define el contrato con SMU.');
-  if (d.sinEnviar.length) lineas.push('<b>' + d.sinEnviar.length + ' cotización(es) por ' + _plPesos(d.sumaSinEnviar) + ' nunca salieron a SMU.</b> La app confirma que no tienen destinatario registrado.');
+  lineas.push('Los montos son la suma de los ítems de cada cotización, <b>sin línea de IVA</b>. La app no sabe si son netos o con IVA — eso lo define el contrato con ' + _escHtml(_plCliente) + '.');
+  if (d.sinEnviar.length) lineas.push('<b>' + d.sinEnviar.length + ' cotización(es) por ' + _plPesos(d.sumaSinEnviar) + ' nunca salieron a ' + _escHtml(_plCliente) + '.</b> La app confirma que no tienen destinatario registrado.');
   var sinCeco = d.cobrables.filter(function(c) { return !c.centro; });
   if (sinCeco.length) lineas.push('<b>' + sinCeco.length + ' cotización(es) sin CECO</b> — el hueco es del catálogo de sucursales, no de la planilla. Se cobran igual.');
   lineas.push('Esta planilla muestra <b>todo lo pendiente en un solo total</b>, sin cortar por mes.');
-  cont.appendChild(_plNota('Antes de mandar esta planilla a SMU', lineas));
+  cont.appendChild(_plNota('Antes de mandar esta planilla a ' + _plCliente, lineas));
 }
 
 /* ── EXCEL ───────────────────────────────────────────────────────────────────────────
    Se exporta la planilla que se está viendo. Los montos van como NUMERO, no como texto:
-   una planilla de cobranza que no se puede sumar en Excel no sirve de nada. */
+   una planilla de cobranza que no se puede sumar en Excel no sirve de nada.
+
+   El nombre del archivo lleva SIEMPRE el cliente: es lo primero que Pedro ve en la barra de
+   Excel y es lo que impide mandarle a SMU el archivo de Entel. Sin tildes ni espacios, misma
+   norma que el resto de los documentos que salen de la app.
+   ⚠️ La fila de titulo interna se agrega SOLO cuando el cliente no es SMU. La planilla de SMU
+   es la que ya esta en uso y la que SMU recibe: correrle la tabla una fila hacia abajo es
+   cambiarle el documento a alguien que no lo pidio. Su identificacion va en el nombre. */
+function _plSlugCliente(c) {
+  return String(c == null ? '' : c).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Cliente';
+}
+function _plTituloHoja(filas, que) {
+  if (_plCliente === PL_CLIENTE_SMU) return filas;
+  filas.unshift([]);
+  filas.unshift(['CLIENTE: ' + _plCliente, '', que]);
+  return filas;
+}
 function descargarExcelPlanilla() {
   if (!_plCache) { toast('Espera a que carguen los datos'); return; }
   if (typeof XLSX === 'undefined') { toast('No se pudo cargar el generador de Excel. Revisa la señal.'); return; }
@@ -12695,7 +12934,7 @@ function descargarExcelPlanilla() {
         .concat(['Total ' + _plAnio])];
       _plFilasVisibles(d).forEach(function(f) {
         var fila = [f.formato || '', f.centro || '', f.nombre, f.supervisor || '',
-          f.transp || '', f.transp ? f.transp * PL_TARIFA_TRANSPALETA : ''];
+          f.transp || '', (f.transp && d.tarifa) ? f.transp * d.tarifa : ''];
         f.celdas.forEach(function(celda) {
           fila.push(celda.length ? celda.map(function(c) { return c.numero; }).join(' / ') : '');
         });
@@ -12708,12 +12947,16 @@ function descargarExcelPlanilla() {
       totFila.push(d.total);
       filas.push(totFila);
       filas.push([]);
-      filas.push(['Tarifa aplicada', PL_TARIFA_TRANSPALETA, 'por transpaleta. La app no registra si es neto o con IVA: lo define el contrato con SMU.']);
-      var ws = XLSX.utils.aoa_to_sheet(filas);
+      if (d.tarifa) {
+        filas.push(['Tarifa aplicada', d.tarifa, 'por transpaleta. La app no registra si es neto o con IVA: lo define el contrato con ' + _plCliente + '.']);
+      } else {
+        filas.push(['Sin tarifa de preventivo', '', _plCliente + ' no tiene mantencion por transpaleta contratada. Las hojas van sin monto: el valor lo pone quien cotiza.']);
+      }
+      var ws = XLSX.utils.aoa_to_sheet(_plTituloHoja(filas, 'Preventivos ' + _plAnio));
       ws['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 18 }]
         .concat(PL_BIMESTRES.map(function() { return { wch: 20 }; })).concat([{ wch: 14 }]);
       XLSX.utils.book_append_sheet(wb, ws, 'Preventivos ' + _plAnio);
-      nombre = 'EMVAL_Planilla_Preventivos_' + _plAnio + '.xlsx';
+      nombre = 'EMVAL_Planilla_Preventivos_' + _plSlugCliente(_plCliente) + '_' + _plAnio + '.xlsx';
     } else {
       var c = _plDatosCorrectivos();
       var f1 = [['Local', 'CeCo', 'Trabajo', 'N Cotizacion', 'HS (N OT)', 'Monto', 'Fecha', 'Enviada', 'SolPed', 'OC', 'HES', 'Factura']];
@@ -12724,11 +12967,11 @@ function descargarExcelPlanilla() {
       });
       f1.push([]);
       f1.push(['TOTAL COBRABLE', '', '', '', '', c.total]);
-      f1.push(['Enviadas a SMU', c.enviadas.length, '', '', '', c.sumaEnviadas]);
+      f1.push(['Enviadas a ' + _plCliente, c.enviadas.length, '', '', '', c.sumaEnviadas]);
       f1.push(['Sin enviar', c.sinEnviar.length, '', '', '', c.sumaSinEnviar]);
       f1.push([]);
-      f1.push(['Los montos son la suma de los items de cada cotizacion, sin linea de IVA. Lo define el contrato con SMU.']);
-      var ws1 = XLSX.utils.aoa_to_sheet(f1);
+      f1.push(['Los montos son la suma de los items de cada cotizacion, sin linea de IVA. Lo define el contrato con ' + _plCliente + '.']);
+      var ws1 = XLSX.utils.aoa_to_sheet(_plTituloHoja(f1, 'Correctivos'));
       ws1['!cols'] = [{ wch: 28 }, { wch: 8 }, { wch: 45 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
       XLSX.utils.book_append_sheet(wb, ws1, 'Correctivos');
 
@@ -12754,7 +12997,7 @@ function descargarExcelPlanilla() {
         ws3['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 10 }, { wch: 20 }, { wch: 60 }];
         XLSX.utils.book_append_sheet(wb, ws3, 'Sin cotizar');
       }
-      nombre = 'EMVAL_Planilla_Correctivos_' + new Date().getFullYear() + '.xlsx';
+      nombre = 'EMVAL_Planilla_Correctivos_' + _plSlugCliente(_plCliente) + '_' + new Date().getFullYear() + '.xlsx';
     }
     XLSX.writeFile(wb, nombre);
     toast('Excel descargado!');

@@ -38,6 +38,10 @@ function extraer(desde, hasta) {
 const codigo = [
   extraer('function _normTipo(tipo)', '\n// Texto normalizado para comparar'),
   extraer('function _normTexto(s) {', '\n// =========== LOGIN ==========='),
+  // _localCanonico y _indexarCadenas: los usa _plClienteDe para saber de que cliente es cada
+  // documento. Sin cliente resuelto, ningun documento pertenece a ninguna planilla.
+  extraer('window.ALIAS_LOCALES = window.ALIAS_LOCALES', '\n// Indexa las cadenas por local'),
+  extraer('function _indexarCadenas(docs)', '\n// Identidad de una OT para detectar duplicados'),
   extraer('const OCULTOS_TECNICOS', '\n// Escapa texto para meterlo seguro'),
   extraer('var PL_TARIFA_TRANSPALETA = 37000;', '\nfunction planillaTab('),
   extraer('function _plDatosPreventivos()', '\nfunction _plRenderPreventivos('),
@@ -115,9 +119,21 @@ const COTIZACIONES = [
     tipoCot: 'previa', estadoCot: 'Realizada' }
 ];
 
+/* Igual que produccion: cargarPlanillas() le resuelve el cliente a CADA documento antes de
+   meterlo al cache, y las planillas solo muestran los del cliente seleccionado. Sin este paso
+   ningun documento pertenece a ninguna planilla y todos los totales dan 0.
+   Se pasa `null` como indice a proposito: estos locales no vienen de un catalogo, asi que caen
+   en el rescate por el nombre (PL_RE_SMU) — que es como se salvan los 2 locales reales que no
+   resuelven contra `cadenas` y arrastran $740.000 en cotizaciones. */
+function _conCliente(docs) {
+  docs.forEach(d => { d._cliente = sandbox._plClienteDe(d, null); });
+  return docs;
+}
+SUCURSALES.forEach(x => { x._cliente = sandbox._plClienteDe({ cadena: x.formato }, null); });
+
 sandbox._plCache = {
-  ordenes: ORDENES.filter(sandbox._plVisible),
-  cotizaciones: COTIZACIONES,
+  ordenes: _conCliente(ORDENES).filter(sandbox._plVisible),
+  cotizaciones: _conCliente(COTIZACIONES),
   sucursales: SUCURSALES
 };
 
@@ -180,13 +196,13 @@ ok(C.sinCotizar.every(o => o.monto === undefined), 'a los trabajos sin cotizar n
 // llegan juntas, SMU ve el mismo numero dos veces. La app no lo arregla sola, pero avisa.
 // El caso real de la 9530: DOS correctivos comparten el numero con UN preventivo. Se agrupa por
 // numero — decir "2 numeros repetidos" mandaria a Pedro a buscar un segundo que no existe.
-sandbox._plCache.cotizaciones = COTIZACIONES.concat([{
+sandbox._plCache.cotizaciones = _conCliente(COTIZACIONES.concat([{
   id: 'c4', local: 'UNIMARC HUALPEN', centro: '740', nombreServicio: 'Sanitizacion estanque',
   numeroCotizacion: '13072604', otNumero: 9001, total: 350000, fecha: '25-06-2026', enviado: true
 }, {
   id: 'c5', local: 'S10 Los Angeles', centro: '', nombreServicio: 'Correctivo transpaletas',
   numeroCotizacion: '13072605', otNumero: 9001, total: 79800, fecha: '01-07-2026', enviado: false
-}]);
+}]));
 const C2 = sandbox._plDatosCorrectivos();
 igual(C2.chocanConPreventivos.length, 1, 'un solo N de OT repetido, aunque lo usen dos cotizaciones');
 igual(C2.chocanConPreventivos[0].otNumero, 9001, 'y dice cual es');
@@ -225,8 +241,14 @@ async function contraProduccion() {
   const [ordenes, cotizaciones, cadenas] = await Promise.all([leer('ordenes'), leer('cotizaciones'), leer('cadenas')]);
   const sucursales = [];
   cadenas.forEach(c => (c.sucursales || []).forEach(s => {
-    if (s && typeof s === 'object' && s.nombre) sucursales.push({ formato: c.nombre || '', nombre: s.nombre, centro: s.centro || '', supervisor: s.supervisor || '' });
+    if (s && typeof s === 'object' && s.nombre) sucursales.push({ formato: c.nombre || '', nombre: s.nombre, centro: s.centro || '', supervisor: s.supervisor || '',
+      _cliente: sandbox._plClienteDe({ cadena: c.nombre }, null) });
   }));
+  /* Con el catalogo REAL, igual que la app. Los numeros del informe de Soporte son de SMU: si el
+     reparto por cliente se comiera una hoja de SMU, los tres asserts de abajo lo dicen. */
+  const idxProd = sandbox._indexarCadenas(cadenas);
+  ordenes.forEach(o => { o._cliente = sandbox._plClienteDe(o, idxProd); });
+  cotizaciones.forEach(c => { c._cliente = sandbox._plClienteDe(c, idxProd); });
   sandbox._plCache = { ordenes: ordenes.filter(sandbox._plVisible), cotizaciones, sucursales };
   const Pp = sandbox._plDatosPreventivos();
   const Cc = sandbox._plDatosCorrectivos();
@@ -261,8 +283,26 @@ async function contraProduccion() {
   ok(normales.every(function(c) { return enDeudaProd[c.id]; }),
      'las ' + normales.length + ' cotizaciones normales siguen cobrandose (no tienen estadoCot: ' +
      'un filtro que lo exigiera se comeria $' + normales.reduce(function(s, c) { return s + (c.total || 0); }, 0).toLocaleString('es-CL') + ')');
-  igual(Cc.cobrables.length + Cc.previas.length, cotizaciones.length,
-     'ninguna cotizacion de produccion se pierde entre deuda y presupuestos');
+  /* Ninguna cotizacion se pierde AL SEPARAR POR CLIENTE. Este assert comparaba contra el total
+     de la coleccion y dejo de valer el 21-08-2026, cuando la planilla dejo de mostrar todos los
+     clientes juntos: la N 133 es la de Megacentro Hualpen (Entel) y NO tiene que aparecer en la
+     de SMU — que es exactamente lo que Pedro pidio. Lo que sigue valiendo, y es mas fuerte, es
+     que sumando TODAS las planillas vuelva la coleccion entera: separar no puede tragarse un
+     documento, y "Sin clasificar" existe justo para que ninguno se quede sin planilla. */
+  const clientesProd = {};
+  cotizaciones.forEach(function(c) { clientesProd[c._cliente] = true; });
+  let sumaProd = 0;
+  Object.keys(clientesProd).forEach(function(cli) {
+    sandbox._plCliente = cli;
+    const D = sandbox._plDatosCorrectivos();
+    sumaProd += D.cobrables.length + D.previas.length;
+  });
+  sandbox._plCliente = sandbox.PL_CLIENTE_SMU;
+  igual(sumaProd, cotizaciones.length,
+     'sumando TODAS las planillas vuelven las ' + cotizaciones.length + ' cotizaciones: separar no pierde ninguna');
+  ok(Cc.cobrables.concat(Cc.previas).every(function(c) { return c._cliente === sandbox.PL_CLIENTE_SMU; }),
+     'y en la planilla de SMU no se colo ninguna cotizacion de otro cliente',
+     'clientes encontrados: ' + Object.keys(clientesProd).join(', '));
 
   /* Foto del 05-ago-2026, para que el numero se pueda mirar de un vistazo. Si esto falla y los
      invariantes de arriba pasan, es que Pedro cotizo mas — se actualiza el numero. Si falla
