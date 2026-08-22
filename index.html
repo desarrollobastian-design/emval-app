@@ -2684,13 +2684,23 @@ async function procesarFoto(e) {
   const tipo = estado.fotoActualTipo;
   const idx = estado.fotoActualIdx;
   let data = null;
+  const diag = {};
   try {
     // Comprime desde el File directo: no carga el bitmap full-res en RAM
-    data = await comprimirArchivoImagen(file, 1200, 0.72);
+    data = await comprimirArchivoImagen(file, 1200, 0.72, diag);
   } catch(err) {
+    diag.error = String((err && err.name) || err || '').slice(0, 40);
     console.warn('No se pudo comprimir foto:', err);
   }
-  if (!data) { toast('No se pudo procesar la imagen. Usa una foto JPG/PNG (evita HEIC).'); return; }
+  // Se valida el contenido, no solo que "haya algo": un "data:," pasaba el `!data` de toda
+  // la vida y se guardaba como si fuera una foto — sale EN BLANCO en la hoja del cliente y
+  // para entonces el tecnico ya se fue del local. Se comprueba aqui, en el unico camino que
+  // sabe reportarlo, sin cambiarle la salida a los otros 12 llamadores de comprimirImagen.
+  if (!_esDataURLImagen(data)) {
+    console.warn('Foto rechazada:', (file && file.type), (file && file.size), diag);
+    toast(_motivoFotoRechazada(file, diag));
+    return;
+  }
   if (tipo === 'antes') estado.fotosAntes[idx] = data;
   else if (tipo === 'despues') estado.fotosDespues[idx] = data;
   else if (tipo === 'timbre') estado.fotoTimbre = data;
@@ -7349,18 +7359,74 @@ function verPDF() {
   }
 }
 
+/* ===== POR QUE SE RECHAZO UNA FOTO =====
+   Hasta el 21-08-2026 el tecnico veia SIEMPRE el mismo texto — "usa JPG/PNG (evita HEIC)" —
+   daba igual si la foto era HEIC, si el archivo llego vacio por falta de espacio, o si el
+   decodificador del telefono murio. El unico detalle real iba a console.warn, que nadie ve
+   parado en un local a las 2 AM. Caso Nelson (Galaxy S21, turno nocturno del 21-08): cinco
+   fotos seguidas rechazadas y cero forma de saber cual de las cuatro causas era — ni desde
+   el telefono ni desde aca. Y el texto apuntaba a HEIC, que en ese equipo ni siquiera era
+   la causa mas probable: mando el diagnostico para el lado equivocado.
+
+   El toast se corta a los 9 s (TOAST_MAX_MS) y en el telefono tocarlo lo CIERRA, no lo
+   pausa: por eso los mensajes van cortos a proposito. Lo que no cabe en 9 s no existe. */
+function _pesoArchivoFoto(bytes) {
+  if (typeof bytes !== 'number' || isNaN(bytes)) return 'peso ?';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// El MIME puede venir VACIO: varios proveedores de galeria de Android no lo declaran al
+// entregar el archivo. La extension no es un respaldo de lujo, es la mitad de la prueba.
+function _esFotoHEIC(file) {
+  var t = String((file && file.type) || '').toLowerCase();
+  if (t.indexOf('heic') >= 0 || t.indexOf('heif') >= 0) return true;
+  return /\.(heic|heif|hif)$/i.test(String((file && file.name) || ''));
+}
+
+// toDataURL NO lanza cuando el canvas no se puede exportar: devuelve "data:," — un string
+// truthy que pasaba el `if (!data)` de procesarFoto y se guardaba como si fuera una foto.
+// Esa foto sale EN BLANCO en la hoja que recibe el cliente, que es peor que rechazarla:
+// el tecnico ve el visto verde y se va del local creyendo que quedo el registro.
+function _esDataURLImagen(s) {
+  return typeof s === 'string' && s.indexOf('data:image/') === 0 && s.length > 128;
+}
+
+/* La ficha tecnica va en las TRES causas, no solo en la desconocida: es lo que Soporte
+   necesita y lo unico que el tecnico puede entregar con una foto de la pantalla, sin tener
+   que explicar nada ni entrar a ninguna consola. */
+function _motivoFotoRechazada(file, diag) {
+  var ficha = ' [' + (String((file && file.type) || '') || 'sin tipo') + ' · ' +
+              _pesoArchivoFoto(file && file.size) +
+              ((diag && diag.paso) ? ' · ' + diag.paso : '') + ']';
+  if (!file || !file.size) {
+    return 'La foto llegó vacía. Revisa el espacio del teléfono.' + ficha;
+  }
+  if (_esFotoHEIC(file)) {
+    return 'Foto en HEIC. Cámara → ajustes → Formatos avanzados → apaga "Fotos HEIF".' + ficha;
+  }
+  return 'No se pudo leer esta foto. Manda esta pantalla a soporte.' + ficha;
+}
+
 // Compress image - si es URL externa devuelve base64 via fetch (evita CORS)
 // Comprime una foto directamente desde el File/Blob del lente SIN cargar el bitmap
 // full-res en RAM: createImageBitmap decodifica y reescala en un solo paso nativo.
 // Evita el "problema de memoria" en teléfonos de gama baja con cámaras de muchos MP.
 // Cae al camino clásico (readAsDataURL + comprimirImagen) si el navegador no soporta
 // createImageBitmap o el redimensionado nativo.
-async function comprimirArchivoImagen(file, maxWidth, quality) {
+async function comprimirArchivoImagen(file, maxWidth, quality, diag) {
   maxWidth = maxWidth || 1200;
   quality = quality || 0.72;
+  // `diag` es opcional y se rellena con el paso donde murio. Los 12 sitios que ya llamaban
+  // a estas funciones no lo pasan y siguen funcionando igual: el diagnostico se agrega,
+  // no se cobra. La etiqueta se pone AL ENTRAR a cada paso y se limpia solo al exito, asi
+  // que si algo revienta a mitad de camino la etiqueta que queda es la del paso culpable.
+  diag = diag || {};
   if (file && typeof createImageBitmap === 'function') {
     let bitmap = null;
     try {
+      diag.paso = 'bitmap';
       // 1er decode liviano solo para conocer dimensiones reales
       bitmap = await createImageBitmap(file);
       let w = bitmap.width, h = bitmap.height;
@@ -7380,14 +7446,21 @@ async function comprimirArchivoImagen(file, maxWidth, quality) {
       ctx.drawImage(bitmap, 0, 0);
       try { bitmap.close(); } catch(e) {}
       bitmap = null;
-      return canvas.toDataURL('image/jpeg', quality);
+      diag.paso = 'canvas';
+      const salida = canvas.toDataURL('image/jpeg', quality);
+      if (_esDataURLImagen(salida)) { diag.paso = ''; return salida; }
+      // "data:," — el canvas no se pudo exportar y toDataURL no lo dice lanzando.
+      // Cae al camino clasico en vez de devolver una foto en blanco (ver _esDataURLImagen).
+      diag.paso = 'canvas-vacio';
     } catch(e) {
       if (bitmap) { try { bitmap.close(); } catch(e2) {} }
+      diag.error = String((e && e.name) || e || '').slice(0, 40);
       console.warn('createImageBitmap no disponible, usando camino clasico:', e);
       // continua al fallback
     }
   }
   // Fallback: leer como data URL y comprimir con el metodo clasico
+  diag.paso = 'lectura';
   const dataUrl = await new Promise(function(resolve) {
     const reader = new FileReader();
     reader.onload = function(ev) { resolve(ev.target.result); };
@@ -7395,10 +7468,12 @@ async function comprimirArchivoImagen(file, maxWidth, quality) {
     reader.readAsDataURL(file);
   });
   if (!dataUrl) return null;
-  return comprimirImagen(dataUrl, maxWidth, quality);
+  const comprimida = await comprimirImagen(dataUrl, maxWidth, quality, diag);
+  if (comprimida) diag.paso = '';
+  return comprimida;
 }
 
-async function comprimirImagen(dataUrl, maxWidth, quality) {
+async function comprimirImagen(dataUrl, maxWidth, quality, diag) {
   // Si es URL http (Cloudinary), ya fue convertida a base64 por cargarImagenComoBase64
   // Solo comprimir si es data URL local
   if (typeof dataUrl === 'string' && dataUrl.startsWith('http')) {
@@ -7418,7 +7493,7 @@ async function comprimirImagen(dataUrl, maxWidth, quality) {
     };
     // Si la imagen no se puede decodificar (p. ej. HEIC en el PC), devolver null
     // para que quien llama la rechace en vez de guardar una foto vacía/corrupta.
-    img.onerror = function() { resolve(null); };
+    img.onerror = function() { if (diag) diag.paso = 'decode'; resolve(null); };
     img.src = dataUrl;
   });
 }
