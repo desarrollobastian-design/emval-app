@@ -515,6 +515,49 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
     enlace **sigue pendiente** y **no se crea ninguna orden fantasma**.
 - Cubierto por `tests/enlace-pdf-no-se-pierde-sin-senal.js`.
 
+**Cuando una foto se rechaza, el mensaje dice POR QUE** (`_motivoFotoRechazada`, `_esFotoHEIC`,
+`_esDataURLImagen`, `_pesoArchivoFoto`, el 4º parámetro `diag`):
+- Caso **don Nelson** (Samsung Galaxy S21, turno nocturno del **21-08-2026**). Pedro: *"hay una pura
+  foto que me logra cargar (…) acabo de tomar como cinco fotos distintas y no me carga ninguna. Si
+  son fotos de WhatsApp, tampoco"*. La app contestaba SIEMPRE lo mismo: *"No se pudo procesar la
+  imagen. Usa una foto JPG/PNG (evita HEIC)"*.
+- 🔴 **Ese texto era un cajón de sastre y encima apuntaba mal.** Salía igual si la foto era HEIC,
+  si el archivo llegó vacío por falta de espacio, si el decodificador del teléfono murió o si el
+  canvas no se pudo exportar. Y una foto bajada de **WhatsApp es JPEG siempre**: que esas también
+  fallaran descartaba HEIC, justo lo único que el mensaje nombraba. El diagnóstico se fue dos días
+  para el lado equivocado por creerle al texto.
+- **Tres mensajes distintos, y los tres con ficha técnica** `[tipo · peso · paso]`: archivo vacío
+  → *"revisa el espacio del teléfono"* · HEIC de verdad → *"Cámara → ajustes → Formatos avanzados
+  → apaga Fotos HEIF"* · cualquier otra → no se inventa causa y se pide la pantalla para Soporte.
+- 🔑 **La ficha va en las TRES, no solo en la desconocida.** Es lo único que el técnico puede
+  entregar con una foto de la pantalla, sin entrar a ninguna consola. Antes el único detalle real
+  iba a `console.warn`, invisible para alguien parado en un local a las 2 de la mañana.
+- **El MIME puede venir VACÍO**: varios proveedores de galería de Android no lo declaran. Por eso
+  `_esFotoHEIC` mira también la extensión — no es respaldo de lujo, es la mitad de la prueba.
+- ⚠️ **Los mensajes van cortos a propósito**: el toast se corta a los 9 s (`TOAST_MAX_MS`) y en el
+  teléfono **tocarlo lo CIERRA, no lo pausa**. Lo que no cabe en 9 s no existe. El test lo mide con
+  la fórmula real de `_toastDuracion`, no con una copia.
+- 🔴 **Bug latente que apareció arreglándolo, y era peor que el reportado:** `toDataURL` **no
+  lanza** cuando el canvas no se puede exportar — devuelve `"data:,"`, un string **truthy** que
+  pasaba el `if (!data)` de siempre y **se guardaba como si fuera una foto**. Sale en blanco en la
+  hoja que recibe SMU y el técnico ya se fue del local, con su visto verde en pantalla. Ahora se
+  valida el contenido con `_esDataURLImagen`, no que "haya algo".
+- **`diag` es el 4º parámetro y es OPCIONAL**, en las dos funciones. `comprimirImagen` la llaman
+  **12 sitios más** con 3 argumentos: el diagnóstico se agrega, no se cobra. La etiqueta se pone al
+  ENTRAR a cada paso y **se limpia sola al éxito**, así que una foto buena nunca arrastra la
+  etiqueta de un fallo anterior.
+- ⚠️ **Esto no arregla la causa del caso Nelson: la vuelve diagnosticable.** Cuál de las cuatro era
+  se sabrá cuando el teléfono muestre la ficha. El pipeline de fotos no se tocaba desde el
+  **08-07-2026** y funciona en todos los demás equipos, así que no era una regresión del código.
+- ✅ **PROBADO en Chromium con el pipeline real, 21-08-2026** (`createImageBitmap`, decodificador y
+  `toDataURL` de verdad; en Node esos tres no se pueden probar): una foto de cámara de **4000×3000
+  y 582 KB entra y sale 1200×900 / 78 KB en 125 ms** por el camino rápido y sin una sola
+  advertencia — **no hay regresión en el camino de éxito, que era el riesgo real del cambio**—, un
+  PNG igual, y los cuatro archivos rotos salen cada uno con su mensaje correcto.
+  **Contraprueba contra el código anterior:** el mensaje único falla 4 de los criterios del test, y
+  con `data = "data:,"` el `if (!data)` de entonces **la guardaba como foto**.
+- Cubierto por `tests/la-foto-rechazada-dice-por-que.js`.
+
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
 - `procesarFoto(e)` — Process captured photo, compress, upload
@@ -740,6 +783,7 @@ These changes are useful context for understanding current state:
   node tests/cotizacion-dice-que-version-va.js index.html
   node tests/pdf-cotizacion-con-formato-viejo-se-regenera.js index.html
   node tests/planillas-no-mezclan-clientes.js index.html
+  node tests/la-foto-rechazada-dice-por-que.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -820,6 +864,12 @@ These changes are useful context for understanding current state:
   sigue midiendo 7 mm con su texto en y+5, el cuerpo conserva sus 98 mm para que el TOTAL NETO y
   la firma no se muevan, con 30 ítems se abre hoja nueva en vez de recortar, y los dos
   generadores dibujan por la misma función ·
+  `la-foto-rechazada-dice-por-que.js` — el mensaje distingue las causas en vez de culpar siempre
+  al formato: un archivo vacío habla del espacio del teléfono, un HEIC dice dónde apagarlo, y a un
+  JPEG no se le inventa que sea HEIC. Los tres traen la ficha `[tipo · peso · paso]` que Soporte
+  necesita, y los tres caben en los 9 s del toast (medido con la fórmula real de `_toastDuracion`).
+  Vigila además que `"data:,"` no vuelva a guardarse como foto y que `diag` siga siendo opcional,
+  que es lo que mantiene vivos a los 12 llamadores de `comprimirImagen` ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
