@@ -1782,30 +1782,141 @@ function eliminarOTPausada(numero, tecnico) {
     guardarOTsPausadas(filtradas);
   } catch(e) { console.error('Error eliminando OT pausada:', e); }
 
-  // Tambien quitar el registro "En Pausa" de Firebase si existe.
-  // Se consulta SOLO por numero y se afina en el cliente: el where('tecnico','==') exacto dejaba
-  // vivo el documento pausado cuando el nombre del tecnico difería en una tilde o un espacio, y
-  // entonces el cierre creaba un segundo documento -> el local aparecia repetido en el panel.
-  if (window._firebaseReady) {
-    try {
-      const db = window.firebase.firestore();
-      db.collection('ordenes')
-        .where('numero', '==', numero)
-        .get().then(function(snapshot) {
-          snapshot.docs.forEach(function(doc) {
-            const d = doc.data();
-            // NUNCA borrar una OT firmada: es el trabajo cerrado, no un borrador.
-            if (d.firmada === true) return;
-            if (!(d.pausa === true || d.estado === 'En Pausa')) return;
-            if (!_mismoTecnico(d.tecnico, tecnico)) return;
-            db.collection('ordenes').doc(doc.id).delete();
-          });
-        }).catch(function(){});
-    } catch(e) {
-      // SILENCIO-FIRMADO: el borrado en Firestore es best-effort. Si falla, la OT sigue
-      // "En Pausa" en el servidor y _reconciliarPausadasFirebase() la vuelve a bajar en el
-      // proximo arranque. El tecnico ya la vio desaparecer de su lista local, que es la suya.
+  // Tambien quitar el registro "En Pausa" de Firebase si existe. Lo que no se logre ahora
+  // queda ENCOLADO en el dispositivo y se reintenta (ver _cerrarPausadaEnLaNube).
+  _cerrarPausadaEnLaNube(numero, tecnico);
+}
+
+/* EL REGISTRO "EN PAUSA" QUE SOBREVIVIA A SU PROPIO CIERRE ─────────────────────────────────
+   Antes esto era best-effort y estaba firmado como silencio aceptable: "si falla, la OT sigue
+   En Pausa en el servidor". Lo que el comentario no decia es que _reconciliarPausadasFirebase()
+   se la vuelve a BAJAR al telefono del tecnico en el proximo arranque — asi que no era un
+   registro colgado en la nube, era un trabajo que reaparecia como pendiente todos los dias.
+   Y el `.get()` iba sin guardia de tiempo, contra la regla del proyecto: con mala señal el SDK
+   no resuelve ni rechaza, se cuelga, y el borrado no ocurre nunca.
+   📍 Caso del 23-08-2026: Pedro veia 3 trabajos "pausados" que ya estaban hechos. Uno de ellos
+   —ALVI CAÑETE #862089— tenia su OT cerrada y firmada, y el registro pausado seguia vivo desde
+   el 19-08. Lucas, Jose y Nelson los acumulaban en sus telefonos por el mismo camino.
+   Invariante, igual que en las colas de correos y de enlaces del PDF: el codigo NUNCA olvida un
+   borrado que no logro aplicar. O se borra, o sigue pendiente. */
+var _KEY_CIERRES_PAUSADA = 'emval_cierres_pausada_pendientes';
+
+function _leerCierresPausadaPendientes() {
+  try { return JSON.parse(localStorage.getItem(_KEY_CIERRES_PAUSADA) || '[]'); } catch(e) { return []; }
+}
+
+function _escribirCierresPausadaPendientes(lista) {
+  try { localStorage.setItem(_KEY_CIERRES_PAUSADA, JSON.stringify(lista || [])); } catch(e) {}
+}
+
+function _encolarCierrePausada(numero, tecnico) {
+  if (numero == null || numero === '') return;
+  try {
+    var clave = String(numero) + '|' + String(tecnico || '');
+    var lista = _leerCierresPausadaPendientes().filter(function(it) {
+      return String(it.numero) + '|' + String(it.tecnico || '') !== clave;
+    });
+    lista.push({ numero: numero, tecnico: tecnico || '', creadoEn: Date.now() });
+    _escribirCierresPausadaPendientes(lista);
+  } catch(e) { console.warn('No se pudo encolar el cierre de la pausada:', e); }
+}
+
+/* Borra en Firestore el registro "En Pausa" de esta OT. Devuelve una promesa que resuelve
+   `true` si al terminar NO queda ningun documento pausado que borrar — que es la condicion
+   para sacarlo de la cola. Nunca lanza: el cierre de la OT no se puede caer por esto. */
+async function _cerrarPausadaEnLaNube(numero, tecnico, _desdeLaCola) {
+  if (numero == null || numero === '') return true;
+  if (!window._firebaseReady || !navigator.onLine) {
+    if (!_desdeLaCola) _encolarCierrePausada(numero, tecnico);
+    return false;
+  }
+  try {
+    var db = window.firebase.firestore();
+    // Se consulta SOLO por numero y se afina en el cliente: el where('tecnico','==') exacto dejaba
+    // vivo el documento pausado cuando el nombre del tecnico difería en una tilde o un espacio, y
+    // entonces el cierre creaba un segundo documento -> el local aparecia repetido en el panel.
+    var snapshot = await _conTimeout(
+      db.collection('ordenes').where('numero', '==', numero).get(),
+      20000, 'buscar la OT pausada para borrarla');
+    var aBorrar = snapshot.docs.filter(function(doc) {
+      var d = doc.data() || {};
+      // NUNCA borrar una OT firmada: es el trabajo cerrado, no un borrador.
+      if (d.firmada === true) return false;
+      if (!(d.pausa === true || d.estado === 'En Pausa')) return false;
+      return _mismoTecnico(d.tecnico, tecnico);
+    });
+    for (var i = 0; i < aBorrar.length; i++) {
+      await _conTimeout(db.collection('ordenes').doc(aBorrar[i].id).delete(),
+        20000, 'borrar la OT pausada');
     }
+    return true;
+  } catch(e) {
+    // No se pudo comprobar ni borrar: se reintenta. Encolar aca (y no antes) evita dejar
+    // basura en la cola cada vez que el borrado SI funciona, que es el caso normal.
+    console.warn('El registro En Pausa de la OT #' + numero + ' no se pudo borrar todavia:', e && e.message);
+    if (!_desdeLaCola) _encolarCierrePausada(numero, tecnico);
+    return false;
+  }
+}
+
+async function sincronizarCierresPausadaPendientes() {
+  if (!navigator.onLine || !window._firebaseReady) return;
+  var lista = _leerCierresPausadaPendientes();
+  if (!lista.length) return;
+  var quedan = [];
+  for (var i = 0; i < lista.length; i++) {
+    var ok = await _cerrarPausadaEnLaNube(lista[i].numero, lista[i].tecnico, true);
+    if (!ok) quedan.push(lista[i]);
+  }
+  _escribirCierresPausadaPendientes(quedan);
+}
+
+/* Numeros de OT que ESTE dispositivo cerró y firmó (localStorage 'emval_ots'). Es la unica
+   fuente que no depende de la red: si el telefono dice "yo cerre y firme la 862089", ninguna
+   copia pausada de esa misma OT en la nube es trabajo pendiente. Se exige `firmada` — una
+   entrada sin firma no prueba que el trabajo se haya cerrado. */
+function _numerosCerradosLocalmente(tecnico) {
+  var mapa = {};
+  try {
+    var completadas = JSON.parse(localStorage.getItem('emval_ots') || '[]');
+    completadas.forEach(function(o) {
+      if (!o || o.numero == null || o.firmada !== true) return;
+      if (tecnico && !_mismoTecnico(o.tecnico, tecnico)) return;
+      mapa[String(o.numero)] = o;
+    });
+  } catch(e) {}
+  return mapa;
+}
+
+/* Quita de la lista del tecnico las hojas "En Pausa" cuyo trabajo YA se cerró y firmó en este
+   mismo telefono, y encola el borrado del registro que quedo en la nube.
+   ⚠️ No es lo mismo que _limpiarBorradoresCompletados, que solo toca autoDraft: esto toca
+   pausas REALES, asi que el criterio es mas estricto — numero + tecnico + local, y la completada
+   tiene que estar firmada. Sin el local, dos OT con el mismo numero (los numeros son aleatorios
+   y ya colisionaron antes: ver la OT 9530) se taparian entre si y desapareceria trabajo de
+   verdad. Devuelve true si hubo cambios. */
+function _limpiarPausadasYaCerradas() {
+  try {
+    var cerradas = _numerosCerradosLocalmente();
+    if (!Object.keys(cerradas).length) return false;
+    var pausadas = cargarOTsPausadas();
+    var aBorrarEnLaNube = [];
+    var filtradas = pausadas.filter(function(ot) {
+      if (!ot || ot.autoDraft === true || ot.numero == null) return true;
+      var c = cerradas[String(ot.numero)];
+      if (!c) return true;
+      if (!_mismoTecnico(c.tecnico, ot.tecnico)) return true;
+      if (String(c.local || '').trim() !== String(ot.local || '').trim()) return true;
+      aBorrarEnLaNube.push(ot);
+      return false;
+    });
+    if (filtradas.length === pausadas.length) return false;
+    guardarOTsPausadas(filtradas);
+    aBorrarEnLaNube.forEach(function(ot) { _encolarCierrePausada(ot.numero, ot.tecnico); });
+    return true;
+  } catch(e) {
+    console.error('Error limpiando pausadas ya cerradas:', e);
+    return false;
   }
 }
 
@@ -6337,7 +6448,25 @@ async function _reconciliarPausadasFirebase() {
     // 2) Agregar las que Firebase dice que son mías pero no tengo localmente (reasignadas hacia mí u otro equipo)
     const numerosLocalesMios = {};
     local.forEach(function(o){ if (_mismoTecnico(o.tecnico, estado.usuario)) numerosLocalesMios[String(o.numero)] = true; });
-    const nuevas = misEnFb.filter(function(fo){ return !numerosLocalesMios[String(fo.numero)]; });
+    /* …salvo las que YO ya cerré en este mismo teléfono. Si el borrado del registro "En Pausa"
+       no alcanzó a llegar a la nube (mala señal), este paso se la volvía a bajar y el trabajo
+       reaparecía como pendiente al día siguiente, y al otro. Ese es el bucle que hacía que
+       Lucas, José y Nelson acumularan pausados de trabajos terminados. El borrado en la nube
+       ahora se reintenta solo (ver _cerrarPausadaEnLaNube); esto corta el bucle mientras tanto,
+       y de paso lo vuelve a intentar para las que ya venían arrastradas. */
+    const misCerradas = _numerosCerradosLocalmente(estado.usuario);
+    const nuevas = misEnFb.filter(function(fo) {
+      if (numerosLocalesMios[String(fo.numero)]) return false;
+      // Mismo criterio estricto que _limpiarPausadasYaCerradas: numero + tecnico + local.
+      // Los numeros de OT son aleatorios y ya colisionaron (la 9530); sin el local, una OT
+      // ajena con el mismo numero taparia trabajo de verdad.
+      const c = misCerradas[String(fo.numero)];
+      if (c && String(c.local || '').trim() === String(fo.local || '').trim()) {
+        _encolarCierrePausada(fo.numero, fo.tecnico);
+        return false;
+      }
+      return true;
+    });
     for (let i = 0; i < nuevas.length; i++) {
       const otLocal = _firebaseADTOPausada(nuevas[i]);
       // Las fotos vienen como URLs de Cloudinary → convertir a base64 para continuar offline
@@ -6373,6 +6502,9 @@ function _renderPausadasEnCadena() {
   try {
     // Eliminar borradores zombis (OTs ya completadas que revivieron como autoguardadas)
     _limpiarBorradoresCompletados();
+    // Y las pausas REALES cuyo trabajo este mismo telefono ya cerro y firmo: son las que se
+    // acumulaban en la lista del tecnico cuando el borrado en la nube no alcanzaba a salir.
+    _limpiarPausadasYaCerradas();
     const otsPausadas = cargarOTsPausadas();
     const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
 
@@ -10292,6 +10424,25 @@ async function cargarOTsSupervisor() {
       .filter(function(cd){ var x = cd.data(); return x.tipoCot === 'previa' && x.estadoCot === 'Pendiente' && !x.otId; })
       .map(function(cd){ return Object.assign({ id: cd.id }, cd.data()); });
 
+    /* Fichas MINIMAS para que las tarjetas de "trabajos pausados" puedan decir cuales de esas
+       hojas ya estan hechas (ver _estadoRealPausada). Se arman con lo que esta pantalla YA bajo
+       —las dos colecciones completas—, asi que no cuesta ni una lectura mas.
+       ⚠️ Solo los campos necesarios: guardarse los documentos enteros en memoria significaria
+       arrastrar las fotos y las firmas en base64 de 200 OT. */
+    window._supFichas = {
+      ots: _docsVis.map(function(dd) {
+        var x = dd.data() || {};
+        return { id: dd.id, numero: x.numero, local: x.local, tecnico: x.tecnico, tipo: x.tipo,
+                 estado: x.estado, pausa: x.pausa === true, firmada: x.firmada === true,
+                 fecha: x.fecha, creadoEn: x.creadoEn };
+      }),
+      cots: cotSnap.docs.map(function(cd) {
+        var x = cd.data() || {};
+        return { id: cd.id, numeroCotizacion: x.numeroCotizacion, otId: x.otId || '',
+                 otNumero: x.otNumero, local: x.local, enviado: x.enviado === true, fecha: x.fecha };
+      })
+    };
+
     // Filtrar solo OTs de hoy
     const now = new Date();
     const dd = String(now.getDate()).padStart(2,'0');
@@ -10574,7 +10725,11 @@ function _msCreado(creadoEn) {
   } catch(e) { return 0; }
 }
 
-// Texto "hace X dias / hoy / ayer"
+/* Texto "hace X dias / hoy / ayer".
+   ⚠️ Habia OTRA funcion llamada igual mas abajo en el archivo (la de la cola de correos) que
+   PISABA a esta y esperaba milisegundos: en el panel de Pedro las tres tarjetas decian el mismo
+   "hace 19949 día(s)". Se renombro a _haceCuantoDesde. Antes de agregar una funcion nueva,
+   comprobar que el nombre no exista ya — tests/pausada-no-sobrevive-al-cierre.js lo vigila. */
 function _haceCuanto(creadoEn) {
   const ms = _msCreado(creadoEn);
   if (!ms) return '';
@@ -10582,6 +10737,44 @@ function _haceCuanto(creadoEn) {
   if (dias <= 0) return 'Hoy';
   if (dias === 1) return 'Ayer';
   return 'Hace ' + dias + ' días';
+}
+
+/* ¿ESTA HOJA PAUSADA YA ESTA HECHA? ────────────────────────────────────────────────────────
+   Pedro veia 3 trabajos "pausados" que el sabia terminados, y no se atrevia a borrarlos por si
+   se llevaban la cotizacion (23-08-2026). La pantalla tenia el dato para responderle —el panel
+   ya baja las 200 OT y las 130 cotizaciones— y no lo estaba usando.
+   Devuelve null cuando NO se puede afirmar nada: sin las fichas cargadas la tarjeta sale como
+   siempre. Decir "ya esta hecha" sin haberlo comprobado es peor que no decir nada.
+   🔑 El cruce exige numero + LOCAL, nunca el numero solo: los numeros de OT son aleatorios de
+   6 digitos y ya colisionaron (la 9530 quedo en dos trabajos distintos). Un falso "ya cerrada"
+   es un boton rojo que Pedro aprieta sobre trabajo real. */
+function _estadoRealPausada(docId, d) {
+  const fichas = window._supFichas;
+  if (!fichas || !d || d.numero == null) return null;
+  const num = String(d.numero).trim();
+  const local = String(d.local || '').trim();
+
+  // 1) La misma OT, pero cerrada y firmada: la hoja pausada es un resto del cierre.
+  const cerrada = (fichas.ots || []).filter(function(o) {
+    return o.id !== docId && o.firmada === true && !o.pausa
+      && String(o.numero).trim() === num
+      && String(o.local || '').trim() === local;
+  })[0];
+  if (cerrada) return { tipo: 'cerrada', ot: cerrada };
+
+  /* 2) Sin OT cerrada, pero cotizada. El vinculo bueno es `otId` —apunta a ESTE documento— y
+     es justo el que hace que borrar no sea gratis: la cotizacion quedaria apuntando a una hoja
+     que ya no existe. Las de UNIMARC SAN CARLOS 2 y LAS VIOLETAS estan en ese caso, y las dos
+     ya salieron a SMU. El cobro no depende de la OT (la planilla suma cotizaciones), pero el
+     "Ver OT" desde la cotizacion si. */
+  const porId = (fichas.cots || []).filter(function(c){ return c.otId && c.otId === docId; })[0];
+  const porNumero = (fichas.cots || []).filter(function(c) {
+    return c.otNumero != null && String(c.otNumero).trim() === num
+      && String(c.local || '').trim() === local;
+  })[0];
+  const cot = porId || porNumero;
+  if (cot) return { tipo: 'cotizada', cot: cot, enlazada: !!porId };
+  return null;
 }
 
 // Crea la card visual de una OT pausada en el panel admin/supervisor
@@ -10650,6 +10843,32 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
     info.appendChild(desc);
   }
 
+  /* El aviso que le faltaba a Pedro: cual de estas hojas ya esta hecha, y si borrarla cuesta
+     algo. Va DENTRO de la tarjeta y no reemplaza a "EN PAUSA": el dato real es que el registro
+     sigue pausado; lo que se agrega es que su trabajo ya se cerro o ya se cotizo. */
+  const real = _estadoRealPausada(docId, d);
+  if (real) {
+    const aviso = document.createElement('div');
+    aviso.className = 'pausada-ya-hecha';
+    if (real.tipo === 'cerrada') {
+      /* LITERAL-FIRMADO: verde de estado dentro de una tarjeta ambar. */
+      aviso.style.cssText = 'margin-top:8px;background:#ECFDF5;border:1px solid #6EE7B7;border-radius:var(--radio-sm);padding:7px 9px;font-size:11.5px;color:#065F46;line-height:1.45;';
+      aviso.innerHTML = '<strong>YA CERRADA</strong> · el trabajo se cerró y firmó'
+        + (real.ot.fecha ? ' el ' + _escHtml(real.ot.fecha) : '')
+        + '.<br>Esta hoja quedó pausada por error: borrarla no toca la OT cerrada.';
+    } else {
+      /* LITERAL-FIRMADO: azul de estado, misma razon. */
+      aviso.style.cssText = 'margin-top:8px;background:#EFF6FF;border:1px solid #93C5FD;border-radius:var(--radio-sm);padding:7px 9px;font-size:11.5px;color:#1E3A8A;line-height:1.45;';
+      aviso.innerHTML = '<strong>YA COTIZADA</strong> · cotización N° '
+        + _escHtml(real.cot.numeroCotizacion || 'sin número')
+        + (real.cot.enviado ? ' (enviada)' : ' (sin enviar)') + '.'
+        + (real.enlazada
+            ? '<br>⚠️ La cotización apunta a <em>esta</em> hoja: si la borras, queda sin su OT. El cobro no se ve afectado.'
+            : '<br>El trabajo no tiene una OT cerrada: la hoja sigue sin firmar.');
+    }
+    info.appendChild(aviso);
+  }
+
   // Botones de accion
   const acciones = document.createElement('div');
   acciones.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
@@ -10667,7 +10886,7 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
     btnEliminar.className = 'sup-accion-btn';
     btnEliminar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Eliminar';
     btnEliminar.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
-    btnEliminar.onclick = function() { eliminarPausadaSup(docId, d, card); };
+    btnEliminar.onclick = function() { eliminarPausadaSup(docId, d, card, real); };
     acciones.appendChild(btnEliminar);
   }
 
@@ -11026,14 +11245,34 @@ function verTrabajoCotizacion(cotId) {
   document.body.appendChild(overlay);
 }
 
-// --- Eliminar OT pausada (solo admin) ---
-async function eliminarPausadaSup(docId, d, card) {
-  if (!await _confirmar('OT #' + (d.numero||'') + ' de ' + (d.local||'') + '.\nEsta acción no se puede deshacer.', { titulo: 'Eliminar OT pausada', okTexto: 'Eliminar', peligro: true })) return;
+/* --- Eliminar OT pausada (solo admin) ---
+   El cuadro dice QUE se lleva el borrado, no solo que no se puede deshacer. Pedro no borraba
+   estos registros por miedo a que se fuera la cotizacion con ellos (23-08-2026), y ese miedo
+   estaba bien fundado en un caso y mal en el otro: donde el trabajo ya tiene su OT cerrada no
+   se pierde nada, y donde la cotizacion apunta a ESTA hoja, si se pierde el vinculo.
+   `real` viene de _estadoRealPausada() y puede ser null: entonces se avisa lo unico cierto,
+   que es que no se pudo comprobar. */
+async function eliminarPausadaSup(docId, d, card, real) {
+  var detalle;
+  if (real && real.tipo === 'cerrada') {
+    detalle = 'El trabajo ya está cerrado y firmado en otra OT; esto solo borra la hoja que quedó pausada.';
+  } else if (real && real.tipo === 'cotizada' && real.enlazada) {
+    detalle = 'La cotización N° ' + (real.cot.numeroCotizacion || '') + ' apunta a esta hoja y quedará sin ella.\n'
+            + 'La cotización y su cobro NO se borran.';
+  } else if (real && real.tipo === 'cotizada') {
+    detalle = 'Este trabajo ya tiene cotización (N° ' + (real.cot.numeroCotizacion || '') + '), pero su hoja nunca se firmó.\n'
+            + 'La cotización y su cobro NO se borran.';
+  } else {
+    detalle = 'No hay ninguna OT cerrada ni cotización que respalde este trabajo: si se ejecutó, esta hoja es el único registro.';
+  }
+  if (!await _confirmar('OT #' + (d.numero||'') + ' de ' + (d.local||'') + '.\n' + detalle + '\nEsta acción no se puede deshacer.',
+      { titulo: 'Eliminar OT pausada', okTexto: 'Eliminar', peligro: true })) return;
   const ok = await verificarPasswordAdmin();
   if (!ok) return;
   try {
     const db = window.firebase.firestore();
-    await db.collection('ordenes').doc(docId).delete();
+    // Con guardia: sin ella, con mala señal el SDK se cuelga y el boton parece no hacer nada.
+    await _conTimeout(db.collection('ordenes').doc(docId).delete(), 25000, 'eliminar la OT pausada');
     toast('OT pausada eliminada');
     if (card) card.remove();
     // Actualizar contador
@@ -13775,9 +14014,19 @@ function _actualizarBarraCorreos(hayBarraDeOTs) {
   if (accion) accion.textContent = ' — Toca para ver';
 }
 
-function _haceCuanto(ts) {
-  if (!ts) return 'hace un rato';
-  var min = Math.max(0, Math.round((Date.now() - ts) / 60000));
+/* Se llamaba _haceCuanto, IGUAL que la de las tarjetas de trabajos pausados (buscar
+   "Texto 'hace X dias / hoy / ayer'"). Dos `function` con el mismo nombre en el mismo ambito no
+   son un error de JS: la segunda PISA a la primera, en silencio y para todo el archivo. Como
+   esta vive mas abajo, era la que corria en las tarjetas del panel de Pedro — y esta espera
+   milisegundos, no el Timestamp de Firestore que le llegaba. El Timestamp del SDK tiene un
+   valueOf() que devuelve "segundos-desde-el-año-1" (un string para ORDENAR, no una fecha), asi
+   que la resta daba un numero enorme y las tres tarjetas mostraban el MISMO "hace 19949 día(s)".
+   📍 Reportado por Pedro el 23-08-2026. Vigilado por tests/pausada-no-sobrevive-al-cierre.js,
+   que ademas prohibe cualquier otro nombre de funcion repetido en el archivo. */
+function _haceCuantoDesde(ts) {
+  var ms = _msCreado(ts);          // acepta Timestamp, ISO o milisegundos
+  if (!ms) return 'hace un rato';
+  var min = Math.max(0, Math.round((Date.now() - ms) / 60000));
   if (min < 60) return 'hace ' + min + ' min';
   if (min < 1440) return 'hace ' + Math.round(min / 60) + ' h';
   return 'hace ' + Math.round(min / 1440) + ' día(s)';
@@ -13821,7 +14070,7 @@ function abrirModalCorreos() {
       html += '<div style="border-bottom:1px solid var(--gris2);padding:9px 0;">'
         + '<div style="font-size:13px;font-weight:600;color:var(--texto);">' + ot + (p.local && !p.asunto ? ' · ' + _escHtml(p.local) : '') + '</div>'
         + '<div style="font-size:11px;color:var(--texto2);margin-top:2px;">' + _escHtml(p.email_admin || 'sin destinatario')
-        + ' · encolado ' + _haceCuanto(c.creadoEn) + ' · ' + (c.intentos || 0) + ' intento(s)'
+        + ' · encolado ' + _haceCuantoDesde(c.creadoEn) + ' · ' + (c.intentos || 0) + ' intento(s)'
         + (c.fallido ? ' · <span style="color:var(--rojo);font-weight:700;">se rindió</span>' : '') + '</div>'
         // Decirle la verdad a quien mira: no es "no salió", es "no se pudo confirmar". La
         // diferencia es la que hace que no lo reenvie a mano creyendo que no llego.
@@ -13962,6 +14211,8 @@ window.addEventListener('online', function() {
   setTimeout(sincronizarCorreosPendientes, 3000);
   // Ultimo: la OT tiene que existir en Firestore antes de que su enlace se pueda aplicar.
   setTimeout(sincronizarEnlacesPDFPendientes, 3500);
+  // Despues de subir la OT cerrada: recien ahi tiene sentido borrar su registro "En Pausa".
+  setTimeout(sincronizarCierresPausadaPendientes, 4000);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -13998,6 +14249,7 @@ document.addEventListener('visibilitychange', function() {
     setTimeout(sincronizarPausadasPendientes, 1200);
     setTimeout(sincronizarCorreosPendientes, 1600);
     setTimeout(sincronizarEnlacesPDFPendientes, 2000);
+    setTimeout(sincronizarCierresPausadaPendientes, 2400);
   }
 });
 
@@ -14051,10 +14303,12 @@ if (!_soloVisorPDF) {
   setTimeout(sincronizarPausadasPendientes, 3000);
   setTimeout(sincronizarCorreosPendientes, 4000);
   setTimeout(sincronizarEnlacesPDFPendientes, 4500);
+  setTimeout(sincronizarCierresPausadaPendientes, 5000);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);
   setInterval(sincronizarEnlacesPDFPendientes, 90000);
+  setInterval(sincronizarCierresPausadaPendientes, 90000);
 }
 </script>
 </body>
