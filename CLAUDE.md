@@ -558,6 +558,56 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   con `data = "data:,"` el `if (!data)` de entonces **la guardaba como foto**.
 - Cubierto por `tests/la-foto-rechazada-dice-por-que.js`.
 
+**El trabajo cerrado que seguía apareciendo como pausado** (`_cerrarPausadaEnLaNube`,
+`_encolarCierrePausada`, `sincronizarCierresPausadaPendientes`, `_limpiarPausadasYaCerradas`,
+`_numerosCerradosLocalmente`, `_estadoRealPausada`):
+- Caso del **23-08-2026**. Pedro: *"me aparecen esos tres trabajos pausados. Yo los verifiqué y ya
+  están hechas sus cotizaciones (…) los traté de eliminar y no pude (…) lo mismo le pasa a Lucas,
+  a don José y a don Nelson"*. Tenía razón en los tres: ALVI CAÑETE #862089 tenía su OT **cerrada
+  y firmada**, y UNIMARC SAN CARLOS 2 #853260 y LAS VIOLETAS #142079 su **cotización enviada**
+  ($99.800 y $116.600 neto).
+- 🔴 **Causa raíz: el cierre de la hoja borraba el registro "En Pausa" *best-effort* y sin
+  `_conTimeout`.** Con mala señal el SDK no resuelve ni rechaza — se cuelga — y el borrado no
+  ocurría nunca. El comentario que lo firmaba como silencio aceptable decía que el registro
+  "sigue En Pausa en el servidor"; lo que no decía es que **`_reconciliarPausadasFirebase()` se lo
+  vuelve a BAJAR al teléfono del técnico** en el próximo arranque. No era un registro colgado en
+  la nube: era un trabajo terminado que reaparecía como pendiente todos los días. Ese es el bucle
+  que le llenaba la lista a Lucas, José y Nelson.
+- **Ahora el borrado se encola** (`emval_cierres_pausada_pendientes`) y se reintenta en el mismo
+  ciclo que las otras colas. Mismo invariante que la cola de correos y la de enlaces del PDF: **el
+  código nunca olvida un borrado que no logró aplicar.**
+- 🔴 **La cola NUNCA borra una OT firmada ni la de otro técnico.** Los números de OT son
+  aleatorios de 6 dígitos y ya colisionaron (la 9530 quedó en dos trabajos distintos), así que
+  todo cruce exige **número + técnico + local**. Un falso "ya cerrada" es un botón rojo apretado
+  sobre trabajo real.
+- **La tarjeta ahora dice si el trabajo ya está hecho** (`_estadoRealPausada`), con lo que la
+  pantalla **ya tenía bajado** — las 200 OT y las 130 cotizaciones — así que no cuesta ni una
+  lectura más. Verde *YA CERRADA* si existe su OT firmada; azul *YA COTIZADA* con el folio si hay
+  cotización. Sin las fichas cargadas **no afirma nada**: decir "ya está hecha" sin comprobarlo es
+  peor que callar.
+- ⚠️ **Borrar no es gratis en todos los casos, y el cuadro de confirmación lo dice.** Las
+  cotizaciones apuntan a la OT con `otId`, y en SAN CARLOS 2 y LAS VIOLETAS ese `otId` es **el
+  documento pausado**: borrarlo deja la cotización sin su hoja. **El cobro no se ve afectado** —la
+  planilla de correctivos suma `cotizaciones`, no `ordenes`— pero el vínculo se pierde. Era
+  exactamente el miedo que tenía Pedro, y estaba bien fundado en dos de los tres casos.
+- **El "hace 19949 día(s)" de la foto era otro bug, en la misma pantalla:** había **dos funciones
+  `_haceCuanto`** y la segunda pisaba a la primera —JS no avisa—. La que quedaba viva espera
+  milisegundos y recibía el Timestamp de Firestore, cuyo `valueOf()` devuelve
+  *"segundos-desde-el-año-1"* (un string para **ordenar**, no una fecha). Por eso las tres
+  tarjetas mostraban **el mismo** número. Se renombró a `_haceCuantoDesde` y **el test prohíbe
+  cualquier nombre de función global repetido en el archivo**.
+- ✅ **PROBADO en Chromium contra los 3 documentos reales de producción**
+  (`tests/offline/prueba-pausada-fantasma.js`): las fechas salen 4, 31 y 34 días (distintas), las
+  tres tarjetas traen su aviso, y el borrado va de punta a punta por la interfaz — confirmación
+  que explica el caso → contraseña de administrador → borrado del registro pausado y solo de ese.
+  **Contraprueba contra `d876e82`:** salen los tres `hace 19949 día(s)` idénticos a la foto de
+  Pedro, ninguna tarjeta avisa nada, y el guion falla.
+- ⚠️ **Lo que este cambio NO hace:** no borra los 3 registros que ya están en producción. Se
+  decidió el 23-08 que eso lo autoriza Pedro — y en dos de ellos la hoja pausada es el único
+  registro del trabajo en `ordenes`, porque nunca se firmaron.
+- Cubierto por `tests/pausada-no-sobrevive-al-cierre.js` (unitario) y
+  `tests/offline/prueba-pausada-fantasma.js` (pantalla real).
+
 **Photo/Signature Handling:**
 - `tomarFoto(id, tipo, idx)` — Capture photo (before/after/seal)
 - `procesarFoto(e)` — Process captured photo, compress, upload
@@ -784,6 +834,7 @@ These changes are useful context for understanding current state:
   node tests/pdf-cotizacion-con-formato-viejo-se-regenera.js index.html
   node tests/planillas-no-mezclan-clientes.js index.html
   node tests/la-foto-rechazada-dice-por-que.js index.html
+  node tests/pausada-no-sobrevive-al-cierre.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -870,6 +921,15 @@ These changes are useful context for understanding current state:
   necesita, y los tres caben en los 9 s del toast (medido con la fórmula real de `_toastDuracion`).
   Vigila además que `"data:,"` no vuelva a guardarse como foto y que `diag` siga siendo opcional,
   que es lo que mantiene vivos a los 12 llamadores de `comprimirImagen` ·
+  `pausada-no-sobrevive-al-cierre.js` — un trabajo cerrado no puede seguir apareciendo como
+  pausado: **ninguna función global se define dos veces** (el guardia que habría cazado el
+  "hace 19949 día(s)" el día que se escribió, y que mide la ÚLTIMA definición, que es la que
+  corre), la fecha se calcula bien sobre un Timestamp de Firestore, el borrado del registro
+  "En Pausa" va con guardia de tiempo y se encola si falla, la cola **nunca borra una OT firmada
+  ni la de otro técnico**, lo que no se aplica sigue pendiente, la limpieza local exige
+  número + técnico + local, y la tarjeta solo dice "ya cerrada / ya cotizada" cuando lo puede
+  comprobar. **Trae línea de control**: contra el código anterior faltan funciones enteras y un
+  guion que muere a medias se parece demasiado a uno que aprueba ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
@@ -886,6 +946,10 @@ These changes are useful context for understanding current state:
   `prueba-texto-cotizacion.js` genera el PDF de la cotización 19082601 con el jsPDF real, lo abre
   y lee qué texto quedó y en qué coordenada — mide además que el TOTAL NETO y la nota de validez
   no se movieron, comparando contra la versión anterior ·
+  `prueba-pausada-fantasma.js` reproduce el Panel Supervisor con los **3 documentos reales** que
+  Pedro fotografió el 23-08 y comprueba las fechas, los avisos de "ya cerrada / ya cotizada" y el
+  borrado completo por la interfaz (confirmación → contraseña → delete). Su contraprueba contra
+  `d876e82` saca los tres `hace 19949 día(s)` idénticos a la foto ·
   Su `sitio/` no se versiona.
 - `vendor/` — dependencias servidas desde el repo, no desde un CDN.
   `emailjs-browser-4.min.js` (@emailjs/browser 4.4.1). Actualizar con:
