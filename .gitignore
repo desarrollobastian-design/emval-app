@@ -21,3 +21,11 @@ index.html.antes-de-firma-*.bak
 tests/offline/sitio/
 tests/offline/*.png
 !tests/offline/foto-prueba.png
+
+# Multimedia que manda el cliente por WhatsApp: firmas manuscritas de los tecnicos, audios y
+# fotos de Pedro. Son datos personales de terceros y este repo es PUBLICO (GitHub Pages).
+# Las firmas viajan igual dentro de index.html en base64 —el PDF se genera sin señal en terreno
+# y no hay alternativa— pero un JPEG suelto es una descarga directa. Viven en el disco de
+# Bastian. Para regenerar el embebido: tools/embeber-firmas-tecnicos.js
+multimedia/
+index.html.antes-de-firmas-tecnicos-*.bak

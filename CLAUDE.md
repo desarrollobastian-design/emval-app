@@ -313,6 +313,59 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   repo es una descarga directa. Viven en el disco de Bastián.
 - Cubierto por `tests/cotizacion-lleva-firma-emval.js`.
 
+**Firma del técnico al pie de la hoja de servicio** (`FIRMAS_TECNICOS`, `_firmaDeTecnico`,
+`_altoFirmaTecnico`, `_dibujarFirmaTecnico`, `_firmarHojaTecnico`):
+- Pedido de Pedro el **25-08-2026**, bajado desde **SMU Santiago**: la hoja de servicio —la "HS"—
+  sale con la **firma y el nombre del técnico que ejecutó el trabajo**, en correctivo y en
+  preventivo. El motivo lo dio el propio SMU: *"los supervisores se conseguían las cotizaciones en
+  blanco y las adulteraban"*. No es cosmético — **una hoja sin firma es una hoja que SMU rechaza.**
+- ⚠️ **Son TRES firmas distintas conviviendo en el archivo, y ya se confundieron una vez:**
+  `estado.fotoTimbre` + `otData.firmaImagen` son del **RECEPTOR** (el local de SMU, fotografiados
+  en cada visita) · `FIRMA_EMVAL` es la de **Pedro como emisor**, y va en la **cotización** ·
+  `FIRMAS_TECNICOS` es esta, una **por técnico**, y va en la **hoja**. El texto impreso las separa
+  a propósito: *"Firma del Receptor"* arriba, *"EJECUTADO POR"* abajo.
+- 🔑 **Un solo sitio para los CINCO generadores.** La hoja se dibuja en `generarPDFPreventivo`, en
+  `generarPDFRecepcionObra` y **otra vez como página 2** dentro de los dos generadores de
+  cotización (uno huérfano). Firmar solo la que se emite suelta dejaría sin firma a la mitad de
+  las hojas que recibe el supervisor. Es la lección de la tabla de ítems, que vivía duplicada.
+- **Alto variable y, si no cabe, hoja nueva** — nunca se encoge hasta lo ilegible ni se omite. La
+  tabla de arriba crece con texto libre (la descripción en el correctivo, las observaciones en el
+  preventivo) y **jsPDF no avisa: recorta en silencio.** 📊 Medido sobre los **202 documentos de
+  producción**: el pie del bloque del receptor cae en **230-231 mm en todos**, o sea sobran 54 mm.
+  El cálculo existe para el día que alguien escriba una observación larga.
+- 🔴 **Sin firma cargada se dibuja igual el bloque**, con la línea vacía para firmar a mano. Un
+  técnico nuevo entra a la app el día que lo contratan; que su hoja salga sin ningún rastro del
+  ejecutor es exactamente lo que SMU está prohibiendo.
+- 🔴 **El alias de `addImage` es DISTINTO por técnico.** Sin alias, jsPDF incrusta el PNG en crudo
+  (de 26 KB a 1,24 MB, medido con la firma de EMVAL); con el alias **repetido**, reutiliza la
+  primera imagen y **las tres hojas salen con la firma del mismo**.
+- **El nombre se busca normalizado** (`_normTexto`): la OT guarda el nombre tal como estaba el día
+  del cierre y hay OT con *"Jose Quiroz"* sin tilde. Comparar los strings crudos dejaría sin firma
+  a la mitad de las hojas, y en silencio.
+- **El técnico viaja congelado**: `guardarYEnviarPDF` le pasa `snap.tecnico`, no `_tecnicoActual()`.
+  Leerlo de `estado` firmaría la hoja con quien quedó cargado, no con quien ejecutó.
+- **Va en base64 dentro de `index.html`** por la misma razón que la de EMVAL: el PDF se genera en
+  el teléfono, muchas veces sin señal. 🔒 **Consecuencia: las firmas son públicamente extraíbles**
+  del código fuente — y acá son de **terceros**, no solo del dueño. Las fotos y los PNG fuente
+  viven en `multimedia/`, que **está en `.gitignore`**.
+- 📐 Las tres pesan **63 KB en base64** (`index.html` pasa de 978 a 1042 KB). A 520 px de ancho la
+  firma sale a ~440 dpi sobre los 30 mm impresos; subirlo solo engorda el archivo que el Service
+  Worker cachea entero y cada técnico se baja en cada versión.
+- 🔴 **La HS no tiene sello de formato**, así que las **~200 hojas ya subidas a Cloudinary no se
+  regeneran**: la firma sale solo en las hojas nuevas. La cotización sí lo tiene y por eso subió a
+  `_PDF_COT_FORMATO = 3`. Decisión del 25-08: no se regeneran las hojas viejas.
+- ✅ **PROBADO con el jsPDF real en Chromium, 25-08-2026** (`tests/offline/prueba-firma-hoja.js`):
+  las dos hojas se generan y se **abre el archivo** para leer qué quedó y en qué coordenada — firma
+  a 29,8 × 22 mm, *"EJECUTADO POR"* en y=241/242 mm, lo más bajo de la hoja en 274/275 de 285, y el
+  PDF en 27-29 KB. **Contraprueba contra `HEAD`:** 0 imágenes y ningún *"EJECUTADO POR"*.
+  **Además, mirado**: las 3 firmas y el caso sin firma, y las dos ramas de la página 2 de la
+  cotización, con la de EMVAL intacta en la página 1.
+- **Contraprueba por mutación** (11 regresiones simuladas — hoja sin firmar, alias repetido, sin
+  alias, alto fijo, sin hoja nueva, comparación cruda, técnico sin firma invisible, etiqueta de
+  receptor, sello sin subir, estado global, firma vertical): el test las detecta **las 11**.
+- Cubierto por `tests/hoja-lleva-firma-del-tecnico.js` (unitario, 11 bloques) y
+  `tests/offline/prueba-firma-hoja.js` (PDF real).
+
 **Pendientes y materiales — nota interna del técnico** (`pend-materiales`, `estado.pendientesMateriales`):
 - Campo de texto libre **solo en preventivos**, debajo de "Observaciones". Lo escribe el técnico en
   terreno (*"faltaron 2 neumáticos"*) y lo lee **solo el rol Administrador** en el detalle de la OT.
@@ -835,6 +888,7 @@ These changes are useful context for understanding current state:
   node tests/planillas-no-mezclan-clientes.js index.html
   node tests/la-foto-rechazada-dice-por-que.js index.html
   node tests/pausada-no-sobrevive-al-cierre.js index.html
+  node tests/hoja-lleva-firma-del-tecnico.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -930,6 +984,17 @@ These changes are useful context for understanding current state:
   número + técnico + local, y la tarjeta solo dice "ya cerrada / ya cotizada" cuando lo puede
   comprobar. **Trae línea de control**: contra el código anterior faltan funciones enteras y un
   guion que muere a medias se parece demasiado a uno que aprueba ·
+  `hoja-lleva-firma-del-tecnico.js` — la hoja de servicio sale firmada por quien la ejecutó: los
+  **cinco** sitios que dibujan una hoja pasan por la misma función (las dos que se emiten solas y
+  las tres copias que viajan como página 2 de la cotización), el bloque no se confunde con el del
+  receptor ni le toca `firmaImagen`/`fotoTimbre`, cabe en la A4 con el peor caso real y **abre hoja
+  nueva** cuando no cabe en vez de recortarse, un técnico **sin** firma cargada igual sale con su
+  nombre y la línea para firmar a mano, el nombre se busca sin tildes (hay OT guardadas con
+  *"José Quiroz"* y otras con *"Jose Quiroz"*), el alias de `addImage` es **distinto por técnico**
+  —con uno repetido las tres hojas salen con la firma del mismo— y va con compresión FAST, una
+  imagen corrupta no bota el PDF, el técnico llega congelado desde el snapshot,
+  `_PDF_COT_FORMATO` subió al cambiar el dibujo, y las firmas embebidas están apaisadas y no
+  engordan de más el archivo ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
@@ -946,6 +1011,10 @@ These changes are useful context for understanding current state:
   `prueba-texto-cotizacion.js` genera el PDF de la cotización 19082601 con el jsPDF real, lo abre
   y lee qué texto quedó y en qué coordenada — mide además que el TOTAL NETO y la nota de validez
   no se movieron, comparando contra la versión anterior ·
+  `prueba-firma-hoja.js` genera las DOS hojas —preventivo y correctivo— con el jsPDF real y
+  **abre el archivo** para leer qué quedó escrito y en qué coordenada: mide que la firma se dibujó,
+  a qué tamaño, y que nada bajó de los 285 mm de la A4. Su contraprueba contra `HEAD` saca 0
+  imágenes y ningún *"EJECUTADO POR"* ·
   `prueba-pausada-fantasma.js` reproduce el Panel Supervisor con los **3 documentos reales** que
   Pedro fotografió el 23-08 y comprueba las fechas, los avisos de "ya cerrada / ya cotizada" y el
   borrado completo por la interfaz (confirmación → contraseña → delete). Su contraprueba contra
@@ -960,3 +1029,14 @@ These changes are useful context for understanding current state:
   fix del 31-jul. **Escribir requiere autorización de Pedro: es producción.**
   `embeber-firma-emval.js` — mete la firma y timbre de EMVAL en `index.html` como base64, midiendo
   el archivo para no deformarla. No toca producción: escribe un archivo del repo, con respaldo.
+  `preparar-firma.js` — deja lista para el PDF la foto de una firma sobre papel: **estima el
+  fondo** para aplanar sombras y pliegues (no es *"subir el contraste"*: un umbral global sobre el
+  gris crudo se come el pliegue o borra el trazo), recorta al bloque de la firma **descartando lo
+  que toca el borde de la hoja**, y escribe un PNG **indexado** —de 62 a 21 KB frente al
+  `toDataURL` de Chromium—. Solo mide; escribe con `-o`. Necesita Playwright para decodificar el
+  JPEG. Las fotos y los PNG viven en `multimedia/`, que está en `.gitignore`.
+  `embeber-firmas-tecnicos.js` — mete las firmas de los técnicos en `index.html` como base64.
+  **Cruza los nombres contra la colección `tecnicos` de producción** (solo lectura) antes de
+  embeber: una firma guardada bajo un nombre que no calza no falla — simplemente **nunca se
+  dibuja**, y la hoja sale sin firma sin que nadie se entere. Lista además los técnicos que
+  quedaron sin firma. Respaldo previo y `--ejecutar` para escribir.
