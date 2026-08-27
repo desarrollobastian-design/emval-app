@@ -1108,6 +1108,12 @@ These changes are useful context for understanding current state:
   que toca el borde de la hoja**, y escribe un PNG **indexado** —de 62 a 21 KB frente al
   `toDataURL` de Chromium—. Solo mide; escribe con `-o`. Necesita Playwright para decodificar el
   JPEG. Las fotos y los PNG viven en `multimedia/`, que está en `.gitignore`.
+  `migrar-ot-a-baja.js` — pasa a la carpeta "Bajas de activo" una OT que en realidad era una
+  baja (caso #586729, 37 días trabada). Lee con **máscara y paginando**: sin máscara la respuesta
+  se corta con los base64 y la OT buscada "no existe". Crea el comprobante en `bajas`; con la OT
+  original **no hace nada por defecto**. ⚠️ **Dejarla NO la destraba** y borrarla pierde el único
+  registro de esa visita: cuál de las dos, lo decide Pedro. Se niega a borrar si alguna
+  cotización le apunta por `otId`. Respaldo previo y `--ejecutar` para escribir.
   `embeber-firmas-tecnicos.js` — mete las firmas de los técnicos en `index.html` como base64.
   **Cruza los nombres contra la colección `tecnicos` de producción** (solo lectura) antes de
   embeber: una firma guardada bajo un nombre que no calza no falla — simplemente **nunca se
