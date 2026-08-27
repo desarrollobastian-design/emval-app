@@ -24,6 +24,11 @@
    El cobro no se ve afectado en ningun caso: la planilla de correctivos suma `cotizaciones`,
    no `ordenes`, y esta OT no tiene ninguna.
 
+   ⚠️ LA HOJA MIGRADA NACE SIN PDF. En la app, la carpeta "Bajas de activo" muestra un boton
+   "Generar PDF" para ese caso: hasta que alguien lo toque, la hoja existe pero no se puede
+   enviar ni compartir. (Antes ese boton no existia y la hoja migrada quedaba inservible para
+   siempre — el comentario prometia un camino que no estaba escrito.)
+
    USO
      node tools/migrar-ot-a-baja.js 586729                    # simula, no escribe nada
      node tools/migrar-ot-a-baja.js 586729 --ejecutar         # crea la baja, deja la OT
@@ -130,7 +135,7 @@ function preguntar(q) {
     tecnico: V(f.tecnico) || '',
     fecha: V(f.fecha) || '',
     emailLocal: '', supervisor: '', emailSupervisor: '',
-    pdfUrlCloudinary: '',              // se genera al abrirla desde la app
+    pdfUrlCloudinary: '',              // nace sin PDF: se genera con el boton de la app (ver cabecera)
     pdfFormato: 1
   };
 
@@ -173,4 +178,6 @@ function preguntar(q) {
     console.log('✅ OT #' + numero + ' borrada de `ordenes` (el respaldo permite restaurarla).');
   }
   console.log('\nListo. Revisa la carpeta "Bajas de activo" en la app.');
+  console.log('OJO: la hoja nace SIN PDF. Abrila en la app y toca "Generar PDF" para que el');
+  console.log('archivo exista y se pueda enviar o compartir.');
 })();

@@ -1163,7 +1163,7 @@
 <!-- ============ SCREEN: CARPETA DE BAJAS DE ACTIVO ============ -->
 <div class="screen" id="s-bajas">
   <div class="topbar">
-    <button class="back" aria-label="Volver" onclick="go('s-supervisor')">←</button>
+    <button class="back" aria-label="Volver" onclick="volverAInicioDesdeCierre()">←</button>
     <h1>Bajas de activo</h1>
   </div>
   <div id="bajas-acciones-bar" style="display:none;gap:8px;align-items:center;padding:10px 16px;background:white;border-bottom:1px solid var(--gris2);">
@@ -8272,6 +8272,12 @@ function filtrarSucursalesBaja(termino) {
 }
 
 function seleccionarLocalBaja(datos) {
+  /* El clientId se acuña ACA y viaja en _bajaSel: es el id del documento en Firestore, y
+     tiene que ser estable mientras el formulario tenga estos datos. Generarlo dentro de
+     guardarYEnviarBaja hacia que un reintento creara una SEGUNDA baja en vez de pisar la
+     primera — la OT congela su clientId por exactamente la misma razon. */
+  datos.clientId = 'baja_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+  datos.folioReservado = '';
   _bajaSel = datos;
   var nom = document.getElementById('baja-local-nombre');
   var det = document.getElementById('baja-local-detalle');
@@ -8441,7 +8447,14 @@ async function generarPDFBaja(b) {
     // Izquierda el TECNICO que ejecuto (la misma funcion que firma las hojas de servicio, para
     // que no se abra un segundo criterio), derecha EMVAL como emisor. Son firmas distintas y
     // el texto impreso las separa: ya se confundieron una vez con la del receptor.
-    const firmaY = PIE_CUERPO + 8;
+    /* CRITICO: La Y sale del cursor real del bucle, NO de una constante. Con `firmaY = PIE_CUERPO + 8`
+       (208 mm, calculado para la hoja 1) y `_firmarHojaTecnico` llamado DESPUES del bucle, un
+       detalle largo dejaba la hoja 1 —la que lleva folio, CECO, local y fecha— SIN FIRMAR, y
+       dibujaba las dos firmas en la hoja de continuacion ENCIMA de las rayas y del propio texto.
+       En la hoja 1 el cursor queda en ~206, asi que el layout probado no se mueve; en una hoja de
+       continuacion queda cerca de 278 y entonces se abre hoja propia para las firmas. */
+    var firmaY = y + 2;
+    if (firmaY + 46 > _FT_PIE_A4) { doc.addPage(); firmaY = 24; }
     _firmarHojaTecnico(doc, b.tecnico || '', margin, firmaY);
 
     const emvalX = 120, emvalAncho = 70, emvalAlto = 30;
@@ -8473,12 +8486,86 @@ async function generarPDFBaja(b) {
   }
 }
 
+/* ---- Cola de bajas pendientes ----------------------------------------------------------
+   Mismo invariante que las otras tres colas de la app: EL CODIGO NUNCA BORRA UNA BAJA QUE NO
+   LOGRO ESCRIBIR. Se encola en el dispositivo antes de tocar la nube (write-ahead) y se saca
+   recien cuando Firestore confirma.
+
+   CRITICO: Por que hacia falta: en la primera version la baja era el UNICO flujo de escritura de la
+   app sin cola. Si el set() fallaba se mostraba un error y se hacia return — y el texto que el
+   tecnico habia escrito en terreno, de noche y sin señal, desaparecia con el folio ya quemado.
+   El cierre de OT nunca funciono asi: encola SIEMPRE en IndexedDB antes de salir a la red. */
+var _BAJAS_PEND_KEY = 'emval_bajas_pendientes';
+
+function _leerBajasPendientes() {
+  try { return JSON.parse(localStorage.getItem(_BAJAS_PEND_KEY) || '[]') || []; } catch (e) { return []; }
+}
+function _escribirBajasPendientes(lista) {
+  try { localStorage.setItem(_BAJAS_PEND_KEY, JSON.stringify(lista || [])); } catch (e) {}
+}
+/* Se relee y se fusiona al guardar, nunca se pisa con la copia rancia del ciclo: pisarla
+   resucitaba avisos ya despachados en la cola de correos, y aca resucitaria bajas ya escritas. */
+function _encolarBaja(doc) {
+  if (!doc || !doc.clientId) return;
+  try {
+    var lista = _leerBajasPendientes().filter(function (b) { return b.clientId !== doc.clientId; });
+    lista.push(doc);
+    _escribirBajasPendientes(lista);
+  } catch (e) { console.warn('No se pudo encolar la baja:', e); }
+}
+function _desencolarBaja(clientId) {
+  try {
+    _escribirBajasPendientes(_leerBajasPendientes().filter(function (b) { return b.clientId !== clientId; }));
+  } catch (e) {}
+}
+
+/* Escribe una baja en Firestore. Idempotente A PROPOSITO: siempre por doc(clientId).set(),
+   nunca add(). Un reintento tiene que PISAR el mismo documento, no crear un segundo — que es
+   lo que pasaba al generar el clientId dentro de la funcion en cada llamada. */
+async function _escribirBajaEnLaNube(b) {
+  const db = window.firebase.firestore();
+  await _conTimeout(db.collection('bajas').doc(b.clientId).set({
+    folio: b.folio, folioProvisorio: !!b.folioProvisorio,
+    cadena: b.cadena || '', local: b.local || '', ceco: b.ceco || '',
+    direccion: b.direccion || '', emailLocal: b.emailLocal || '',
+    supervisor: b.supervisor || '', emailSupervisor: b.emailSupervisor || '',
+    detalle: b.detalle || '', tecnico: b.tecnico || '', fecha: b.fecha || '',
+    pdfUrlCloudinary: b.pdfUrlCloudinary || '',
+    pdfFormato: _BAJA_PDF_FORMATO,
+    creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true }), 25000, 'guardar baja');
+}
+
+// Reintenta las bajas que no alcanzaron a subir. Corre en el mismo ciclo que las otras colas.
+async function sincronizarBajasPendientes() {
+  if (!window._firebaseReady || !navigator.onLine) return;
+  var lista = _leerBajasPendientes();
+  if (!lista.length) return;
+  for (var i = 0; i < lista.length; i++) {
+    try {
+      await _escribirBajaEnLaNube(lista[i]);
+      _desencolarBaja(lista[i].clientId);
+      console.log('Baja pendiente subida:', lista[i].folio || lista[i].clientId);
+    } catch (e) {
+      // Sigue pendiente. No se borra nada: se reintenta en el proximo ciclo.
+      console.warn('La baja sigue pendiente:', e && e.message);
+    }
+  }
+}
+
 /* ---- Emitir la hoja -------------------------------------------------------------------
-   Mismo orden y las mismas guardias que `guardarYEnviarPDF`: instantanea antes del primer
-   await, `_fetchConTimeout` para Cloudinary y `_conTimeout` para Firestore. Sin las guardias,
-   con la señal muerta el SDK no resuelve ni rechaza y el correo nunca sale — el cuelgue que
-   dejo a administracion sin enterarse de las hojas de julio. */
+   Mismo orden y las mismas guardias que `guardarYEnviarPDF`: instantanea antes del PRIMER
+   await, `_fetchConTimeout` para Cloudinary y `_conTimeout` para Firestore.
+
+   CRITICO: CERROJO DE REENTRADA. `_bloquear()` se auto-libera a los 30 s (_MAX_BLOQUEO_MS) y ademas
+   le dice al tecnico "El servidor no respondio... intentalo de nuevo". Este flujo puede durar
+   mas que eso (20 s de folio + 30 s de Cloudinary + 25 s de Firestore), asi que el boton vuelve
+   a estar vivo con la emision todavia en vuelo. Sin cerrojo, el segundo toque emitia una
+   SEGUNDA baja: dos folios quemados, dos documentos y dos correos al local. */
+var _emitiendoBaja = false;
+
 async function guardarYEnviarBaja() {
+  if (_emitiendoBaja) { toast('La hoja se está emitiendo, espera un momento...'); return; }
   if (!_bajaSel || !_bajaSel.local) {
     await _avisar('Elige primero la cadena y la sucursal.', { titulo: 'Falta el local' });
     return;
@@ -8490,38 +8577,55 @@ async function guardarYEnviarBaja() {
     _rechazar('Escribe qu' + String.fromCharCode(233) + ' activo se da de baja', 'baja-detalle');
     return;
   }
+  if (!window._firebaseReady) {
+    await _avisar('La app todav' + String.fromCharCode(237) + 'a no se conecta.\n\nEspera unos segundos con señal y vuelve a intentar.',
+      { titulo: 'Sin conexi' + String.fromCharCode(243) + 'n' });
+    return;
+  }
 
+  /* ─── INSTANTANEA — se copia TODO ACA, antes del PRIMER await ─────────────────────────
+     `_bajaSel` es global y mutable, y el boton "Cambiar" del formulario NO se bloquea: solo
+     se bloquea #btn-generar-baja. En la primera version el snap se armaba DESPUES de
+     `await _asignarFolioBaja(db)` —hasta 20 s— leyendo `_bajaSel.local`, `.ceco`, `.email`:
+     el tecnico podia cambiar de sucursal dentro de esa ventana y la hoja salia con el folio
+     de un local y el nombre de otro. Es la misma causa raiz que perdio las hojas de julio,
+     con el comentario correcto encima del codigo equivocado. NO leer `_bajaSel` ni el DOM
+     mas abajo — usar `snap`. ─────────────────────────────────────────────────────────── */
+  const snap = {
+    // El clientId viaja en `_bajaSel`, asi que un reintento sobre el MISMO formulario reusa el
+    // mismo id de documento y el set({merge}) lo pisa en vez de crear una segunda baja.
+    clientId: _bajaSel.clientId,
+    cadena: _bajaSel.cadena, local: _bajaSel.local, ceco: _bajaSel.ceco,
+    direccion: _bajaSel.direccion, emailLocal: _bajaSel.email,
+    supervisor: _bajaSel.supervisor, emailSupervisor: _bajaSel.emailSupervisor,
+    detalle: detalle,
+    tecnico: _tecnicoActual(),
+    fecha: new Date().toLocaleDateString('es-CL'),
+    // Un folio ya reservado en un intento anterior NO se vuelve a pedir: cada llamada a
+    // _asignarFolioBaja consume un correlativo del dia, y reintentar quemaba uno nuevo.
+    folio: _bajaSel.folioReservado || '',
+    folioProvisorio: false
+  };
+
+  _emitiendoBaja = true;
   const soltar = _bloquear(document.getElementById('btn-generar-baja'), 'Generando...');
   try {
-    if (!window._firebaseReady) {
-      await _avisar('La app todav' + String.fromCharCode(237) + 'a no se conecta.\n\nEspera unos segundos con señal y vuelve a intentar.',
-        { titulo: 'Sin conexi' + String.fromCharCode(243) + 'n' });
-      return;
-    }
     const db = window.firebase.firestore();
 
-    // Instantanea: de aca en adelante NO se lee ni el DOM ni _bajaSel. Es la misma causa raiz
-    // que perdio las hojas de julio — el estado cambia bajo los pies de un guardado en vuelo.
-    const folioInfo = await _asignarFolioBaja(db);
-    const snap = {
-      clientId: 'baja_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9),
-      folio: folioInfo.folio,
-      folioProvisorio: folioInfo.provisorio,
-      cadena: _bajaSel.cadena,
-      local: _bajaSel.local,
-      ceco: _bajaSel.ceco,
-      direccion: _bajaSel.direccion,
-      emailLocal: _bajaSel.email,
-      supervisor: _bajaSel.supervisor,
-      emailSupervisor: _bajaSel.emailSupervisor,
-      detalle: detalle,
-      tecnico: _tecnicoActual(),
-      fecha: new Date().toLocaleDateString('es-CL')
-    };
+    if (!snap.folio) {
+      const folioInfo = await _asignarFolioBaja(db);
+      snap.folio = folioInfo.folio;
+      snap.folioProvisorio = folioInfo.provisorio;
+      if (folioInfo.folio) _bajaSel.folioReservado = folioInfo.folio;
+    }
 
     toast('Generando la hoja...');
     const doc = await generarPDFBaja(snap);
     if (!doc) { _error('generar la hoja de baja', null, 'Reintenta con buena señal.'); return; }
+
+    /* WRITE-AHEAD: la baja queda en el dispositivo ANTES de salir a la red. De aca en adelante,
+       pase lo que pase con la señal, lo que el tecnico escribio no se pierde. */
+    _encolarBaja(snap);
 
     const pdfBase64 = doc.output('datauristring');
     const pdfBase64Solo = pdfBase64.split(',')[1];
@@ -8543,51 +8647,39 @@ async function guardarYEnviarBaja() {
     } catch (e) {
       console.error('Error subiendo la hoja de baja a Cloudinary:', e);
     }
+    snap.pdfUrlCloudinary = pdfUrlCloudinary;
+    _encolarBaja(snap);                       // con la URL, por si el guardado se cae
 
-    // Se guarda el registro AUNQUE la subida haya fallado: la baja existe, y el PDF se puede
-    // volver a generar. Perder el registro por no tener el archivo seria al reves.
+    var guardada = false;
     try {
-      await _conTimeout(db.collection('bajas').doc(snap.clientId).set({
-        folio: snap.folio,
-        folioProvisorio: snap.folioProvisorio,
-        cadena: snap.cadena,
-        local: snap.local,
-        ceco: snap.ceco,
-        direccion: snap.direccion,
-        emailLocal: snap.emailLocal,
-        supervisor: snap.supervisor,
-        emailSupervisor: snap.emailSupervisor,
-        detalle: snap.detalle,
-        tecnico: snap.tecnico,
-        fecha: snap.fecha,
-        pdfUrlCloudinary: pdfUrlCloudinary,
-        pdfFormato: _BAJA_PDF_FORMATO,
-        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-      }), 25000, 'guardar baja');
+      await _escribirBajaEnLaNube(snap);
+      _desencolarBaja(snap.clientId);
+      guardada = true;
     } catch (e) {
-      _error('guardar la hoja de baja', e, 'La hoja no qued' + String.fromCharCode(243) + ' registrada. Reintenta con señal.');
-      return;
+      // NO se pierde: queda en la cola del dispositivo y sube sola al recuperar la señal.
+      console.error('La baja no se pudo guardar ahora, queda pendiente:', e);
     }
 
-    // El correo al local va por la COLA, nunca por emailjs.send directo: si no sale ahora,
-    // sale al recuperar la señal en vez de morir en un toast.
-    if (snap.emailLocal) {
+    /* CRITICO: SIN PDF NO SE MANDA EL CORREO. Un comprobante cuyo enlace esta vacio no es un
+       comprobante, y el correo que lo anuncia es peor que no mandar nada: el local lo da por
+       recibido. Se avisa al tecnico y la hoja queda en la carpeta para reemitir su PDF. */
+    if (!pdfUrlCloudinary) {
+      await _avisar('La hoja se guard' + String.fromCharCode(243) + ', pero su PDF no alcanz' +
+        String.fromCharCode(243) + ' a subir, as' + String.fromCharCode(237) + ' que NO se envi' +
+        String.fromCharCode(243) + ' al local.\n\nAbre la hoja en "Bajas de activo" y toca "Generar PDF" cuando tengas señal.',
+        { titulo: 'Falta el PDF' });
+    } else if (snap.emailLocal) {
       toast('Enviando al local...');
-      const ok = await _enviarCorreo({
-        email_admin: snap.emailLocal,
-        ot_numero: snap.folio || 'S/N',
-        local: String(snap.local || ''),
-        fecha: snap.fecha,
-        tecnico: String(snap.tecnico || ''),
-        tipo: 'Baja de activo',
-        trabajo: snap.detalle,
-        pdf_url: pdfUrlCloudinary || ''
-      }, { sello: 'baja_' + snap.clientId + '__local' });
+      const ok = await _enviarCorreo(_paramsCorreoBaja(snap, snap.emailLocal),
+        { sello: 'baja_' + snap.clientId + '__local' });
       toast(ok ? 'Hoja enviada al local' : 'Hoja guardada. El correo sale solo al recuperar la señal.');
     } else {
       toast('Hoja guardada. El local no tiene correo cargado.');
     }
 
+    if (!guardada) {
+      toast('La hoja qued' + String.fromCharCode(243) + ' pendiente: sube sola al recuperar la señal.');
+    }
     if (snap.folioProvisorio) {
       await _avisar('La hoja qued' + String.fromCharCode(243) + ' guardada, pero SIN folio: no se pudo reservar el correlativo.\n\n' +
         'Av' + String.fromCharCode(237) + 'sale a administraci' + String.fromCharCode(243) + 'n antes de entregarla.',
@@ -8599,8 +8691,32 @@ async function guardarYEnviarBaja() {
     go('s-bajas');
     cargarBajas();
   } finally {
+    _emitiendoBaja = false;
     soltar();
   }
+}
+
+/* Los parametros del correo de una baja, en UN solo sitio: lo usan el envio al local y el
+   envio al supervisor, y tienen que decir lo mismo.
+
+   CRITICO: `ot_numero` LLEVA "BAJA DE ACTIVO" ADELANTE, y no es cosmetica. La plantilla de EmailJS
+   que usa la app (`template_agzfcux`) arma el ASUNTO con {{ot_numero}} y el texto fijo
+   "OT #... completada". Sin esta marca, el comprobante que por definicion NO es un trabajo
+   cobrable le llegaba al supervisor de SMU con la misma linea de asunto que una orden de
+   trabajo ejecutada — lo contrario exacto de para lo que se creo este documento.
+   Se marca el campo en vez de editar la plantilla por la misma razon que la marca (REENVIO):
+   un fix que solo funciona si alguien entra a un panel externo es un fix a medias. */
+function _paramsCorreoBaja(b, destino) {
+  return {
+    email_admin: destino,
+    ot_numero: 'BAJA DE ACTIVO ' + (b.folio || 'S/N'),
+    local: String(b.local || ''),
+    fecha: b.fecha || '',
+    tecnico: String(b.tecnico || ''),
+    tipo: 'Baja de activo',
+    trabajo: String(b.detalle || ''),
+    pdf_url: b.pdfUrlCloudinary || ''
+  };
 }
 
 /* ---- La carpeta ------------------------------------------------------------------------ */
@@ -8690,10 +8806,20 @@ async function cargarBajas() {
         acciones.appendChild(bVer);
         acciones.appendChild(bComp);
       } else {
+        /* CRITICO: SIN ESTE BOTON la hoja quedaba inservible PARA SIEMPRE. La app solo dibujaba
+           "Ver PDF" y "Compartir" cuando ya habia PDF, asi que una baja cuyo Cloudinary fallo
+           —o una migrada con `tools/migrar-ot-a-baja.js`, que nace sin archivo— no tenia ningun
+           camino de vuelta: el comentario del migrador prometia "se genera al abrirla desde la
+           app" y ese camino no existia. */
+        var bGen = document.createElement('button');
+        bGen.textContent = 'Generar PDF';
+        bGen.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;';
+        bGen.onclick = function() { regenerarPDFBaja(b, bGen); };
         var aviso = document.createElement('div');
-        aviso.style.cssText = 'font-size:11px;color:var(--naranja);';
-        aviso.textContent = 'La hoja se guard' + String.fromCharCode(243) + ', pero su PDF no alcanz' +
-          String.fromCharCode(243) + ' a subir. Vuelve a emitirla con señal.';
+        aviso.style.cssText = 'font-size:11px;color:var(--naranja);flex-basis:100%;';
+        aviso.textContent = 'Esta hoja todav' + String.fromCharCode(237) + 'a no tiene PDF. T' +
+          String.fromCharCode(243) + 'calo para generarlo y poder enviarla.';
+        acciones.appendChild(bGen);
         acciones.appendChild(aviso);
       }
       card.appendChild(acciones);
@@ -8736,6 +8862,40 @@ function _actualizarBarraBajas() {
   var cnt = document.getElementById('bajas-seleccionadas-count');
   if (bar) bar.style.display = sel.length ? 'flex' : 'none';
   if (cnt) cnt.textContent = sel.length + (sel.length === 1 ? ' seleccionada' : ' seleccionadas');
+}
+
+/* Genera y sube el PDF de una baja que se guardo sin el, y lo enlaza. Reusa exactamente el
+   mismo generador y el mismo nombre de archivo que la emision: si algun dia cambia el dibujo,
+   cambia en los dos caminos a la vez. */
+async function regenerarPDFBaja(b, btn) {
+  if (!b) return;
+  var soltar = btn ? _bloquear(btn, 'Generando...') : function() {};
+  try {
+    if (!window._firebaseReady || !navigator.onLine) {
+      await _avisar('Necesitas señal para generar y subir el PDF.', { titulo: 'Sin conexi' + String.fromCharCode(243) + 'n' });
+      return;
+    }
+    toast('Generando la hoja...');
+    var doc = await generarPDFBaja(b);
+    if (!doc) { _error('generar la hoja de baja', null, 'Reintenta con buena señal.'); return; }
+    var base64 = doc.output('datauristring').split(',')[1];
+    var fd = new FormData();
+    fd.append('file', 'data:application/pdf;base64,' + base64);
+    fd.append('upload_preset', 'emval_pdf');
+    fd.append('folder', 'emval/bajas');
+    fd.append('public_id', _slugPDFBaja(b) + '_' + String(b.id || b.clientId || '').slice(-7) + '.pdf');
+    var resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
+      { method: 'POST', body: fd }, 30000);
+    var data = await resp.json();
+    if (!data.secure_url) { _error('subir la hoja', null, 'Reintenta con buena señal.'); return; }
+    await _conTimeout(window.firebase.firestore().collection('bajas').doc(b.id).update({
+      pdfUrlCloudinary: data.secure_url, pdfFormato: _BAJA_PDF_FORMATO
+    }), 25000, 'enlazar pdf baja');
+    toast('Hoja generada');
+    cargarBajas();
+  } catch (e) {
+    _error('generar el PDF de la baja', e, 'Reintenta con buena señal.');
+  } finally { soltar(); }
 }
 
 async function compartirBaja(b) {
@@ -8786,18 +8946,14 @@ async function enviarBajasSeleccionadas() {
     var b = sel[i];
     var destino = b.emailSupervisor || b.emailLocal;
     if (!destino) continue;
-    var ok = await _enviarCorreo({
-      email_admin: destino,
-      ot_numero: b.folio || 'S/N',
-      local: String(b.local || ''),
-      fecha: b.fecha || '',
-      tecnico: String(b.tecnico || ''),
-      tipo: 'Baja de activo',
-      trabajo: String(b.detalle || ''),
-      pdf_url: b.pdfUrlCloudinary || ''
-      // El sello lleva el destinatario: la misma hoja puede ir al local y al supervisor, y son
-      // dos avisos distintos que no se pueden tapar entre si.
-    }, { sello: 'baja_' + b.id + '__' + destino });
+    /* El sello lleva el MINUTO del envio. Con un sello estable, `_yaDespachado` suprimia en
+       silencio el segundo envio de la misma hoja al mismo destinatario (ventana de 30 dias) y
+       el resumen igual decia "enviada": Pedro creia haberla mandado y nunca salio. Apretar
+       "Enviar" es una accion deliberada y tiene que salir; lo que el sello sigue frenando es el
+       doble toque accidental dentro del mismo minuto. */
+    var selloMin = Math.floor(Date.now() / 60000);
+    var ok = await _enviarCorreo(_paramsCorreoBaja(b, destino),
+      { sello: 'baja_' + b.id + '__' + destino + '__' + selloMin });
     if (ok) enviados++; else pendientes++;
   }
   await _avisar(enviados + (enviados === 1 ? ' hoja enviada' : ' hojas enviadas') +
@@ -15236,6 +15392,7 @@ window.addEventListener('online', function() {
   setTimeout(sincronizarEnlacesPDFPendientes, 3500);
   // Despues de subir la OT cerrada: recien ahi tiene sentido borrar su registro "En Pausa".
   setTimeout(sincronizarCierresPausadaPendientes, 4000);
+  setTimeout(sincronizarBajasPendientes, 4400);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -15273,6 +15430,7 @@ document.addEventListener('visibilitychange', function() {
     setTimeout(sincronizarCorreosPendientes, 1600);
     setTimeout(sincronizarEnlacesPDFPendientes, 2000);
     setTimeout(sincronizarCierresPausadaPendientes, 2400);
+    setTimeout(sincronizarBajasPendientes, 2800);
   }
 });
 
@@ -15327,6 +15485,7 @@ if (!_soloVisorPDF) {
   setTimeout(sincronizarCorreosPendientes, 4000);
   setTimeout(sincronizarEnlacesPDFPendientes, 4500);
   setTimeout(sincronizarCierresPausadaPendientes, 5000);
+  setTimeout(sincronizarBajasPendientes, 5400);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);

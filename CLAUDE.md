@@ -414,16 +414,63 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   → cadena → sucursal → detalle → emitir, con el resultado medido en el espía: **1 escritura en
   `bajas`, 0 en `ordenes` y 0 en `cotizaciones`**, y el correo al local con el folio en el asunto.
   **Contraprueba contra `HEAD`:** la función no existe y el guion falla.
-- **Contraprueba por mutación** (11 regresiones simuladas — hoja sin firmar, sin timbre, guardada
+- **Contraprueba por mutación** (22 regresiones simuladas — hoja sin firmar, sin timbre, guardada
   en `ordenes`, con cotización, sin guardia de tiempo, `fetch` pelado, folio sin transacción,
-  contador de cotizaciones, texto recortado, `emailjs.send`, local cortado a 16): el test las
-  detecta **las 11**.
+  contador de cotizaciones, texto recortado, `emailjs.send`, local cortado a 16, y las 11 de la
+  revisión adversarial —sin cerrojo, instantánea tardía, sin write-ahead, `add()`, clientId dentro
+  de la emisión, folio requemado, asunto de OT, correo sin PDF, `firmaY` constante, técnico
+  encerrado, sin `regenerarPDFBaja`—): el test las detecta **las 22**.
 - ⚠️ **Lo que este cambio NO hace:** no hay inventario de activos (la app no sabe qué transpaletas
   existen ni cuáles están de baja), no ajusta el N° de equipos suscritos del preventivo, y **no
   migra las 2 hojas ya existentes** — eso lo autoriza Pedro. Y **el formato del PDF es el que
   Pedro dictó**: si SMU tiene su propio formulario de baja, este layout hay que ajustarlo, que es
   la misma lección de la hoja de servicio. Alcance completo en `ALCANCE-baja-de-activo.md`.
-- Cubierto por `tests/baja-de-activo-no-cobra.js` (unitario, 11 bloques) y
+- 🔬 **Los NUEVE defectos que encontró la revisión adversarial del 27-08-2026, y que la primera
+  versión tenía con el test en verde.** Se dejan escritos porque el patrón se repite: los tres
+  primeros son *chequeos mal anclados*, no código mal pensado.
+  1. **El técnico quedaba encerrado en el Panel Supervisor.** La flecha de `s-bajas` era un
+     `go('s-supervisor')` hardcodeado, y esa pantalla solo tiene *Salir* (cierra sesión y pide el
+     PIN de nuevo). Peor: desde ahí el técnico llegaba a *Cotizaciones guardadas*, donde
+     `eliminarCotizacionesSeleccionadas` **solo pide contraseña si el cargo es Administrador** —
+     podía borrar la colección de la que la planilla de correctivos le cobra a SMU. Ahora la
+     flecha usa `volverAInicioDesdeCierre()`, que ya ramificaba por rol.
+  2. **El correo salía con la plantilla de "OT completada".** `template_agzfcux` arma el asunto
+     con `{{ot_numero}}` + texto fijo, así que al supervisor de SMU le llegaba *"OT #27082601
+     completada"* — para el documento que existe justamente para NO confundirse con una OT. Se
+     marca el campo (`BAJA DE ACTIVO <folio>`), igual que la marca `(REENVIO)`: un fix que
+     depende de editar un panel externo es un fix a medias.
+  3. **La instantánea se tomaba DESPUÉS del primer await de red**, con el comentario correcto
+     encima del código equivocado. El `snap` se armaba tras `await _asignarFolioBaja` (hasta 20 s)
+     leyendo `_bajaSel`, y el botón *Cambiar* del formulario no se bloquea: la hoja podía salir
+     con el folio de un local y el nombre de otro. Es la causa raíz de julio, reescrita.
+  4. **Sin cerrojo de reentrada.** `_bloquear()` se auto-libera a los 30 s (`_MAX_BLOQUEO_MS`) y
+     además le dice al técnico *"intentalo de nuevo"*, pero el flujo dura hasta ~96 s: el segundo
+     toque emitía una segunda baja, con dos folios y dos correos. Ahora hay `_emitiendoBaja`.
+  5. **No era idempotente.** El `clientId` se acuñaba dentro de la emisión, así que un reintento
+     creaba un documento nuevo en vez de pisar el mismo. Ahora viaja en `_bajaSel` y la escritura
+     es `doc(clientId).set(..., {merge:true})`, como la OT.
+  6. **Era el único flujo de escritura de la app sin cola.** Si el `set()` fallaba, se mostraba un
+     error y se hacía `return`: el texto que el técnico escribió en terreno desaparecía con el
+     folio ya quemado. Ahora hay write-ahead en `localStorage` (`_encolarBaja`) antes de tocar la
+     red y `sincronizarBajasPendientes` en el mismo ciclo que las otras tres colas.
+  7. **Si Cloudinary fallaba, el correo salía igual con el enlace vacío** y el toast decía *"Hoja
+     enviada al local"*. Un comprobante sin comprobante que el local da por recibido. Ahora sin
+     PDF no se manda nada y se avisa.
+  8. 🔴 **Con detalle largo, la hoja 1 salía SIN FIRMA y las firmas caían encima del texto de la
+     continuación.** `firmaY` era la constante `PIE_CUERPO + 8` (208 mm, calculada para la hoja 1)
+     pero `_firmarHojaTecnico` se llama después del bucle, o sea sobre la última página. Ahora la
+     Y sale del cursor real y se abre hoja propia si no cabe. **La prueba en navegador daba verde
+     igual** porque medía *"lo más bajo del documento"*, un promedio mentiroso en un PDF de varias
+     hojas: ahora mide **por página**.
+  9. **`_yaDespachado` suprimía el reenvío en silencio y el resumen decía que había salido.** El
+     sello del envío al supervisor era estable, así que la segunda vez no salía (ventana de 30
+     días). Ahora el sello lleva el minuto: el doble toque accidental se sigue frenando, pero
+     apretar *Enviar* a propósito manda.
+  📌 **Una baja sin PDF ya no es un callejón sin salida:** la carpeta muestra **Generar PDF**
+  (`regenerarPDFBaja`). Sin ese botón, una baja cuyo Cloudinary falló —o una migrada con la
+  herramienta, que nace sin archivo— quedaba inservible para siempre, y el comentario del migrador
+  prometía un camino que no estaba escrito.
+- Cubierto por `tests/baja-de-activo-no-cobra.js` (unitario, 21 bloques) y
   `tests/offline/prueba-baja-activo.js` (PDF real + flujo por la interfaz).
 
 **Pendientes y materiales — nota interna del técnico** (`pend-materiales`, `estado.pendientesMateriales`):

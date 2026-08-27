@@ -104,7 +104,9 @@ const F = {
   nombrePDF: cuerpoDe('function _nombrePDFBaja('),
   slugPDF: cuerpoDe('function _slugPDFBaja('),
   enviarSel: cuerpoDe('async function enviarBajasSeleccionadas('),
-  seleccionarCadena: cuerpoDe('function seleccionarCadenaBaja(')
+  seleccionarCadena: cuerpoDe('function seleccionarCadenaBaja('),
+  escribirNube: cuerpoDe('async function _escribirBajaEnLaNube('),
+  paramsCorreo: cuerpoDe('function _paramsCorreoBaja(')
 };
 Object.keys(F).forEach(function(k) {
   if (!F[k]) fallos.push('  ✗ No se encontro la funcion ' + k + ' en index.html');
@@ -121,8 +123,8 @@ const SRC_LIMPIO = sinComentarios(src.replace(/<!--[\s\S]*?-->/g, ''));
 const TODAS = Object.keys(C).map(function(k) { return C[k]; }).join('\n');
 
 // ── 1. La baja NO puede tocar la cobranza ───────────────────────────────────────────────────
-chequear(/collection\(['"]bajas['"]\)/.test(C.guardarYEnviarBaja),
-  'guardarYEnviarBaja no escribe en la coleccion `bajas`');
+chequear(/collection\(['"]bajas['"]\)/.test(TODAS),
+  'la baja no se escribe en la coleccion `bajas`');
 chequear(!/collection\(['"]ordenes['"]\)/.test(TODAS),
   'la baja de activo escribe o lee `ordenes`: no puede — ahi vive lo que se cobra');
 chequear(!/collection\(['"]cotizaciones['"]\)/.test(TODAS),
@@ -151,8 +153,13 @@ chequear(!/Receptor/i.test(C.generarPDFBaja),
   'la hoja de baja dice "Receptor": este documento no lo firma el local');
 
 // ── 6. Guardias de tiempo en todo lo que sale a la red ──────────────────────────────────────
+/* ⚠️ `_escribirBajaEnLaNube` entra en esta lista porque la escritura SE MUDO ahi al agregar la
+   cola. Sin actualizarla, el chequeo seguia recorriendo funciones donde ya no habia ninguna
+   llamada a Firestore y daba verde: la contraprueba por mutacion quito el `_conTimeout` del
+   set() y el test no lo vio. Al mover codigo de sitio hay que mover tambien su vigilancia. */
 [['guardarYEnviarBaja', C.guardarYEnviarBaja], ['cargarBajas', C.cargarBajas],
- ['cargarCadenasBaja', C.cargarCadenasBaja], ['_asignarFolioBaja', C.asignarFolio]].forEach(function(par) {
+ ['cargarCadenasBaja', C.cargarCadenasBaja], ['_asignarFolioBaja', C.asignarFolio],
+ ['_escribirBajaEnLaNube', C.escribirNube], ['regenerarPDFBaja', sinComentarios(cuerpoDe('async function regenerarPDFBaja(') || '')]].forEach(function(par) {
   const nombre = par[0], cuerpo = par[1];
   // Cada .get()/.set()/.add()/.update()/runTransaction tiene que ir dentro de _conTimeout.
   const llamadas = cuerpo.match(/db\s*\.\s*(collection|runTransaction)[\s\S]*?(?=;)/g) || [];
@@ -194,6 +201,94 @@ chequear(!/_bajaSel\s*\./.test(cuerpoTrasSnap.slice(cuerpoTrasSnap.indexOf('toas
 chequear(!/getElementById\(['"]baja-detalle['"]\)\s*\.\s*value/.test(trasPrimerAwait),
   'guardarYEnviarBaja lee el textarea despues de un await: para entonces puede tener otro texto');
 
+/* ── 12 a 21. Lo que encontro la revision adversarial del 27-08-2026 ────────────────────────
+   Los diez chequeos de abajo existen porque la primera version pasaba el test y estaba rota. El
+   de la instantanea (13) es el mas importante de todos: estaba escrito, pero medido desde
+   `toast(` en adelante, y por eso no vio que el snap se armaba DESPUES del primer await. Un
+   chequeo mal anclado es peor que no tenerlo: da una luz verde falsa. */
+
+// 12. Cerrojo de reentrada: _bloquear() se auto-libera a los 30 s y este flujo dura mas.
+chequear(/_emitiendoBaja\s*=\s*true/.test(C.guardarYEnviarBaja) && /if\s*\(\s*_emitiendoBaja\s*\)/.test(C.guardarYEnviarBaja),
+  'guardarYEnviarBaja no tiene cerrojo de reentrada: el boton se reactiva solo a los 30 s y el segundo toque emite una baja duplicada');
+chequear(/_emitiendoBaja\s*=\s*false/.test(C.guardarYEnviarBaja),
+  'el cerrojo de reentrada no se suelta: la segunda baja del dia no se podria emitir');
+
+// 13. LA INSTANTANEA VA ANTES DEL PRIMER AWAIT. Se mide por posicion, no por cercania a un toast.
+/* Se compara contra el primer await QUE SALE A LA RED (_asignarFolioBaja), no contra el primer
+   await a secas: arriba hay awaits de validacion (_avisar) que son correctos y no leen datos.
+   Y el barrido posterior empieza al CERRAR el literal del snap — medido desde su apertura, el
+   propio objeto (que si lee _bajaSel.local, para eso existe) disparaba el chequeo. Dos formas
+   distintas de anclar mal el mismo chequeo; la primera dejo pasar el bug de verdad. */
+const posSnap = C.guardarYEnviarBaja.indexOf('const snap = {');
+const posRed = C.guardarYEnviarBaja.indexOf('_asignarFolioBaja(');
+chequear(posSnap > -1 && posRed > -1 && posSnap < posRed,
+  'la instantanea se arma DESPUES del primer await de red: _bajaSel puede cambiar en esa ventana y la hoja sale con el local equivocado');
+function finDeLiteral(txt, desde) {
+  var p = 0;
+  for (var k = txt.indexOf('{', desde); k < txt.length; k++) {
+    if (txt[k] === '{') p++;
+    else if (txt[k] === '}') { p--; if (p === 0) return k + 1; }
+  }
+  return desde;
+}
+const trasSnap = posSnap > -1 ? C.guardarYEnviarBaja.slice(finDeLiteral(C.guardarYEnviarBaja, posSnap)) : '';
+chequear(!/_bajaSels*.s*(local|ceco|cadena|email|direccion|supervisor)/.test(trasSnap),
+  'guardarYEnviarBaja vuelve a leer datos de _bajaSel despues de la instantanea');
+
+// 14. Write-ahead: lo que el tecnico escribio no se pierde aunque la nube no responda.
+chequear(/_encolarBaja\s*\(/.test(C.guardarYEnviarBaja),
+  'la baja no se encola en el dispositivo antes de salir a la red: sin señal se pierde la hoja entera');
+chequear(!!cuerpoDe('async function sincronizarBajasPendientes('),
+  'no existe sincronizarBajasPendientes: lo que no se pudo escribir no se reintenta nunca');
+chequear(/setTimeout\(sincronizarBajasPendientes/.test(SRC_LIMPIO),
+  'la cola de bajas no esta enganchada al ciclo de sincronizacion');
+
+// 15. Idempotencia: un reintento PISA el documento, no crea un segundo.
+chequear(/doc\(\s*b\.clientId\s*\)\.set\(/.test(sinComentarios(cuerpoDe('async function _escribirBajaEnLaNube(') || '')),
+  'la baja no se escribe con doc(clientId).set(): un reintento crearia una segunda hoja');
+chequear(!/collection\(['"]bajas['"]\)\.add\(/.test(TODAS),
+  'la baja usa add(): el reintento duplica el documento');
+chequear(!/clientId:\s*'baja_'\s*\+\s*Date\.now/.test(C.guardarYEnviarBaja),
+  'el clientId se acuña DENTRO de guardarYEnviarBaja: cada reintento escribiria un documento nuevo');
+
+// 16. El folio no se vuelve a pedir si ya se reservo: cada llamada consume un correlativo.
+// Se exige que el snap LEA el folio ya reservado, no que la palabra aparezca en algun lado: con
+// solo buscar el nombre, la mutacion que borraba la lectura pasaba desapercibida porque mas abajo
+// quedaba la ESCRITURA del mismo campo.
+chequear(/folio:\s*_bajaSel\.folioReservado/.test(C.guardarYEnviarBaja),
+  'un reintento vuelve a reservar folio y quema un correlativo del dia por cada intento');
+chequear(/_bajaSel\.folioReservado\s*=/.test(C.guardarYEnviarBaja),
+  'el folio reservado no se guarda, asi que el proximo intento pedira otro');
+
+// 17. El asunto que le llega a SMU no puede decir que se completo una OT.
+const paramsCorreo = sinComentarios(cuerpoDe('function _paramsCorreoBaja(') || '');
+chequear(!!paramsCorreo, 'no existe _paramsCorreoBaja: los dos envios podrian decir cosas distintas');
+chequear(/BAJA DE ACTIVO/.test(paramsCorreo),
+  'ot_numero no lleva la marca "BAJA DE ACTIVO": la plantilla arma el asunto con ese campo y a SMU le llega "OT #<folio> completada"');
+chequear(/_paramsCorreoBaja\s*\(/.test(C.guardarYEnviarBaja) && /_paramsCorreoBaja\s*\(/.test(C.enviarSel),
+  'los dos envios de la baja no comparten los parametros del correo');
+
+// 18. Sin PDF no se anuncia nada: un comprobante sin comprobante es peor que no mandarlo.
+chequear(/if\s*\(\s*!pdfUrlCloudinary\s*\)/.test(C.guardarYEnviarBaja),
+  'si Cloudinary falla se manda igual el correo con el enlace vacio y se dice que la hoja se envio');
+
+// 19. Las firmas se anclan al cursor real, no a una constante calculada para la hoja 1.
+chequear(!/const firmaY = PIE_CUERPO/.test(C.generarPDFBaja),
+  'firmaY es una constante: con detalle largo la hoja 1 sale SIN FIRMA y las firmas caen encima del texto de la continuacion');
+chequear(/var firmaY = y \+/.test(C.generarPDFBaja) && /firmaY \+ 46 > _FT_PIE_A4/.test(C.generarPDFBaja),
+  'las firmas no se reubican cuando el texto crece: hay que anclarlas al cursor y abrir hoja si no caben');
+
+// 20. El tecnico no puede quedar encerrado en el Panel Supervisor.
+const pantallaBajas = SRC_LIMPIO.slice(SRC_LIMPIO.indexOf('id="s-bajas"') - 400, SRC_LIMPIO.indexOf('id="s-bajas"') + 400);
+chequear(!/onclick="go\('s-supervisor'\)"/.test(pantallaBajas),
+  'la flecha de s-bajas manda a s-supervisor sin mirar el rol: el tecnico queda atrapado ahi (su unica salida es cerrar sesion) y gana acceso a Cotizaciones');
+chequear(/volverAInicioDesdeCierre/.test(pantallaBajas),
+  'la flecha de s-bajas no ramifica por rol');
+
+// 21. Una baja sin PDF tiene camino de vuelta.
+chequear(!!cuerpoDe('async function regenerarPDFBaja('),
+  'no existe regenerarPDFBaja: una baja cuyo PDF no subio (o una migrada) queda inservible para siempre');
+
 // ── 9. El local NO se corta ─────────────────────────────────────────────────────────────────
 chequear(!/substring\(\s*0\s*,\s*16\s*\)/.test(C.generarPDFBaja),
   'la hoja de baja corta el nombre del local a 16 caracteres: es el bug que quedo pendiente el 19-08');
@@ -231,9 +326,9 @@ function correrPDF(detalle) {
     text: function(t) { dibujado.push(String(t)); }
   };
   const ventana = { jspdf: { jsPDF: function() { return doc; } } };
-  const fn = new Function('window', 'String_', '_firmarHojaTecnico', '_dibujarFirmaEmval', 'console',
+  const fn = new Function('window', 'String_', '_firmarHojaTecnico', '_dibujarFirmaEmval', 'console', '_FT_PIE_A4',
     F.generarPDFBaja + '\nreturn generarPDFBaja;')(
-      ventana, String, function() { return 0; }, function() { return true; }, console);
+      ventana, String, function() { return 0; }, function() { return true; }, console, 285);
   return fn({ folio: '27082601', local: 'ALVI CONCEPCION', ceco: '3089', tecnico: 'Lucas Fernández',
               fecha: '27-08-2026', detalle: detalle })
     .then(function(d) { return { doc: d, dibujado: dibujado, paginas: estado.paginas }; });

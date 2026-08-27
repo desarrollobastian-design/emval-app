@@ -78,8 +78,12 @@ function textosDelPDF(buf) {
     try { trozos.push(zlib.inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1')); }
     catch (e) { trozos.push(m[1]); }
   }
+  // `pagina` = indice del content stream. Sin esto solo se podia medir "lo mas bajo del
+  // documento", que es un promedio mentiroso en un PDF de varias hojas: la primera version de
+  // esta prueba daba verde mientras la hoja 1 salia SIN FIRMA y las firmas se dibujaban encima
+  // del texto de la continuacion. Lo encontro una revision adversarial, no este guion.
   const salida = [];
-  trozos.forEach(function (c) {
+  trozos.forEach(function (c, pagina) {
     let x = 0, y = 0;
     const tk = /(-?[\d.]+)\s+(-?[\d.]+)\s+(Td|TD)|1\s+0\s+0\s+1\s+(-?[\d.]+)\s+(-?[\d.]+)\s+Tm|\(((?:\\.|[^\\)])*)\)\s*Tj/g;
     let t;
@@ -90,7 +94,7 @@ function textosDelPDF(buf) {
         const txt = t[6]
           .replace(/\\([()\\])/g, '$1')
           .replace(/\\([0-7]{1,3})/g, function (_, o) { return String.fromCharCode(parseInt(o, 8)); });
-        salida.push({ txt: txt, xmm: x / PT_POR_MM, ymm: 297 - y / PT_POR_MM });
+        salida.push({ txt: txt, pagina: pagina, xmm: x / PT_POR_MM, ymm: 297 - y / PT_POR_MM });
       }
     }
   });
@@ -259,6 +263,25 @@ const sinTildes = s => norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       chequear(paginas > 1, 'con 60 renglones no se abrio hoja de continuacion');
       const masBajoL = tl.reduce((a, t) => Math.max(a, t.ymm), 0);
       chequear(masBajoL <= PIE_A4, 'en la hoja de continuacion hay texto bajo los ' + PIE_A4 + ' mm');
+
+      /* LA FIRMA, MEDIDA POR PAGINA. Es el chequeo que faltaba: con un detalle largo la firma se
+         dibujaba en una Y fija calculada para la hoja 1 — o sea encima de las rayas y del texto
+         de la continuacion — y esta prueba daba verde igual porque medía "lo mas bajo del
+         documento". Ahora se exige que exista y que en SU pagina no quede ningun renglon del
+         detalle por debajo de ella. */
+      const firmaL = tl.find(t => /EJECUTADO POR/i.test(t.txt));
+      chequear(!!firmaL, 'con detalle largo la hoja no lleva firma en ninguna pagina');
+      if (firmaL) {
+        const enSuPagina = tl.filter(t => t.pagina === firmaL.pagina && /^renglon-de-control-/.test(t.txt));
+        const pisados = enSuPagina.filter(t => t.ymm >= firmaL.ymm - 4);
+        console.log('   firma en pagina ' + (firmaL.pagina + 1) + ' a ' + firmaL.ymm.toFixed(0) +
+                    ' mm; renglones por debajo de ella en esa pagina: ' + pisados.length);
+        chequear(pisados.length === 0,
+          'las firmas se dibujan encima de ' + pisados.length + ' renglon(es) del detalle');
+        const emvalL = tl.find(t => /Firma y timbre EMVAL/i.test(t.txt));
+        chequear(!!emvalL && emvalL.pagina === firmaL.pagina,
+          'las dos firmas quedaron en paginas distintas');
+      }
     }
 
     // ───────────────── FLUJO REAL POR LA INTERFAZ ─────────────────
@@ -342,6 +365,11 @@ const sinTildes = s => norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       chequear(correoBaja.email_admin === 'local.prueba@ejemplo.cl',
         'el correo no fue al local (fue a "' + correoBaja.email_admin + '")');
       chequear(!!correoBaja.pdf_url, 'el correo salio sin el enlace al PDF');
+      /* El asunto de la plantilla se arma con {{ot_numero}} y el texto fijo "OT #... completada".
+         Sin la marca, el comprobante que por definicion NO se cobra le llegaba al supervisor de
+         SMU con la misma linea de asunto que una orden de trabajo ejecutada. */
+      chequear(/^BAJA DE ACTIVO /.test(String(correoBaja.ot_numero || '')),
+        'ot_numero no lleva la marca "BAJA DE ACTIVO" (llego "' + correoBaja.ot_numero + '"): a SMU le aparece como una OT completada');
     }
 
     llegoAlFinal = true;
