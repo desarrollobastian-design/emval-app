@@ -739,6 +739,10 @@
       <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--azul);color:white;font-size:15px;line-height:1;">+</span>
       <span>Nueva OT — elige la cadena</span>
     </div>
+    <!-- Baja de activo: no es una OT y por eso no entra en el flujo de 4 pasos de arriba.
+         Va aca porque es donde el tecnico empieza su dia. Pedro, 27-08-2026: "que el tecnico
+         elija el local y todo, listo; y el despues rellena". -->
+    <button class="btn btn-secondary btn-sm" onclick="nuevaBaja()" style="width:100%;margin-bottom:14px;font-size:13px;">Emitir una baja de activo</button>
     <div id="lista-cadenas"></div>
   </div>
 </div>
@@ -1088,6 +1092,95 @@
   </div>
 </div>
 
+<!-- ============ SCREEN: BAJA DE ACTIVO ============ -->
+<!-- Pedido de Pedro el 27-08-2026. Es un COMPROBANTE, no un trabajo cobrable: no genera
+     cotizacion, no genera planilla y no entra en la cobranza a SMU. Por eso vive en su propia
+     coleccion (`bajas`) y no como un tercer valor de `tipo` en `ordenes` — _normTipo() es
+     binaria a proposito (todo lo que no es preventivo es correctivo, para que ninguna OT
+     desaparezca de las listas) y un `tipo:'baja'` caeria dentro de la planilla de correctivos
+     que se le cobra a SMU. Ver ALCANCE-baja-de-activo.md. -->
+<div class="screen" id="s-baja">
+  <div class="topbar">
+    <button class="back" aria-label="Volver" onclick="salirDeBaja()">←</button>
+    <h1>Baja de activo</h1>
+    <span class="ot-badge" id="baja-folio-badge">#---</span>
+  </div>
+  <div class="content">
+
+    <!-- PASO 1: CADENA -->
+    <div id="baja-paso-cadena">
+      <div style="font-size:12px;color:var(--texto2);margin-bottom:12px;">Paso 1 de 2 &mdash; Elige la cadena</div>
+      <div id="baja-lista-cadenas"></div>
+    </div>
+
+    <!-- PASO 2: SUCURSAL -->
+    <div id="baja-paso-local" style="display:none;">
+      <div style="font-size:12px;color:var(--texto2);margin-bottom:12px;" id="baja-local-subtitulo">Paso 2 de 2 &mdash; Elige la sucursal</div>
+      <div style="margin-bottom:16px;">
+        <label for="baja-buscar-sucursal" style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--texto);">Buscar sucursal</label>
+        <div style="display:flex;gap:8px;align-items:stretch;">
+          <input type="text" id="baja-buscar-sucursal" aria-label="Buscar sucursal" placeholder="Ej: Concepción, Chillán" style="flex:1;padding:12px 14px;font-size:16px;border:2px solid var(--gris3);border-radius:var(--radio-sm);font-family:inherit;color:var(--texto);" oninput="filtrarSucursalesBaja(this.value)" />
+          <button type="button" aria-label="Limpiar busqueda" style="width:44px;height:44px;padding:0;border:2px solid var(--gris3);background:transparent;border-radius:var(--radio-sm);cursor:pointer;font-size:16px;color:var(--texto3);" onclick="var i=document.getElementById('baja-buscar-sucursal');i.value='';filtrarSucursalesBaja('');">&#10005;</button>
+        </div>
+      </div>
+      <div id="baja-lista-sucursales"></div>
+    </div>
+
+    <!-- PASO 3: LA HOJA -->
+    <div id="baja-paso-form" style="display:none;">
+      <div class="card" style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:600;color:var(--texto);" id="baja-local-nombre">&mdash;</div>
+            <div style="font-size:12px;color:var(--texto3);margin-top:2px;" id="baja-local-detalle"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="cambiarLocalBaja()" style="font-size:12px;white-space:nowrap;">Cambiar</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="baja-detalle">Detalle de la baja</label>
+        <textarea id="baja-detalle" rows="6" placeholder="Ej: Se da de baja 1 transpaleta marca Stax N1 (N Serie 26215-39) por trizaduras en su estructura. No reparable."></textarea>
+      </div>
+
+      <!-- El tecnico tiene que saber, MIENTRAS escribe, que esta hoja no dispara cobro. Es la
+           misma razon por la que el campo "Pendientes y materiales" lleva su aviso al lado. -->
+      <div style="display:flex;gap:8px;align-items:flex-start;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:var(--radio-sm);padding:10px 12px;margin-bottom:14px;">
+        <span style="color:var(--azul-claro);flex-shrink:0;margin-top:1px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+        <div style="font-size:11px;color:#1E3A8A;line-height:1.45;">
+          Esta hoja es un <b>comprobante</b>: se manda al local como respaldo de la baja.
+          <b>No genera cotizaci&oacute;n, ni orden de compra, ni cobro.</b>
+          Sale firmada por ti y con el timbre de EMVAL.
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-generar-baja" onclick="guardarYEnviarBaja()">Generar y enviar hoja</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ SCREEN: CARPETA DE BAJAS DE ACTIVO ============ -->
+<div class="screen" id="s-bajas">
+  <div class="topbar">
+    <button class="back" aria-label="Volver" onclick="volverAInicioDesdeCierre()">←</button>
+    <h1>Bajas de activo</h1>
+  </div>
+  <div id="bajas-acciones-bar" style="display:none;gap:8px;align-items:center;padding:10px 16px;background:white;border-bottom:1px solid var(--gris2);">
+    <span id="bajas-seleccionadas-count" style="font-size:12px;color:var(--texto2);flex:1;">0 seleccionadas</span>
+    <button onclick="enviarBajasSeleccionadas()" style="background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;">Enviar</button>
+    <button onclick="compartirBajasSeleccionadas()" style="background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;">Compartir</button>
+  </div>
+  <div class="content">
+    <button onclick="nuevaBaja()" style="width:100%;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:14px;box-shadow:0 2px 8px rgba(27,58,107,0.2);">+ Nueva baja de activo</button>
+    <div style="margin-bottom:12px;">
+      <input type="text" id="bajas-buscar" aria-label="Buscar baja de activo" placeholder="Buscar local, folio o t&eacute;cnico..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:8px;" onkeyup="filtrarBajas();">
+      <div style="font-size:11px;color:var(--texto3);text-align:right;" id="bajas-contador">0 hojas</div>
+    </div>
+    <div id="lista-bajas"></div>
+  </div>
+</div>
+
 <!-- ============ SCREEN: CIERRE / ÉXITO ============ -->
 <div class="screen" id="s-cierre">
   <div class="success-hero">
@@ -1152,6 +1245,7 @@
       <button id="btn-facturar" class="btn btn-secondary btn-sm" onclick="go('s-facturar');cargarFacturacion();" style="font-size:12px;display:none;">Facturar</button>
       <button id="btn-ventas" class="btn btn-secondary btn-sm" onclick="go('s-ventas');cargarVentas();" style="font-size:12px;display:none;">Ventas</button>
       <button id="btn-planillas" class="btn btn-secondary btn-sm" onclick="go('s-planillas');cargarPlanillas();" style="font-size:12px;display:none;">Planillas</button>
+      <button class="btn btn-secondary btn-sm" onclick="go('s-bajas');cargarBajas();" style="font-size:12px;">Bajas de activo</button>
     </div>
     <!-- AVISOS POR CORREO ATASCADOS (admin/supervisor).
          El correo caido no se puede avisar por correo. Cada dispositivo reporta su cola a
@@ -7980,6 +8074,896 @@ async function verCotizacionDirecta(cotId) {
   }
 }
 
+/* =========== BAJA DE ACTIVO — el comprobante que NO se cobra =============================
+   Pedido de Pedro el 27-08-2026, en cinco audios. El caso que lo motiva esta fechado: la OT
+   #586729 (Alvi Concepcion, 21-07-2026, Lucas) dice "Se da de baja 1 transpaleta marca Stax
+   (N1) (NSerie 26215-39) ... No Reparable" y quedo 37 dias trabada en la lista de pendientes
+   de cotizar — porque la app solo sabe de preventivos y correctivos, y todo correctivo espera
+   su cotizacion. Pedro: "esa hoja no deberia llevar cotizacion ni nada".
+
+   VIVE EN SU PROPIA COLECCION (`bajas`), NUNCA como un tercer valor de `tipo` en `ordenes`.
+   `_normTipo()` es binaria A PROPOSITO —"todo lo que no es preventivo es correctivo"— para que
+   ninguna OT desaparezca de las listas por traer el tipo nulo (las 7 OT de Chillan Viejo,
+   17-07-2026). Un `tipo:'baja'` seria tratado como CORRECTIVO por las 51 comparaciones
+   directas que hay en este archivo: entraria en la planilla de correctivos que se le cobra a
+   SMU y volveria a aparecer como pendiente de cotizar, que es exactamente el bug que esto
+   viene a arreglar. La coleccion aparte no puede contaminar la cobranza: no hay una sola linea
+   de codigo de planilla que lea `bajas`.
+
+   Invariantes (los vigila tests/baja-de-activo-no-cobra.js):
+   1. No genera cotizacion, ni orden de compra, ni entra en ninguna planilla.
+   2. Sale firmada por el tecnico que la emitio y con el timbre de EMVAL — audio 5.
+   3. Toda llamada a la nube va con guardia de tiempo, como el resto de la app.
+   4. Nunca escribe en `ordenes` ni en `cotizaciones`.
+
+   El formato del PDF es el que Pedro dicto en el audio 5 (titulo, fecha, CECO, local, lineas
+   para escribir, las dos firmas). Si SMU tiene su propio formulario de baja, ESTE layout hay
+   que ajustarlo — es la misma leccion de la hoja de servicio. Ver ALCANCE-baja-de-activo.md. */
+
+// Sello de formato del PDF, igual que _PDF_COT_FORMATO: al cambiar como se DIBUJA la hoja se
+// sube este numero y los PDF anteriores quedan obsoletos. Sin esto un arreglo de dibujo no
+// llega nunca al cliente, que fue lo que le paso a la cotizacion cortada de Pedro el 19-08.
+var _BAJA_PDF_FORMATO = 1;
+
+// Seleccion del formulario. No se toca `estado`: este flujo NO es una OT, y meterlo ahi seria
+// darle al autoguardado de OT pausadas una hoja que no es una orden de trabajo.
+var _bajaSel = null;
+var _bajaCadenas = [];
+var _bajasCache = [];
+
+function nuevaBaja() {
+  _bajaSel = null;
+  var det = document.getElementById('baja-detalle');
+  if (det) det.value = '';
+  var badge = document.getElementById('baja-folio-badge');
+  if (badge) badge.textContent = 'Nueva';
+  _bajaPaso('cadena');
+  go('s-baja');
+  cargarCadenasBaja();
+}
+
+// Vuelve a la carpeta, no al login: esta pantalla se abre desde ahi.
+function salirDeBaja() {
+  go('s-bajas');
+  cargarBajas();
+}
+
+function _bajaPaso(paso) {
+  var pasos = { cadena: 'baja-paso-cadena', local: 'baja-paso-local', form: 'baja-paso-form' };
+  Object.keys(pasos).forEach(function(k) {
+    var el = document.getElementById(pasos[k]);
+    if (el) el.style.display = (k === paso) ? 'block' : 'none';
+  });
+}
+
+function cambiarLocalBaja() {
+  _bajaPaso('cadena');
+  cargarCadenasBaja();
+}
+
+/* Catalogo propio y no `cargarCadenasApp()`: esa funcion pinta en #lista-cadenas y, sobre
+   todo, su `seleccionarCadena()` ARRANCA UNA OT (le asigna numero y enciende el autoguardado
+   de pausadas). Reusarla convertiria cada baja en una orden de trabajo fantasma. */
+async function cargarCadenasBaja() {
+  var lista = document.getElementById('baja-lista-cadenas');
+  if (!lista) return;
+  _cargando(lista, 3);
+  try {
+    if (_esperandoFirebase('bajas-cadenas', cargarCadenasBaja)) return;
+    const db = window.firebase.firestore();
+    const snap = await _conTimeout(db.collection('cadenas').get(), 25000, 'get cadenas baja');
+    var cadenas = [];
+    snap.docs.forEach(function(d) { cadenas.push({ id: d.id, ...d.data() }); });
+    if (typeof _dedupCadenas === 'function') cadenas = _dedupCadenas(cadenas);
+    _bajaCadenas = cadenas;
+    _cargado(lista);
+    lista.innerHTML = '';
+    if (!cadenas.length) {
+      lista.innerHTML = _vacio('No hay cadenas cargadas', 'Pidele al administrador que cargue las cadenas y sus sucursales.');
+      return;
+    }
+    const ORDEN = ['Unimarc', 'S10', 'Alvi', 'M10', 'Entel', 'Papa Johns'];
+    cadenas.sort(function(a, b) {
+      var ia = ORDEN.indexOf(a.nombre), ib = ORDEN.indexOf(b.nombre);
+      if (ia === -1 && ib === -1) return (a.orden || 99) - (b.orden || 99);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    cadenas.forEach(function(c) {
+      var card = document.createElement('div');
+      card.className = 'cadena-card';
+      var logoDiv = document.createElement('div');
+      logoDiv.className = 'cadena-logo';
+      logoDiv.style.background = c.color || COLOR_CADENA_POR_DEFECTO;
+      if (c.logo) {
+        var img = document.createElement('img');
+        img.src = c.logo;
+        img.alt = '';
+        img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        img.onerror = function() { logoDiv.removeChild(img); logoDiv.textContent = c.letra || (c.nombre || '?').charAt(0); };
+        logoDiv.appendChild(img);
+      } else {
+        logoDiv.textContent = c.letra || (c.nombre || '?').charAt(0);
+      }
+      var nom = document.createElement('div');
+      nom.className = 'cadena-nombre';
+      nom.textContent = c.nombre || '';
+      var sub = document.createElement('div');
+      sub.style.cssText = 'font-size:11px;color:var(--texto3);';
+      sub.textContent = (c.sucursales || []).length + ' sucursales';
+      card.appendChild(logoDiv);
+      card.appendChild(nom);
+      card.appendChild(sub);
+      card.onclick = function() { seleccionarCadenaBaja(c); };
+      lista.appendChild(card);
+    });
+  } catch (e) {
+    _cargado(lista);
+    lista.innerHTML = _vacio('No se pudo cargar el catalogo', 'Revisa la señal y vuelve a entrar.');
+    console.error('cargarCadenasBaja:', e);
+  }
+}
+
+function seleccionarCadenaBaja(cadena) {
+  var lista = document.getElementById('baja-lista-sucursales');
+  var sub = document.getElementById('baja-local-subtitulo');
+  if (sub) sub.textContent = 'Paso 2 de 2 — Sucursal de ' + (cadena.nombre || '');
+  if (!lista) return;
+  lista.innerHTML = '';
+  var sucs = cadena.sucursales || [];
+  if (!sucs.length) {
+    lista.innerHTML = _vacio('Esta cadena no tiene sucursales', 'Pidele al administrador que las cargue.');
+  }
+  sucs.forEach(function(s) {
+    var nombre = (typeof s === 'object' ? s.nombre : s) || '';
+    var datos = {
+      cadena: cadena.nombre || '',
+      cadenaColor: cadena.color || '',
+      cadenaLogo: cadena.logo || '',
+      local: nombre,
+      ceco: (typeof s === 'object' && s.centro) ? String(s.centro) : '',
+      direccion: (typeof s === 'object' && s.direccion) ? s.direccion : '',
+      email: (typeof s === 'object' && s.email) ? s.email : '',
+      supervisor: (typeof s === 'object' && s.supervisor) ? s.supervisor : '',
+      emailSupervisor: (typeof s === 'object' && s.emailSupervisor) ? s.emailSupervisor : ''
+    };
+    var wrap = document.createElement('div');
+    wrap.setAttribute('data-baja-sucursal', nombre);
+    var item = document.createElement('div');
+    item.className = 'local-item';
+    var icono = document.createElement('div');
+    icono.style.cssText = 'width:40px;height:40px;border-radius:var(--radio-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0;background:' + (cadena.color || COLOR_CADENA_POR_DEFECTO) + ';';
+    icono.textContent = cadena.letra || (cadena.nombre || '?').charAt(0);
+    var info = document.createElement('div');
+    info.className = 'local-info';
+    var nomEl = document.createElement('div');
+    nomEl.className = 'local-name';
+    nomEl.textContent = nombre;
+    info.appendChild(nomEl);
+    var det = [];
+    if (datos.ceco) det.push('C.' + datos.ceco);
+    if (datos.direccion) det.push(datos.direccion);
+    if (det.length) {
+      var dEl = document.createElement('div');
+      dEl.className = 'local-addr';
+      dEl.textContent = det.join(' | ');
+      info.appendChild(dEl);
+    }
+    item.appendChild(icono);
+    item.appendChild(info);
+    wrap.appendChild(item);
+    wrap.onclick = function() { seleccionarLocalBaja(datos); };
+    lista.appendChild(wrap);
+  });
+  var buscador = document.getElementById('baja-buscar-sucursal');
+  if (buscador) buscador.value = '';
+  _bajaPaso('local');
+}
+
+function filtrarSucursalesBaja(termino) {
+  var lista = document.getElementById('baja-lista-sucursales');
+  if (!lista) return;
+  var t = String(termino || '').toLowerCase().trim();
+  lista.querySelectorAll('[data-baja-sucursal]').forEach(function(el) {
+    var n = (el.getAttribute('data-baja-sucursal') || '').toLowerCase();
+    el.style.display = (!t || n.indexOf(t) !== -1) ? 'block' : 'none';
+  });
+}
+
+function seleccionarLocalBaja(datos) {
+  /* El clientId se acuña ACA y viaja en _bajaSel: es el id del documento en Firestore, y
+     tiene que ser estable mientras el formulario tenga estos datos. Generarlo dentro de
+     guardarYEnviarBaja hacia que un reintento creara una SEGUNDA baja en vez de pisar la
+     primera — la OT congela su clientId por exactamente la misma razon. */
+  datos.clientId = 'baja_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+  datos.folioReservado = '';
+  _bajaSel = datos;
+  var nom = document.getElementById('baja-local-nombre');
+  var det = document.getElementById('baja-local-detalle');
+  if (nom) nom.textContent = datos.local || '';
+  if (det) {
+    var partes = [];
+    if (datos.cadena) partes.push(datos.cadena);
+    if (datos.ceco) partes.push('CECO ' + datos.ceco);
+    // Que el tecnico VEA que el local no tiene correo, antes de emitir: la hoja se genera
+    // igual, pero no sale sola. Callarlo repite el caso de los 17 de 147 avisos que nunca
+    // llegaron porque la ficha del local no tenia email.
+    partes.push(datos.email ? datos.email : 'sin correo cargado');
+    det.textContent = partes.join(' · ');
+  }
+  _bajaPaso('form');
+}
+
+/* ---- Folio de la baja -----------------------------------------------------------------
+   Correlativo diario y GLOBAL, con transaccion, igual que el de la cotizacion y por la misma
+   razon: `snap.size + 1` no es atomico y dos hojas del mismo dia terminan compartiendo folio
+   (paso con el '01' hardcodeado: 39 de 45 cotizaciones con el mismo numero, y una llego a
+   SMU). El contador es propio (`baja_<ddmmaa>`), no el de cotizaciones: son documentos
+   distintos y compartir contador le abriria huecos a la numeracion de las cotizaciones. */
+async function _asignarFolioBaja(db) {
+  const fechaCodigo = _fechaCodigoHoy();
+  const ref = db.collection('contadores').doc('baja_' + fechaCodigo);
+  try {
+    const correlativo = await _conTimeout(db.runTransaction(function(tx) {
+      return tx.get(ref).then(function(d) {
+        const n = ((d.exists && d.data() && d.data().n) || 0) + 1;
+        tx.set(ref, { n: n, fechaCodigo: fechaCodigo }, { merge: true });
+        return n;
+      });
+    }), 20000, 'correlativo baja');
+    return { folio: fechaCodigo + String(correlativo).padStart(2, '0'), provisorio: false };
+  } catch (e) {
+    // Sin contador no se puede garantizar unicidad. Igual que en la cotizacion: se deja el
+    // hueco VISIBLE en vez de inventar un numero que colisiona en silencio.
+    console.error('No se pudo reservar el folio de la baja:', e);
+    return { folio: '', provisorio: true };
+  }
+}
+
+// Nombre con que Pedro archiva: folio primero, para que la carpeta ordene sola.
+function _nombrePDFBaja(b) {
+  b = b || {};
+  var partes = [(b.folio || 'SIN-NUMERO'), 'Baja de activo'];
+  if (b.local) partes.push(b.local);
+  return partes.join(' ') + '.pdf';
+}
+
+/* Sin tildes ni ñ, y NO es cosmetica: el nombre viaja dentro de la URL como
+   `fl_attachment:<nombre>` y un caracter fuera de ASCII hace que Cloudinary responda 400 —
+   la descarga se rompe, no sale fea. Medido con HEAD contra produccion el 14-08-2026. */
+function _slugPDFBaja(b) {
+  return _nombrePDFBaja(b).replace(/\.pdf$/i, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .substring(0, 90) || 'Baja_de_activo';
+}
+
+/* ---- El PDF ---------------------------------------------------------------------------
+   Lo que Pedro dicto en el audio 5: "una hoja donde arriba aparezca la fecha, el centro de
+   costo del local y el nombre del local. Que diga arriba 'Baja de activo' (...) y abajo que
+   aparezcan lineas, nada mas que eso. Y que te de la opcion de que vaya con la firma y nombre
+   del tecnico; que de para poner la firma y timbre del administrador".
+
+   Las tildes van con String.fromCharCode como en el resto de los generadores: jsPDF con
+   Helvetica no resuelve el UTF-8 y saca basura en su lugar.
+
+   El nombre del local NO se corta a 16 caracteres. Esa es la mutilacion que ya tienen las
+   hojas viejas (25 de 50 locales; los cuatro UNIMARC CHILLAN salen identicos) y que quedo
+   pendiente el 19-08: no se hereda en una hoja nueva. */
+async function generarPDFBaja(b) {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210;
+    const margin = 15;
+    const util = W - 2 * margin;
+    const fecha = b.fecha || new Date().toLocaleDateString('es-CL');
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('BAJA DE ACTIVO', W / 2, 15, { align: 'center' });
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Servicios Emval ltda', margin, 25);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Giro: Obras Menores', margin, 29);
+    doc.text('Direcci' + String.fromCharCode(243) + 'n: Uribe 636, Antofagasta', margin, 33);
+    doc.text('Fono: +56995720003 - RUT.: 76.166.407-7', margin, 37);
+    doc.text('E-mail: Servicios.emval@gmail.com', margin, 41);
+
+    doc.setDrawColor(0);
+    doc.rect(140, 18, 55, 26);
+    doc.line(140, 28, 195, 28);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('FOLIO: N' + String.fromCharCode(186) + (b.folio || '----'), 167, 25, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('FECHA: ' + fecha, 167, 35, { align: 'center' });
+
+    // Fila CECO / LOCAL. El local ocupa el resto de la fila y se mide: si no cabe en una
+    // linea, se achica la fuente antes que recortarlo.
+    const infoY = 48, infoH = 10, cecoW = 40, localW = util - cecoW;
+    doc.rect(margin, infoY, cecoW, infoH);
+    doc.rect(margin + cecoW, infoY, localW, infoH);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('CECO: ' + (b.ceco || ''), margin + 2, infoY + 6.5);
+    var textoLocal = 'LOCAL: ' + (b.local || '');
+    var tamLocal = 8;
+    while (tamLocal > 5 && doc.getStringUnitWidth(textoLocal) * tamLocal / doc.internal.scaleFactor > localW - 4) {
+      tamLocal -= 0.5;
+      doc.setFontSize(tamLocal);
+    }
+    doc.text(textoLocal, margin + cecoW + 2, infoY + 6.5);
+    doc.setFontSize(8);
+
+    // ---- CUERPO: las lineas para escribir ----
+    // Pedro pidio lineas, no una caja: la hoja se llena a mano en el local cuando hace falta.
+    // Si el tecnico escribio el detalle en la app, se imprime SOBRE las lineas, una por raya.
+    const cuerpoY = infoY + infoH + 8;
+    const PIE_CUERPO = 200;          // desde aca abajo van las firmas
+    const PASO = 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('DETALLE DE LA BAJA', margin, cuerpoY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const detalle = String(b.detalle == null ? '' : b.detalle).trim();
+    // Se mide con la fuente YA fijada: en negrita el mismo texto ocupa mas, y medir con una
+    // fuente y dibujar con otra es como no medir (leccion de la tabla de items, 19-08).
+    const lineasTexto = detalle ? doc.splitTextToSize(detalle, util - 4) : [];
+    var y = cuerpoY + 8;
+    var tope = PIE_CUERPO;
+    var i = 0;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.2);
+    // El texto que no cabe NUNCA se pierde: se abren TANTAS hojas de continuacion como haga
+    // falta. Un solo salto de pagina alcanzaba para 46 lineas y con 60 se comia el resto en
+    // silencio — que es el bug de la tabla de items (19-08) escrito de nuevo. jsPDF recorta y
+    // no avisa, asi que el bucle tiene que cerrar por el TEXTO, no por la pagina.
+    while (true) {
+      while (y <= tope) {
+        doc.line(margin, y, margin + util, y);
+        if (i < lineasTexto.length) { doc.text(lineasTexto[i], margin + 2, y - 2); i++; }
+        y += PASO;
+      }
+      if (i >= lineasTexto.length) break;
+      doc.addPage();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('DETALLE DE LA BAJA (continuaci' + String.fromCharCode(243) + 'n)', margin, 20);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setDrawColor(150, 150, 150);
+      doc.setLineWidth(0.2);
+      y = 28;
+      tope = 270;
+    }
+    // ---- LAS DOS FIRMAS ----
+    // Izquierda el TECNICO que ejecuto (la misma funcion que firma las hojas de servicio, para
+    // que no se abra un segundo criterio), derecha EMVAL como emisor. Son firmas distintas y
+    // el texto impreso las separa: ya se confundieron una vez con la del receptor.
+    /* CRITICO: La Y sale del cursor real del bucle, NO de una constante. Con `firmaY = PIE_CUERPO + 8`
+       (208 mm, calculado para la hoja 1) y `_firmarHojaTecnico` llamado DESPUES del bucle, un
+       detalle largo dejaba la hoja 1 —la que lleva folio, CECO, local y fecha— SIN FIRMAR, y
+       dibujaba las dos firmas en la hoja de continuacion ENCIMA de las rayas y del propio texto.
+       En la hoja 1 el cursor queda en ~206, asi que el layout probado no se mueve; en una hoja de
+       continuacion queda cerca de 278 y entonces se abre hoja propia para las firmas. */
+    var firmaY = y + 2;
+    if (firmaY + 46 > _FT_PIE_A4) { doc.addPage(); firmaY = 24; }
+    _firmarHojaTecnico(doc, b.tecnico || '', margin, firmaY);
+
+    const emvalX = 120, emvalAncho = 70, emvalAlto = 30;
+    if (_dibujarFirmaEmval(doc, emvalX, firmaY + 3, emvalAlto, emvalAncho)) {
+      doc.setDrawColor(120, 120, 120);
+      doc.setLineWidth(0.2);
+      doc.line(emvalX, firmaY + 3 + emvalAlto + 2, emvalX + emvalAncho, firmaY + 3 + emvalAlto + 2);
+    } else {
+      // Sin imagen cargada se dibuja igual la linea: la hoja tiene que poder firmarse a mano.
+      doc.setDrawColor(120, 120, 120);
+      doc.setLineWidth(0.2);
+      doc.line(emvalX, firmaY + 3 + emvalAlto + 2, emvalX + emvalAncho, firmaY + 3 + emvalAlto + 2);
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Firma y timbre EMVAL', emvalX, firmaY + 3 + emvalAlto + 6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(90, 90, 90);
+    doc.text('Administraci' + String.fromCharCode(243) + 'n  ' + String.fromCharCode(183) +
+             '  Servicios Emval Ltda.', emvalX, firmaY + 3 + emvalAlto + 10.5);
+    doc.setTextColor(0, 0, 0);
+
+    return doc;
+  } catch (e) {
+    console.error('Error generando PDF de baja de activo:', e);
+    return null;
+  }
+}
+
+/* ---- Cola de bajas pendientes ----------------------------------------------------------
+   Mismo invariante que las otras tres colas de la app: EL CODIGO NUNCA BORRA UNA BAJA QUE NO
+   LOGRO ESCRIBIR. Se encola en el dispositivo antes de tocar la nube (write-ahead) y se saca
+   recien cuando Firestore confirma.
+
+   CRITICO: Por que hacia falta: en la primera version la baja era el UNICO flujo de escritura de la
+   app sin cola. Si el set() fallaba se mostraba un error y se hacia return — y el texto que el
+   tecnico habia escrito en terreno, de noche y sin señal, desaparecia con el folio ya quemado.
+   El cierre de OT nunca funciono asi: encola SIEMPRE en IndexedDB antes de salir a la red. */
+var _BAJAS_PEND_KEY = 'emval_bajas_pendientes';
+
+function _leerBajasPendientes() {
+  try { return JSON.parse(localStorage.getItem(_BAJAS_PEND_KEY) || '[]') || []; } catch (e) { return []; }
+}
+function _escribirBajasPendientes(lista) {
+  try { localStorage.setItem(_BAJAS_PEND_KEY, JSON.stringify(lista || [])); } catch (e) {}
+}
+/* Se relee y se fusiona al guardar, nunca se pisa con la copia rancia del ciclo: pisarla
+   resucitaba avisos ya despachados en la cola de correos, y aca resucitaria bajas ya escritas. */
+function _encolarBaja(doc) {
+  if (!doc || !doc.clientId) return;
+  try {
+    var lista = _leerBajasPendientes().filter(function (b) { return b.clientId !== doc.clientId; });
+    lista.push(doc);
+    _escribirBajasPendientes(lista);
+  } catch (e) { console.warn('No se pudo encolar la baja:', e); }
+}
+function _desencolarBaja(clientId) {
+  try {
+    _escribirBajasPendientes(_leerBajasPendientes().filter(function (b) { return b.clientId !== clientId; }));
+  } catch (e) {}
+}
+
+/* Escribe una baja en Firestore. Idempotente A PROPOSITO: siempre por doc(clientId).set(),
+   nunca add(). Un reintento tiene que PISAR el mismo documento, no crear un segundo — que es
+   lo que pasaba al generar el clientId dentro de la funcion en cada llamada. */
+async function _escribirBajaEnLaNube(b) {
+  const db = window.firebase.firestore();
+  await _conTimeout(db.collection('bajas').doc(b.clientId).set({
+    folio: b.folio, folioProvisorio: !!b.folioProvisorio,
+    cadena: b.cadena || '', local: b.local || '', ceco: b.ceco || '',
+    direccion: b.direccion || '', emailLocal: b.emailLocal || '',
+    supervisor: b.supervisor || '', emailSupervisor: b.emailSupervisor || '',
+    detalle: b.detalle || '', tecnico: b.tecnico || '', fecha: b.fecha || '',
+    pdfUrlCloudinary: b.pdfUrlCloudinary || '',
+    pdfFormato: _BAJA_PDF_FORMATO,
+    creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true }), 25000, 'guardar baja');
+}
+
+// Reintenta las bajas que no alcanzaron a subir. Corre en el mismo ciclo que las otras colas.
+async function sincronizarBajasPendientes() {
+  if (!window._firebaseReady || !navigator.onLine) return;
+  var lista = _leerBajasPendientes();
+  if (!lista.length) return;
+  for (var i = 0; i < lista.length; i++) {
+    try {
+      await _escribirBajaEnLaNube(lista[i]);
+      _desencolarBaja(lista[i].clientId);
+      console.log('Baja pendiente subida:', lista[i].folio || lista[i].clientId);
+    } catch (e) {
+      // Sigue pendiente. No se borra nada: se reintenta en el proximo ciclo.
+      console.warn('La baja sigue pendiente:', e && e.message);
+    }
+  }
+}
+
+/* ---- Emitir la hoja -------------------------------------------------------------------
+   Mismo orden y las mismas guardias que `guardarYEnviarPDF`: instantanea antes del PRIMER
+   await, `_fetchConTimeout` para Cloudinary y `_conTimeout` para Firestore.
+
+   CRITICO: CERROJO DE REENTRADA. `_bloquear()` se auto-libera a los 30 s (_MAX_BLOQUEO_MS) y ademas
+   le dice al tecnico "El servidor no respondio... intentalo de nuevo". Este flujo puede durar
+   mas que eso (20 s de folio + 30 s de Cloudinary + 25 s de Firestore), asi que el boton vuelve
+   a estar vivo con la emision todavia en vuelo. Sin cerrojo, el segundo toque emitia una
+   SEGUNDA baja: dos folios quemados, dos documentos y dos correos al local. */
+var _emitiendoBaja = false;
+
+async function guardarYEnviarBaja() {
+  if (_emitiendoBaja) { toast('La hoja se está emitiendo, espera un momento...'); return; }
+  if (!_bajaSel || !_bajaSel.local) {
+    await _avisar('Elige primero la cadena y la sucursal.', { titulo: 'Falta el local' });
+    return;
+  }
+  const detalleEl = document.getElementById('baja-detalle');
+  const detalle = detalleEl ? detalleEl.value.trim() : '';
+  if (!detalle) {
+    // Una hoja de baja sin decir QUE se dio de baja no sirve de comprobante ante SMU.
+    _rechazar('Escribe qu' + String.fromCharCode(233) + ' activo se da de baja', 'baja-detalle');
+    return;
+  }
+  if (!window._firebaseReady) {
+    await _avisar('La app todav' + String.fromCharCode(237) + 'a no se conecta.\n\nEspera unos segundos con señal y vuelve a intentar.',
+      { titulo: 'Sin conexi' + String.fromCharCode(243) + 'n' });
+    return;
+  }
+
+  /* ─── INSTANTANEA — se copia TODO ACA, antes del PRIMER await ─────────────────────────
+     `_bajaSel` es global y mutable, y el boton "Cambiar" del formulario NO se bloquea: solo
+     se bloquea #btn-generar-baja. En la primera version el snap se armaba DESPUES de
+     `await _asignarFolioBaja(db)` —hasta 20 s— leyendo `_bajaSel.local`, `.ceco`, `.email`:
+     el tecnico podia cambiar de sucursal dentro de esa ventana y la hoja salia con el folio
+     de un local y el nombre de otro. Es la misma causa raiz que perdio las hojas de julio,
+     con el comentario correcto encima del codigo equivocado. NO leer `_bajaSel` ni el DOM
+     mas abajo — usar `snap`. ─────────────────────────────────────────────────────────── */
+  const snap = {
+    // El clientId viaja en `_bajaSel`, asi que un reintento sobre el MISMO formulario reusa el
+    // mismo id de documento y el set({merge}) lo pisa en vez de crear una segunda baja.
+    clientId: _bajaSel.clientId,
+    cadena: _bajaSel.cadena, local: _bajaSel.local, ceco: _bajaSel.ceco,
+    direccion: _bajaSel.direccion, emailLocal: _bajaSel.email,
+    supervisor: _bajaSel.supervisor, emailSupervisor: _bajaSel.emailSupervisor,
+    detalle: detalle,
+    tecnico: _tecnicoActual(),
+    fecha: new Date().toLocaleDateString('es-CL'),
+    // Un folio ya reservado en un intento anterior NO se vuelve a pedir: cada llamada a
+    // _asignarFolioBaja consume un correlativo del dia, y reintentar quemaba uno nuevo.
+    folio: _bajaSel.folioReservado || '',
+    folioProvisorio: false
+  };
+
+  _emitiendoBaja = true;
+  const soltar = _bloquear(document.getElementById('btn-generar-baja'), 'Generando...');
+  try {
+    const db = window.firebase.firestore();
+
+    if (!snap.folio) {
+      const folioInfo = await _asignarFolioBaja(db);
+      snap.folio = folioInfo.folio;
+      snap.folioProvisorio = folioInfo.provisorio;
+      if (folioInfo.folio) _bajaSel.folioReservado = folioInfo.folio;
+    }
+
+    toast('Generando la hoja...');
+    const doc = await generarPDFBaja(snap);
+    if (!doc) { _error('generar la hoja de baja', null, 'Reintenta con buena señal.'); return; }
+
+    /* WRITE-AHEAD: la baja queda en el dispositivo ANTES de salir a la red. De aca en adelante,
+       pase lo que pase con la señal, lo que el tecnico escribio no se pierde. */
+    _encolarBaja(snap);
+
+    const pdfBase64 = doc.output('datauristring');
+    const pdfBase64Solo = pdfBase64.split(',')[1];
+
+    var pdfUrlCloudinary = '';
+    try {
+      toast('Subiendo la hoja...');
+      const fd = new FormData();
+      fd.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
+      fd.append('upload_preset', 'emval_pdf');
+      fd.append('folder', 'emval/bajas');
+      fd.append('public_id', _slugPDFBaja(snap) + '_' + String(snap.clientId).slice(-7) + '.pdf');
+      const resp = await _fetchConTimeout(
+        'https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
+        { method: 'POST', body: fd }, 30000);
+      const data = await resp.json();
+      if (data.secure_url) pdfUrlCloudinary = data.secure_url;
+      else console.error('Cloudinary baja error:', data);
+    } catch (e) {
+      console.error('Error subiendo la hoja de baja a Cloudinary:', e);
+    }
+    snap.pdfUrlCloudinary = pdfUrlCloudinary;
+    _encolarBaja(snap);                       // con la URL, por si el guardado se cae
+
+    var guardada = false;
+    try {
+      await _escribirBajaEnLaNube(snap);
+      _desencolarBaja(snap.clientId);
+      guardada = true;
+    } catch (e) {
+      // NO se pierde: queda en la cola del dispositivo y sube sola al recuperar la señal.
+      console.error('La baja no se pudo guardar ahora, queda pendiente:', e);
+    }
+
+    /* CRITICO: SIN PDF NO SE MANDA EL CORREO. Un comprobante cuyo enlace esta vacio no es un
+       comprobante, y el correo que lo anuncia es peor que no mandar nada: el local lo da por
+       recibido. Se avisa al tecnico y la hoja queda en la carpeta para reemitir su PDF. */
+    if (!pdfUrlCloudinary) {
+      await _avisar('La hoja se guard' + String.fromCharCode(243) + ', pero su PDF no alcanz' +
+        String.fromCharCode(243) + ' a subir, as' + String.fromCharCode(237) + ' que NO se envi' +
+        String.fromCharCode(243) + ' al local.\n\nAbre la hoja en "Bajas de activo" y toca "Generar PDF" cuando tengas señal.',
+        { titulo: 'Falta el PDF' });
+    } else if (snap.emailLocal) {
+      toast('Enviando al local...');
+      const ok = await _enviarCorreo(_paramsCorreoBaja(snap, snap.emailLocal),
+        { sello: 'baja_' + snap.clientId + '__local' });
+      toast(ok ? 'Hoja enviada al local' : 'Hoja guardada. El correo sale solo al recuperar la señal.');
+    } else {
+      toast('Hoja guardada. El local no tiene correo cargado.');
+    }
+
+    if (!guardada) {
+      toast('La hoja qued' + String.fromCharCode(243) + ' pendiente: sube sola al recuperar la señal.');
+    }
+    if (snap.folioProvisorio) {
+      await _avisar('La hoja qued' + String.fromCharCode(243) + ' guardada, pero SIN folio: no se pudo reservar el correlativo.\n\n' +
+        'Av' + String.fromCharCode(237) + 'sale a administraci' + String.fromCharCode(243) + 'n antes de entregarla.',
+        { titulo: 'Hoja sin folio' });
+    }
+
+    _bajaSel = null;
+    if (detalleEl) detalleEl.value = '';
+    go('s-bajas');
+    cargarBajas();
+  } finally {
+    _emitiendoBaja = false;
+    soltar();
+  }
+}
+
+/* Los parametros del correo de una baja, en UN solo sitio: lo usan el envio al local y el
+   envio al supervisor, y tienen que decir lo mismo.
+
+   CRITICO: `ot_numero` LLEVA "BAJA DE ACTIVO" ADELANTE, y no es cosmetica. La plantilla de EmailJS
+   que usa la app (`template_agzfcux`) arma el ASUNTO con {{ot_numero}} y el texto fijo
+   "OT #... completada". Sin esta marca, el comprobante que por definicion NO es un trabajo
+   cobrable le llegaba al supervisor de SMU con la misma linea de asunto que una orden de
+   trabajo ejecutada — lo contrario exacto de para lo que se creo este documento.
+   Se marca el campo en vez de editar la plantilla por la misma razon que la marca (REENVIO):
+   un fix que solo funciona si alguien entra a un panel externo es un fix a medias. */
+function _paramsCorreoBaja(b, destino) {
+  return {
+    email_admin: destino,
+    ot_numero: 'BAJA DE ACTIVO ' + (b.folio || 'S/N'),
+    local: String(b.local || ''),
+    fecha: b.fecha || '',
+    tecnico: String(b.tecnico || ''),
+    tipo: 'Baja de activo',
+    trabajo: String(b.detalle || ''),
+    pdf_url: b.pdfUrlCloudinary || ''
+  };
+}
+
+/* ---- La carpeta ------------------------------------------------------------------------ */
+async function cargarBajas() {
+  const lista = document.getElementById('lista-bajas');
+  if (!lista) return;
+  try {
+    if (_esperandoFirebase('bajas', cargarBajas)) return;
+    const db = window.firebase.firestore();
+    _cargando(lista, 4);
+    // SIN orderBy A PROPOSITO, por la misma razon que en cargarPreventivos: un
+    // orderBy('creadoEn') EXCLUYE en silencio todo documento sin ese campo. Se ordena aca.
+    const snap = await _conTimeout(db.collection('bajas').get(), 25000, 'get bajas');
+    var docs = [];
+    snap.docs.forEach(function(d) { docs.push({ id: d.id, ...d.data() }); });
+    docs = docs.filter(function(b) { return !_ocultoTecnico(b.tecnico); });
+    docs.sort(function(a, b) { return _fechaOTms(b) - _fechaOTms(a); });
+    _bajasCache = docs;
+
+    _cargado(lista);
+    lista.innerHTML = '';
+    var cont = document.getElementById('bajas-contador');
+    if (cont) cont.textContent = docs.length + (docs.length === 1 ? ' hoja' : ' hojas');
+    if (!docs.length) {
+      lista.innerHTML = _vacio('A' + String.fromCharCode(250) + 'n no hay bajas de activo',
+        'Toca "+ Nueva baja de activo" para emitir la primera.');
+      return;
+    }
+
+    docs.forEach(function(b) {
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'margin-bottom:10px;';
+      card.setAttribute('data-baja-buscar',
+        ((b.local || '') + ' ' + (b.folio || '') + ' ' + (b.tecnico || '') + ' ' + (b.ceco || '')).toLowerCase());
+
+      var fila = document.createElement('div');
+      fila.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'baja-check';
+      chk.setAttribute('data-baja-id', b.id);
+      chk.setAttribute('aria-label', 'Seleccionar la baja ' + (b.folio || ''));
+      chk.style.cssText = 'width:20px;height:20px;flex-shrink:0;margin-top:2px;';
+      // Sin PDF no se puede enviar ni compartir: el check se deshabilita en vez de ofrecer
+      // una accion que va a fallar (misma regla que las hojas de preventivo sin PDF).
+      chk.disabled = !_esPDFCompartible(b.pdfUrlCloudinary);
+      if (chk.disabled) chk.style.opacity = '0.35';
+      chk.onchange = _actualizarBarraBajas;
+
+      var info = document.createElement('div');
+      info.style.flex = '1';
+      var t1 = document.createElement('div');
+      t1.style.cssText = 'font-size:15px;font-weight:600;color:var(--texto);';
+      t1.textContent = b.local || '(sin local)';
+      var t2 = document.createElement('div');
+      t2.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
+      var meta = [];
+      meta.push('Folio ' + (b.folio || 'sin numero'));
+      if (b.ceco) meta.push('CECO ' + b.ceco);
+      if (b.fecha) meta.push(b.fecha);
+      if (b.tecnico) meta.push(b.tecnico);
+      t2.textContent = meta.join(' · ');
+      var t3 = document.createElement('div');
+      t3.style.cssText = 'font-size:12px;color:var(--texto2);margin-top:6px;line-height:1.4;';
+      t3.textContent = String(b.detalle || '').slice(0, 160);
+      info.appendChild(t1);
+      info.appendChild(t2);
+      info.appendChild(t3);
+
+      fila.appendChild(chk);
+      fila.appendChild(info);
+      card.appendChild(fila);
+
+      var acciones = document.createElement('div');
+      acciones.style.cssText = 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;';
+      if (_esPDFCompartible(b.pdfUrlCloudinary)) {
+        var bVer = document.createElement('button');
+        bVer.textContent = 'Ver PDF';
+        bVer.style.cssText = 'background:var(--gris2);color:var(--texto);border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;';
+        bVer.onclick = function() { window.open(_urlPDFDescarga(b.pdfUrlCloudinary), '_blank'); };
+        var bComp = document.createElement('button');
+        bComp.textContent = 'Compartir';
+        bComp.style.cssText = 'background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;';
+        bComp.onclick = function() { compartirBaja(b); };
+        acciones.appendChild(bVer);
+        acciones.appendChild(bComp);
+      } else {
+        /* CRITICO: SIN ESTE BOTON la hoja quedaba inservible PARA SIEMPRE. La app solo dibujaba
+           "Ver PDF" y "Compartir" cuando ya habia PDF, asi que una baja cuyo Cloudinary fallo
+           —o una migrada con `tools/migrar-ot-a-baja.js`, que nace sin archivo— no tenia ningun
+           camino de vuelta: el comentario del migrador prometia "se genera al abrirla desde la
+           app" y ese camino no existia. */
+        var bGen = document.createElement('button');
+        bGen.textContent = 'Generar PDF';
+        bGen.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;';
+        bGen.onclick = function() { regenerarPDFBaja(b, bGen); };
+        var aviso = document.createElement('div');
+        aviso.style.cssText = 'font-size:11px;color:var(--naranja);flex-basis:100%;';
+        aviso.textContent = 'Esta hoja todav' + String.fromCharCode(237) + 'a no tiene PDF. T' +
+          String.fromCharCode(243) + 'calo para generarlo y poder enviarla.';
+        acciones.appendChild(bGen);
+        acciones.appendChild(aviso);
+      }
+      card.appendChild(acciones);
+      lista.appendChild(card);
+    });
+    _actualizarBarraBajas();
+  } catch (e) {
+    _cargado(lista);
+    lista.innerHTML = _vacio('No se pudieron cargar las bajas', 'Revisa la señal y vuelve a entrar.');
+    console.error('cargarBajas:', e);
+  }
+}
+
+function filtrarBajas() {
+  var inp = document.getElementById('bajas-buscar');
+  var lista = document.getElementById('lista-bajas');
+  if (!inp || !lista) return;
+  var t = inp.value.toLowerCase().trim();
+  var visibles = 0;
+  lista.querySelectorAll('[data-baja-buscar]').forEach(function(el) {
+    var hay = (el.getAttribute('data-baja-buscar') || '').indexOf(t) !== -1;
+    el.style.display = (!t || hay) ? 'block' : 'none';
+    if (!t || hay) visibles++;
+  });
+  var cont = document.getElementById('bajas-contador');
+  if (cont) cont.textContent = visibles + (visibles === 1 ? ' hoja' : ' hojas');
+}
+
+function _bajasSeleccionadas() {
+  var ids = [];
+  document.querySelectorAll('.baja-check').forEach(function(c) {
+    if (c.checked) ids.push(c.getAttribute('data-baja-id'));
+  });
+  return _bajasCache.filter(function(b) { return ids.indexOf(b.id) !== -1; });
+}
+
+function _actualizarBarraBajas() {
+  var sel = _bajasSeleccionadas();
+  var bar = document.getElementById('bajas-acciones-bar');
+  var cnt = document.getElementById('bajas-seleccionadas-count');
+  if (bar) bar.style.display = sel.length ? 'flex' : 'none';
+  if (cnt) cnt.textContent = sel.length + (sel.length === 1 ? ' seleccionada' : ' seleccionadas');
+}
+
+/* Genera y sube el PDF de una baja que se guardo sin el, y lo enlaza. Reusa exactamente el
+   mismo generador y el mismo nombre de archivo que la emision: si algun dia cambia el dibujo,
+   cambia en los dos caminos a la vez. */
+async function regenerarPDFBaja(b, btn) {
+  if (!b) return;
+  var soltar = btn ? _bloquear(btn, 'Generando...') : function() {};
+  try {
+    if (!window._firebaseReady || !navigator.onLine) {
+      await _avisar('Necesitas señal para generar y subir el PDF.', { titulo: 'Sin conexi' + String.fromCharCode(243) + 'n' });
+      return;
+    }
+    toast('Generando la hoja...');
+    var doc = await generarPDFBaja(b);
+    if (!doc) { _error('generar la hoja de baja', null, 'Reintenta con buena señal.'); return; }
+    var base64 = doc.output('datauristring').split(',')[1];
+    var fd = new FormData();
+    fd.append('file', 'data:application/pdf;base64,' + base64);
+    fd.append('upload_preset', 'emval_pdf');
+    fd.append('folder', 'emval/bajas');
+    fd.append('public_id', _slugPDFBaja(b) + '_' + String(b.id || b.clientId || '').slice(-7) + '.pdf');
+    var resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload',
+      { method: 'POST', body: fd }, 30000);
+    var data = await resp.json();
+    if (!data.secure_url) { _error('subir la hoja', null, 'Reintenta con buena señal.'); return; }
+    await _conTimeout(window.firebase.firestore().collection('bajas').doc(b.id).update({
+      pdfUrlCloudinary: data.secure_url, pdfFormato: _BAJA_PDF_FORMATO
+    }), 25000, 'enlazar pdf baja');
+    toast('Hoja generada');
+    cargarBajas();
+  } catch (e) {
+    _error('generar el PDF de la baja', e, 'Reintenta con buena señal.');
+  } finally { soltar(); }
+}
+
+async function compartirBaja(b) {
+  if (!b) return;
+  var p = ['Baja de activo — EMVAL E.I.R.L.'];
+  if (b.local) p.push('Local: ' + b.local);
+  if (b.folio) p.push('Folio: ' + b.folio);
+  if (b.fecha) p.push('Fecha: ' + b.fecha);
+  await compartirDocumentos([{ url: b.pdfUrlCloudinary || '', nombre: _nombrePDFBaja(b) }], {
+    titulo: 'Baja de activo' + (b.local ? ' · ' + b.local : ''),
+    texto: p.join('\n')
+  });
+}
+
+async function compartirBajasSeleccionadas() {
+  var sel = _bajasSeleccionadas();
+  if (!sel.length) { toast('Marca al menos una hoja'); return; }
+  await compartirDocumentos(sel.map(function(b) {
+    return { url: b.pdfUrlCloudinary || '', nombre: _nombrePDFBaja(b) };
+  }), {
+    titulo: sel.length === 1 ? ('Baja de activo · ' + (sel[0].local || '')) : (sel.length + ' bajas de activo'),
+    texto: 'Bajas de activo — EMVAL E.I.R.L.'
+  });
+}
+
+/* Enviar al supervisor del local: es lo que Pedro pidio para el ("que quede con la opcion para
+   mi de poder enviarla al supervisor del local"). El correo del local ya salio al emitirla. */
+async function enviarBajasSeleccionadas() {
+  var sel = _bajasSeleccionadas();
+  if (!sel.length) { toast('Marca al menos una hoja'); return; }
+
+  var sinDestino = sel.filter(function(b) { return !b.emailSupervisor && !b.emailLocal; });
+  if (sinDestino.length === sel.length) {
+    await _avisar('Ninguna de las hojas marcadas tiene un correo al que enviarla.\n\n' +
+      'El correo del supervisor se carga en la ficha de la sucursal, en Administrar.',
+      { titulo: 'Sin destinatario' });
+    return;
+  }
+
+  var destinos = sel.map(function(b) { return b.emailSupervisor || b.emailLocal; }).filter(Boolean);
+  var unicos = destinos.filter(function(d, i) { return destinos.indexOf(d) === i; });
+  if (!await _confirmar('Se van a enviar ' + sel.length + (sel.length === 1 ? ' hoja' : ' hojas') +
+      ' a ' + unicos.length + (unicos.length === 1 ? ' destinatario' : ' destinatarios') + ':\n\n' +
+      unicos.join('\n'), { titulo: 'Enviar bajas de activo', okTexto: 'Enviar' })) return;
+
+  var enviados = 0, pendientes = 0;
+  for (var i = 0; i < sel.length; i++) {
+    var b = sel[i];
+    var destino = b.emailSupervisor || b.emailLocal;
+    if (!destino) continue;
+    /* El sello lleva el MINUTO del envio. Con un sello estable, `_yaDespachado` suprimia en
+       silencio el segundo envio de la misma hoja al mismo destinatario (ventana de 30 dias) y
+       el resumen igual decia "enviada": Pedro creia haberla mandado y nunca salio. Apretar
+       "Enviar" es una accion deliberada y tiene que salir; lo que el sello sigue frenando es el
+       doble toque accidental dentro del mismo minuto. */
+    var selloMin = Math.floor(Date.now() / 60000);
+    var ok = await _enviarCorreo(_paramsCorreoBaja(b, destino),
+      { sello: 'baja_' + b.id + '__' + destino + '__' + selloMin });
+    if (ok) enviados++; else pendientes++;
+  }
+  await _avisar(enviados + (enviados === 1 ? ' hoja enviada' : ' hojas enviadas') +
+    (pendientes ? '.\n\n' + pendientes + ' qued' + (pendientes === 1 ? String.fromCharCode(243) : 'aron') +
+      ' en la cola: sale' + (pendientes === 1 ? '' : 'n') + ' solo' + (pendientes === 1 ? '' : 's') +
+      ' al recuperar la señal.' : '.'),
+    { titulo: 'Env' + String.fromCharCode(237) + 'o de bajas' });
+}
+
+
 // =========== FIRMA Y TIMBRE DE EMVAL (el emisor) ===========
 // Pedido de Pedro el 13-08-2026: toda cotizacion sale ya firmada y timbrada, para que el
 // supervisor de SMU no tenga que pedirla firmada aparte.
@@ -14408,6 +15392,7 @@ window.addEventListener('online', function() {
   setTimeout(sincronizarEnlacesPDFPendientes, 3500);
   // Despues de subir la OT cerrada: recien ahi tiene sentido borrar su registro "En Pausa".
   setTimeout(sincronizarCierresPausadaPendientes, 4000);
+  setTimeout(sincronizarBajasPendientes, 4400);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -14445,6 +15430,7 @@ document.addEventListener('visibilitychange', function() {
     setTimeout(sincronizarCorreosPendientes, 1600);
     setTimeout(sincronizarEnlacesPDFPendientes, 2000);
     setTimeout(sincronizarCierresPausadaPendientes, 2400);
+    setTimeout(sincronizarBajasPendientes, 2800);
   }
 });
 
@@ -14499,6 +15485,7 @@ if (!_soloVisorPDF) {
   setTimeout(sincronizarCorreosPendientes, 4000);
   setTimeout(sincronizarEnlacesPDFPendientes, 4500);
   setTimeout(sincronizarCierresPausadaPendientes, 5000);
+  setTimeout(sincronizarBajasPendientes, 5400);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);
