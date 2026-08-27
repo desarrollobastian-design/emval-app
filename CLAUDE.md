@@ -366,6 +366,66 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - Cubierto por `tests/hoja-lleva-firma-del-tecnico.js` (unitario, 11 bloques) y
   `tests/offline/prueba-firma-hoja.js` (PDF real).
 
+**Baja de activo — el comprobante que NO se cobra** (`_BAJA_PDF_FORMATO`, `nuevaBaja`,
+`generarPDFBaja`, `guardarYEnviarBaja`, `cargarBajas`, `_asignarFolioBaja`, `_nombrePDFBaja`):
+- Pedido de Pedro el **27-08-2026**, en cinco audios: una hoja aparte, con su propia carpeta,
+  *"como la que tenías de preventivo y correctivo"*, que lleve **fecha, CECO y nombre del local**
+  arriba, el título *Baja de activo*, **líneas para escribir**, la **firma del técnico** y la
+  **firma y timbre del administrador**. Y que **no genere cotización, ni orden de compra, ni
+  planilla**: *"esa hoja no debería llevar cotización ni nada"*.
+- 🔬 **El caso que lo motiva, verificado por REST:** la OT **#586729** (Alvi Concepción, CECO 3089,
+  Lucas, **21-07-2026**) dice *"Se da de baja 1 transpaleta marca Stax (Nº1) (NºSerie 26215-39) …
+  No Reparable"*. Está guardada como **correctivo sin cotización**, y por eso llevaba **37 días**
+  apareciendo en la lista de pendientes de cotizar de Pedro. Su par preventivo del mismo día es
+  la **#305239**. Son **las 2 únicas** de 206 OT que registran una baja: el flujo no es de
+  volumen, estaba **atascado**.
+- 🔴 **Vive en su propia colección (`bajas`), NUNCA como un tercer valor de `tipo` en `ordenes`.**
+  `_normTipo()` es binaria **a propósito** —*"todo lo que no es preventivo es correctivo"*— para
+  que ninguna OT desaparezca de las listas por traer el tipo nulo (las 7 OT de Chillán Viejo,
+  17-07). Un `tipo:'baja'` sería tratado como **correctivo** por las **51 comparaciones directas**
+  que hay en el archivo: entraría en la planilla que se le cobra a SMU y volvería a aparecer como
+  pendiente de cotizar, que es el bug que esto viene a arreglar. La colección aparte no puede
+  contaminar la cobranza: **no hay una sola línea de código de planilla que lea `bajas`**.
+- **No reusa `seleccionarCadena()`**, aunque el selector se vea igual: esa función **arranca una
+  OT** (le asigna número y enciende el autoguardado de pausadas). Reusarla convertiría cada baja
+  en una orden de trabajo fantasma. El selector de la baja es propio y no toca `estado`.
+- **Un solo sitio para las dos firmas.** El técnico va por `_firmarHojaTecnico` —la misma función
+  que firma las cinco hojas de servicio— y EMVAL por `_dibujarFirmaEmval`. Abrir un segundo
+  criterio de firma es como se termina con la mitad de los documentos sin firmar.
+  ⚠️ **Son las mismas tres firmas que ya conviven en el archivo**: `estado.fotoTimbre` y
+  `otData.firmaImagen` son del **receptor** y **no aparecen acá** — esta hoja no la firma el local.
+- **Folio propio con transacción** (`contadores/baja_<ddmmaa>`), no el de cotizaciones:
+  compartirlo le abriría huecos a la numeración que ve SMU. Sin contador el folio queda vacío y
+  **se avisa**, en vez de inventar un número que colisiona en silencio (el bug del `'01'`).
+- **El texto largo abre tantas hojas de continuación como haga falta.** jsPDF recorta en silencio;
+  un solo salto de página alcanzaba para 46 líneas y con 60 se comía el resto — el bug de la
+  tabla de ítems escrito de nuevo.
+- **El nombre del local NO se corta a 16 caracteres.** Esa mutilación la tienen las hojas viejas
+  (25 de 50 locales; los cuatro `UNIMARC CHILLAN` salen idénticos) y quedó pendiente el 19-08: no
+  se hereda en una hoja nueva. Acá la fuente se achica antes que recortar.
+- El correo al local sale por **la cola** (`_enviarCorreo`), nunca por `emailjs.send` directo, y
+  reusa el template existente con `tipo: 'Baja de activo'`. Desde la carpeta, Pedro puede además
+  **enviarla al supervisor** — que es lo que pidió para él.
+- ✅ **PROBADO de punta a punta en Chromium** (`tests/offline/prueba-baja-activo.js`): el PDF se
+  genera con el **jsPDF real** y se **abre el archivo** para leer qué quedó y en qué coordenada —
+  título en y=15 mm, **dos** imágenes distintas (técnico 29,8 × 22 mm y EMVAL 33,1 × 30 mm), lo
+  más bajo en 251 mm de los 285 útiles, y el PDF en **105 KB**. Con 60 renglones salen **3 páginas
+  y los 60 impresos**. Y el **flujo completo por la interfaz**: login con PIN → botón del técnico
+  → cadena → sucursal → detalle → emitir, con el resultado medido en el espía: **1 escritura en
+  `bajas`, 0 en `ordenes` y 0 en `cotizaciones`**, y el correo al local con el folio en el asunto.
+  **Contraprueba contra `HEAD`:** la función no existe y el guion falla.
+- **Contraprueba por mutación** (11 regresiones simuladas — hoja sin firmar, sin timbre, guardada
+  en `ordenes`, con cotización, sin guardia de tiempo, `fetch` pelado, folio sin transacción,
+  contador de cotizaciones, texto recortado, `emailjs.send`, local cortado a 16): el test las
+  detecta **las 11**.
+- ⚠️ **Lo que este cambio NO hace:** no hay inventario de activos (la app no sabe qué transpaletas
+  existen ni cuáles están de baja), no ajusta el N° de equipos suscritos del preventivo, y **no
+  migra las 2 hojas ya existentes** — eso lo autoriza Pedro. Y **el formato del PDF es el que
+  Pedro dictó**: si SMU tiene su propio formulario de baja, este layout hay que ajustarlo, que es
+  la misma lección de la hoja de servicio. Alcance completo en `ALCANCE-baja-de-activo.md`.
+- Cubierto por `tests/baja-de-activo-no-cobra.js` (unitario, 11 bloques) y
+  `tests/offline/prueba-baja-activo.js` (PDF real + flujo por la interfaz).
+
 **Pendientes y materiales — nota interna del técnico** (`pend-materiales`, `estado.pendientesMateriales`):
 - Campo de texto libre **solo en preventivos**, debajo de "Observaciones". Lo escribe el técnico en
   terreno (*"faltaron 2 neumáticos"*) y lo lee **solo el rol Administrador** en el detalle de la OT.
@@ -889,6 +949,7 @@ These changes are useful context for understanding current state:
   node tests/la-foto-rechazada-dice-por-que.js index.html
   node tests/pausada-no-sobrevive-al-cierre.js index.html
   node tests/hoja-lleva-firma-del-tecnico.js index.html
+  node tests/baja-de-activo-no-cobra.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -984,6 +1045,13 @@ These changes are useful context for understanding current state:
   número + técnico + local, y la tarjeta solo dice "ya cerrada / ya cotizada" cuando lo puede
   comprobar. **Trae línea de control**: contra el código anterior faltan funciones enteras y un
   guion que muere a medias se parece demasiado a uno que aprueba ·
+  `baja-de-activo-no-cobra.js` — la baja de activo es un comprobante y no un trabajo cobrable:
+  no escribe en `ordenes` ni en `cotizaciones`, ninguna planilla la lee, sale con la firma del
+  técnico y el timbre de EMVAL (y con ninguna del receptor), el folio se reserva con transacción y
+  en su propio contador, el texto largo abre hojas de continuación en vez de recortarse, el nombre
+  del local no se corta a 16, y el correo pasa por la cola. Trae despojador de comentarios: el
+  código EXPLICA lo que no se debe hacer, y un test que busca sobre el texto crudo se dispara con
+  la advertencia que existe para evitar el bug ·
   `hoja-lleva-firma-del-tecnico.js` — la hoja de servicio sale firmada por quien la ejecutó: los
   **cinco** sitios que dibujan una hoja pasan por la misma función (las dos que se emiten solas y
   las tres copias que viajan como página 2 de la cotización), el bloque no se confunde con el del
@@ -1015,6 +1083,11 @@ These changes are useful context for understanding current state:
   **abre el archivo** para leer qué quedó escrito y en qué coordenada: mide que la firma se dibujó,
   a qué tamaño, y que nada bajó de los 285 mm de la A4. Su contraprueba contra `HEAD` saca 0
   imágenes y ningún *"EJECUTADO POR"* ·
+  `prueba-baja-activo.js` genera la hoja de baja con el jsPDF real y **abre el archivo** para
+  leer qué quedó y en qué coordenada (las dos firmas, el pie a 251 de 285 mm, 60 renglones en 3
+  páginas), y después corre el **flujo completo por la interfaz** —login con PIN, cadena,
+  sucursal, detalle, emitir— midiendo en el espía que escribe 1 documento en `bajas` y **ninguno**
+  en `ordenes` ni en `cotizaciones`. Su contraprueba contra `HEAD` no encuentra la función ·
   `prueba-pausada-fantasma.js` reproduce el Panel Supervisor con los **3 documentos reales** que
   Pedro fotografió el 23-08 y comprueba las fechas, los avisos de "ya cerrada / ya cotizada" y el
   borrado completo por la interfaz (confirmación → contraseña → delete). Su contraprueba contra
