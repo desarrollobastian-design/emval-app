@@ -71,10 +71,19 @@ console.log('El link del PDF tiene que ser compartible\n');
 }
 
 // ── 4. El correo de OT completada ya mandaba el link bueno — que siga asi ────────────────────
+/* ⚠️ Este chequeo media la SINTAXIS `pdf_url: pdfUrlCloudinary || pdfUrlFirestore` y se cayo el
+   03-09-2026 con el fix de la OT #484304, que saco esa expresion a una variable (`_urlLocal`)
+   para poder decidir con ella el sello y la nota del correo. El comportamiento no cambio.
+   Ahora se mide el INVARIANTE, que es lo que importa y ademas es mas dificil de romper sin que
+   se note: Cloudinary va SIEMPRE antes que el link a la app, y el orden inverso no aparece en
+   ninguna parte. El link a la app da 404 fuera de la app — caso #597587. */
 {
-  const ok = /pdf_url:\s*pdfUrlCloudinary\s*\|\|\s*pdfUrlFirestore/.test(src);
+  const prefiere = /pdfUrlCloudinary\s*\|\|\s*pdfUrlFirestore/.test(src);
+  const invertido = /pdfUrlFirestore\s*\|\|\s*pdfUrlCloudinary/.test(src);
+  const ok = prefiere && !invertido;
   console.log('4) Correo de OT completada: ' + (ok ? 'manda el PDF ✓' : 'cambio y ahora manda el link a la app ✗'));
-  chequear(ok, 'el correo dejo de preferir la URL de Cloudinary');
+  chequear(prefiere, 'el correo dejo de preferir la URL de Cloudinary');
+  chequear(!invertido, 'aparecio el orden invertido: el link a la app le ganaria al PDF');
 }
 
 console.log('');

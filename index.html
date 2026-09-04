@@ -3693,6 +3693,31 @@ const _CORREOS_MS_CONEXION = 1500;
 const _CORREOS_DESPACHADOS_KEY = 'emval_correos_despachados';
 const _CORREOS_DESPACHADOS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/* ─── EL AVISO SIN PDF Y EL AVISO CON PDF SON DOS AVISOS DISTINTOS ────────────────────────────
+   Caso OT #484304 (03-09-2026, UNIMARC CORONEL 3, Nelson). El cierre sin señal mando el aviso
+   con el enlace VACIO; 22 s despues la cola offline rescato la URL buena, la escribio en la
+   orden y volvio a llamar a `_notificarOTCompletada` CON el enlace — y ese segundo aviso, que
+   era el bueno, lo suprimio `_yaDespachado` por compartir el sello con el primero. Pedro
+   recibio uno solo: el malo.
+
+   🔑 El libro de despachos sabia reconocer "el mismo aviso", pero no "el mismo aviso con mejor
+   contenido". Este sufijo los separa: el aviso sin PDF y el aviso con PDF son dos despachos, y
+   el segundo YA NO se descarta. Lo que el libro sigue frenando es lo que tiene que frenar —
+   dos avisos sin PDF no se duplican, y dos con PDF tampoco.
+
+   ⚠️ Va como SUFIJO y no como sello propio para que el orden inverso tambien funcione: si el
+   aviso bueno sale primero, el "sin pdf" que llegue despues es otro despacho y sale igual. Es
+   un correo de mas —1 request de 200— contra el riesgo de perder el unico que traia el enlace.
+   La politica del proyecto ya esta escrita: un aviso perdido es un trabajo que administracion
+   no ve ni factura; un duplicado es un susto. */
+const _SELLO_SIN_PDF = '__sinpdf';
+
+// Lo que se le dice a quien recibe un aviso sin enlace. Sin esto, el correo llega con el texto
+// "Descargar PDF..." muerto y se lee como que el sistema se rompio o que el trabajo no dejo
+// comprobante. Dice la verdad —todavia no esta— y que viene otro correo.
+const _NOTA_SIN_PDF = 'NOTA: el PDF no se pudo confirmar al cerrar la hoja (señal en terreno). ' +
+  'El comprobante llega en un segundo correo apenas termine de subir. El trabajo YA quedo registrado.';
+
 // Espera antes del proximo intento de UN aviso. Pura y sin estado: la prueba la corre directo.
 function _backoffCorreo(intentos) {
   const n = Math.max(1, intentos || 1);
@@ -4263,6 +4288,11 @@ async function _reportarEstadoCorreos() {
 // libro de despachos reconoce que es el mismo aviso aunque salgan con horas de diferencia. Antes
 // la unica identidad era el numero de OT, que ademas puede venir vacio (CABRERO y LAJA, 24-07).
 async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUrl, nota, clientId) {
+  // Los DOS productores de este aviso —el cierre y la cola offline— pasan por aca, asi que el
+  // sufijo se aplica una sola vez y cubre a ambos. Ver _SELLO_SIN_PDF: es lo que dejo salir el
+  // aviso corregido de la OT 484304, que el libro de despachos estaba tirando a la basura.
+  const _url = pdfUrl || '';
+  const _notas = [String(nota || ''), _url ? '' : _NOTA_SIN_PDF].filter(Boolean);
   const ok = await _enviarCorreo({
     email_admin: window.PEDRO_NOTIF_EMAIL,
     ot_numero: _numOTCorreo(numero),
@@ -4270,9 +4300,9 @@ async function _notificarOTCompletada(numero, local, tecnico, tipo, fecha, pdfUr
     fecha: String(fecha),
     tecnico: String(tecnico),
     tipo: tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-    trabajo: String(nota || ''),
-    pdf_url: pdfUrl || ''
-  }, clientId ? { sello: 'ot_' + clientId + '__admin' } : undefined);
+    trabajo: _notas.join('\n\n'),
+    pdf_url: _url
+  }, clientId ? { sello: 'ot_' + clientId + '__admin' + (_url ? '' : _SELLO_SIN_PDF) } : undefined);
   if (!ok) {
     // Decir la verdad de POR QUE no salio. "Se enviará al recuperar la señal" era falso cuando
     // el problema era la cuota: el tecnico se quedaba tranquilo y el aviso no salia nunca.
@@ -7846,6 +7876,41 @@ function _nombreArchivoPDF(snap) {
   return 'Recepcion_Obra_OT' + (s.otNumero || '') + '.pdf';
 }
 
+/* ─── RESCATE DE LA URL DEL PDF — caso OT #484304, 03-09-2026 ──────────────────────────────
+   El `public_id` se arma en el TELEFONO, antes del POST. O sea que la URL del PDF se puede
+   DERIVAR sin esperar la respuesta de Cloudinary — y sin el segmento de version, que es lo que
+   la hace construible (ya documentado en CLAUDE.md, seccion "Barrer Cloudinary completo").
+
+   Para que existe: con la señal muerta, `_fetchConTimeout` aborta el POST a los 30 s y deja
+   `pdfUrlCloudinary = null` — pero el archivo SI llego al servidor. En la OT 484304 Cloudinary
+   lo guardo a las 21:47:34, 21 s despues de que el telefono se rindiera. El PDF existia y el
+   correo salio igual con el enlace VACIO: Gmail descarta un <a href=""> y deja el texto muerto
+   en negro, que es lo que Pedro fotografio y leyo como "llego sin archivo adjunto".
+
+   🔑 UN TIMEOUT NO ES UN FALLO: ES NO SABER. Es la misma leccion del aviso duplicado
+   (caso 614727) aplicada al PDF en vez de al correo.
+
+   ⚠️ Solo se usa la URL derivada si un HEAD la CONFIRMA. Adivinarla y mandarla sin comprobar
+   seria peor que el vacio: un enlace 404 en la bandeja del supervisor de SMU se lee como un
+   documento que se perdio (caso #597587, el link a la app que no abre fuera de la app). */
+function _publicIdPDFCloudinary(snap) {
+  if (!snap || !snap.clientId) return '';
+  return 'emval/pdfs/' + _nombreArchivoPDF(snap).replace(/\.pdf$/i, '') + '_' + String(snap.clientId).slice(-7) + '.pdf';
+}
+
+// Devuelve la URL SOLO si el archivo ya esta arriba. '' en cualquier otro caso — incluido el
+// error de red, porque "no pude preguntar" no es "no esta".
+async function _urlPDFSiYaEsta(publicId) {
+  if (!publicId) return '';
+  const url = 'https://res.cloudinary.com/' + CLOUDINARY.cloudName + '/raw/upload/' + encodeURI(publicId);
+  try {
+    // HEAD y con guardia de tiempo, como toda llamada de red de la app: no baja el archivo
+    // (son 180 KB en el plan de datos de un tecnico) y no puede colgar el cierre de la OT.
+    const r = await _fetchConTimeout(url, { method: 'HEAD' }, 8000);
+    return (r && r.ok) ? url : '';
+  } catch(e) { return ''; }
+}
+
 async function guardarYEnviarPDF() {
   /* ─── INSTANTANEA DE LA OT — se copia TODO ACA, antes del primer await ───────────────────
      Misma causa raiz que la de guardarEnFirebase (3203), en otra funcion: `estado` es global y
@@ -7946,6 +8011,15 @@ async function guardarYEnviarPDF() {
     console.error('Error subiendo PDF a Cloudinary:', e);
   }
 
+  // El POST pudo LLEGAR aunque la respuesta no volviera (guardia de tiempo, señal muerta). Antes
+  // de dar el PDF por no subido, se pregunta por la URL derivada: si el archivo ya esta, el
+  // correo sale con su enlace en vez del vacio. Ver _urlPDFSiYaEsta.
+  const _pubIdPDF = _publicIdPDFCloudinary(snap);
+  if (!pdfUrlCloudinary && _pubIdPDF) {
+    pdfUrlCloudinary = await _urlPDFSiYaEsta(_pubIdPDF) || null;
+    if (pdfUrlCloudinary) console.log('PDF rescatado por URL derivada:', pdfUrlCloudinary);
+  }
+
   // --- Guardar en Firestore para el supervisor ---
   let pdfUrlFirestore = null;
   try {
@@ -7989,6 +8063,7 @@ async function guardarYEnviarPDF() {
   const email = snap.email;
   if (email && !snap.editandoOTId) {
     toast('Enviando email con PDF...');
+    const _urlLocal = pdfUrlCloudinary || pdfUrlFirestore || '';
     const enviado = await _enviarCorreo({
       email_admin: email,
       ot_numero: _numOTCorreo(snap.otNumero),
@@ -7996,12 +8071,16 @@ async function guardarYEnviarPDF() {
       fecha: new Date().toLocaleDateString('es-CL'),
       tecnico: String(snap.tecnico),
       tipo: snap.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-      trabajo: String(trabajoSnap),
-      pdf_url: pdfUrlCloudinary || pdfUrlFirestore || ''
+      trabajo: String(trabajoSnap) + (_urlLocal ? '' : '\n\n' + _NOTA_SIN_PDF),
+      pdf_url: _urlLocal
       // El sello lleva el destinatario: este correo va al LOCAL y el otro a administracion. Son
       // dos avisos distintos del mismo trabajo y no se pueden tapar entre si.
-    }, snap.clientId ? { sello: 'ot_' + snap.clientId + '__local' } : undefined);
-    toast(enviado ? 'Email enviado con PDF' : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
+      // Y lleva ademas SI TRAE PDF: ver _SELLO_SIN_PDF.
+    }, snap.clientId ? { sello: 'ot_' + snap.clientId + '__local' + (_urlLocal ? '' : _SELLO_SIN_PDF) } : undefined);
+    // El toast no puede prometer un PDF que no viajo: el tecnico se va del local creyendo que
+    // el comprobante ya llego.
+    toast(enviado ? (_urlLocal ? 'Email enviado con PDF' : 'Aviso enviado. El PDF va en un segundo correo.')
+                  : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
   }
 
   // --- Actualizar orden en Firestore con URL del PDF ---
@@ -8040,6 +8119,22 @@ async function guardarYEnviarPDF() {
       console.error('Error actualizando URL PDF en orden:', e);
       _encolarEnlacePDF(snap.editandoOTId || snap.otClientId, pdfUrlFirestore, pdfUrlCloudinary);
     }
+  } else if (!snap.editandoOTId && _pubIdPDF && (snap.editandoOTId || snap.otClientId)) {
+    /* NI UNA URL: las dos guardias de tiempo se rindieron. Este es el caso 484304 y es
+       precisamente donde antes no se encolaba NADA — el `if` de arriba salta el bloque entero,
+       y con el la unica red de seguridad. El PDF puede estar arriba igual (a Cloudinary llego
+       21 s despues de que el telefono abortara), asi que se deja encargado el rescate: el ciclo
+       pregunta cada 90 s, y cuando el archivo aparece enlaza la OT y manda el aviso corregido.
+       El aviso viaja CONGELADO desde el snap, por lo mismo de siempre: cuando la cola despache,
+       `estado` ya puede ser el de la OT siguiente. */
+    _encolarEnlacePDF(snap.editandoOTId || snap.otClientId, '', '', {
+      publicId: _pubIdPDF,
+      aviso: {
+        numero: snap.otNumero, local: snap.local, tecnico: snap.tecnico, tipo: snap.tipo,
+        fecha: new Date().toLocaleDateString('es-CL'),
+        clientId: snap.clientId, emailLocal: email || '', trabajo: String(trabajoSnap || '')
+      }
+    });
   }
 
   // Notificacion de respaldo interno (con el link del PDF ya generado). No se envía en ediciones.
@@ -15029,9 +15124,15 @@ function _escribirEnlacesPDFPendientes(lista) {
   try { localStorage.setItem(_KEY_ENLACES_PDF, JSON.stringify(lista || [])); } catch(e) {}
 }
 
-function _encolarEnlacePDF(otDocId, pdfUrl, pdfUrlCloudinary) {
+/* `rescate` (opcional): { publicId, aviso } para el caso en que NO se conoce ninguna URL.
+   Antes esta funcion hacia `return` con las dos vacias y la de arriba ni siquiera la llamaba —
+   la red de seguridad se apagaba justo en el escenario para el que fue construida: el PDF esta
+   en Cloudinary y Firestore no lo apunta. Con el publicId guardado, el ciclo puede PREGUNTAR
+   mas tarde si el archivo aparecio (ver _urlPDFSiYaEsta) y recien ahi enlazar y avisar. */
+function _encolarEnlacePDF(otDocId, pdfUrl, pdfUrlCloudinary, rescate) {
   if (!otDocId) return;                                   // sin doc no hay a que enlazar
-  if (!pdfUrl && !pdfUrlCloudinary) return;               // sin URL no hay nada que enlazar
+  var _pub = (rescate && rescate.publicId) || '';
+  if (!pdfUrl && !pdfUrlCloudinary && !_pub) return;      // sin URL y sin que preguntar, no hay nada que hacer
   try {
     // Por otDocId: si el tecnico regenera el PDF de la misma OT, el enlace bueno es el ultimo.
     var lista = _leerEnlacesPDFPendientes().filter(function(it){ return it.otDocId !== otDocId; });
@@ -15039,6 +15140,8 @@ function _encolarEnlacePDF(otDocId, pdfUrl, pdfUrlCloudinary) {
       otDocId: otDocId,
       pdfUrl: pdfUrl || '',
       pdfUrlCloudinary: pdfUrlCloudinary || '',
+      publicId: _pub,
+      aviso: (rescate && rescate.aviso) || null,
       creadoEn: Date.now()
     });
     _escribirEnlacesPDFPendientes(lista);
@@ -15054,6 +15157,16 @@ async function sincronizarEnlacesPDFPendientes() {
   for (var i = 0; i < lista.length; i++) {
     var it = lista[i];
     try {
+      /* Rescate: el enlace se encolo SIN URL porque la respuesta de Cloudinary nunca volvio.
+         Se pregunta si el archivo aparecio. Si todavia no esta, sigue pendiente — nunca se
+         descarta, que es el invariante de las cuatro colas: el codigo no borra lo que no
+         logro aplicar. Un HEAD no gasta cuota de EmailJS ni de nada. */
+      if (!it.pdfUrl && !it.pdfUrlCloudinary && it.publicId) {
+        var _rescatada = await _urlPDFSiYaEsta(it.publicId);
+        if (!_rescatada) { quedan.push(it); continue; }
+        it.pdfUrlCloudinary = _rescatada;
+        console.log('PDF rescatado desde la cola de enlaces:', _rescatada);
+      }
       /* update(), NUNCA set({merge}) como en el camino directo: aca la OT puede no existir
          todavia en Firestore (sigue en la cola del dispositivo). Un set con merge la CREARIA
          con dos campos y nada mas — una orden fantasma, sin numero ni tipo, colandose en las
@@ -15069,6 +15182,27 @@ async function sincronizarEnlacesPDFPendientes() {
       await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
         25000, 'reintento enlace pdf');
       console.log('Enlace de PDF aplicado a la OT', it.otDocId);
+      /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
+         quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
+         orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
+         (ver _SELLO_SIN_PDF); sin el, el libro de despachos lo tiraria en silencio. */
+      if (it.aviso && it.pdfUrlCloudinary) {
+        var _a = it.aviso;
+        await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
+          it.pdfUrlCloudinary, '', _a.clientId);
+        if (_a.emailLocal) {
+          await _enviarCorreo({
+            email_admin: _a.emailLocal,
+            ot_numero: _numOTCorreo(_a.numero),
+            local: String(_a.local || ''),
+            fecha: String(_a.fecha || ''),
+            tecnico: String(_a.tecnico || ''),
+            tipo: _a.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+            trabajo: String(_a.trabajo || ''),
+            pdf_url: it.pdfUrlCloudinary
+          }, _a.clientId ? { sello: 'ot_' + _a.clientId + '__local' } : undefined);
+        }
+      }
     } catch(e) {
       // No se aplico: sigue pendiente. Se reintenta en el proximo ciclo.
       console.warn('Enlace de PDF sigue pendiente (' + it.otDocId + '):', e && e.message);
