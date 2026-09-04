@@ -675,6 +675,66 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
     enlace **sigue pendiente** y **no se crea ninguna orden fantasma**.
 - Cubierto por `tests/enlace-pdf-no-se-pierde-sin-senal.js`.
 
+**El correo que llegó sin el PDF** (`_SELLO_SIN_PDF`, `_NOTA_SIN_PDF`, `_publicIdPDFCloudinary`,
+`_urlPDFSiYaEsta`, el 4º parámetro `rescate` de `_encolarEnlacePDF`):
+- Caso **OT #484304** (03-09-2026, UNIMARC CORONEL 3, Nelson Herrera). Pedro: *"Mira, llegó sin
+  archivo adjunto"*. En la captura, el texto *"Descargar PDF de Recepcion de Obra"* sale en
+  **negro y sin ser enlace**: Gmail descarta un `<a href="">` y lo deja como texto muerto.
+- 🔬 **Nada se perdió.** El PDF está íntegro en Cloudinary (**183.959 bytes**, guardado 21:47:34
+  UTC) y además completo en `pdfs.pdfData`. Lo que salió roto fue el **aviso**.
+- 🔑 **La prueba dura de la causa está en la forma del documento, no en los logs:** la orden tiene
+  `pdfUrlCloudinary` pero **NO tiene el campo `pdfUrl`**. El bloque que enlaza el PDF en el cierre
+  escribe **siempre las dos claves juntas**, aunque vayan vacías — que una esté *ausente* prueba
+  que ese bloque nunca corrió, o sea que al armar los correos **no se conocía ninguna URL**. La
+  que sí tiene la orden la escribió después la cola, el único camino que toca `pdfUrlCloudinary`
+  sin tocar `pdfUrl`.
+- **La secuencia:** 21:47:13 el teléfono se rinde con las dos llamadas (guardias de tiempo) ·
+  21:47:33 sale el aviso con `pdf_url = ''` · **21:47:34 Cloudinary termina de guardar el PDF**,
+  21 s *después* del abort · 21:47:55 la cola rescata la URL, la enlaza y vuelve a llamar al aviso
+  **con el enlace bueno**… y `_yaDespachado` lo suprime por compartir sello.
+- 🔴 **EL BUG DE FONDO: el correo bueno existía y se tiraba a la basura.** El libro de despachos
+  sabía reconocer *"el mismo aviso"*, pero no *"el mismo aviso con MEJOR CONTENIDO"*. Son dos
+  cosas distintas, igual que `clase` y `ambiguo` en el caso 614727. Por eso el sello lleva ahora
+  el sufijo `__sinpdf`: el aviso sin PDF y el aviso con PDF son **dos despachos**, y el segundo ya
+  no se descarta. Lo que la dedupe sigue frenando es lo que debe: dos sin PDF no se duplican, y
+  dos con PDF tampoco.
+- ⚠️ **El sufijo va como SUFIJO y no como sello propio** para que el orden inverso también
+  funcione: el orden entre los dos productores no está garantizado.
+- 🔑 **UN TIMEOUT NO ES UN FALLO: ES NO SABER.** El `public_id` se arma en el teléfono **antes**
+  del POST, así que la URL se puede **derivar** sin esperar la respuesta (sin el segmento de
+  versión, igual que en *"Barrer Cloudinary completo"*). Si el POST se abortó pero el archivo
+  llegó, `_urlPDFSiYaEsta` lo confirma con un **HEAD** y el correo sale con su enlace.
+- ⚠️ **La URL derivada solo se usa si un HEAD la CONFIRMA.** Adivinarla sería peor que el vacío:
+  un enlace 404 en la bandeja del supervisor de SMU se lee como un documento perdido (caso
+  #597587). Y **la red caída devuelve vacío**: *"no pude preguntar"* no es *"sí está"*.
+- **La red de seguridad ya no se apaga justo cuando hace falta.** Antes, con las dos URLs vacías,
+  la guardia saltaba el bloque entero y `_encolarEnlacePDF` ni se llamaba — el escenario exacto
+  para el que la cola fue construida. Ahora se encola el `publicId` y el ciclo pregunta cada 90 s;
+  cuando el archivo aparece, enlaza la OT **y manda el aviso corregido**. El aviso viaja
+  **congelado** desde el `snap`, por lo de siempre: al despachar, `estado` ya puede ser otra OT.
+- **El aviso corregido sale DESPUÉS de escribir el enlace**, nunca antes: si el `update` falla, no
+  se promete un PDF que la orden no apunta (la lección de la baja cuyo Cloudinary fallaba).
+- **El correo sin enlace dice la verdad** (`_NOTA_SIN_PDF`) y el toast también deja de prometer
+  *"Email enviado con PDF"*. El aviso se manda igual: un aviso perdido es un trabajo que
+  administración no ve ni factura — la política del proyecto no cambió.
+- 📊 **Frecuencia medida: aislado.** 1 caso en los 155 registros modernos de `pdfs` y 1 en las 50
+  OT cerradas desde el fix del 13-08. Pero el mecanismo le pega a cualquier hoja cerrada sin señal.
+- ✅ **PROBADO en Chromium (Pixel 7), 03-09-2026**, cerrando una OT completa por la interfaz con
+  los tres escenarios del arnés: sin señal la cola de enlaces queda con el `publicId` y el aviso
+  congelado (`colaEnlaces=1`); con señal intermitente el enlace se aplica con **solo**
+  `pdfUrlCloudinary`; y con la OT aún inexistente el `update()` se rechaza sin crear fantasmas.
+  **Contraprueba contra `main`:** `colaEnlaces=0` — la cola queda **vacía**, que es el hueco.
+- **Contraprueba por mutación** (17 regresiones simuladas — sello ciego, sufijo siempre, sello
+  ciego en el correo al local, URL adivinada, red caída tomada por éxito, `fetch` pelado, GET en
+  vez de HEAD, red de seguridad apagada, enlace descartado, aviso corregido mudo, nota borrada,
+  nota que pisa el aviso de local sin correo, `public_id` descuadrado, `pdfUrl` pisado con vacío,
+  toast mentiroso, orden invertido enlace/aviso, y el SW sin subir): el test las detecta **las 17**.
+- ⚠️ **Lo que este cambio NO hace:** no reenvía los avisos ya salidos sin enlace (la OT 484304 se
+  resolvió a mano pasándole el link a Pedro), y **el correo al local de CORONEL 3 sigue pendiente
+  en el teléfono de Nelson** — saldrá al recuperar señal, y con el enlace vacío, porque los
+  parámetros quedan congelados en la cola. Reenviarlo con el link bueno es una acción aparte.
+- Cubierto por `tests/el-correo-de-la-ot-lleva-el-pdf.js` y el arnés `tests/offline/prueba-offline.js`.
+
 **Cuando una foto se rechaza, el mensaje dice POR QUE** (`_motivoFotoRechazada`, `_esFotoHEIC`,
 `_esDataURLImagen`, `_pesoArchivoFoto`, el 4º parámetro `diag`):
 - Caso **don Nelson** (Samsung Galaxy S21, turno nocturno del **21-08-2026**). Pedro: *"hay una pura
@@ -997,6 +1057,7 @@ These changes are useful context for understanding current state:
   node tests/pausada-no-sobrevive-al-cierre.js index.html
   node tests/hoja-lleva-firma-del-tecnico.js index.html
   node tests/baja-de-activo-no-cobra.js index.html
+  node tests/el-correo-de-la-ot-lleva-el-pdf.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -1110,6 +1171,16 @@ These changes are useful context for understanding current state:
   imagen corrupta no bota el PDF, el técnico llega congelado desde el snapshot,
   `_PDF_COT_FORMATO` subió al cambiar el dibujo, y las firmas embebidas están apaisadas y no
   engordan de más el archivo ·
+  `el-correo-de-la-ot-lleva-el-pdf.js` — el aviso de la OT llega con su enlace, o dice por qué no:
+  el aviso **sin** PDF y el aviso **con** PDF son dos despachos distintos —si comparten sello, el
+  libro de despachos se come el único correo que traía el enlace, que es el caso 484304— pero dos
+  del mismo tipo siguen sin duplicarse y el orden entre ellos da igual; la URL derivada se
+  **comprueba con un HEAD** y jamás se adivina (con la red caída devuelve vacío: *“no pude
+  preguntar”* no es *“sí está”*); el `public_id` que se deriva es **el mismo** que se sube; la cola
+  encola el rescate aunque no haya ninguna URL —que es donde antes se apagaba la red de seguridad—
+  y nunca descarta un enlace que no logró aplicar ni pisa `pdfUrl` con vacío; el aviso corregido
+  sale **después** de escribir el enlace y no antes; y ni el toast ni el cuerpo del correo prometen
+  un PDF que no viajó ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
