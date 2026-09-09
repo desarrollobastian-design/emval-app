@@ -1745,6 +1745,10 @@ function _cargarEstadoDesdeOTGuardada(ot) {
   // MISMO documento en vez de crear otro. Sin esto, cerrar dos veces la misma OT (el tecnico
   // vuelve porque no vio confirmacion) dejaba dos hojas identicas del mismo local.
   estado.otClientId = ot.otClientId || '';
+  // Cuantas veces se dibujo ya la hoja de esta OT. Se arrastra para que la proxima regeneracion
+  // suba a un archivo NUEVO en vez de rebotar contra el que ya existe (ver _publicIdPDFCloudinary).
+  // Sin campo guardado = 1: las ~253 hojas anteriores al fix conservan su URL exacta.
+  estado.pdfHojaGen = Number(ot.pdfHojaGen) > 0 ? Number(ot.pdfHojaGen) : 1;
   // Vínculo con cotización previa (OT "en espera"): se arrastra para unir el recibo al completar
   estado.cotizacionId = ot.cotizacionId || '';
   estado.enEspera = !!ot.enEspera;
@@ -2070,6 +2074,7 @@ let estado = {
   enEspera: false,
   editandoOTId: '', editandoTecnico: '', editandoFecha: '',
   otClientId: '',
+  pdfHojaGen: 1,   // generacion del PDF de la hoja: 1 = original, 2+ = regenerada (ver _publicIdPDFCloudinary)
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
@@ -2515,6 +2520,9 @@ function nuevaOT() {
   estado.editandoTecnico = '';
   estado.editandoFecha = '';
   estado.otClientId = '';
+  estado.pdfHojaGen = 1;   // OT nueva: su hoja nunca se ha dibujado. Sin esto, la generacion de la
+                           // OT que se acaba de editar viajaria a la siguiente y le pondria "_v2"
+                           // al primer PDF de una hoja que nadie regenero.
   estado.otNumero = _generarNumeroOTUnico();
   estado.creadoEnBorrador = new Date().toISOString();
   estado.tipo = null;
@@ -7893,9 +7901,53 @@ function _nombreArchivoPDF(snap) {
    ⚠️ Solo se usa la URL derivada si un HEAD la CONFIRMA. Adivinarla y mandarla sin comprobar
    seria peor que el vacio: un enlace 404 en la bandeja del supervisor de SMU se lee como un
    documento que se perdio (caso #597587, el link a la app que no abre fuera de la app). */
+/* ─── LA HOJA REGENERADA NO PISA A LA ANTERIOR — caso 19082601 / OT 347723, 09-09-2026 ─────
+   El `public_id` de la hoja era DETERMINISTA y sin version: regenerar la misma OT apuntaba al
+   MISMO archivo. Y el preset `emval_pdf` NO SOBRESCRIBE: devuelve el asset que ya existe.
+
+   📊 Medido contra produccion (09-09-2026): la OT 9016 subio su hoja DOS veces —`pdfs`
+   PInGX4gjKyJNIVyeG73G el 07-jul 21:16:45 y JJIPqSEjf2Qykly785wY el 09-jul 01:53:00, 28,6 h
+   despues— y los dos registros guardan la MISMA version `v1783459002`. El archivo responde hoy
+   `Last-Modified: 07 Jul 2026 21:16:43`, 86.502 bytes: la segunda subida no cambio un byte.
+   Mismo patron en las OT 9578 y 9527.
+
+   🔑 Por que importa: `editarOTTerminada` existe justamente para corregir el texto de una hoja
+   ya cerrada y regenerarla. Sin version, corregia Firestore, decia "OT actualizada ✓" y
+   Cloudinary seguia sirviendo el PDF viejo por la misma URL — la que ya tiene SMU. Peor:
+   `verPDFById` prefiere `pdfUrlCloudinary`, asi que el texto corregido no se veia NI dentro de
+   la app. Una funcion que la app ofrece y no cumple.
+
+   ⚠️ La version va como sufijo `_v2`, `_v3`… y la generacion 1 NO lleva sufijo: las ~253 hojas
+   ya subidas conservan su URL exacta. Eso no es cosmetico — es lo que mantiene vivo el barrido
+   de huerfanos de CLAUDE.md ("Barrer Cloudinary completo"), que deriva la URL del docId, y el
+   rescate `_urlPDFSiYaEsta` del caso 484304.
+
+   ⛔ NO se usa `Date.now()` como sufijo, aunque la cotizacion (`_slugPDFCot`) si lo haga. Ahi el
+   id se calcula una sola vez y se guarda; aca tiene que poder RECALCULARSE mas tarde con solo el
+   documento en la mano, que es de lo que viven las dos redes de rescate de arriba. Un sufijo
+   aleatorio las deja ciegas. */
+function _sufijoGenPDF(gen) {
+  // Entero >= 2 o nada. Un `_v1.5` seria un nombre de archivo que ninguna de las dos redes de
+  // rescate sabe reconstruir, y "casi valido" es peor que invalido: se sube igual y nadie lo ve.
+  const n = Math.floor(Number(gen));
+  return (Number.isFinite(n) && n > 1) ? '_v' + n : '';
+}
+
+// El nombre del archivo, SIN la carpeta. Un solo sitio: los tres puntos que suben la hoja
+// (guardarYEnviarPDF, la cola offline y este derivador) tienen que producir el MISMO id, o el
+// rescate por HEAD busca un archivo que nadie subio. Ya estaba duplicado en tres copias.
+// ⚠️ SIN guardia de clientId a proposito: esta arma el nombre y nada mas. La guardia vive en
+// `_publicIdPDFCloudinary`, porque ahi significa otra cosa —"no puedo derivar la URL, no
+// adivines"— y moverla aca le cambiaria el public_id a la cola cuando el clientId viene vacio.
+function _nombrePublicIdPDF(snap) {
+  const s = snap || {};
+  return _nombreArchivoPDF(s).replace(/\.pdf$/i, '') + '_' + String(s.clientId || '').slice(-7) +
+    _sufijoGenPDF(s.pdfGen) + '.pdf';
+}
+
 function _publicIdPDFCloudinary(snap) {
   if (!snap || !snap.clientId) return '';
-  return 'emval/pdfs/' + _nombreArchivoPDF(snap).replace(/\.pdf$/i, '') + '_' + String(snap.clientId).slice(-7) + '.pdf';
+  return 'emval/pdfs/' + _nombrePublicIdPDF(snap);
 }
 
 // Devuelve la URL SOLO si el archivo ya esta arriba. '' en cualquier otro caso — incluido el
@@ -7943,6 +7995,12 @@ async function guardarYEnviarPDF() {
   // Identidad de escritura de esta OT, resuelta una sola vez (el _uid() de respaldo se congela
   // igual: antes se recalculaba en cada lectura y salia un id distinto cada vez).
   snap.clientId = snap.otClientId || snap.editandoOTId || _uid();
+  /* Generacion de la hoja, congelada con el resto (ver _publicIdPDFCloudinary). Solo SUBE cuando
+     esto es una regeneracion: un cierre normal siempre dibuja la generacion 1. Se calcula aca,
+     antes del primer await, porque `estado.pdfHojaGen` cambia bajo los pies apenas se abre otra OT.
+     Un intento fallido deja un hueco en la numeracion y esta bien: no es un folio, es un nombre de
+     archivo — inventarle continuidad obligaria a leer la nube para saber en cual vamos. */
+  snap.pdfGen = snap.editandoOTId ? (Number(estado.pdfHojaGen) > 0 ? Number(estado.pdfHojaGen) : 1) + 1 : 1;
 
   // RED DE SEGURIDAD: nunca emitir una hoja de MANTENIMIENTO PREVENTIVO con la pauta incompleta.
   // cerrarOT() ya lo valida, pero este camino se usa tambien para REGENERAR el PDF de una OT
@@ -7991,7 +8049,10 @@ async function guardarYEnviarPDF() {
     formData.append('file', 'data:application/pdf;base64,' + pdfBase64Solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', _nombreArchivoPDF(snap).replace(/\.pdf$/i, '') + '_' + String(snap.clientId).slice(-7) + '.pdf');
+    // Mismo id que deriva `_publicIdPDFCloudinary` — por la MISMA funcion, no por una copia del
+    // texto. La copia pegada que habia aca es como el derivador y el subidor terminan apuntando a
+    // archivos distintos y el rescate por HEAD busca uno que nadie subio.
+    formData.append('public_id', _nombrePublicIdPDF(snap));
     // _fetchConTimeout, igual que el gemelo de la cola (_subirPDFaCloudinary): un fetch pelado
     // no se rinde nunca con la señal MUERTA (que no es lo mismo que sin señal — navigator.onLine
     // sigue en true) y deja el cierre de la OT esperando en terreno.
@@ -8094,7 +8155,10 @@ async function guardarYEnviarPDF() {
       if (_otDocId) {
         await _conTimeout(db.collection('ordenes').doc(_otDocId).set({
           pdfUrl: pdfUrlFirestore || '',
-          pdfUrlCloudinary: pdfUrlCloudinary || ''
+          pdfUrlCloudinary: pdfUrlCloudinary || '',
+          // Queda escrito para que la PROXIMA regeneracion sepa en cual va. Sin esto, dos
+          // ediciones seguidas de la misma OT vuelven a pedir `_v2` y la segunda rebota.
+          pdfHojaGen: snap.pdfGen
         }, { merge: true }), 25000, 'enlazar pdf en OT');
       } else {
         // Legacy: OT sin clientId (versiones viejas) → fallback por numero.
@@ -8103,7 +8167,8 @@ async function guardarYEnviarPDF() {
         if (!legacySnap.empty) {
           await _conTimeout(db.collection('ordenes').doc(legacySnap.docs[0].id).update({
             pdfUrl: pdfUrlFirestore || '',
-            pdfUrlCloudinary: pdfUrlCloudinary || ''
+            pdfUrlCloudinary: pdfUrlCloudinary || '',
+            pdfHojaGen: snap.pdfGen
           }), 25000, 'enlazar pdf en OT legacy');
         }
       }
@@ -15081,7 +15146,14 @@ async function _subirPDFaCloudinary(pdfDataUri, numero, clientId) {
     formData.append('file', 'data:application/pdf;base64,' + solo);
     formData.append('upload_preset', 'emval_pdf');
     formData.append('folder', 'emval/pdfs');
-    formData.append('public_id', 'Recepcion_Obra_OT' + (numero || '') + '_' + String(clientId || '').slice(-7) + '.pdf');
+    /* Por la MISMA funcion que el derivador y que el cierre online. Una OT que sube desde la cola
+       nunca fue editada, asi que siempre es la generacion 1 y el id sale IDENTICO al de antes del
+       fix — pero deja de ser una cuarta copia del texto que puede quedar desalineada.
+       ⚠️ Lo que este cambio NO arregla: aca `tipo` no viaja, asi que una hoja PREVENTIVA que suba
+       desde la cola sigue subiendo con nombre de correctivo (`Recepcion_Obra_OT…`). Es un defecto
+       preexistente y contradice "el nombre del PDF es el unico indicio confiable del tipo"
+       (CLAUDE.md); no se toca aca para no mezclar dos arreglos en el mismo cambio. */
+    formData.append('public_id', _nombrePublicIdPDF({ otNumero: numero, clientId: clientId, pdfGen: 1 }));
     const resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: formData }, 30000);
     const data = await resp.json();
     return data.secure_url || null;

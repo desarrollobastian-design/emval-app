@@ -735,6 +735,77 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   parámetros quedan congelados en la cola. Reenviarlo con el link bueno es una acción aparte.
 - Cubierto por `tests/el-correo-de-la-ot-lleva-el-pdf.js` y el arnés `tests/offline/prueba-offline.js`.
 
+**La hoja corregida no rebota contra la anterior** (`_sufijoGenPDF`, `_nombrePublicIdPDF`,
+`pdfHojaGen`):
+- Pedido de Pedro el **09-09-2026**, cotización **19082601** / OT **347723**: *"necesito corregir
+  el texto ya que no fue lo que yo escribí"*. Sus dos hojas del 07-09 en UNIMARC Pioneros salieron
+  diciendo *"Se cambian 50 palmetas de 50x50"* y *"Se cambian 50 palmetas"* — indistinguibles para
+  SMU, por dos frentes de trabajo distintos de una cotización de **$1.600.000 neto**.
+- 🔬 **La app YA tenía el camino y no cumplía.** `editarOTTerminada` (solo Administrador: Panel
+  Supervisor → Ver OTs → el técnico → Editar OT) corrige el texto, regenera el PDF y **no gasta
+  cuota de correo** (los dos envíos están apagados con `editandoOTId`). Pero el `public_id` de la
+  hoja era determinista **y sin versión**, y el preset `emval_pdf` **NO SOBRESCRIBE**.
+- 📊 **Medido contra producción:** la OT **9016** subió su hoja dos veces —`pdfs`
+  `PInGX4gjKyJNIVyeG73G` (07-jul 21:16:45) y `JJIPqSEjf2Qykly785wY` (09-jul 01:53:00, **28,6 h**
+  después)— y los dos registros guardan la **misma versión** `v1783459002`. El archivo responde
+  `Last-Modified: 07 Jul 2026 21:16:43`, 86.502 bytes: **la segunda subida no cambió un byte.**
+  Mismo patrón en las OT 9578 y 9527.
+- 🔴 **Lo que veía el cliente:** texto corregido en Firestore, toast *"OT actualizada ✓"*, y
+  Cloudinary sirviendo el PDF viejo por la misma URL — la que ya tiene SMU. Y como `verPDFById`
+  prefiere `pdfUrlCloudinary`, **el texto corregido no se veía ni dentro de la app**.
+- **La versión va como sufijo `_v2`, `_v3`… y la generación 1 NO lleva sufijo.** No es cosmética:
+  las **253 hojas ya subidas conservan su URL exacta**, y con ella el barrido de huérfanos de este
+  archivo y el rescate `_urlPDFSiYaEsta` del caso 484304.
+- ⛔ **NO se usa `Date.now()` como sufijo, aunque la cotización sí lo haga** (`_slugPDFCot`). Ahí el
+  id se calcula una vez y se guarda; acá tiene que poder **recalcularse** más tarde con solo el
+  documento en la mano, que es de lo que viven las dos redes de rescate. Un sufijo aleatorio las
+  deja ciegas.
+- **La generación se congela en el `snap`** antes del primer `await` (regla de
+  `estado-global-pisado-por-la-ot-siguiente`) y se **persiste** en la orden junto al enlace: sin
+  eso, la segunda corrección vuelve a pedir `_v2` y rebota igual. `nuevaOT()` la resetea, o la OT
+  siguiente nace con `_v2` sin que nadie la regenerara.
+- **Un solo sitio arma el nombre.** Estaba pegado en tres copias (el derivador, el cierre online y
+  la cola offline). Ahora los tres llaman a `_nombrePublicIdPDF` y el test prohíbe una cuarta.
+- 🐛 **Hallazgo colateral que afecta a los DEMÁS tests:** el despojador `sinComentarios` que usan
+  varios guiones de `tests/` está roto. En `index.html:829` hay un `accept="image/*"`; ese `/*`
+  abre un comentario falso y se traga **1.070 líneas** (829 → 1899, hasta el primer `*/` real).
+  Todo chequeo estructural sobre ese rango mira un archivo vacío y **pasa siempre**. El guion
+  nuevo exige que el `/*` **abra la línea**. Los otros no se tocaron.
+- ⚠️ **Lo que este cambio NO hace:** la hoja regenerada sale **fechada el día de la edición**
+  (`generarPDFRecepcionObra` usa `new Date()`), así que una hoja del 07-09 corregida hoy le llega
+  a SMU con otra fecha · **no reemplaza el PDF que SMU ya recibió**: la URL vieja es inmutable y
+  sigue viva, hay que mandarle la nueva · la columna **ITEM** de la hoja se sigue dibujando vacía
+  y `descripcionProblema` sigue sin imprimirse en ningún PDF (eso es **alcance nuevo**, lo cotiza
+  06) · y **no se corrigieron las 2 OT del 07-09**, que es producción y lo autoriza Pedro.
+- ✅ **PROBADO de punta a punta en Chromium (Pixel 7), 09-09-2026** con
+  `tests/offline/prueba-hoja-regenerada.js`: se cierra una OT completa **por la interfaz** (foto,
+  firma en el canvas, timbre) y después se corrige el texto **dos veces** por el camino real
+  (`editarOTTerminada` → *"✓ Guardar cambios"*), midiendo el `public_id` que la app manda de
+  verdad en el POST multipart. Salen `Recepcion_Obra_OT172661_ir3q7gu.pdf`, `…_v2.pdf` y
+  `…_v3.pdf`; el texto corregido se lee **dentro** del PDF subido; la orden queda en
+  `pdfHojaGen: 3` apuntando al último archivo; y las dos correcciones mandan **0 correos**.
+  **Contraprueba contra `HEAD`:** las tres subidas salen con el **mismo** `public_id` y el guion
+  falla. 🔑 Y ahí está la trampa que hacía el bug invisible: contra el código viejo **también**
+  pasan *"el texto corregido viaja dentro del PDF"* y *"quedó en la orden"* — la corrección se
+  hacía en todas partes menos en el archivo que recibe el cliente.
+  ⚠️ El único atajo del guion: pone `estado.cargo = 'Administrador'` a mano, porque el botón
+  *Editar OT* solo se dibuja para ese rol. Es un `if` de una línea y no es lo que está a prueba.
+  📌 Las fotos y la hoja viajan por el **mismo** endpoint de Cloudinary (`/image/upload` vs
+  `/raw/upload`): contarlas juntas da 6 subidas y no 3.
+- ⚠️ **Antes de tocar las 2 OT:** `guardarEnFirebase` captura la firma del canvas **sin mirar
+  `firmaConfirmada`**, así que si la firma guardada no alcanza a repintarse se escribe un JPEG
+  **en blanco** encima de la del receptor — irreversible, y una hoja sin firma la rechaza SMU. Y
+  `sincronizarOTsPendientes` reescribe `descripcionTrabajo` con `set(merge)` **sin guardia de
+  `firmada`**: si al teléfono de Nelson le queda esa OT encolada, pisa la corrección.
+- **Contraprueba por mutación** (14 regresiones simuladas — sufijo también en la generación 1, sin
+  sufijo nunca, sufijo con reloj, generación que sube en un cierre normal, que no se incrementa,
+  que se lee después del `await`, que no se persiste, que no viaja con el enlace, `nuevaOT()` sin
+  resetear, sin leerla de la OT guardada, la fórmula pegada a mano, la cola sin fijar la
+  generación 1, el sufijo antes del `clientId`, y la guardia movida al armador de nombre): el test
+  las detecta **las 14**. **Contraprueba contra `HEAD`:** las funciones no existen y el guion falla.
+- Cubierto por `tests/hoja-regenerada-no-pisa-la-anterior.js` (unitario, 26 comprobaciones) y
+  `tests/offline/prueba-hoja-regenerada.js` (flujo real por la interfaz).
+
 **Cuando una foto se rechaza, el mensaje dice POR QUE** (`_motivoFotoRechazada`, `_esFotoHEIC`,
 `_esDataURLImagen`, `_pesoArchivoFoto`, el 4º parámetro `diag`):
 - Caso **don Nelson** (Samsung Galaxy S21, turno nocturno del **21-08-2026**). Pedro: *"hay una pura
@@ -1058,6 +1129,7 @@ These changes are useful context for understanding current state:
   node tests/hoja-lleva-firma-del-tecnico.js index.html
   node tests/baja-de-activo-no-cobra.js index.html
   node tests/el-correo-de-la-ot-lleva-el-pdf.js index.html
+  node tests/hoja-regenerada-no-pisa-la-anterior.js index.html
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -1181,6 +1253,14 @@ These changes are useful context for understanding current state:
   y nunca descarta un enlace que no logró aplicar ni pisa `pdfUrl` con vacío; el aviso corregido
   sale **después** de escribir el enlace y no antes; y ni el toast ni el cuerpo del correo prometen
   un PDF que no viajó ·
+  `hoja-regenerada-no-pisa-la-anterior.js` — corregir el texto de una hoja ya cerrada produce un
+  archivo NUEVO en Cloudinary: la generación 1 sigue sin sufijo (las 253 hojas ya subidas conservan
+  su URL, y con ella el barrido de huérfanos y el rescate del 484304), regenerar da `_v2`/`_v3`, el
+  sufijo es **determinista** —nada de `Date.now()`, o las dos redes de rescate quedan ciegas—, la
+  generación solo sube al editar, se congela antes del primer `await`, viaja en **las dos**
+  escrituras del enlace, `nuevaOT()` la resetea, la cola offline sube siempre la generación 1 y los
+  sitios que suben pasan todos por la misma función. Trae su propio despojador de comentarios: el
+  compartido se traga 1.070 líneas por un `accept="image/*"` del HTML ·
   `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
   el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
   ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
@@ -1206,6 +1286,10 @@ These changes are useful context for understanding current state:
   páginas), y después corre el **flujo completo por la interfaz** —login con PIN, cadena,
   sucursal, detalle, emitir— midiendo en el espía que escribe 1 documento en `bajas` y **ninguno**
   en `ordenes` ni en `cotizaciones`. Su contraprueba contra `HEAD` no encuentra la función ·
+  `prueba-hoja-regenerada.js` cierra una OT por la interfaz y después **corrige el texto dos
+  veces** por el camino real de edición, midiendo el `public_id` que viaja en el POST multipart a
+  Cloudinary: salen el original, `_v2` y `_v3`. Su contraprueba contra `HEAD` saca **el mismo
+  public_id las tres veces** — el bug de la OT 347723 ·
   `prueba-pausada-fantasma.js` reproduce el Panel Supervisor con los **3 documentos reales** que
   Pedro fotografió el 23-08 y comprueba las fechas, los avisos de "ya cerrada / ya cotizada" y el
   borrado completo por la interfaz (confirmación → contraseña → delete). Su contraprueba contra
