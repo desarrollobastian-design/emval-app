@@ -77,7 +77,9 @@ try {
   codNumOT     = extraer('function _numOTCorreo(n)', '\n}') + '\n}';
   codNotificar = extraer('async function _notificarOTCompletada(', '\nasync function guardarEnFirebase');
   codNombre    = extraer('function _nombreArchivoPDF(snap)', '\n\n/* ─── RESCATE');
-  codRescate   = extraer('function _publicIdPDFCloudinary(snap)', '\nasync function guardarYEnviarPDF');
+  // Desde `_sufijoGenPDF`, no desde `_publicIdPDFCloudinary`: el derivador se apoya en los dos
+  // ayudantes de arriba desde el fix del 09-09 (la hoja regenerada no pisa a la anterior).
+  codRescate   = extraer('function _sufijoGenPDF(gen)', '\nasync function guardarYEnviarPDF');
   codEnlaces   = extraer('var _KEY_ENLACES_PDF =', '\nfunction _abrirDBOffline');
 } catch (e) {
   // Contra el codigo anterior al fix estas funciones NO EXISTEN. Se reporta como falla legible
@@ -298,12 +300,20 @@ const URL_PDF = 'https://res.cloudinary.com/dcrf29tna/raw/upload/emval/pdfs/x.pd
         'derivado: ' + pub + '\n        real:     ' + ESPERADO);
     } else ok('coincide con la URL real de la OT 484304');
 
-    // Y tiene que seguir el MISMO formato que arma la subida, o el rescate apunta a otro archivo.
-    const subida = src.match(/formData\.append\('public_id',([^\n]+)\);/);
-    if (!subida) mal('no se encontro el public_id de la subida a Cloudinary');
-    else if (!/_nombreArchivoPDF\(snap\)[\s\S]*slice\(-7\)/.test(subida[1])) {
-      mal('la subida ya no arma el public_id como el rescate lo deriva', subida[1].trim());
-    } else ok('la subida y el rescate arman el mismo nombre');
+    /* Y tiene que salir de la MISMA funcion que usa el rescate, o el HEAD busca un archivo que
+       nadie subio. Antes esto se comprobaba mirando que la subida repitiera la formula a mano;
+       desde el 09-09 la formula vive en un solo sitio y lo que se exige es que TODOS los sitios
+       que suben la hoja la llamen — ninguna cuarta copia pegada. */
+    const subidas = [...sinComentarios(src).matchAll(/formData\.append\('public_id',([^\n]+)\);/g)]
+      .map(m => m[1].trim());
+    if (!subidas.length) mal('no se encontro el public_id de la subida a Cloudinary');
+    else {
+      const pegadas = subidas.filter(s => !/_nombrePublicIdPDF\(/.test(s));
+      if (pegadas.length) {
+        mal('hay una subida que arma el public_id por su cuenta en vez de usar _nombrePublicIdPDF',
+          pegadas.join('\n        '));
+      } else ok('los ' + subidas.length + ' sitios que suben la hoja usan la misma funcion');
+    }
 
     // Sin clientId no se puede derivar nada: mejor vacio que un nombre a medias que da 404.
     if (sandbox._publicIdPDFCloudinary({ tipo: 'correctivo', otNumero: 1 }) !== '') {
