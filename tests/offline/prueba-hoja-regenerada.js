@@ -129,6 +129,12 @@ const TEXTO_CORREGIDO_2 = 'Reparacion de piso en pasillo central y venta asistid
          linea, no es lo que esta a prueba. De aca en adelante corre el camino real:
          editarOTTerminada → abrirOTGuardada → el mismo boton #btn-cerrar-ot. */
       estado.cargo = 'Administrador';
+      /* 🔴 Y el administrador NO es el técnico. Es la condición que destapó el bug del 10-09:
+         `snap.tecnico` salía de `_tecnicoActual()`, así que la hoja corregida se re-emitía con el
+         nombre de quien la editaba. Si este guion editara con el mismo usuario que cerró la OT,
+         el defecto pasaría invisible — que es exactamente lo que pasó en la primera versión. */
+      estado.usuario = 'PEDRO ADMIN';
+      try { localStorage.setItem('emval_ultimo_usuario', 'PEDRO ADMIN'); } catch (e) {}
       const clave = Object.keys(window.__DOCS).find(k => k.indexOf('ordenes/') === 0);
       if (!clave) return { error: 'la OT no quedo guardada en la base del arnes' };
       const doc = window.__DOCS[clave];
@@ -216,6 +222,17 @@ const TEXTO_CORREGIDO_2 = 'Reparacion de piso en pasillo central y venta asistid
       const hayNuevo = texto.indexOf('venta asistida') >= 0 || texto.indexOf('pasillo central') >= 0;
       if (!hayNuevo) mal('el texto corregido NO esta en el PDF regenerado');
       else ok('el texto corregido viaja dentro del PDF');
+
+      /* Y la firma tiene que seguir siendo la del TECNICO, no la del admin que corrigio.
+         Una hoja que dice que la ejecuto otro es peor que una con el texto abreviado: es lo que
+         SMU prohibio expresamente el 25-08. */
+      const dice = [...texto.matchAll(/\(([^)]*)\)\s*Tj/g)].map(m => m[1]);
+      const i = dice.findIndex(t => /EJECUTADO POR/.test(t));
+      const firmante = i >= 0 ? String(dice[i + 1] || '').trim() : '(no se encontro)';
+      if (!/NELSON/i.test(firmante)) {
+        mal('la hoja corregida quedo firmada por quien la edito, no por quien la ejecuto',
+          'EJECUTADO POR: "' + firmante + '" — deberia decir el tecnico de la OT');
+      } else ok('la hoja sigue firmada por el tecnico que ejecuto ("' + firmante + '")');
     }
   }
 

@@ -7986,7 +7986,17 @@ async function guardarYEnviarPDF() {
     tipo: estado.tipo,
     ceco: estado.ceco,
     local: estado.local,
-    tecnico: _tecnicoActual(),
+    /* 🔴 EN EDICION, EL TECNICO ES EL DE LA OT — NO EL QUE ESTA LOGUEADO. 10-09-2026.
+       `snap.tecnico` es lo que firma la hoja (`generarPDFRecepcionObra(snap.tecnico)` →
+       `_firmarHojaTecnico`). Con `_tecnicoActual()` a secas, el Administrador que entra a
+       corregir el texto de una hoja ajena la re-emite con SU nombre: medido en el arnes, el
+       documento conservaba `tecnico: "NELSON PRUEBA"` (guardarEnFirebase ya lo preservaba,
+       linea ~4474) y el PDF salia **"EJECUTADO POR: PEDRO ADMIN"**.
+       Es exactamente lo que SMU prohibio el 25-08 —la hoja tiene que decir quien ejecuto— y
+       hasta el fix del 09-09 no se notaba porque el PDF regenerado rebotaba en Cloudinary y
+       nunca llegaba a nadie. La regla del proyecto ya existia ("el tecnico viaja congelado");
+       este camino simplemente se habia quedado fuera, igual que `_conTimeout` en julio. */
+    tecnico: estado.editandoOTId ? (estado.editandoTecnico || _tecnicoActual()) : _tecnicoActual(),
     editandoOTId: estado.editandoOTId || '',
     otClientId: estado.otClientId || '',
     email: estado.emailSucursal || estado.emailAdmin,

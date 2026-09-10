@@ -797,6 +797,23 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   **en blanco** encima de la del receptor — irreversible, y una hoja sin firma la rechaza SMU. Y
   `sincronizarOTsPendientes` reescribe `descripcionTrabajo` con `set(merge)` **sin guardia de
   `firmada`**: si al teléfono de Nelson le queda esa OT encolada, pisa la corrección.
+- 🔴 **10-09-2026 — EL DEFECTO QUE ESTE MISMO FIX DESTAPÓ, y que obligó a un segundo despliegue.**
+  Pedro no había corregido nada todavía (*"siguen igual"*: el `updateTime` de la 347723 seguía en
+  el minuto del cierre y no había `pdfHojaGen`). Antes de corregirlas por él se midió **quién
+  firma la hoja regenerada**: `guardarYEnviarPDF` armaba `snap.tecnico = _tecnicoActual()` —el
+  usuario **logueado**— y `snap.tecnico` es justo lo que dibuja `_firmarHojaTecnico`.
+  📊 Medido en el arnés: el documento conservaba `tecnico: "NELSON PRUEBA"` (`guardarEnFirebase`
+  ya lo preservaba con `editandoTecnico`) y **el PDF salía "EJECUTADO POR: PEDRO ADMIN"**.
+  🔑 **El que corrige una hoja SIEMPRE es el Administrador, y nunca es el que ejecutó**, así que
+  el defecto se dispara en el 100% de las correcciones. Es exactamente lo que SMU prohibió el
+  25-08 —la hoja tiene que decir quién ejecutó— y **hasta el fix del 09-09 no se notaba porque el
+  PDF regenerado rebotaba en Cloudinary y no llegaba a nadie**. La regla del proyecto ya estaba
+  escrita (*"el técnico viaja congelado"*); este camino se había quedado fuera, igual que
+  `_conTimeout` en julio. Ahora: `tecnico: estado.editandoOTId ? (estado.editandoTecnico || …)`.
+  ⚠️ **Lección de método:** la prueba del 09-09 editaba con **el mismo usuario** que cerró la OT,
+  así que el defecto pasó invisible con el guion en verde. Ahora el guion edita como
+  `PEDRO ADMIN` a propósito. **Contraprueba contra `e62f957`** (el fix del día anterior): falla
+  **solo** en esa comprobación, con `"PEDRO ADMIN"` impreso en la hoja.
 - **Contraprueba por mutación** (14 regresiones simuladas — sufijo también en la generación 1, sin
   sufijo nunca, sufijo con reloj, generación que sube en un cierre normal, que no se incrementa,
   que se lee después del `await`, que no se persiste, que no viaja con el enlace, `nuevaOT()` sin
