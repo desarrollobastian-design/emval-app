@@ -226,6 +226,29 @@ bloque('5 · La generacion se congela ANTES del primer await');
 }
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
+bloque('5b · Al corregir, la hoja la firma el TECNICO DE LA OT, no quien la edita');
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+{
+  /* 🔴 El que corrige el texto de una hoja es el ADMINISTRADOR, y no es el que ejecuto el
+     trabajo. `snap.tecnico` es lo que firma la hoja (`generarPDFRecepcionObra(snap.tecnico)`).
+     Con `_tecnicoActual()` a secas la hoja sale "EJECUTADO POR: <el admin>" — medido en el
+     arnes el 10-09-2026 — que es justo lo que SMU prohibio el 25-08. Hasta el fix del 09-09 no
+     se notaba porque el PDF regenerado rebotaba en Cloudinary y no llegaba a nadie. */
+  const fn = LIMPIO.slice(LIMPIO.indexOf('async function guardarYEnviarPDF()'));
+  const snapTec = fn.slice(0, fn.indexOf('editandoOTId:')).match(/tecnico:\s*([^\n,]+)/);
+  if (!snapTec) mal('no se encontro como se arma snap.tecnico');
+  else if (!/editandoTecnico/.test(snapTec[1])) {
+    mal('la hoja regenerada se firma con el usuario LOGUEADO, no con el tecnico de la OT',
+      snapTec[1].trim() + '\n        El administrador que corrige una hoja ajena la re-emite con SU nombre.');
+  } else ok('en edicion, snap.tecnico sale de editandoTecnico');
+
+  // Y el documento tiene que seguir preservandolo tambien (guardarEnFirebase, que ya lo hacia).
+  if (!/tecnico:\s*esEdicion\s*\?\s*\(\s*snap\.editandoTecnico/.test(LIMPIO)) {
+    mal('guardarEnFirebase dejo de preservar el tecnico original de la OT');
+  } else ok('el documento tambien conserva el tecnico original');
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
 bloque('6 · La generacion queda PERSISTIDA, o la segunda correccion rebota igual');
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 {
@@ -334,7 +357,7 @@ bloque('9 · Lo que ya estaba y no se puede perder');
   try {
     const sw = fs.readFileSync(path.join(path.dirname(archivo) || '.', 'sw.js'), 'utf8');
     const m = sw.match(/emval-v(\d+)/);
-    if (!m || parseInt(m[1], 10) < 54) {
+    if (!m || parseInt(m[1], 10) < 55) {
       mal('el Service Worker no subio de version (' + (m ? m[0] : '?') + ')',
         'Sin eso el telefono sigue sirviendo el index.html cacheado y el fix no llega.');
     } else ok('Service Worker en ' + m[0]);
