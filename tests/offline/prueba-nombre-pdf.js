@@ -16,8 +16,8 @@
      Bloqueado — api.cloudinary.com (las SUBIDAS), por si algún camino intentara escribir.
 
    Se prueban los dos casos que Pedro definió:
-     1. Cotización con OT   -> "<folio> HS <N° OT> <servicio> <local>.pdf"
-     2. Cotización previa   -> sin "HS" y sin número de OT en ninguna parte.
+     1. Cotización con OT   -> "COT - <folio> - ceco <centro> - <servicio>.pdf"
+     2. Cotización previa   -> el mismo formato COT, sin mezclar la HS.
    Y los dos caminos del nombre del local: uno con `localCorto` guardado en el documento y otro
    sin él, que tiene que resolverse contra el catálogo de cadenas. */
 
@@ -40,6 +40,7 @@ const log = (...a) => console.log(...a);
   const page = await ctx.newPage();
   const errores = [];
   page.on('pageerror', e => errores.push(e.message.slice(0, 140)));
+  page.on('console', m => { if (m.type() === 'warning' || m.type() === 'error') log('   navegador: ' + m.text()); });
 
   // Las SUBIDAS a Cloudinary quedan cortadas. Las lecturas (res.cloudinary.com) pasan.
   await page.route('**api.cloudinary.com/**', r => r.abort('internetdisconnected'));
@@ -62,15 +63,17 @@ const log = (...a) => console.log(...a);
         // CON OT. A propósito SIN `localCorto`: obliga a resolver "Alvi Chillan" -> "Chillan"
         // contra el catálogo, que es como estan las 103 cotizaciones que ya existen.
         { _id: 'cot1', numeroCotizacion: '01082604', otNumero: 301143, local: 'Alvi Chillan',
+          centro: '474',
           nombreServicio: 'Correctivo transpaletas', descripcionTrabajo: 'Correctivo transpaletas',
           carpeta: 'PRUEBA ARNES', enviado: false, total: 120000, fecha: '02-08-2026',
-          pdfUrl: pdf1, pdfGeneradoEn: 4102444800000, items: [] },
+          pdfUrl: pdf1, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] },
         // PREVIA: sin OT. Con `localCorto` guardado, como las que se creen de ahora en adelante.
         { _id: 'cot2', numeroCotizacion: '01082605', otNumero: '', tipoCot: 'previa',
           estadoCot: 'Pendiente', local: 'S10 Chillan 2', localCorto: 'Chillan 2',
+          centro: '907',
           nombreServicio: 'Cambio de lamas', descripcionTrabajo: 'Cambio de lamas',
           carpeta: 'PRUEBA ARNES', enviado: false, total: 90000, fecha: '02-08-2026',
-          pdfUrl: pdf2, pdfGeneradoEn: 4102444800000, items: [] }
+          pdfUrl: pdf2, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] }
       ]
     };
     let real = null;
@@ -119,6 +122,10 @@ const log = (...a) => console.log(...a);
   const cuantos = await botones.count();
   chequear(cuantos >= 2, 'se esperaban 2 botones "Ver PDF" y hay ' + cuantos);
   log('2) Lista de cotizaciones: ' + cuantos + ' botones "Ver PDF" ✓');
+  const nombresCalculados = await page.evaluate(() => Object.values(window._todasCotizaciones || {}).map(c => ({
+    nombre: _nombrePDFCot(c), url: _urlDescargaCot(c)
+  })));
+  log('   Nombres calculados: ' + nombresCalculados.map(x => x.nombre).join(' | '));
 
   // ── 3. Descargar la cotización CON N° de OT ────────────────────────────────────────────────
   await botones.nth(0).click();
@@ -130,16 +137,16 @@ const log = (...a) => console.log(...a);
   log('\nArchivos que descargó el navegador:');
   descargas.forEach(n => log('   · ' + n));
 
-  const conOT = descargas.find(n => n.indexOf('01082604') === 0);
-  const previa = descargas.find(n => n.indexOf('01082605') === 0);
+  const conOT = descargas.find(n => n.indexOf('COT - 01082604 - ') === 0);
+  const previa = descargas.find(n => n.indexOf('COT - 01082605 - ') === 0);
 
-  const esperadoOT = '01082604 HS 301143 Correctivo transpaletas Chillan.pdf';
+  const esperadoOT = 'COT - 01082604 - ceco 0474 - Correctivo transpaletas.pdf';
   chequear(conOT === esperadoOT, 'con OT llegó "' + conOT + '", se esperaba "' + esperadoOT + '"');
 
-  const esperadoPrev = '01082605 Cambio de lamas Chillan 2.pdf';
+  const esperadoPrev = 'COT - 01082605 - ceco 0907 - Cambio de lamas.pdf';
   chequear(previa === esperadoPrev, 'la previa llegó "' + previa + '", se esperaba "' + esperadoPrev + '"');
   chequear(previa ? !/\bHS\b/.test(previa) : false, 'la previa trae "HS" en el nombre: "' + previa + '"');
-  chequear(previa ? !/301143|\b\d{6}\b/.test(previa.replace(/^01082605/, '')) : false,
+  chequear(previa ? !/301143/.test(previa) : false,
     'la previa trae un número de OT: "' + previa + '"');
 
   log('\n3) Con N° de OT:  ' + (conOT === esperadoOT ? conOT + ' ✓' : 'llegó "' + conOT + '" ✗'));

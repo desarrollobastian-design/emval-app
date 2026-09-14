@@ -1665,6 +1665,7 @@ function _crearOTPausadaDesdeEstado() {
     pausa: true,
     enEspera: !!estado.enEspera,
     cotizacionId: estado.cotizacionId || '',
+    cotizacionNumero: estado.cotizacionNumero || '',
     autoDraft: true,
     otClientId: estado.otClientId || '',   // identidad de escritura: sobrevive a retomar la OT
     firmada: !!estado.firmada,
@@ -1751,6 +1752,7 @@ function _cargarEstadoDesdeOTGuardada(ot) {
   estado.pdfHojaGen = Number(ot.pdfHojaGen) > 0 ? Number(ot.pdfHojaGen) : 1;
   // Vínculo con cotización previa (OT "en espera"): se arrastra para unir el recibo al completar
   estado.cotizacionId = ot.cotizacionId || '';
+  estado.cotizacionNumero = ot.cotizacionNumero || '';
   estado.enEspera = !!ot.enEspera;
   cadenaSeleccionada = estado.cadenaNombre ? {
     nombre: estado.cadenaNombre,
@@ -2071,6 +2073,7 @@ let estado = {
   emailAdmin: '',
   creadoEnBorrador: '',
   cotizacionId: '',
+  cotizacionNumero: '',
   enEspera: false,
   editandoOTId: '', editandoTecnico: '', editandoFecha: '',
   otClientId: '',
@@ -2262,7 +2265,11 @@ function _cotFusionada(cot) {
 // `_pdfCotObsoleto` solo miraba si habia cambiado el CONTENIDO. Efecto: Pedro reenviaba la
 // cotizacion arreglada y le seguia saliendo cortada, con el fix ya desplegado. Subir este numero
 // al cambiar el dibujo hace que el proximo Ver PDF / envio / compartir lo regenere solo.
-var _PDF_COT_FORMATO = 3;   // 2 = 19-08-2026, el texto del item se imprime completo
+var _PDF_COT_FORMATO = 4;   // 4 = 14-09-2026, la cotizacion ya no incluye la HS ni sus fotos
+// Gerencia exige que COT y HS sean archivos independientes. El bloque legado se conserva
+// temporalmente dentro de los generadores para poder comparar documentos antiguos, pero queda
+// fuera de toda emision nueva. Este sello tambien evita una lectura inutil de la OT.
+var _COTIZACION_INCLUYE_HS = false;
                             // 3 = 25-08-2026, la hoja de la pagina 2 lleva la firma del tecnico
 /* 👉 Al cambiar COMO se dibuja este PDF hay que subir este numero, o el cliente no ve el cambio
    por ningun camino: un PDF ya subido a Cloudinary es un archivo estatico y _pdfCotObsoleto
@@ -2515,6 +2522,7 @@ function nuevaOT() {
   if (!_restaurandoBorradorOT) guardarBorradorOTActual();
   _otFinalizada = false;
   estado.cotizacionId = '';
+  estado.cotizacionNumero = '';
   estado.enEspera = false;
   estado.editandoOTId = '';
   estado.editandoTecnico = '';
@@ -4375,6 +4383,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     numEquipos: estado.numEquipos || '',
     serviciosPreventivo: [...(estado.serviciosPreventivo || [])],
     cotizacionId: estado.cotizacionId || '',
+    cotizacionNumero: estado.cotizacionNumero || '',
     enEspera: estado.enEspera === true,
     emailLocal: estado.emailSucursal || estado.emailAdmin || '',
     editandoTecnico: estado.editandoTecnico || '',
@@ -4403,7 +4412,8 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     serviciosPreventivo: [...snap.serviciosPreventivo],
     fotosAntes: fotosAntesCopy, fotosDespues: fotosDespuesCopy,
     fotoTimbre: fotoTimbreCopy, firmaBase64: firmaBase64,
-    cotizacionId: snap.cotizacionId, enEspera: snap.enEspera,
+    cotizacionId: snap.cotizacionId, cotizacionNumero: snap.cotizacionNumero,
+    enEspera: snap.enEspera,
     emailLocal: snap.emailLocal,
     audiosBase64: audiosBase64, savedAt: new Date().toISOString()
   };
@@ -4480,6 +4490,8 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       serviciosPreventivo: snap.serviciosPreventivo,
       fotosAntes: urlsAntes, fotosDespues: urlsDespues,
       fotoTimbre: urlTimbre,
+      cotizacionId: snap.cotizacionId,
+      cotizacionNumero: snap.cotizacionNumero,
       firmada: true, firmaImagen: firmaBase64
     };
     // No borrar audios existentes en una edicion sin nuevas grabaciones
@@ -4597,10 +4609,19 @@ function _esPDFCompartible(url) {
 }
 
 // Cloudinary sirve el raw sin extension; agregarsela hace que llegue como .pdf al que lo recibe.
-function _urlPDFDescarga(url) {
+function _urlPDFDescarga(url, nombre) {
   var u = (url || '').toString().trim();
   if (!u) return '';
-  return /\.pdf($|\?)/i.test(u) ? u : u + '.pdf';
+  if (!/\.pdf($|\?)/i.test(u)) u += '.pdf';
+  // Los PDF ya existentes conservan su public_id historico. `fl_attachment` cambia solamente
+  // el nombre con que se descarga/adjunta, sin duplicarlos ni romper sus enlaces guardados.
+  var marca = '/raw/upload/';
+  var i = u.indexOf(marca);
+  if (nombre && i !== -1 && u.indexOf('/raw/upload/fl_attachment:') === -1) {
+    var limpio = String(nombre).replace(/\.pdf$/i, '');
+    return u.slice(0, i + marca.length) + 'fl_attachment:' + encodeURIComponent(limpio) + '/' + u.slice(i + marca.length);
+  }
+  return u;
 }
 
 // El nombre bueno ya viaja en la URL: el public_id se arma con _nombreArchivoPDF / _slugPDFCot.
@@ -4624,7 +4645,7 @@ async function _archivosParaCompartir(docs) {
   try {
     var files = [];
     for (var i = 0; i < docs.length; i++) {
-      var resp = await fetch(_urlPDFDescarga(docs[i].url), ctrl ? { signal: ctrl.signal } : undefined);
+      var resp = await fetch(_urlPDFDescarga(docs[i].url, docs[i].nombre), ctrl ? { signal: ctrl.signal } : undefined);
       if (!resp.ok) return null;
       var blob = await resp.blob();
       if (!blob || !blob.size) return null;
@@ -4654,7 +4675,7 @@ async function compartirDocumentos(docs, opts) {
   });
 
   var titulo = opts.titulo || 'EMVAL E.I.R.L.';
-  var enlaces = validos.map(function(d){ return _urlPDFDescarga(d.url); }).join('\n');
+  var enlaces = validos.map(function(d){ return _urlPDFDescarga(d.url, d.nombre); }).join('\n');
   var texto = (opts.texto || titulo);
   _compartirActual = { docs: validos, titulo: titulo, texto: texto, enlaces: enlaces };
 
@@ -4668,7 +4689,7 @@ async function compartirDocumentos(docs, opts) {
       // Con archivos NO va `url`: algunas plataformas descartan el adjunto si ademas hay enlace.
       await navigator.share({ files: files, title: titulo, text: texto });
     } else if (validos.length === 1) {
-      await navigator.share({ title: titulo, text: texto, url: _urlPDFDescarga(validos[0].url) });
+      await navigator.share({ title: titulo, text: texto, url: _urlPDFDescarga(validos[0].url, validos[0].nombre) });
     } else {
       await navigator.share({ title: titulo, text: texto + '\n\n' + enlaces });
     }
@@ -4718,7 +4739,7 @@ async function _compartirPor(via) {
   } else if (via === 'copiar') {
     await _copiarAlPortapapeles(c.enlaces);
   } else if (via === 'abrir') {
-    window.open(_urlPDFDescarga(c.docs[0].url), '_blank');
+    window.open(_urlPDFDescarga(c.docs[0].url, c.docs[0].nombre), '_blank');
   }
   cerrarModalCompartir();
 }
@@ -4768,6 +4789,64 @@ async function _asegurarPDFCotizacion(cot) {
   return url || '';
 }
 
+// Descarga con nombre explicito. Chromium puede abrir el visor PDF en un blob interno y cambiar
+// el nombre sugerido por un UUID aun cuando Cloudinary manda Content-Disposition correctamente.
+async function _descargarPDFNombrado(url, nombre) {
+  var u = _urlPDFDescarga(url, nombre);
+  try {
+    var resp = await _fetchConTimeout(u, {}, _COMPARTIR_TIMEOUT_MS);
+    if (!resp || !resp.ok) throw new Error('HTTP ' + (resp && resp.status));
+    var blob = await resp.blob();
+    var obj = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = obj;
+    a.download = nombre || 'documento.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(obj); }, 30000);
+    return true;
+  } catch(e) {
+    console.warn('No se pudo fijar el nombre de descarga; se abre el PDF:', e);
+    window.open(u, '_blank');
+    return false;
+  }
+}
+
+// Busca la HS independiente que corresponde a una cotizacion. Primero usa el enlace de la OT;
+// para documentos legacy cae al indice `pdfs`, donde quedaron varias hojas que nunca se
+// re-enlazaron a `ordenes` por mala senal.
+async function _obtenerHojaDeCot(cot) {
+  if (!cot || (!cot.otId && !cot.otNumero) || !window._firebaseReady) return null;
+  try {
+    var db = window.firebase.firestore();
+    var ot = {};
+    if (cot.otId) {
+      var otDoc = await _conTimeout(db.collection('ordenes').doc(cot.otId).get(), 25000, 'buscar HS de cotizacion');
+      if (otDoc.exists) ot = Object.assign({ id: otDoc.id }, otDoc.data());
+    }
+    var url = _pdfDeOT(ot);
+    if (!url) {
+      var pdfSnap = null;
+      if (cot.otId) {
+        pdfSnap = await _conTimeout(db.collection('pdfs').where('otClientId', '==', cot.otId).limit(1).get(), 25000, 'buscar PDF de HS');
+      }
+      if ((!pdfSnap || pdfSnap.empty) && cot.otNumero) {
+        pdfSnap = await _conTimeout(db.collection('pdfs').where('otNumero', '==', cot.otNumero).limit(1).get(), 25000, 'buscar PDF de HS legacy');
+      }
+      if (pdfSnap && !pdfSnap.empty) url = pdfSnap.docs[0].data().pdfUrlCloudinary || '';
+    }
+    if (!_esPDFCompartible(url)) return null;
+    var datos = _datosHojaConCot(ot, cot, cot.centro || '');
+    return { url: url, nombre: _nombrePDFHoja(datos), datos: datos };
+  } catch(e) {
+    // SILENCIO-FIRMADO: esta búsqueda es un complemento para adjuntar la HS; el PDF COT sigue
+    // siendo compartible y el correo muestra explícitamente "HS no disponible".
+    console.warn('No se pudo obtener la HS independiente:', e);
+    return null;
+  }
+}
+
 async function compartirCotizacion(cot) {
   if (!cot) return;
   var clave = 'compartir-cot:' + (cot.id || '');
@@ -4776,11 +4855,12 @@ async function compartirCotizacion(cot) {
   try {
     if (!cot.pdfUrl || _pdfCotObsoleto(cot)) toast('Preparando el PDF...');
     var url = await _asegurarPDFCotizacion(cot);
-    await compartirPDF({
-      url: url,
-      nombre: _nombrePDFCot(cot),
+    var docs = [{ url: url, nombre: _nombrePDFCot(cot) }];
+    var hoja = await _obtenerHojaDeCot(cot);
+    if (hoja) docs.push({ url: hoja.url, nombre: hoja.nombre });
+    await compartirDocumentos(docs, {
       titulo: _asuntoCotizaciones([cot]),
-      texto: _textoCompartirCot(cot)
+      texto: _textoCompartirCot(cot) + (hoja ? '\n\nSe adjuntan COT y HS en archivos separados.' : '')
     });
   } finally { soltar(); }
 }
@@ -4798,11 +4878,15 @@ async function compartirCotizacionesSeleccionadas() {
     for (var i = 0; i < sel.length; i++) {
       const url = await _asegurarPDFCotizacion(sel[i]);
       if (url) docs.push({ url: url, nombre: _nombrePDFCot(sel[i]) });
+      const hoja = await _obtenerHojaDeCot(sel[i]);
+      if (hoja && !docs.some(function(d){ return d.url === hoja.url; })) {
+        docs.push({ url: hoja.url, nombre: hoja.nombre });
+      }
     }
     await compartirDocumentos(docs, {
       titulo: _asuntoCotizaciones(sel),
       texto: sel.length === 1 ? _textoCompartirCot(sel[0])
-        : sel.length + ' cotizaciones — EMVAL E.I.R.L.'
+        : sel.length + ' cotizaciones — COT y HS en archivos separados — EMVAL E.I.R.L.'
     });
   } finally { soltar(); }
 }
@@ -4822,7 +4906,7 @@ async function compartirPreventivosSeleccionados() {
   if (!conPdf.length) return;
   if (conPdf.length === 1) { await compartirHoja(conPdf[0]); return; }
   await compartirDocumentos(
-    conPdf.map(function(h){ return { url: h.pdfUrl, nombre: _nombreDesdeURL(h.pdfUrl, 'Hoja_de_trabajo.pdf') }; }),
+    conPdf.map(function(h){ return { url: h.pdfUrl, nombre: _nombrePDFHoja(h) }; }),
     {
       titulo: conPdf.length + ' hojas de trabajo · EMVAL E.I.R.L.',
       texto: conPdf.length + ' hojas de trabajo — Mantenimiento preventivo de transpaletas\nEMVAL E.I.R.L.'
@@ -4849,7 +4933,7 @@ async function compartirHoja(h) {
   if (h.fecha) p.push('Fecha: ' + h.fecha);
   await compartirPDF({
     url: h.pdfUrl || '',
-    nombre: _nombreDesdeURL(h.pdfUrl, 'Hoja_de_trabajo.pdf'),
+    nombre: _nombrePDFHoja(h),
     titulo: 'Hoja de trabajo' + (h.local ? ' · ' + h.local : '') + (h.numero ? ' · N° ' + h.numero : ''),
     texto: p.join('\n')
   });
@@ -4869,7 +4953,7 @@ async function compartirOT(ot, urlResuelta) {
   if (ot.fecha) p.push('Fecha: ' + ot.fecha);
   await compartirPDF({
     url: url,
-    nombre: _nombreDesdeURL(url, (esPrev ? 'Hoja_de_trabajo' : 'Recepcion_Obra_OT' + num) + '.pdf'),
+    nombre: _nombrePDFHoja(ot),
     titulo: (esPrev ? 'Hoja de trabajo' : 'Recepción de obra') + (num ? ' · OT ' + num : '') + (ot.local ? ' · ' + ot.local : ''),
     texto: p.join('\n')
   });
@@ -5754,6 +5838,16 @@ async function guardarCotizacion() {
       const docRef = await _conTimeout(db.collection('cotizaciones').add(cotData), 25000, 'add cotizacion');
       savedDocId = docRef.id;
     }
+    // La HS necesita llevar el folio de su COT. Guardarlo tambien en la OT evita depender de
+    // haber abierto antes la pantalla de cotizaciones para nombrar/compartir ambos archivos.
+    if (!cotizacionActual.esPrevia && cotData.otId) {
+      try {
+        await _conTimeout(db.collection('ordenes').doc(cotData.otId).update({
+          cotizacionId: savedDocId,
+          cotizacionNumero: cotData.numeroCotizacion || ''
+        }), 25000, 'vincular folio COT a HS');
+      } catch(ev) { console.warn('Cotizacion guardada, pero no se pudo vincular el folio a la HS:', ev); }
+    }
     toast('Cotización guardada');
     // Subir PDF a Cloudinary en segundo plano
     const _cotDataPDF = Object.assign({}, cotData, { id: savedDocId });
@@ -6049,13 +6143,22 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     const btnPdf = document.createElement('button');
     btnPdf.textContent = 'Ver PDF';
     btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-    btnPdf.onclick = (function(data){ return function(){
+    btnPdf.onclick = (function(data){ return async function(){
       // Antes bastaba con que EXISTIERA un pdfUrl para abrirlo, sin preguntar de cuando era.
       // `_urlDescargaCot` no cambia el archivo: le pega el nombre bueno a la descarga. Los PDF
       // subidos ANTES del 14-08-2026 tienen el public_id viejo y esto los renombra igual, que es
       // lo unico que se puede hacer sin volver a subir 45 archivos a produccion.
-      if (data.pdfUrl && !_pdfCotObsoleto(data)) { window.open(_urlDescargaCot(data), '_blank'); }
-      else { generarPDFCotizacionGuardada(data); }
+      var url = data.pdfUrl || '';
+      if (!url || _pdfCotObsoleto(data)) {
+        toast('Actualizando PDF al formato separado...');
+        url = await _asegurarPDFCotizacion(data);
+      }
+      if (url) {
+        data.pdfUrl = url;
+        await _descargarPDFNombrado(_urlDescargaCot(data), _nombrePDFCot(data));
+      } else {
+        await _avisar('No se pudo preparar el PDF separado. Revisa la señal e intenta de nuevo.', { titulo: 'PDF no disponible' });
+      }
     }; })(it);
     const btnEdit = document.createElement('button');
     btnEdit.textContent = 'Editar';
@@ -6125,7 +6228,8 @@ async function cargarCarpetas() {
         descuento: d.descuento || 0, numeroCotizacion: d.numeroCotizacion || '', centro: d.centro || '',
         localCorto: d.localCorto || '',
         carpeta: d.carpeta || '', supervisor: d.supervisor || '',
-        pdfUrl: d.pdfUrl || '', enviado: d.enviado || false,
+        pdfUrl: d.pdfUrl || '', pdfGeneradoEn: d.pdfGeneradoEn || 0,
+        pdfFormato: d.pdfFormato || 1, enviado: d.enviado || false,
         tipoCot: d.tipoCot || '', estadoCot: d.estadoCot || '',
         tecnicoAsignado: d.tecnicoAsignado || '', otEnEsperaNumero: d.otEnEsperaNumero || '',
         otCompletadaNumero: d.otCompletadaNumero || '', fechaRealizada: d.fechaRealizada || '',
@@ -7642,12 +7746,16 @@ function verPDF() {
   } else {
     // Congelado antes de generar: si el tecnico arranca la OT siguiente mientras se arma el PDF,
     // el archivo que se descarga saldria con el numero (y el tipo) de la otra hoja.
-    const snapNombre = { tipo: estado.tipo, ceco: estado.ceco, otNumero: estado.otNumero };
+    const snapNombre = {
+      tipo: estado.tipo, ceco: estado.ceco, otNumero: estado.otNumero,
+      cotizacionNumero: estado.cotizacionNumero || '',
+      descripcionTrabajo: document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : ''
+    };
     // El tecnico se congela junto al resto: si arranca la OT siguiente mientras se arma este
     // PDF, la firma impresa seria la del usuario que quedo cargado, no la del que ejecuto.
     const snapTecnico = _tecnicoActual();
     generarPDFRecepcionObra(snapTecnico).then(function(doc){
-      if(doc) doc.save(_nombreArchivoPDF(snapNombre));
+      if(doc) doc.save(_nombrePDFHoja(snapNombre));
     });
   }
 }
@@ -7999,6 +8107,7 @@ async function guardarYEnviarPDF() {
     tecnico: estado.editandoOTId ? (estado.editandoTecnico || _tecnicoActual()) : _tecnicoActual(),
     editandoOTId: estado.editandoOTId || '',
     otClientId: estado.otClientId || '',
+    cotizacionNumero: estado.cotizacionNumero || '',
     email: estado.emailSucursal || estado.emailAdmin,
     serviciosPreventivo: estado.serviciosPreventivo
   };
@@ -8028,6 +8137,7 @@ async function guardarYEnviarPDF() {
   // El texto del trabajo tambien se lee del DOM DESPUES del await de Cloudinary: al iniciar la
   // OT siguiente el campo ya esta limpio o con otra descripcion. Se copia con el resto.
   const trabajoSnap = document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : '';
+  snap.descripcionTrabajo = trabajoSnap;
 
   toast('Generando PDF...');
   // snap.tecnico, no _tecnicoActual(): es el unico dato de la firma que sale de la instantanea
@@ -8108,6 +8218,9 @@ async function guardarYEnviarPDF() {
         // Identidad estable del enlace: si el numero se cruza igual, por aca se re-enlaza.
         otClientId: snap.clientId,
         local: snap.local,
+        ceco: snap.ceco || '',
+        cotizacionNumero: snap.cotizacionNumero || '',
+        descripcionTrabajo: trabajoSnap || '',
         tecnico: snap.tecnico,
         fecha: new Date().toLocaleDateString('es-CL'),
         pdfData: (pdfBase64 && pdfBase64.length < 900000) ? pdfBase64 : '',
@@ -8135,6 +8248,8 @@ async function guardarYEnviarPDF() {
   if (email && !snap.editandoOTId) {
     toast('Enviando email con PDF...');
     const _urlLocal = pdfUrlCloudinary || pdfUrlFirestore || '';
+    const _urlLocalEntrega = (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
+      ? _urlPDFDescarga(_urlLocal, _nombrePDFHoja(snap)) : _urlLocal;
     const enviado = await _enviarCorreo({
       email_admin: email,
       ot_numero: _numOTCorreo(snap.otNumero),
@@ -8143,7 +8258,7 @@ async function guardarYEnviarPDF() {
       tecnico: String(snap.tecnico),
       tipo: snap.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
       trabajo: String(trabajoSnap) + (_urlLocal ? '' : '\n\n' + _NOTA_SIN_PDF),
-      pdf_url: _urlLocal
+      pdf_url: _urlLocalEntrega
       // El sello lleva el destinatario: este correo va al LOCAL y el otro a administracion. Son
       // dos avisos distintos del mismo trabajo y no se pueden tapar entre si.
       // Y lleva ademas SI TRAE PDF: ver _SELLO_SIN_PDF.
@@ -8207,7 +8322,8 @@ async function guardarYEnviarPDF() {
       aviso: {
         numero: snap.otNumero, local: snap.local, tecnico: snap.tecnico, tipo: snap.tipo,
         fecha: new Date().toLocaleDateString('es-CL'),
-        clientId: snap.clientId, emailLocal: email || '', trabajo: String(trabajoSnap || '')
+        clientId: snap.clientId, emailLocal: email || '', trabajo: String(trabajoSnap || ''),
+        ceco: snap.ceco || '', cotizacionNumero: snap.cotizacionNumero || ''
       }
     });
   }
@@ -8222,7 +8338,9 @@ async function guardarYEnviarPDF() {
     _notificarOTCompletada(
       snap.otNumero, snap.local, snap.tecnico, snap.tipo,
       new Date().toLocaleDateString('es-CL'),
-      pdfUrlCloudinary || pdfUrlFirestore || '',
+      (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
+        ? _urlPDFDescarga(pdfUrlCloudinary || pdfUrlFirestore || '', _nombrePDFHoja(snap))
+        : (pdfUrlCloudinary || pdfUrlFirestore || ''),
       email ? '' : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.',
       snap.clientId
     );
@@ -9474,7 +9592,7 @@ async function generarPDFCotizacionGuardada(cotData, options) {
     // Cargar datos completos de la OT desde Firestore
     let otData = null;
     console.log('Cargando OT para PDF, otId:', cotData.otId);
-    if (window._firebaseReady && cotData.otId) {
+    if (_COTIZACION_INCLUYE_HS && window._firebaseReady && cotData.otId) {
       const db = window.firebase.firestore();
       const otDoc = await db.collection('ordenes').doc(cotData.otId).get();
       if (otDoc.exists) {
@@ -9483,7 +9601,7 @@ async function generarPDFCotizacionGuardada(cotData, options) {
       } else {
         console.warn('OT no encontrada en Firestore para id:', cotData.otId);
       }
-    } else {
+    } else if (_COTIZACION_INCLUYE_HS) {
       console.warn('Sin otId o Firebase no listo. otId:', cotData.otId, '_firebaseReady:', window._firebaseReady);
     }
 
@@ -9611,7 +9729,7 @@ async function generarPDFCotizacionGuardada(cotData, options) {
     doc.text('Cotizacion valida por 10 dias a partir de su fecha de emisi' + String.fromCharCode(243) + 'n.', margin, firmY);
 
     // ---- PAGINA 2 ----
-    if (otData) {
+    if (_COTIZACION_INCLUYE_HS && otData) {
       doc.addPage();
       const m2 = 15, W2 = 210;
       if (otData.tipo === 'preventivo') {
@@ -10004,7 +10122,7 @@ async function generarPDFCotizacion() {
   toast('Cargando datos de la OT...');
   try {
     // Cargar datos completos de la OT desde Firestore
-    if (window._firebaseReady && cotizacionActual.otId) {
+    if (_COTIZACION_INCLUYE_HS && window._firebaseReady && cotizacionActual.otId) {
       const db = window.firebase.firestore();
       const otDoc = await db.collection('ordenes').doc(cotizacionActual.otId).get();
       if (otDoc.exists) {
@@ -10508,7 +10626,14 @@ async function cargarPreventivos() {
       const pdfCloudUrl = ot.pdfUrlCloudinary || (pdfInfo ? pdfInfo.cloudUrl : '') || '';
       const pdfFirestoreUrl = ot.pdfUrl || (pdfInfo ? ('https://desarrollobastian-design.github.io/emval-app/?pdf=' + pdfInfo.id) : '');
       const supNombre = idxPrev.supervisor(ot.local);
-      window._todosPreventivos[ot.id] = { id: ot.id, local: ot.local || '', tecnico: ot.tecnico || '', numero: otNum, fecha: ot.fecha || '', pdfUrl: pdfCloudUrl || pdfFirestoreUrl || '', supervisorNombre: supNombre };
+      const cecoValPrev = ot.ceco || idxPrev.ceco(ot.local) || '';
+      window._todosPreventivos[ot.id] = {
+        id: ot.id, local: ot.local || '', tecnico: ot.tecnico || '', numero: otNum,
+        otNumero: otNum, fecha: ot.fecha || '', tipo: 'preventivo',
+        ceco: ot.ceco || idxPrev.ceco(ot.local) || '',
+        descripcionTrabajo: ot.descripcionTrabajo || 'MP Transpaletas',
+        pdfUrl: pdfCloudUrl || pdfFirestoreUrl || '', supervisorNombre: supNombre
+      };
 
       const card = document.createElement('div');
       card.className = 'card prev-hoja-row';
@@ -10529,7 +10654,6 @@ async function cargarPreventivos() {
       } else { ico.textContent = (ot.local||'?').charAt(0); }
       const hdrInfo = document.createElement('div');
       hdrInfo.style.flex = '1';
-      const cecoValPrev = ot.ceco || idxPrev.ceco(ot.local) || '';
       const cecoTag = cecoValPrev ? ' · <b>CeCo:' + cecoValPrev + '</b>' : '';
       hdrInfo.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--texto);">' + (ot.local||'Sin local') + '</div>'
         + '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">' + (ot.fecha||'') + cecoTag + ' · ' + (ot.tecnico||'-') + '</div>';
@@ -10581,12 +10705,12 @@ async function cargarPreventivos() {
         const btnDesc = document.createElement('button');
         btnDesc.textContent = 'Ver PDF';
         btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnDesc.onclick = (function(cUrl, fUrl){ return function(){
+        btnDesc.onclick = (function(cUrl, fUrl, hoja){ return function(){
           var a = document.createElement('a');
-          a.href = cUrl || fUrl;
+          a.href = cUrl ? _urlPDFDescarga(cUrl, _nombrePDFHoja(hoja)) : fUrl;
           a.target = '_blank';
           a.click();
-        }; })(pdfCloudUrl, pdfFirestoreUrl);
+        }; })(pdfCloudUrl, pdfFirestoreUrl, _datosHojaConCot(ot, null, cecoValPrev));
         btns.appendChild(btnDesc);
       }
 
@@ -10599,7 +10723,9 @@ async function cargarPreventivos() {
         btnComp.textContent = 'Compartir';
         btnComp.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnComp.onclick = (function(h){ return function(){ compartirHoja(h); }; })({
-          pdfUrl: pdfCloudUrl, local: ot.local || '', numero: otNum, fecha: ot.fecha || ''
+          pdfUrl: pdfCloudUrl, local: ot.local || '', numero: otNum, otNumero: otNum,
+          fecha: ot.fecha || '', tipo: 'preventivo', ceco: cecoValPrev,
+          descripcionTrabajo: ot.descripcionTrabajo || 'MP Transpaletas'
         });
         btns.appendChild(btnComp);
       }
@@ -10677,10 +10803,16 @@ async function verOTsTecnico(nombre, grupo) {
   // Cargar cotizaciones existentes - buscar por otId Y por otNumero como fallback
   const otsCotizadasT = {};
   const otsCotizadasPorNumero = {};
+  const cotDatosPorIdT = {};
+  const cotDatosPorNumeroT = {};
   cotSnapT.docs.forEach(function(cd) {
     const cdata = cd.data();
-    if (cdata.otId) otsCotizadasT[cdata.otId] = cd.id;
-    if (cdata.otNumero) otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
+    const ficha = Object.assign({ id: cd.id }, cdata);
+    if (cdata.otId) { otsCotizadasT[cdata.otId] = cd.id; cotDatosPorIdT[cdata.otId] = ficha; }
+    if (cdata.otNumero) {
+      otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
+      cotDatosPorNumeroT[String(cdata.otNumero)] = ficha;
+    }
   });
   // Previas pendientes (sin OT asignada aun) para el boton "Adjuntar previa".
   const previasPendientesT = cotSnapT.docs
@@ -10761,6 +10893,8 @@ async function verOTsTecnico(nombre, grupo) {
     const subDiv = document.createElement('div');
     subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
     const cecoValTec = ot.ceco || cecoMapTec[ot.local] || '';
+    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotDatosPorNumeroT[String(ot.numero || ot.otNumero || '')] || null;
+    const datosNombreHojaT = _datosHojaConCot(ot, cotDatosHojaT, cecoValTec);
     subDiv.innerHTML = '<b style="color:var(--azul)">#' + (ot.numero || '—') + '</b> · ' + (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
     headerInfo.appendChild(subDiv);
@@ -10875,7 +11009,7 @@ async function verOTsTecnico(nombre, grupo) {
       const btnPdf = document.createElement('button');
       btnPdf.textContent = 'Ver PDF';
       btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnPdf.onclick = (function(url){ return function(){
+      btnPdf.onclick = (function(url, hoja){ return function(){
         // Si es URL de la app (Firestore), abrir directamente
         // Si es URL de Cloudinary, forzar descarga con nombre correcto
         if (url.includes('github.io') || url.includes('?pdf=')) {
@@ -10883,11 +11017,11 @@ async function verOTsTecnico(nombre, grupo) {
         } else {
           // Cloudinary raw - descargar con nombre PDF
           var a = document.createElement('a');
-          a.href = url.endsWith('.pdf') ? url : url + '.pdf';
+          a.href = _urlPDFDescarga(url, _nombrePDFHoja(hoja));
           a.target = '_blank';
           a.click();
         }
-      }; })(urlParaVer);
+      }; })(urlParaVer, datosNombreHojaT);
       btns.appendChild(btnPdf);
 
       /* Compartir: solo si lo que hay es el PDF. Cuando `urlParaVer` es el link a la app, Ver PDF
@@ -10897,7 +11031,7 @@ async function verOTsTecnico(nombre, grupo) {
         const btnCompOT = document.createElement('button');
         btnCompOT.textContent = 'Compartir';
         btnCompOT.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-        btnCompOT.onclick = (function(o, u){ return function(){ compartirOT(o, u); }; })(ot, urlParaVer);
+        btnCompOT.onclick = (function(o, u){ return function(){ compartirOT(o, u); }; })(datosNombreHojaT, urlParaVer);
         btns.appendChild(btnCompOT);
       }
     }
@@ -11370,25 +11504,19 @@ function _slugTexto(txt) {
     .substring(0, 60);
 }
 
-/* ─── NOMBRE DEL PDF DE UNA COTIZACION ────────────────────────────────────────────────────────
-   Pedido de Pedro, 14-08-2026. Formato:
+/* ─── NOMBRE DEL PDF DE UNA COTIZACIÓN ────────────────────────────────────────────────────────
+   Pedido de Gerencia recibido por Pedro, 14-09-2026. Formatos independientes:
 
-       <N° cotizacion> HS <N° OT> <servicio> <local>.pdf
-       31082601 HS 9464 Cambio de lamas Chillan 2.pdf
+       COT - <N° cotización> - ceco <centro> - <trabajo>.pdf
+       HS - <N° hoja> - COT <N° cotización> - ceco <centro> - <trabajo>.pdf
 
-   Es el formato con el que Pedro archiva a mano desde ANTES de que existiera la app, y el orden
-   no es decorativo: el folio va primero porque es lo unico irrepetible y ordenable — una carpeta
-   ordenada por nombre queda ordenada por dia y por correlativo del dia. El nombre viejo
-   (`Cotizacion_<local>_<servicio>_<fecha>`) empezaba con la misma palabra en las 45, asi que
-   ordenar la carpeta no servia de nada.
+   COT y HS no se mezclan en el nombre ni en el contenido. El folio se conserva tal como fue
+   asignado y el CECO numérico se completa a cuatro dígitos para recuperar ceros que Firestore
+   perdió al guardar centros antiguos como número.
 
-   ⚠️ SIN N° DE OT SE OMITE EL BLOQUE "HS ..." ENTERO, no se deja vacio. Una cotizacion previa se
-   emite ANTES de que exista la OT (`otNumero: ''`, puesto a proposito al guardar), y un "HS"
-   suelto sin numero se lee como un dato que se perdio, que es justo lo contrario.
-
-   ⚠️ El folio se toma tal cual lo dejo `_asignarNumeroCotizacion` — ddmmaa + correlativo del dia,
-   con transaccion. Aca NO se recalcula ni se rearma: ese fue el bug del '01' hardcodeado que
-   mando 39 cotizaciones con el mismo numero a los supervisores de SMU.
+   El folio se toma tal cual lo dejó `_asignarNumeroCotizacion` — ddmmaa + correlativo del día,
+   con transacción. Acá NO se recalcula ni se rearma: ese fue el bug del '01' hardcodeado que
+   mandó 39 cotizaciones con el mismo número a los supervisores de SMU.
    ─────────────────────────────────────────────────────────────────────────────────────────── */
 
 // El local sin el nombre de la cadena adelante: "S10 Chillan 2" -> "Chillan 2".
@@ -11422,23 +11550,67 @@ function _recortarPalabras(txt, max) {
   return (esp > max * 0.5 ? corte.substring(0, esp) : corte).trim();
 }
 
+// Los centros historicos quedaron a veces como numero (474) y a veces como texto (0474).
+// Para la nomenclatura nueva ambos representan el mismo CECO de cuatro digitos.
+function _cecoDocumento(valor) {
+  const c = String(valor == null ? '' : valor).trim();
+  if (!c) return 'SIN-CECO';
+  return /^\d+$/.test(c) && c.length < 4 ? c.padStart(4, '0') : c;
+}
+
+// Una sola limpieza para COT y HS: ASCII para Cloudinary, sin caracteres prohibidos por
+// Windows/Android y sin separadores duplicados provenientes del texto libre.
+function _nombreDocumento(partes) {
+  return partes.filter(function(p){ return p != null && String(p).trim(); }).join(' - ')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]+/g, '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ').trim() + '.pdf';
+}
+
+function _trabajoDocumento(datos) {
+  datos = datos || {};
+  const t = String(datos.nombreServicio || datos.descripcionTrabajo || datos.descripcion || '').trim();
+  if (t) return _recortarPalabras(t, 60);
+  if (datos.tipo === 'preventivo') return 'MP Transpaletas';
+  return 'SIN-DESCRIPCION';
+}
+
+// Nomenclatura solicitada por Gerencia/Procurement el 14-09-2026.
+// Ejemplo: HS - 6537 - COT 5454 - ceco 0474 - reparacion corte electrico.pdf
+function _nombrePDFHoja(datos) {
+  datos = datos || {};
+  const num = String(datos.otNumero || datos.numero || '').trim() || 'SIN-NUMERO';
+  const cot = String(datos.cotizacionNumero || datos.numeroCotizacion || '').trim();
+  const partes = ['HS', num];
+  if (cot) partes.push('COT ' + cot);
+  partes.push('ceco ' + _cecoDocumento(datos.ceco || datos.centro));
+  partes.push(_trabajoDocumento(datos));
+  return _nombreDocumento(partes);
+}
+
+function _datosHojaConCot(ot, cot, cecoFallback) {
+  ot = ot || {};
+  cot = cot || {};
+  return Object.assign({}, ot, {
+    otNumero: ot.otNumero || ot.numero || cot.otNumero || '',
+    cotizacionNumero: ot.cotizacionNumero || cot.numeroCotizacion || '',
+    ceco: ot.ceco || cot.centro || cecoFallback || '',
+    descripcionTrabajo: ot.descripcionTrabajo || cot.descripcionTrabajo || cot.nombreServicio || ''
+  });
+}
+
 // Nombre para LEER, con espacios. El identificador para Cloudinary se deriva de este en
 // _slugPDFCot, que si va sin espacios. Son dos cosas distintas a proposito.
 function _nombrePDFCot(cot) {
   cot = cot || {};
-  const partes = [];
+  const partes = ['COT'];
   // Sin folio queda 'SIN-NUMERO' bien visible: es el sintoma de que el contador no respondio al
   // guardar (_asignarNumeroCotizacion marca esas como provisorias). Se ve y se corrige antes de
   // enviarla; un nombre que disimula el hueco la manda a SMU sin numero.
   partes.push(String(cot.numeroCotizacion || '').trim() || 'SIN-NUMERO');
-  // El 0 se descarta igual que el vacio: no existe la OT 0, y `otNumero` llega como numero desde
-  // Firestore (integerValue), asi que un 0 pasaria el filtro de string y estamparia un "HS 0".
-  const ot = String(cot.otNumero == null ? '' : cot.otNumero).trim();
-  if (ot && ot !== '0') { partes.push('HS'); partes.push(ot); }
-  const servicio = String(cot.nombreServicio || cot.descripcionTrabajo || '').trim();
-  if (servicio) partes.push(_recortarPalabras(servicio, 45));
-  const local = String(cot.localCorto || '').trim() || _localSinCadena(cot.local, cot.cadena);
-  if (local) partes.push(local);
+  partes.push('ceco ' + _cecoDocumento(cot.centro || cot.ceco));
+  partes.push(_trabajoDocumento(cot));
   /* SIN TILDES NI Ñ, y no es cosmetica: el nombre viaja dentro de la URL de Cloudinary como
      `fl_attachment:<nombre>` y un caracter fuera de ASCII la hace responder 400 — o sea, la
      descarga se ROMPE, no es que salga fea.
@@ -11448,11 +11620,7 @@ function _nombrePDFCot(cot) {
      Los caracteres de la segunda linea los RECHAZAN Windows y Android en un nombre de archivo, y
      la descripcion del trabajo es texto libre: basta un "cambio 1/2 pulgada" para no poder
      guardar el archivo. */
-  return partes.join(' ')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^\x20-\x7E]+/g, '')
-    .replace(/[\\/:*?"<>|]+/g, ' ')
-    .replace(/\s+/g, ' ').trim() + '.pdf';
+  return _nombreDocumento(partes);
 }
 
 // public_id de Cloudinary: el mismo nombre, sin espacios. Un public_id con espacios viaja como
@@ -11534,6 +11702,13 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
     }
   }
 
+  // Resolver las HS antes de armar el correo: desde este cambio el PDF de cotizacion ya no las
+  // lleva como pagina 2. Cuando el trabajo existe, el destinatario recibe dos enlaces/archivos
+  // claramente separados; una previa aun no ejecutada conserva solo su COT.
+  for (var hi = 0; hi < seleccionadas.length; hi++) {
+    seleccionadas[hi]._hojaEntrega = await _obtenerHojaDeCot(seleccionadas[hi]);
+  }
+
   // ── CSS-EXPORTADO: INICIO ────────────────────────────────────────────────────────────
   // Este HTML viaja a un CLIENTE DE CORREO (EmailJS). Alli el :root de la app no existe.
   // Una custom property sin fallback invalida la declaracion entera y el navegador computa el
@@ -11565,7 +11740,13 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
         '</div>'
       : '';
     const verPdf = it.pdfUrl
-      ? '<a href="' + it.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar PDF' + (_ver ? ' (v. ' + _ver + ')' : '') + '</a>'
+      ? '<a href="' + _urlDescargaCot(it) + '" style="display:inline-block;margin-top:8px;margin-right:6px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Descargar COT' + (_ver ? ' (v. ' + _ver + ')' : '') + '</a>'
+      : '';
+    const verHs = it._hojaEntrega
+      ? '<a href="' + _urlPDFDescarga(it._hojaEntrega.url, it._hojaEntrega.nombre) + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#27785F;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Descargar HS</a>'
+      : '';
+    const faltaHs = (it.otId || it.otNumero) && !it._hojaEntrega
+      ? '<div style="margin-top:8px;font-size:12px;color:#7A4E00;">HS no disponible para adjuntar; revisa que la hoja tenga PDF.</div>'
       : '';
     itemsHtml +=
       '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
@@ -11575,7 +11756,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
         (trabajo ? '<div style="margin-top:2px;font-size:12px;color:#444;">Trabajo: ' + trabajo + '</div>' : '') +
         '<div style="margin-top:2px;font-size:12px;color:#444;">Total: ' + total + '</div>' +
         avisoVersion +
-        verPdf +
+        verPdf + verHs + faltaHs +
       '</div>';
   });
 
@@ -12493,7 +12674,12 @@ async function _confirmarAdjuntarPrevia(previa, ot, overlay, recargar) {
       fotoTimbre: ot.fotoTimbre || null,
       firmaImagen: ot.firmaImagen || ''
     }, _cotPdfCaduco())), 25000, 'adjuntar previa');
-    try { await db.collection('ordenes').doc(ot.id).update({ cotizacionId: previa.id }); } catch(e) {}
+    try {
+      await _conTimeout(db.collection('ordenes').doc(ot.id).update({
+        cotizacionId: previa.id,
+        cotizacionNumero: previa.numeroCotizacion || ''
+      }), 25000, 'vincular previa a HS');
+    } catch(e) {}
     toast('✓ Cotización adjuntada a la OT #' + otNum);
     if (overlay && overlay.parentNode) document.body.removeChild(overlay);
     if (typeof recargar === 'function') recargar();
@@ -15148,8 +15334,9 @@ function _modalOcultar(id) {
 // =========== OFFLINE / INDEXEDDB ===========
 
 // Sube un PDF (base64 completo 'data:...;base64,...') a Cloudinary (raw) y devuelve la URL.
-async function _subirPDFaCloudinary(pdfDataUri, numero, clientId) {
+async function _subirPDFaCloudinary(pdfDataUri, datos) {
   try {
+    datos = datos || {};
     const solo = String(pdfDataUri || '').split(',').pop();
     if (!solo) return null;
     const formData = new FormData();
@@ -15163,7 +15350,7 @@ async function _subirPDFaCloudinary(pdfDataUri, numero, clientId) {
        desde la cola sigue subiendo con nombre de correctivo (`Recepcion_Obra_OT…`). Es un defecto
        preexistente y contradice "el nombre del PDF es el unico indicio confiable del tipo"
        (CLAUDE.md); no se toca aca para no mezclar dos arreglos en el mismo cambio. */
-    formData.append('public_id', _nombrePublicIdPDF({ otNumero: numero, clientId: clientId, pdfGen: 1 }));
+    formData.append('public_id', _nombrePublicIdPDF({ otNumero: datos.numero, clientId: datos.clientId, pdfGen: 1, tipo: datos.tipo, ceco: datos.ceco, cotizacionNumero: datos.cotizacionNumero, descripcionTrabajo: datos.descripcionTrabajo }));
     const resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: formData }, 30000);
     const data = await resp.json();
     return data.secure_url || null;
@@ -15270,8 +15457,16 @@ async function sincronizarEnlacesPDFPendientes() {
          (ver _SELLO_SIN_PDF); sin el, el libro de despachos lo tiraria en silencio. */
       if (it.aviso && it.pdfUrlCloudinary) {
         var _a = it.aviso;
+        var _urlHSRescatada = it.pdfUrlCloudinary;
+        if (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function') {
+          var _nombreHSRescatada = _nombrePDFHoja({
+            otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco,
+            cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
+          });
+          _urlHSRescatada = _urlPDFDescarga(it.pdfUrlCloudinary, _nombreHSRescatada);
+        }
         await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
-          it.pdfUrlCloudinary, '', _a.clientId);
+          _urlHSRescatada, '', _a.clientId);
         if (_a.emailLocal) {
           await _enviarCorreo({
             email_admin: _a.emailLocal,
@@ -15281,7 +15476,7 @@ async function sincronizarEnlacesPDFPendientes() {
             tecnico: String(_a.tecnico || ''),
             tipo: _a.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
             trabajo: String(_a.trabajo || ''),
-            pdf_url: it.pdfUrlCloudinary
+            pdf_url: _urlHSRescatada
           }, _a.clientId ? { sello: 'ot_' + _a.clientId + '__local' } : undefined);
         }
       }
@@ -15528,6 +15723,8 @@ async function sincronizarOTsPendientes() {
         tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
         descripcionProblema: ot.descripcionProblema || '',
         ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
+        cotizacionId: ot.cotizacionId || '',
+        cotizacionNumero: ot.cotizacionNumero || '',
         pendientesMateriales: ot.pendientesMateriales || '',
         numEquipos: ot.numEquipos || '',
         serviciosPreventivo: ot.serviciosPreventivo || [],
@@ -15549,7 +15746,7 @@ async function sincronizarOTsPendientes() {
       // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link
       var pdfUrlSync = '';
       if (ot.pdfBase64) {
-        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot.numero, ot.clientId)) || '';
+        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
         if (pdfUrlSync && ot.clientId) {
           // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
           // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
@@ -15581,13 +15778,17 @@ async function sincronizarOTsPendientes() {
           email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
           fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
           tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-          trabajo: String(ot.descripcionTrabajo || ''), pdf_url: pdfUrlSync
+          trabajo: String(ot.descripcionTrabajo || ''),
+          pdf_url: (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
+            ? _urlPDFDescarga(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
         }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
       }
 
       await _eliminarOTPendiente(ot.id);
       toast('OT #' + ot.numero + ' sincronizada ✓');
-      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha, pdfUrlSync,
+      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
+        (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
+          ? _urlPDFDescarga(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
         ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
         ot.clientId);
     } catch(err) {

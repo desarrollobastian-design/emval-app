@@ -1,9 +1,9 @@
 /* Prueba de regresion — el PDF de una cotizacion sale con el nombre con que Pedro archiva.
 
-   Pedido de Pedro, 14-08-2026. Formato:
+   Pedido de Gerencia recibido por Pedro, 14-09-2026. Formato:
 
-       <N° cotizacion> HS <N° OT> <servicio> <local>.pdf
-       31082601 HS 9464 Cambio de lamas Chillan 2.pdf
+       COT - <N° cotizacion> - ceco <centro> - <trabajo>.pdf
+       HS - <N° hoja> - COT <N° cotizacion> - ceco <centro> - <trabajo>.pdf
 
    El nombre viejo (`Cotizacion_<local>_<servicio>_<fecha>_<6 digitos>`) empezaba con la misma
    palabra en las 45 cotizaciones, asi que ordenar la carpeta por nombre no servia de nada.
@@ -50,7 +50,8 @@ function texto(nombre) {
 
 /* Las cuatro se llaman entre si, asi que se evaluan JUNTAS y en un scope propio con su `window`.
    Extraerlas de a una las dejaria sin sus dependencias y el test pasaria por la razon equivocada. */
-const NOMBRES = ['_localSinCadena', '_recortarPalabras', '_nombrePDFCot', '_slugPDFCot', '_urlDescargaCot'];
+const NOMBRES = ['_localSinCadena', '_recortarPalabras', '_cecoDocumento', '_nombreDocumento',
+  '_trabajoDocumento', '_nombrePDFHoja', '_datosHojaConCot', '_nombrePDFCot', '_slugPDFCot', '_urlDescargaCot'];
 const fuentes = NOMBRES.map(texto);
 const faltan = NOMBRES.filter((n, i) => !fuentes[i]);
 if (faltan.length) {
@@ -81,12 +82,26 @@ console.log('El PDF de la cotizacion sale con el nombre de Pedro\n');
 {
   const cot = {
     numeroCotizacion: '01082604', otNumero: 301143,
-    nombreServicio: 'Correctivo transpaletas', local: 'Alvi Chillan'
+    centro: '474', nombreServicio: 'Correctivo transpaletas', local: 'Alvi Chillan'
   };
   const n = F._nombrePDFCot(cot);
-  const esperado = '01082604 HS 301143 Correctivo transpaletas Chillan.pdf';
+  const esperado = 'COT - 01082604 - ceco 0474 - Correctivo transpaletas.pdf';
   chequear(n === esperado, 'nombre con OT: se esperaba "' + esperado + '" y salio "' + n + '"');
   console.log('1) Con N° de OT: ' + (n === esperado ? n + ' ✓' : 'salio "' + n + '" ✗'));
+}
+
+// ── 1b. La HS es otro archivo y referencia el folio de la COT ────────────────────────────
+{
+  const hoja = {
+    otNumero: 6537, cotizacionNumero: 5454, ceco: 474,
+    descripcionTrabajo: 'Reparación corte eléctrico en cortina'
+  };
+  const n = F._nombrePDFHoja(hoja);
+  const esperado = 'HS - 6537 - COT 5454 - ceco 0474 - Reparacion corte electrico en cortina.pdf';
+  chequear(n === esperado, 'nombre HS: se esperaba "' + esperado + '" y salio "' + n + '"');
+  chequear(n !== F._nombrePDFCot({ numeroCotizacion: 5454, centro: 474,
+    descripcionTrabajo: hoja.descripcionTrabajo }), 'COT y HS terminaron con el mismo nombre');
+  console.log('1b) HS independiente: ' + (n === esperado ? n + ' ✓' : 'salio "' + n + '" ✗'));
 }
 
 // ── 2. Cotizacion previa: sin OT, y sin rastro de "HS" ───────────────────────────────────────
@@ -94,10 +109,10 @@ console.log('El PDF de la cotizacion sale con el nombre de Pedro\n');
   // Tal como la guarda el codigo: `otNumero: ''` explicito (no undefined).
   const previa = {
     numeroCotizacion: '01082604', otNumero: '', tipoCot: 'previa',
-    nombreServicio: 'Cambio de lamas', local: 'S10 Chillan 2', cadena: 'S10'
+    centro: '907', nombreServicio: 'Cambio de lamas', local: 'S10 Chillan 2', cadena: 'S10'
   };
   const n = F._nombrePDFCot(previa);
-  const esperado = '01082604 Cambio de lamas Chillan 2.pdf';
+  const esperado = 'COT - 01082604 - ceco 0907 - Cambio de lamas.pdf';
   const sinHS = !/\bHS\b/.test(n);
   chequear(n === esperado, 'previa: se esperaba "' + esperado + '" y salio "' + n + '"');
   chequear(sinHS, 'previa: el nombre trae "HS" sin numero -> "' + n + '"');
@@ -114,11 +129,11 @@ console.log('El PDF de la cotizacion sale con el nombre de Pedro\n');
   const base = { otNumero: 9464, nombreServicio: 'Cambio de lamas', local: 'S10 Chillan 2', cadena: 'S10' };
   // El folio del documento manda aunque sea de otro dia: el archivo es del documento, no de hoy.
   const viejo = F._nombrePDFCot(Object.assign({}, base, { numeroCotizacion: '13072601' }));
-  const respeta = viejo.indexOf('13072601 ') === 0;
+  const respeta = viejo.indexOf('COT - 13072601 - ') === 0;
   chequear(respeta, 'el folio del documento no quedo al principio: "' + viejo + '"');
 
   const sinFolio = F._nombrePDFCot(Object.assign({}, base, { numeroCotizacion: '' }));
-  const seVe = sinFolio.indexOf('SIN-NUMERO') === 0;
+  const seVe = sinFolio.indexOf('COT - SIN-NUMERO - ') === 0;
   chequear(seVe, 'sin folio el nombre no lo delata: "' + sinFolio + '"');
   console.log('3) Folio: ' + (respeta && seVe ? 'se copia tal cual, y si falta se ve ✓' : 'se altera o se disimula ✗'));
 }
@@ -201,7 +216,7 @@ console.log('El PDF de la cotizacion sale con el nombre de Pedro\n');
 // ── 7. public_id sin espacios, y el nombre bueno viaja en fl_attachment ──────────────────────
 {
   const cot = { numeroCotizacion: '01082604', otNumero: 301143,
-                nombreServicio: 'Correctivo transpaletas', local: 'Alvi Chillan' };
+                centro: '474', nombreServicio: 'Correctivo transpaletas', local: 'Alvi Chillan' };
   const slug = F._slugPDFCot(cot);
   const sinEspacios = !/\s/.test(slug) && slug.length > 0;
   chequear(sinEspacios, 'el public_id trae espacios: "' + slug + '"');
@@ -209,7 +224,7 @@ console.log('El PDF de la cotizacion sale con el nombre de Pedro\n');
   const url = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1785636717/emval/cotizaciones/Cotizacion_Alvi_Chillan_x.pdf';
   const conNombre = F._urlDescargaCot({ pdfUrl: url, ...cot });
   const lleva = conNombre.indexOf('/raw/upload/fl_attachment:') > 0 &&
-                conNombre.indexOf('01082604%20HS%20301143') > 0 &&
+                conNombre.indexOf('COT%20-%2001082604%20-%20ceco%200474') > 0 &&
                 conNombre.endsWith('/v1785636717/emval/cotizaciones/Cotizacion_Alvi_Chillan_x.pdf');
   chequear(lleva, 'la URL de descarga no lleva el nombre: "' + conNombre + '"');
 
