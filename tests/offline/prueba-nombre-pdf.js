@@ -1,34 +1,43 @@
-/* PRUEBA REAL — el administrador descarga una cotización y el archivo llega con el nombre nuevo.
+/* PRUEBA REAL — el administrador descarga la CT y la HS y los archivos llegan con el nombre que
+   exige SMU. Caso COT 15092601 / OT 796863 (15-09-2026).
 
    node tests/offline/prueba-nombre-pdf.js [index.html|prefix.html]
 
-   Ejecuta el flujo entero por la interfaz: login como Administrador con contraseña, panel,
-   "Cotizaciones", y click en "Ver PDF". Lo que se mide es el `suggestedFilename()` de la descarga
-   que dispara el navegador — o sea el nombre con el que el archivo cae en la carpeta de Pedro,
-   no lo que dice una función.
+   Ejecuta el flujo por la interfaz: login como Administrador con contraseña, panel,
+   "Cotizaciones", y click en cada "Ver PDF". Se mide el `suggestedFilename()` de la descarga que
+   dispara el navegador — el nombre con el que el archivo cae en la carpeta de Pedro.
+   Para la HS se pide a la app, con su catálogo y sus datos, el enlace que manda en el correo
+   "Descargar HS" (`_obtenerHojaDeCot`), y se abre en el navegador como lo abre el supervisor.
 
    Qué es real y qué no:
-     Real   — el navegador, la app entera, el login con hash, el render de la lista, el click, y
-              **Cloudinary de verdad**: la URL apunta a dos PDF que existen en la cuenta. Es una
-              LECTURA pública (GET); no sube nada, no borra nada y no gasta cuota de ningún plan.
-              El nombre lo pone Cloudinary en el Content-Disposition, no este guion.
+     Real   — el navegador, la app entera, el login con hash, el catálogo cacheado por
+              `cargarCadenasApp`, el render de la lista, el click, y **Cloudinary de verdad**: las
+              URLs apuntan a PDF que existen en la cuenta, con el `fl_attachment` que arma la app.
+              Son LECTURAS públicas (GET); no suben nada ni gastan cuota.
+              Si Cloudinary rechaza el nombre (400), no hay descarga y la prueba falla: eso es lo que
+              le pasó al supervisor de SMU con la HS 796863.
      Espía  — Firestore y EmailJS (el SDK ni se carga: tocar producción es imposible).
-     Bloqueado — api.cloudinary.com (las SUBIDAS), por si algún camino intentara escribir.
+     Bloqueado — api.cloudinary.com (las SUBIDAS).
 
-   Se prueban los dos casos que Pedro definió:
-     1. Cotización con OT   -> "COT - <folio> - ceco <centro> - <servicio>.pdf"
-     2. Cotización previa   -> el mismo formato COT, sin mezclar la HS.
-   Y los dos caminos del nombre del local: uno con `localCorto` guardado en el documento y otro
-   sin él, que tiene que resolverse contra el catálogo de cadenas. */
+   Los datos son los de producción TAL CUAL, incluido lo que falta: la COT 15092601 y la OT 796863
+   tienen el CECO vacío y el local "S10 Concepcion", una ficha sin centro. El CECO 3164 tiene que
+   salir del catálogo por ALIAS_LOCALES.
+
+   CONTRAPRUEBA: prefix.html armado desde 943888e. Ahí la CT sale "COT - … - ceco SIN-CECO", la de
+   la coma y la HS dan 400 y no se descarga nada. */
 
 const { chromium, devices } = require('playwright');
 
 const ARCHIVO = process.argv[2] || 'index.html';
 const HASH_PEDRO123 = 'cefdf4148cc0bdd9b6b4e6f125a65088e5340d9cf15d58000015b254bcf5168d';
 
-// Dos PDF que existen de verdad en la cuenta de Cloudinary de EMVAL (verificados con HEAD 200).
-const PDF_1 = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1785636717/emval/cotizaciones/Cotizacion_Alvi_Chillan_Correctivo_transpaletas_2026-08-02_715194.pdf';
-const PDF_2 = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1785729228/emval/cotizaciones/Cotizacion_Alvi_Concepcion_Cierre_estacionamiento_2026-08-03_224195.pdf';
+// PDF reales de la cuenta de EMVAL (verificados con HEAD el 15-09-2026).
+const CT_15092601 = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1789474108/emval/cotizaciones/COT_15092601_ceco_SIN_CECO_Destape_piletas_y_camara_107503.pdf';
+const HS_796863 = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1789395715/emval/pdfs/Recepcion_Obra_OT796863_qp9imoz.pdf';
+const CT_01082617 = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1785638841/emval/cotizaciones/Cotizacion_UNIMARC_GOMEZ_CARRENO_Cambio_ubicacion_termo_retiro_termo_malo_2026-08-02_833331.pdf';
+const PDF_PREVIA = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1785729228/emval/cotizaciones/Cotizacion_Alvi_Concepcion_Cierre_estacionamiento_2026-08-03_224195.pdf';
+
+const DESC_796863 = 'Asistencia por piletas tapadas en sector Venta Asistida.\n- Se realiza limpieza de cañerías de desagüe desde venta asistida (Carnicería y Fiambrería) hasta cámara de inspección.\nQuedando cañerías de desagüe limpias sin problemas de rebalse.';
 
 const fallos = [];
 const chequear = (ok, d) => { if (!ok) fallos.push('  ✗ ' + d); };
@@ -40,40 +49,48 @@ const log = (...a) => console.log(...a);
   const page = await ctx.newPage();
   const errores = [];
   page.on('pageerror', e => errores.push(e.message.slice(0, 140)));
-  page.on('console', m => { if (m.type() === 'warning' || m.type() === 'error') log('   navegador: ' + m.text()); });
+  page.on('console', m => { if (m.type() === 'error') log('   navegador: ' + m.text().slice(0, 160)); });
 
-  // Las SUBIDAS a Cloudinary quedan cortadas. Las lecturas (res.cloudinary.com) pasan.
   await page.route('**api.cloudinary.com/**', r => r.abort('internetdisconnected'));
 
-  /* El arnés asigna `window.__SEMILLA` al cargar, así que se intercepta la asignación para
-     fusionarle los documentos de esta prueba. Inyectarlos después no sirve: la app lee usuarios
-     apenas arranca. */
-  await page.addInitScript(({ hash, pdf1, pdf2 }) => {
+  await page.addInitScript(({ hash, ct1, ct2, previa, hs, desc }) => {
     window.__EXTRA = {
       tecnicos: [
         { _id: 'adm1', nombre: 'PEDRO PRUEBA', cargo: 'Administrador', letra: 'P', passwordHash: hash }
       ],
+      // Fichas reales: "S10 Concepcion" sin centro (relleno) y "M10 CONCEPCION" con 3164.
       cadenas: [
-        { _id: 'c1', nombre: 'Alvi', color: '#1B3A6B', logo: '', letra: 'A', orden: 0,
-          sucursales: [{ nombre: 'Alvi Chillan', centro: '474' }] },
+        { _id: 'c1', nombre: 'M10', color: '#1B3A6B', logo: '', letra: 'M', orden: 0,
+          sucursales: [{ nombre: 'M10 CONCEPCION', centro: '3164', direccion: 'Los Carrera 637 Concepcion' }] },
         { _id: 'c2', nombre: 'S10', color: '#1B3A6B', logo: '', letra: 'S', orden: 1,
-          sucursales: [{ nombre: 'S10 Chillan 2', centro: '907' }] }
+          sucursales: [{ nombre: 'S10 Concepcion', email: '' }, { nombre: 'S10 Chillan 2', centro: '907' }] },
+        { _id: 'c3', nombre: 'Unimarc', color: '#1B3A6B', logo: '', letra: 'U', orden: 2,
+          sucursales: [{ nombre: 'UNIMARC GOMEZ CARRENO', centro: '713' }] }
+      ],
+      ordenes: [
+        { _id: 'ot_mu1by0re_qp9imoz', numero: 796863, local: 'S10 Concepcion', ceco: '', tipo: 'correctivo',
+          tecnico: 'Lucas Fernández', fecha: '14-09-2026', cotizacionNumero: '15092601',
+          cotizacionId: 'cot1', descripcionTrabajo: desc, firmada: true, estado: 'Terminada',
+          pdfUrlCloudinary: hs, pdfUrl: 'https://desarrollobastian-design.github.io/emval-app/?pdf=sBE6AgdWrO9XFi9r1q42' }
       ],
       cotizaciones: [
-        // CON OT. A propósito SIN `localCorto`: obliga a resolver "Alvi Chillan" -> "Chillan"
-        // contra el catálogo, que es como estan las 103 cotizaciones que ya existen.
-        { _id: 'cot1', numeroCotizacion: '01082604', otNumero: 301143, local: 'Alvi Chillan',
-          centro: '474',
-          nombreServicio: 'Correctivo transpaletas', descripcionTrabajo: 'Correctivo transpaletas',
-          carpeta: 'PRUEBA ARNES', enviado: false, total: 120000, fecha: '02-08-2026',
-          pdfUrl: pdf1, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] },
-        // PREVIA: sin OT. Con `localCorto` guardado, como las que se creen de ahora en adelante.
-        { _id: 'cot2', numeroCotizacion: '01082605', otNumero: '', tipoCot: 'previa',
-          estadoCot: 'Pendiente', local: 'S10 Chillan 2', localCorto: 'Chillan 2',
-          centro: '907',
+        // El caso: centro VACIO, como esta en Firestore.
+        { _id: 'cot1', numeroCotizacion: '15092601', otNumero: 796863, otId: 'ot_mu1by0re_qp9imoz',
+          local: 'S10 Concepcion', localCorto: 'S10 Concepcion', centro: '',
+          nombreServicio: 'Destape piletas y camara', descripcionTrabajo: desc,
+          carpeta: 'PRUEBA ARNES', enviado: false, total: 130000, fecha: '15-09-2026',
+          pdfUrl: ct1, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] },
+        // Coma en el servicio: la unica CT de produccion que armaba un enlace roto.
+        { _id: 'cot2', numeroCotizacion: '01082617', otNumero: '', local: 'UNIMARC GOMEZ CARRENO', centro: '713',
+          nombreServicio: 'Cambio ubicacion termo, retiro termo malo', descripcionTrabajo: 'Cambio ubicacion termo, retiro termo malo',
+          carpeta: 'PRUEBA ARNES', enviado: false, total: 90000, fecha: '02-08-2026',
+          pdfUrl: ct2, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] },
+        // PREVIA: sin OT.
+        { _id: 'cot3', numeroCotizacion: '01082605', otNumero: '', tipoCot: 'previa',
+          estadoCot: 'Pendiente', local: 'S10 Chillan 2', localCorto: 'Chillan 2', centro: '907',
           nombreServicio: 'Cambio de lamas', descripcionTrabajo: 'Cambio de lamas',
           carpeta: 'PRUEBA ARNES', enviado: false, total: 90000, fecha: '02-08-2026',
-          pdfUrl: pdf2, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] }
+          pdfUrl: previa, pdfGeneradoEn: 4102444800000, pdfFormato: 4, items: [] }
       ]
     };
     let real = null;
@@ -82,15 +99,14 @@ const log = (...a) => console.log(...a);
       get() { return real; },
       set(v) { real = Object.assign(v || {}, window.__EXTRA); }
     });
-  }, { hash: HASH_PEDRO123, pdf1: PDF_1, pdf2: PDF_2 });
+  }, { hash: HASH_PEDRO123, ct1: CT_15092601, ct2: CT_01082617, previa: PDF_PREVIA, hs: HS_796863, desc: DESC_796863 });
 
-  // Toda descarga, venga de la pestaña principal o del popup que abre window.open.
   const descargas = [];
   const escuchar = p => p.on('download', d => descargas.push(d.suggestedFilename()));
   escuchar(page);
   ctx.on('page', escuchar);
 
-  log('\n══ ' + ARCHIVO + ' · descarga de cotización por el administrador ══');
+  log('\n══ ' + ARCHIVO + ' · descarga de CT y HS por el administrador ══');
   await page.goto('http://localhost:8765/' + ARCHIVO);
   await page.waitForTimeout(2500);
 
@@ -102,55 +118,70 @@ const log = (...a) => console.log(...a);
   await campoPass.fill('Pedro123');
   await page.locator('button', { hasText: 'Ingresar' }).first().click();
   await page.waitForTimeout(1500);
-  // La pantalla a la que cae el Administrador es el panel de supervisión (`s-supervisor`): Pedro
-  // usa ese panel, no una pantalla propia. Se afirma que salió del login, no un id concreto.
-  const pantalla = await page.evaluate(() => {
-    const s = document.querySelector('.screen.active');
-    return s ? s.id : '(ninguna)';
-  });
+  const pantalla = await page.evaluate(() => { const s = document.querySelector('.screen.active'); return s ? s.id : '(ninguna)'; });
   const entro = pantalla !== 's-usuarios' && pantalla !== 's-pin';
   chequear(entro, 'el login de administrador no salió de la pantalla de acceso (quedó en ' + pantalla + ')');
   log('1) Login como Administrador: ' + (entro ? 'entró a ' + pantalla + ' ✓' : 'quedó en ' + pantalla + ' ✗'));
+  // El catálogo del que sale el CECO es el que cacheó la app al arrancar, no uno inyectado.
+  const cache = await page.evaluate(() => (localStorage.getItem('emval_cadenas_cache') || '').indexOf('M10 CONCEPCION') >= 0);
+  chequear(cache, 'la app no dejó el catálogo en emval_cadenas_cache');
 
   // ── 2. Panel -> Cotizaciones ────────────────────────────────────────────────────────────────
   await page.locator('button', { hasText: /^Cotizaciones$/ }).first().click();
   await page.waitForTimeout(2000);
-  // Las cotizaciones se agrupan por carpeta de supervisor; hay que abrir la carpeta.
   const carpeta = page.locator('text=PRUEBA ARNES').first();
   if (await carpeta.count()) { await carpeta.click(); await page.waitForTimeout(1200); }
   const botones = page.locator('button', { hasText: /^Ver PDF$/ });
   const cuantos = await botones.count();
-  chequear(cuantos >= 2, 'se esperaban 2 botones "Ver PDF" y hay ' + cuantos);
-  log('2) Lista de cotizaciones: ' + cuantos + ' botones "Ver PDF" ✓');
-  const nombresCalculados = await page.evaluate(() => Object.values(window._todasCotizaciones || {}).map(c => ({
-    nombre: _nombrePDFCot(c), url: _urlDescargaCot(c)
-  })));
-  log('   Nombres calculados: ' + nombresCalculados.map(x => x.nombre).join(' | '));
+  chequear(cuantos >= 3, 'se esperaban 3 botones "Ver PDF" y hay ' + cuantos);
+  log('2) Lista de cotizaciones: ' + cuantos + ' botones "Ver PDF"');
 
-  // ── 3. Descargar la cotización CON N° de OT ────────────────────────────────────────────────
-  await botones.nth(0).click();
-  await page.waitForTimeout(6000);
-  // ── 4. Descargar la PREVIA ─────────────────────────────────────────────────────────────────
-  await botones.nth(1).click();
-  await page.waitForTimeout(6000);
+  // ── 3. "Ver PDF" en cada cotización ─────────────────────────────────────────────────────────
+  for (let i = 0; i < cuantos; i++) {
+    await botones.nth(i).click();
+    await page.waitForTimeout(6000);
+  }
+
+  // ── 4. La HS, por el mismo camino que el botón "Descargar HS" del correo ──────────────────────
+  const hoja = await page.evaluate(async () => {
+    const cot = Object.values(window._todasCotizaciones || {}).find(c => c.numeroCotizacion === '15092601');
+    if (!cot || typeof _obtenerHojaDeCot !== 'function') return null;
+    // El espía sirve `doc(id).get()` desde __DOCS: la OT se deja donde la leería Firestore.
+    const ot = (window.__SEMILLA.ordenes || []).find(o => o._id === cot.otId);
+    if (ot) window.__DOCS['ordenes/' + ot._id] = ot;
+    const h = await _obtenerHojaDeCot(cot);
+    return h ? { nombre: h.nombre, url: _urlPDFDescarga(h.url, h.nombre) } : null;
+  });
+  chequear(!!hoja, 'la app no encontró la HS de la cotización 15092601');
+  if (hoja) {
+    log('   Enlace "Descargar HS" que arma la app:\n   ' + hoja.url);
+    const pestana = await ctx.newPage();
+    const espera = pestana.waitForEvent('download', { timeout: 20000 }).catch(() => null);
+    await pestana.goto(hoja.url).catch(() => {});   // una descarga aborta la navegación: es lo esperado
+    const d = await espera;
+    if (!d) chequear(false, 'abrir el enlace de la HS no descargó nada (Cloudinary lo rechazó)');
+    await pestana.close();
+  }
 
   log('\nArchivos que descargó el navegador:');
   descargas.forEach(n => log('   · ' + n));
 
-  const conOT = descargas.find(n => n.indexOf('COT - 01082604 - ') === 0);
-  const previa = descargas.find(n => n.indexOf('COT - 01082605 - ') === 0);
-
-  const esperadoOT = 'COT - 01082604 - ceco 0474 - Correctivo transpaletas.pdf';
-  chequear(conOT === esperadoOT, 'con OT llegó "' + conOT + '", se esperaba "' + esperadoOT + '"');
-
-  const esperadoPrev = 'COT - 01082605 - ceco 0907 - Cambio de lamas.pdf';
-  chequear(previa === esperadoPrev, 'la previa llegó "' + previa + '", se esperaba "' + esperadoPrev + '"');
-  chequear(previa ? !/\bHS\b/.test(previa) : false, 'la previa trae "HS" en el nombre: "' + previa + '"');
-  chequear(previa ? !/301143/.test(previa) : false,
-    'la previa trae un número de OT: "' + previa + '"');
-
-  log('\n3) Con N° de OT:  ' + (conOT === esperadoOT ? conOT + ' ✓' : 'llegó "' + conOT + '" ✗'));
-  log('4) Previa sin OT: ' + (previa === esperadoPrev ? previa + ' ✓' : 'llegó "' + previa + '" ✗'));
+  const esperados = [
+    ['3a) CT del caso', 'CT - 15092601 - ceco 3164 - Destape piletas y camara.pdf'],
+    ['3b) CT con coma', 'CT - 01082617 - ceco 0713 - Cambio ubicacion termo retiro termo malo.pdf'],
+    ['3c) CT previa', 'CT - 01082605 - ceco 0907 - Cambio de lamas.pdf'],
+    ['4)  HS del caso', 'HS - 796863 - CT 15092601 - ceco 3164 - Destape piletas y camara.pdf']
+  ];
+  log('');
+  esperados.forEach(([etq, nombre]) => {
+    const ok = descargas.indexOf(nombre) >= 0;
+    chequear(ok, etq + ': no llegó "' + nombre + '"');
+    log(etq + ': ' + (ok ? nombre + ' ✓' : 'no llegó "' + nombre + '" ✗'));
+  });
+  const previa = descargas.find(n => n.indexOf('CT - 01082605') === 0) || '';
+  chequear(!/\bHS\b/.test(previa) && !/\b\d{6}\b/.test(previa.replace(/^CT - 01082605/, '')),
+    'la previa trae un N° de HS/OT en el nombre: "' + previa + '"');
+  chequear(!descargas.some(n => /\bCOT\b|SIN-CECO/.test(n)), 'alguna descarga salió con "COT" o "SIN-CECO"');
 
   if (errores.length) log('\nErrores de JS en la página: ' + errores.join(' | '));
   chequear(errores.length === 0, 'la página lanzó errores de JS: ' + errores.join(' | '));
@@ -159,5 +190,5 @@ const log = (...a) => console.log(...a);
 
   log('');
   if (fallos.length) { console.error('FALLOS:\n' + fallos.join('\n')); process.exit(1); }
-  log('OK — el archivo llega a la carpeta con el nombre que pidió Pedro.');
+  log('OK — la CT y la HS llegan a la carpeta con el nombre que exige SMU, y se descargan.');
 })();

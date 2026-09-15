@@ -512,48 +512,81 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   escrituras fallan calladas. Encaja con `pdf-en-cloudinary-fuente-paralela`. No se tocó.
 - Cubierto por `tests/pendientes-materiales-no-sale-al-cliente.js`.
 
-**Nombre del PDF de la cotización** (`_nombrePDFCot`, `_localSinCadena`, `_slugPDFCot`,
-`_urlDescargaCot`):
-- Formato pedido por Pedro el 14-08-2026, el mismo con que archiva a mano desde antes de la app:
-  `<N° cotización> HS <N° OT> <servicio> <local>.pdf` → `31082601 HS 9464 Cambio de lamas Chillan 2.pdf`.
-  El nombre viejo empezaba con `Cotizacion_` en las 103, así que ordenar la carpeta no servía.
-- 🔴 **Sin N° de OT se omite el bloque `HS …` entero**, no se deja vacío. Una **previa** se emite
-  antes de que exista la OT (`otNumero: ''`, puesto a propósito al guardar): un `HS` suelto se lee
-  como un dato que se perdió. El `0` se descarta igual que el vacío — `otNumero` llega de Firestore
-  como número y un `0` pasaría el filtro de string.
-- **El folio se copia, nunca se rearma.** Es `ddmmaa` + correlativo **del día** y **global**
-  (`contadores/cot_<ddmmaa>`, transacción) — no es por supervisor ni por local. Rearmarlo fue el
-  bug del `'01'` hardcodeado. Sin folio el nombre dice `SIN-NUMERO`: el hueco se ve y se corrige
-  antes de enviar.
-- 🔴 **Sin tildes ni ñ, y no es cosmética.** El nombre viaja dentro de la URL como
-  `fl_attachment:<nombre>` y un carácter fuera de ASCII hace que Cloudinary responda **400**: la
-  descarga se rompe, no sale fea. Medido con `HEAD` contra producción (14-08-2026): *"Destape baño"*
-  daba `400 / inline`; normalizado da `200` con el nombre puesto.
-- **El nombre que se ve y el `public_id` son dos cosas distintas.** El `public_id` va sin espacios
-  y con sufijo único (regenerar un PDF no puede pisar el anterior: el preset no garantiza
-  sobrescritura); el nombre bonito se pega en la descarga con `fl_attachment`, que **no vuelve a
-  subir nada**. Efecto colateral bueno: **los PDF viejos también se descargan con el nombre nuevo**.
-- `localCorto` se **denormaliza al guardar** la cotización. Recortar la cadena depende de
-  `window._cadenasMapaCot`, que solo se puebla al abrir la pantalla de cotizaciones: sin
-  denormalizar, el mismo documento salía con dos nombres según por dónde se abriera. **Sin catálogo
-  se devuelve el nombre completo**, jamás uno cortado a medias.
-- ⚠️ **El camino "Ver PDF" de una cotización sin PDF subido u obsoleta abre un blob y no lleva
-  nombre.** Se dejó así: el botón dice *Ver*, y pasarlo a descarga es cambiarle el comportamiento a
-  Pedro sin que lo pidiera. Al enviarla o compartirla se sube y ahí sale con el nombre bueno.
-- ⚠️ **`cargarCarpetas()` arma cada tarjeta campo por campo**, así que lo que no se copie ahí no
-  existe para el botón. `localCorto` se quedó fuera en el primer intento y el campo guardado no
-  llegaba nunca. Apareció al **preparar** la prueba en navegador —trazando la ruta real hasta el
-  botón—, no al correrla y tampoco en el test unitario, que le pasaba el campo a mano.
-- ✅ **PROBADO en Chromium, 14-08-2026** (`tests/offline/prueba-nombre-pdf.js`): login real como
-  Administrador, panel, Cotizaciones y click en **Ver PDF**; se mide el nombre del archivo que
-  descarga el navegador. Salen `01082604 HS 301143 Correctivo transpaletas Chillan.pdf` y
-  `01082605 Cambio de lamas Chillan 2.pdf`. **Contraprueba contra `f0b4c2b`** (anterior al cambio):
-  bajan los `Cotizacion_Alvi_Chillan_…` de siempre y el guion falla.
-- ✅ **PROBADO además contra las 103 cotizaciones reales** (lectura por REST + `HEAD` a Cloudinary):
-  0 nombres inválidos, 0 repetidos entre documentos distintos, y el `Content-Disposition` vuelve
-  con el nombre exacto.
-- Cubierto por `tests/nombre-pdf-cotizacion.js` (unitario) y `tests/offline/prueba-nombre-pdf.js`
-  (flujo real).
+**Nombre de la CT y de la HS — el que exige SMU para emitir la HES** (`_nombrePDFCot`,
+`_nombrePDFHoja`, `_datosHojaConCot`, `_cecoDe`, `_cecoDelCatalogo`, `_trabajoDocumento`,
+`_nombreAdjuntoSeguro`, `_urlPDFDescarga`, `_urlDescargaCot`, `_slugPDFCot`):
+- 🔄 **Reemplaza el formato del 14-08** (`<folio> HS <OT> <servicio> <local>.pdf`). El **14-09-2026**
+  SMU Procurement exigió por correo CT y HS en archivos separados y con nomenclatura; sin eso no
+  emite la HES. La primera versión (`943888e`, subida directo a `main`) salió con `COT` y
+  `ceco SIN-CECO`, y el **15-09** el supervisor de SMU escribió qué debía decir:
+  `CT - <folio> - ceco <CECO> - <texto breve>.pdf` y
+  `HS - <N° OT> - CT <folio> - ceco <CECO> - <texto breve>.pdf` →
+  `CT - 15092601 - ceco 3164 - Destape piletas y camara.pdf` /
+  `HS - 796863 - CT 15092601 - ceco 3164 - Destape piletas y camara.pdf`.
+  ⚠️ **No es el ejemplo literal del correo formal** (`CT-2425-733-Rep grifería local`): es lo que
+  escribió el supervisor al ver un archivo real. **Decisión de Bastián, 15-09-2026.**
+- 🔴 **LA HS NO SE PODÍA DESCARGAR, y era el enlace, no el archivo.** Desde `943888e` toda descarga
+  de HS le pega el nombre con `fl_attachment:<nombre>`, y el nombre traía el texto libre del
+  trabajo (*"…Venta Asistida.-"*). 🔬 **Medido con curl, carácter por carácter:** dentro de
+  `fl_attachment:` Cloudinary **solo acepta** `[A-Za-z0-9]`, espacio, `-`, `_`, `!` y `$`. Con `.`
+  en medio, `,`, `(`, `)`, `'`, `#`, `&`, `+`, `;`, `=`, `@`, `~`, `%`, `"`, `/`, `:` o no-ASCII
+  responde **400** (Chrome: `ERR_INVALID_RESPONSE`; Android: "descarga pendiente"). Barrido de
+  producción: **99 de 276 HS** armaban un enlace roto, y **1 CT** (la de la coma). Salió **un**
+  correo roto: el "Descargar HS" de la 15092601 al supervisor.
+- 🔑 **La limpieza es LISTA BLANCA y vive en la URL** (`_nombreAdjuntoSeguro`, llamada dentro de
+  `_urlPDFDescarga` y `_urlDescargaCot`), no en quien arma el nombre. La versión anterior limpiaba
+  con lista negra ("ASCII para Cloudinary") y el punto pasaba. Solo esas **dos** funciones arman
+  `fl_attachment:` — el test lo cuenta.
+- 🔴 **El CECO se RESUELVE** (`_cecoDe`): primero el del documento (`ceco` de la OT, `centro` de la
+  COT), y si viene vacío el **catálogo** vía `_indexarCadenas` (nombre normalizado + `ALIAS_LOCALES`)
+  sobre el caché `emval_cadenas_cache` — nunca la red: se nombra en el teléfono, sin señal. La
+  15092601 salió `SIN-CECO` porque el técnico eligió **"S10 Concepcion", ficha de relleno de
+  `CADENAS_DEFAULT` sin `centro`**; el alias del 27-07 ya dice que es **M10 CONCEPCION (3164)**, y
+  los timbres de las OT de ese local dicen *Mayorista 10* / *Super 10*. `_obtenerCentroSucursal`
+  busca por nombre exacto y no lo ve. Medido: por nombre exacto resuelven 174 de 185 cotizaciones;
+  con índice y alias, 182. **No hizo falta escribir nada en producción.** Lo que nadie sabe queda
+  `SIN-CECO` a la vista — nunca uno adivinado.
+- ⚠️ **CECO rellenado a 4 dígitos** (`733` → `0733`) por el ejemplo del pedido del 14-09
+  (`ceco 0474`). **Sin confirmar:** el correo formal usa `733` y ningún `centro` de producción
+  tiene cero inicial.
+- 🔑 **El texto breve es el MISMO en CT y HS**: el `nombreServicio` de la cotización, como en los dos
+  ejemplos de SMU. `943888e` le ponía a la HS la descripción larga de la OT y no calzaba en ninguna
+  de las 168 OT cotizadas. Sin cotización se usa la **primera línea** de la descripción; un
+  **preventivo** dice `MP Transpaletas <Mes> <Año>`, nunca sus Observaciones.
+- **La cotización en la mano gana sobre el folio copiado en la OT** (`_datosHojaConCot`): si la COT
+  se borró y se rehizo, la OT puede apuntar al folio viejo.
+- **El folio se copia, nunca se rearma** (`ddmmaa` + correlativo del día, con transacción). Sin folio
+  el nombre dice `SIN-NUMERO`.
+- ⚠️ **`_urlPDFDescarga` solo toca URLs de Cloudinary.** Le pegaba `.pdf` al link de la app
+  (`?pdf=<id>` → `?pdf=<id>.pdf`), que es el respaldo del correo cuando Cloudinary falla.
+- ⚠️ **Si la descarga nombrada falla** (`_descargarPDFNombrado`), se abre el archivo **sin**
+  `fl_attachment` (`_urlPDFSinNombre`), no la misma URL que acaba de dar 400.
+- **Cambiar el nombre no es cambiar el dibujo:** `_PDF_COT_FORMATO` sigue en 4. Regenerar es una
+  subida desde el teléfono y pisa el `pdfUrl` guardado; el nombre viaja en `fl_attachment` y los
+  PDF ya subidos se descargan con el nombre nuevo sin tocarlos.
+- **El vínculo COT↔HS no se pisa con vacío:** el cierre, la edición y la cola escriben
+  `cotizacionId`/`cotizacionNumero` **solo si traen valor**. Un correctivo se cierra antes de que
+  exista su COT, y `943888e` le borraba con merge el folio que `guardarCotizacion` ya había escrito.
+- **`_obtenerHojaDeCot`** cae al índice `pdfs` también cuando la OT solo tiene el link a la app, y
+  por número de OT **solo acepta la hoja del mismo local** (los números ya colisionaron: 9016, 9502).
+- ✅ **PROBADO en Chromium, 15-09-2026** (`tests/offline/prueba-nombre-pdf.js`) con los datos de
+  producción tal cual (CECO vacío, local de relleno): login como Administrador → Cotizaciones →
+  **Ver PDF** en cada una, contra **Cloudinary de verdad**, y el enlace "Descargar HS" que arma
+  `_obtenerHojaDeCot` abierto en el navegador. Bajan `CT - 15092601 - ceco 3164 - Destape piletas y
+  camara.pdf`, la CT con coma, la previa y `HS - 796863 - CT 15092601 - ceco 3164 - …`.
+  **Contraprueba contra `943888e`:** baja `COT - 15092601 - ceco SIN-CECO - …`, la CT con coma y la
+  HS no bajan, y la app arma **exactamente** la URL rota de la captura de Pedro.
+- ✅ `node tests/la-hs-se-descarga.js index.html --prod` hace HEAD de verdad a las URLs de los tres
+  casos reales (punto, paréntesis, coma): responden 206 con `Content-Disposition`.
+- 📌 **Lo que este cambio NO hace** (anotado, sin tocar): la CT no imprime el **nombre de quien la
+  emite** (SMU lo pide; hoy solo razón social + imagen de firma y timbre, y la razón social no calza
+  entre CT, HS y correo) · reenviar una COT antigua adjunta su HS original, que en **108 de 178**
+  es anterior a la firma del técnico (26-08) · "Ver PDF" en una COT de formato 3 la regenera y pisa
+  su `pdfUrl` · el envío COT+HS sin señal espera en serie hasta 3 lecturas por cotización · editar
+  una cotización le reserva un folio nuevo (preexistente) · falta el alias de
+  `UNIMARC LOS PIONEROS`, y `S10 Chillan 2` tiene OT con CECO 3027 y catálogo con 3554.
+- Cubierto por `tests/nombre-pdf-cotizacion.js`, `tests/la-hs-se-descarga.js` (con `--prod` pega a
+  Cloudinary), `tests/cotizacion-y-hs-separadas.js` y `tests/offline/prueba-nombre-pdf.js`.
 
 **El texto del ítem se imprime completo** (`_colsCot`, `_lineasItemCot`, `_altoFilaCot`,
 `_dibujarTablaItemsCot`):
@@ -1147,6 +1180,9 @@ These changes are useful context for understanding current state:
   node tests/baja-de-activo-no-cobra.js index.html
   node tests/el-correo-de-la-ot-lleva-el-pdf.js index.html
   node tests/hoja-regenerada-no-pisa-la-anterior.js index.html
+  node tests/cotizacion-y-hs-separadas.js index.html
+  node tests/la-hs-se-descarga.js index.html            # offline
+  node tests/la-hs-se-descarga.js index.html --prod     # ademas HEAD real a Cloudinary
   ```
   ⚠️ **Al renombrar una función que un test extrae, el test se cae con "No se encontro"** — es a
   propósito: avisa que el fix hay que revalidarlo, no que el test esté malo.
@@ -1278,16 +1314,25 @@ These changes are useful context for understanding current state:
   escrituras del enlace, `nuevaOT()` la resetea, la cola offline sube siempre la generación 1 y los
   sitios que suben pasan todos por la misma función. Trae su propio despojador de comentarios: el
   compartido se traga 1.070 líneas por un `accept="image/*"` del HTML ·
-  `nombre-pdf-cotizacion.js` — el PDF de la cotización sale con el nombre con que Pedro archiva:
-  el folio va primero y se copia tal cual (no se rearma), una **previa sin OT no dice `HS`** en
-  ninguna parte, sin folio el hueco se ve, las tildes y la ñ se normalizan (fuera de ASCII la
-  descarga devuelve 400), la descripción larga se corta por palabra entera, recortar la cadena
-  nunca se come el local, el nombre no cambia según qué pantalla se haya abierto antes, y
-  `_urlDescargaCot` no toca el link a la app
+  `nombre-pdf-cotizacion.js` — la CT y la HS salen con el nombre que exige SMU, probado con los
+  datos de la 15092601 **tal como están en Firestore** (CECO vacío, local de relleno): `CT`, nunca
+  `COT`; el CECO sale del documento, si no del catálogo con alias, y si nadie lo sabe dice
+  `SIN-CECO`; el texto breve es el mismo en CT y HS; el folio se copia y la COT en la mano gana
+  sobre el copiado en la OT; un preventivo dice `MP Transpaletas <Mes> <Año>`; y `_urlDescargaCot`
+  no toca el link a la app ·
+  `la-hs-se-descarga.js` — el enlace de descarga abre diga lo que diga el texto del trabajo: el
+  segmento `fl_attachment:` cumple la lista blanca medida contra Cloudinary con los textos reales
+  (punto, paréntesis, coma) y con un barrido de todo el ASCII imprimible; solo dos funciones arman
+  `fl_attachment:`; el link a la app no recibe `.pdf`; y si la descarga nombrada falla se abre el
+  archivo sin nombre. Con `--prod` hace el HEAD de verdad ·
+  `cotizacion-y-hs-separadas.js` — la CT ya no incrusta la HS, compartir y el correo entregan dos
+  archivos, el folio de la COT queda en la OT, y el vínculo COT↔HS **no se pisa con vacío** en el
+  cierre, la edición ni la cola
 - `tests/offline/` — arnés Playwright con la app real (`preparar.js` arma el sitio con los espías).
   `prueba-offline.js` corre los escenarios A/B/C del cierre sin señal ·
-  `prueba-nombre-pdf.js` baja una cotización como Administrador y mide el nombre del archivo que
-  descarga el navegador (Cloudinary de verdad: son 2 GET públicos, no gastan cuota) ·
+  `prueba-nombre-pdf.js` baja la CT (3 casos) y la HS de la 15092601 como Administrador y mide el
+  nombre del archivo que descarga el navegador, contra Cloudinary de verdad (GET públicos, no gastan
+  cuota). Su contraprueba contra `943888e` arma la URL rota de la captura de Pedro ·
   `prueba-duplicado.js` reproduce el caso 614727 — el cierre FUNCIONA y lo único que se rompe es la
   confirmación del correo (`__CORREO_MODO = 'sale-y-falla'`), con una **recarga de página** en el
   medio que simula el día que pasó entre un correo y el otro.
