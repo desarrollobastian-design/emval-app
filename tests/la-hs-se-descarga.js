@@ -107,6 +107,9 @@ console.log('La HS y la CT se pueden descargar\n');
     const s = segmento(F._urlPDFDescarga(RAW_796863, 'HS - 1 - ' + c + '.pdf'));
     if (s !== null && !PERMITIDO.test(s)) { malos++; chequear(false, 'nombre crudo "' + c.slice(0, 30) + '" dejo pasar: "' + s + '"'); }
   });
+  // La lista blanca no puede comerse letras: sin el normalize, "baño" salia "ba o" (47 nombres reales).
+  const tildes = segmento(F._urlPDFDescarga(RAW_796863, 'HS - 1 - Destape baño y reparación Fijación.pdf'));
+  chequear(tildes === 'HS - 1 - Destape bano y reparacion Fijacion', 'las tildes y la ñ no se transliteran: "' + tildes + '"');
   // Y el nombre que baja el navegador (a.download, File, doc.save) usa la misma lista blanca.
   const archivo = F._nombrePDFHoja(REALES[0].datos);
   chequear(PERMITIDO.test(archivo.replace(/\.pdf$/, '')), 'el nombre del archivo local trae caracteres fuera de la lista: "' + archivo + '"');
@@ -114,16 +117,43 @@ console.log('La HS y la CT se pueden descargar\n');
   console.log('   ' + segmento(urls[0]) + '\n   ' + segmento(urls[1]) + '\n   ' + segmento(urls[2]));
 }
 
-// ── 2. Solo dos funciones arman `fl_attachment:`, y las dos con la misma limpieza ─────────────
+// ── 2. `fl_attachment` solo aparece dentro de las funciones que lo manejan ────────────────────
 {
-  // Sin comentarios de linea ni de bloque: el codigo EXPLICA lo que no se debe hacer.
-  const sinComent = src.replace(/^\s*\/\*[\s\S]*?\*\//gm, '').replace(/^\s*\/\/.*$/gm, '');
-  const sitios = sinComent.split('\n').filter(l => /['"]fl_attachment:['"]/.test(l)).length;
-  chequear(sitios === 2, 'se arma fl_attachment en ' + sitios + ' sitios (se esperaban 2: _urlPDFDescarga y _urlDescargaCot)');
-  const limpiaPDF = /_nombreAdjuntoSeguro\(nombre\)/.test(texto('_urlPDFDescarga'));
-  const limpiaCot = /_nombreAdjuntoSeguro\(_nombrePDFCot\(cot\)\)/.test(texto('_urlDescargaCot'));
-  chequear(limpiaPDF && limpiaCot, 'alguna de las dos no pasa el nombre por _nombreAdjuntoSeguro');
-  console.log('2) Un solo criterio: ' + (sitios === 2 && limpiaPDF && limpiaCot ? '2 sitios, misma lista blanca ✓' : 'hay otro camino ✗'));
+  /* No se busca una forma de escribirlo (comillas, template, concatenado): se busca la PALABRA en el
+     codigo y se exige que cada aparicion caiga DENTRO de _urlPDFDescarga (la unica que lo arma) o
+     de _urlPDFSinNombre (la que lo saca). La revision del 15-09 armo un tercer sitio con
+     `url.replace('/raw/upload/', '/raw/upload/fl_attachment:' + …)` y el guardia anterior, que
+     buscaba el literal entre comillas, no lo vio.
+     Los comentarios se enmascaran con espacios (mismo largo) para no correr las posiciones. */
+  const enmascarado = src
+    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, m => m.replace(/[^\n]/g, ' '))
+    .replace(/^[ \t]*\/\/.*$/gm, m => ' '.repeat(m.length))
+    .replace(/[ \t]\/\/ .*$/gm, m => ' '.repeat(m.length));
+  const rangos = ['_urlPDFDescarga', '_urlPDFSinNombre'].map(n => {
+    const i = src.indexOf('function ' + n + '(');
+    return [i, i + (texto(n) || '').length];
+  });
+  const fuera = [];
+  let k = enmascarado.indexOf('fl_attachment');
+  while (k !== -1) {
+    if (!rangos.some(([a, b]) => k >= a && k < b)) {
+      const linea = src.slice(0, k).split('\n').length;
+      fuera.push(linea + ': ' + src.split('\n')[linea - 1].trim().slice(0, 90));
+    }
+    k = enmascarado.indexOf('fl_attachment', k + 1);
+  }
+  chequear(!fuera.length, 'fl_attachment aparece fuera de _urlPDFDescarga/_urlPDFSinNombre:\n      ' + fuera.join('\n      '));
+  const limpia = /_nombreAdjuntoSeguro\(nombre\)/.test(texto('_urlPDFDescarga'));
+  const delega = /_urlPDFDescarga\(url, _nombrePDFCot\(cot\)\)/.test(texto('_urlDescargaCot'));
+  chequear(limpia, '_urlPDFDescarga no pasa el nombre por _nombreAdjuntoSeguro');
+  chequear(delega, '_urlDescargaCot no delega en _urlPDFDescarga: hay otro sitio armando el enlace');
+  // Y la URL se defiende sola: una que ya trae un nombre sucio (otro camino, un correo viejo) sale limpia.
+  const sucia = RAW_796863.replace('/raw/upload/', '/raw/upload/fl_attachment:' + encodeURIComponent('HS - 1 - Venta Asistida.- (x)') + '/');
+  const rearmada = F._urlPDFDescarga(sucia, '');
+  chequear(segmento(rearmada) === 'HS - 1 - Venta Asistida - x', 'una URL con nombre sucio no se rearmo: "' + segmento(rearmada) + '"');
+  const limpiaYa = F._urlPDFDescarga(RAW_796863, 'HS - 1 - ok');
+  chequear(F._urlPDFDescarga(limpiaYa, 'otro') === limpiaYa, 'una URL con nombre limpio recibio otro');
+  console.log('2) Un solo criterio: ' + (!fuera.length && limpia && delega ? 'fl_attachment vive en una sola funcion ✓' : 'hay otro camino ✗'));
 }
 
 // ── 3. El link a la app no se toca ───────────────────────────────────────────────────────────────

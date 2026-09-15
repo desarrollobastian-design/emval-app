@@ -8,12 +8,8 @@
 
    Los invariantes que vigila, cada uno por una razon concreta de este proyecto:
 
-   1. LOS CINCO sitios que dibujan una hoja la firman. La hoja se dibuja en
-      generarPDFPreventivo, en generarPDFRecepcionObra y OTRA VEZ como pagina 2 dentro de los
-      dos generadores de cotizacion (uno de ellos huerfano). Cuando la tabla de items estaba
-      copiada en dos sitios, el bug del texto cortado vivio duplicado y se arreglo una sola
-      copia: a SMU le siguieron llegando cotizaciones cortadas. Aca se exige que las cinco
-      pasen por la misma funcion.
+   1. LOS DOS generadores de HS firman la hoja. Desde el 14-09-2026 la cotizacion es un archivo
+      independiente y ya no puede contener una copia de la hoja como pagina 2.
    2. NO SE CONFUNDE CON LA FIRMA DEL RECEPTOR. En esta app conviven tres firmas distintas
       —la del local que recibe, la de Pedro como emisor en la cotizacion, y esta— y ya se
       confundieron una vez. El bloque del tecnico no puede decir "Receptor" ni leer
@@ -125,14 +121,11 @@ const Y_REAL = 231 + 8;
 
 console.log('La hoja de servicio tiene que salir firmada por quien la ejecuto\n');
 
-// ── 1. Los CINCO sitios que dibujan una hoja la firman ──────────────────────────────────────
+// ── 1. Los DOS generadores de HS firman la hoja ─────────────────────────────────────────────
 {
   const generadores = [
     ['async function generarPDFPreventivo(', 1, 'la hoja de preventivo que se emite sola'],
-    ['async function generarPDFRecepcionObra(', 1, 'la hoja de correctivo que se emite sola'],
-    // Dos ramas: la pagina 2 puede ser preventivo o recepcion de obra. Las dos son hojas.
-    ['async function generarPDFCotizacionGuardada(', 2, 'la hoja dentro del PDF de cotizacion'],
-    ['async function generarPDFCotizacion(', 1, 'la hoja dentro de la cotizacion HUERFANA']
+    ['async function generarPDFRecepcionObra(', 1, 'la hoja de correctivo que se emite sola']
   ];
   let total = 0, ok = true;
   generadores.forEach(function ([decl, esperadas, quien]) {
@@ -146,7 +139,7 @@ console.log('La hoja de servicio tiene que salir firmada por quien la ejecuto\n'
         decl.replace('async function ', '').replace('(', '') + '): esas hojas llegan a SMU sin firma');
     }
   });
-  console.log('1) Los cinco sitios: ' + total + ' llamadas a _firmarHojaTecnico ' + (ok ? '✓' : '✗'));
+  console.log('1) Los dos generadores HS: ' + total + ' llamadas a _firmarHojaTecnico ' + (ok ? '✓' : '✗'));
 }
 
 // ── 2. No se confunde con la firma del RECEPTOR ─────────────────────────────────────────────
@@ -281,14 +274,14 @@ console.log('La hoja de servicio tiene que salir firmada por quien la ejecuto\n'
   console.log('9) Tecnico congelado: ' + (congelado ? 'snap.tecnico ✓' : 'lee el estado global ✗'));
 }
 
-// ── 10. Al cambiar el dibujo de la cotizacion, sube el sello de formato ─────────────────────
+// ── 10. La cotizacion combinada queda invalidada y no vuelve a emitir una HS embebida ───────
 {
   const m = src.match(/var\s+_PDF_COT_FORMATO\s*=\s*(\d+)/);
   const v = m ? Number(m[1]) : 0;
-  chequear(v >= 3,
-    '_PDF_COT_FORMATO sigue en ' + v + '. La pagina 2 de la cotizacion cambio (ahora lleva firma) ' +
-    'y sin subir el sello los PDF ya subidos NO se regeneran: el cliente no ve el cambio por ningun camino');
-  console.log('10) Sello de formato del PDF de cotizacion: v' + v + ' ' + (v >= 3 ? '✓' : '✗'));
+  const separada = /var\s+_COTIZACION_INCLUYE_HS\s*=\s*false/.test(src);
+  chequear(v >= 4, '_PDF_COT_FORMATO sigue en ' + v + ': las cotizaciones combinadas no se regeneraran');
+  chequear(separada, 'la cotizacion puede volver a incluir la HS como pagina 2');
+  console.log('10) COT y HS separadas: formato v' + v + ' ' + (v >= 4 && separada ? '✓' : '✗'));
 }
 
 // ── 11. Las firmas embebidas estan apaisadas y no engordan de mas el archivo ────────────────
@@ -330,4 +323,4 @@ if (fallos.length) {
   console.error('\nFALLA — la hoja puede salir sin firmar:\n' + fallos.join('\n') + '\n');
   process.exit(1);
 }
-console.log('\nOK — la hoja de servicio sale firmada por quien la ejecuto, en los cinco sitios.\n');
+console.log('\nOK — la hoja de servicio sale firmada por quien la ejecuto, en los dos generadores de HS.\n');

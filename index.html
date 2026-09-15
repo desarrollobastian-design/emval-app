@@ -4649,13 +4649,24 @@ function _urlPDFDescarga(url, nombre) {
   var u = (url || '').toString().trim();
   if (!u) return '';
   var marca = '/raw/upload/';
-  var i = u.indexOf(marca);
-  if (i === -1) return u;
+  if (u.indexOf(marca) === -1) return u;
   if (!/\.pdf($|\?)/i.test(u)) u += '.pdf';
+  // Una URL que YA trae nombre se respeta si ese nombre esta limpio. Si no lo esta —la armo otro
+  // sitio sin esta funcion, o viene de un correo viejo— se rearma con la lista blanca: la
+  // garantia de que el enlace abre no puede depender de que nadie mas arme `fl_attachment`.
+  var previo = u.match(/\/raw\/upload\/fl_attachment(?::([^/]*))?\//);
+  if (previo) {
+    var viejo = '';
+    try { viejo = decodeURIComponent(previo[1] || ''); } catch(e) { viejo = previo[1] || ''; }
+    if (previo[1] && encodeURIComponent(_nombreAdjuntoSeguro(viejo)) === previo[1]) return u;
+    u = _urlPDFSinNombre(u);
+    nombre = nombre || viejo;
+  }
+  var i = u.indexOf(marca);
   // Los PDF ya existentes conservan su public_id historico. `fl_attachment` cambia solamente
   // el nombre con que se descarga/adjunta, sin duplicarlos ni romper sus enlaces guardados.
   var limpio = _nombreAdjuntoSeguro(nombre);
-  if (limpio && u.indexOf('/raw/upload/fl_attachment') === -1) {
+  if (limpio) {
     return u.slice(0, i + marca.length) + 'fl_attachment:' + encodeURIComponent(limpio) + '/' + u.slice(i + marca.length);
   }
   return u;
@@ -4858,6 +4869,22 @@ async function _descargarPDFNombrado(url, nombre) {
   }
 }
 
+// De varios registros de `pdfs` de la misma hoja, el de la generacion MAS ALTA. Corregir una hoja ya
+// cerrada sube `_v2`, `_v3`… (ver _sufijoGenPDF) y deja el original vivo: sin orden, Firestore los
+// devuelve por id y la OT 347723 traia primero la hoja SIN corregir. Solo cuentan los que tienen
+// URL de Cloudinary: un registro sin archivo no se adjunta.
+function _urlHojaMasReciente(docs) {
+  var mejor = '', genMejor = 0;
+  (docs || []).forEach(function(d) {
+    var u = String((d.data ? d.data() : d).pdfUrlCloudinary || '');
+    if (!_esPDFCompartible(u)) return;
+    var m = u.match(/_v(\d+)\.pdf(?:$|\?)/i);
+    var gen = m ? Number(m[1]) : 1;
+    if (gen > genMejor) { genMejor = gen; mejor = u; }
+  });
+  return mejor;
+}
+
 // Busca la HS independiente que corresponde a una cotizacion. Primero usa el enlace de la OT;
 // para documentos legacy cae al indice `pdfs`, donde quedaron varias hojas que nunca se
 // re-enlazaron a `ordenes` por mala senal.
@@ -4875,21 +4902,19 @@ async function _obtenerHojaDeCot(cot) {
     // "no hay PDF" y tiene que caer al indice `pdfs`, no cortar la busqueda.
     if (!_esPDFCompartible(url)) {
       url = '';
-      var pdfSnap = null;
       if (cot.otId) {
-        pdfSnap = await _conTimeout(db.collection('pdfs').where('otClientId', '==', cot.otId).limit(1).get(), 25000, 'buscar PDF de HS');
+        var porId = await _conTimeout(db.collection('pdfs').where('otClientId', '==', cot.otId).limit(10).get(), 25000, 'buscar PDF de HS');
+        url = _urlHojaMasReciente(porId.docs);
       }
-      if ((!pdfSnap || pdfSnap.empty) && cot.otNumero) {
-        pdfSnap = await _conTimeout(db.collection('pdfs').where('otNumero', '==', cot.otNumero).limit(5).get(), 25000, 'buscar PDF de HS legacy');
+      if (!url && cot.otNumero) {
+        var porNum = await _conTimeout(db.collection('pdfs').where('otNumero', '==', cot.otNumero).limit(10).get(), 25000, 'buscar PDF de HS legacy');
         // Los N° de OT ya colisionaron entre locales (9016, 9502): por numero solo vale la hoja
         // del MISMO local. Mandarle a SMU la HS de otro local es peor que avisar que falta.
         var locCot = _normTexto(_localCanonico(cot.local));
-        var propios = pdfSnap.docs.filter(function(d) {
+        url = _urlHojaMasReciente(porNum.docs.filter(function(d) {
           return !locCot || _normTexto(_localCanonico(d.data().local)) === locCot;
-        });
-        pdfSnap = { empty: !propios.length, docs: propios };
+        }));
       }
-      if (pdfSnap && !pdfSnap.empty) url = pdfSnap.docs[0].data().pdfUrlCloudinary || '';
     }
     if (!_esPDFCompartible(url)) return null;
     var datos = _datosHojaConCot(ot, cot, cot.centro || '');
@@ -11711,17 +11736,23 @@ function _nombrePDFHoja(datos) {
   return _nombreDocumento(partes);
 }
 
-// La cotizacion que se tiene EN LA MANO manda sobre el folio copiado en la OT: si la COT se borro
-// y se rehizo, la OT puede seguir apuntando al folio viejo.
+// La cotizacion que se tiene EN LA MANO manda sobre lo copiado en la OT: si la COT se borro y se
+// rehizo, la OT puede seguir apuntando al folio viejo.
+// 🔑 Con cotizacion, la HS toma el CECO y el texto breve EXACTAMENTE como los resuelve la CT: los dos
+// archivos viajan juntos a Procurement y se parean por esos datos. Barrido del 15-09-2026: 2 pares
+// salian con CECO distinto (la OT guardo uno y la ficha del catalogo dice otro — S10 Chillan 2,
+// 3027 vs 3554) y los que no traen `nombreServicio` salian con texto distinto.
 function _datosHojaConCot(ot, cot, cecoFallback) {
   ot = ot || {};
   cot = cot || {};
+  const hayCot = Object.keys(cot).length > 0;
+  const textoCot = String(cot.nombreServicio || '').trim() || String(cot.descripcionTrabajo || '');
   return Object.assign({}, ot, {
     otNumero: ot.otNumero || ot.numero || cot.otNumero || '',
     cotizacionNumero: cot.numeroCotizacion || ot.cotizacionNumero || '',
-    ceco: ot.ceco || cot.centro || cecoFallback || '',
+    ceco: (hayCot ? _cecoDe(cot) : '') || ot.ceco || cecoFallback || '',
     local: ot.local || cot.local || '',
-    nombreServicio: cot.nombreServicio || ot.nombreServicio || '',
+    nombreServicio: (hayCot ? textoCot : '') || ot.nombreServicio || '',
     descripcionTrabajo: ot.descripcionTrabajo || cot.descripcionTrabajo || ''
   });
 }
@@ -11766,13 +11797,8 @@ function _slugPDFCot(cot) {
    link roto es mucho peor que un nombre feo. */
 function _urlDescargaCot(cot) {
   const url = String((cot && cot.pdfUrl) || '');
-  const marca = '/raw/upload/';
-  const i = url.indexOf(marca);
-  if (i === -1) return url;
-  if (url.indexOf('/raw/upload/fl_attachment') !== -1) return url;
-  const nombre = _nombreAdjuntoSeguro(_nombrePDFCot(cot));
-  if (!nombre) return url;
-  return url.slice(0, i + marca.length) + 'fl_attachment:' + encodeURIComponent(nombre) + '/' + url.slice(i + marca.length);
+  // Delega en `_urlPDFDescarga`: UN solo sitio de la app arma `fl_attachment`, con UNA lista blanca.
+  return url.indexOf('/raw/upload/') === -1 ? url : _urlPDFDescarga(url, _nombrePDFCot(cot));
 }
 
 // Asunto descriptivo y buscable para el correo de cotizaciones

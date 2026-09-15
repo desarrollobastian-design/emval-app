@@ -567,8 +567,16 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
 - **El vínculo COT↔HS no se pisa con vacío:** el cierre, la edición y la cola escriben
   `cotizacionId`/`cotizacionNumero` **solo si traen valor**. Un correctivo se cierra antes de que
   exista su COT, y `943888e` le borraba con merge el folio que `guardarCotizacion` ya había escrito.
-- **`_obtenerHojaDeCot`** cae al índice `pdfs` también cuando la OT solo tiene el link a la app, y
-  por número de OT **solo acepta la hoja del mismo local** (los números ya colisionaron: 9016, 9502).
+- **`_obtenerHojaDeCot`** cae al índice `pdfs` también cuando la OT solo tiene el link a la app, se
+  queda con la **generación más alta** (`_urlHojaMasReciente`: una hoja corregida sube `_v2` y el
+  original sigue vivo; en la OT 347723 el original venía primero), y por número de OT **solo acepta
+  la hoja del mismo local** (los números ya colisionaron: 9016, 9502).
+- **La CT y su HS salen con el MISMO CECO y el MISMO texto breve** (`_datosHojaConCot`): con la
+  cotización en la mano, la HS los resuelve igual que la CT. El barrido encontró 2 pares que no
+  calzaban (la OT de S10 Chillan 2 guardó 3027 y la ficha dice 3554).
+- **Un solo sitio arma `fl_attachment`:** `_urlDescargaCot` delega en `_urlPDFDescarga`, y esa
+  rearma con la lista blanca una URL que ya traiga un nombre sucio. El test busca la palabra en
+  todo el código, no una forma de escribirla.
 - ✅ **PROBADO en Chromium, 15-09-2026** (`tests/offline/prueba-nombre-pdf.js`) con los datos de
   producción tal cual (CECO vacío, local de relleno): login como Administrador → Cotizaciones →
   **Ver PDF** en cada una, contra **Cloudinary de verdad**, y el enlace "Descargar HS" que arma

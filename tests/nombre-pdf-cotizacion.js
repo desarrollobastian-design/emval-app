@@ -57,7 +57,7 @@ function texto(nombre) {
 const NOMBRES = ['_normTexto', '_localCanonico', '_indexarCadenas', '_nombreAdjuntoSeguro',
   '_localSinCadena', '_recortarPalabras', '_cecoDocumento', '_cecoDelCatalogo', '_cecoDe',
   '_nombreDocumento', '_trabajoDocumento', '_nombrePDFHoja', '_datosHojaConCot', '_nombrePDFCot',
-  '_slugPDFCot', '_urlDescargaCot'];
+  '_slugPDFCot', '_urlPDFDescarga', '_urlPDFSinNombre', '_urlDescargaCot'];
 const fuentes = NOMBRES.map(texto);
 const faltan = NOMBRES.filter((n, i) => !fuentes[i]);
 if (faltan.length) {
@@ -172,6 +172,41 @@ const OT_796863 = {
   chequear(huecos.every(c => c === 'SIN-CECO'), 'un CECO desconocido no quedo a la vista: ' + huecos.join(', '));
   console.log('4) CECO: ' + (propio === '3027' && norm === '3089' && huecos.every(c => c === 'SIN-CECO')
     ? 'documento > catalogo con alias > SIN-CECO visible ✓' : 'se resuelve mal ✗'));
+}
+
+// ── 4b. La CT y su HS, que viajan JUNTAS a Procurement, dicen el mismo CECO y el mismo texto ───
+{
+  // Pares reales del barrido del 15-09: la OT guardo 3027 y la ficha de S10 Chillan 2 dice 3554; y
+  // una cotizacion sin `nombreServicio`. Se parean por esos datos: si difieren, no calzan.
+  const pares = [
+    [{ numeroCotizacion: '01082603', centro: '3554', local: 'S10 Chillan 2', nombreServicio: 'Correctivo transpaletas' },
+     { numero: 574856, ceco: '3027', local: 'S10 Chillan 2', descripcionTrabajo: 'Se cambia rueda de carga.' }],
+    [{ numeroCotizacion: '15092601', centro: '', local: 'S10 Concepcion', nombreServicio: '',
+       descripcionTrabajo: 'Destape de piletas, camara y cañeria.\n- Se realiza limpieza.' },
+     { numero: 796863, ceco: '', local: 'S10 Concepcion', descripcionTrabajo: 'Asistencia por piletas tapadas.' }]
+  ];
+  const partes = n => { const p = n.replace(/\.pdf$/, '').split(' - '); return { ceco: p[p.length - 2], texto: p[p.length - 1] }; };
+  let ok = true;
+  pares.forEach(([cot, ot]) => {
+    const ct = partes(F._nombrePDFCot(cot));
+    const hs = partes(F._nombrePDFHoja(F._datosHojaConCot(ot, cot, cot.centro)));
+    if (ct.ceco !== hs.ceco || ct.texto !== hs.texto) {
+      ok = false;
+      chequear(false, 'CT ' + cot.numeroCotizacion + ' y su HS no calzan: "' + ct.ceco + ' / ' + ct.texto + '" vs "' + hs.ceco + ' / ' + hs.texto + '"');
+    }
+  });
+  console.log('4b) Par CT-HS: ' + (ok ? 'mismo CECO y mismo texto breve en los dos archivos ✓' : 'no calzan ✗'));
+}
+
+// ── 4c. Tildes y ñ se transliteran, no se borran ─────────────────────────────────────────────
+{
+  // Reales: COT 13072606 "Destape baño" y COT 27082612 "Fijación estanco". Sin el normalize la lista
+  // blanca las borraba: "Destape ba o", "Fijaci n estanco" (47 nombres de produccion).
+  const a = F._nombrePDFCot({ numeroCotizacion: '13072606', centro: '748', local: 'x', nombreServicio: 'Destape baño' });
+  const b = F._nombrePDFCot({ numeroCotizacion: '27082612', centro: '709', local: 'x', nombreServicio: 'Fijación estanco' });
+  chequear(a === 'CT - 13072606 - ceco 0748 - Destape bano.pdf', 'tildes: salio "' + a + '"');
+  chequear(b === 'CT - 27082612 - ceco 0709 - Fijacion estanco.pdf', 'tildes: salio "' + b + '"');
+  console.log('4c) Tildes: ' + a + (a === 'CT - 13072606 - ceco 0748 - Destape bano.pdf' ? ' ✓' : ' ✗'));
 }
 
 // ── 5. El folio se copia, no se rearma; y si falta, se ve ────────────────────────────────────────
