@@ -592,7 +592,17 @@ Screens are div elements with `class="screen"`. Navigation via `go(screenId)` fu
   es anterior a la firma del técnico (26-08) · "Ver PDF" en una COT de formato 3 la regenera y pisa
   su `pdfUrl` · el envío COT+HS sin señal espera en serie hasta 3 lecturas por cotización · editar
   una cotización le reserva un folio nuevo (preexistente) · falta el alias de
-  `UNIMARC LOS PIONEROS`, y `S10 Chillan 2` tiene OT con CECO 3027 y catálogo con 3554.
+  `UNIMARC LOS PIONEROS`, y `S10 Chillan 2` tiene OT con CECO 3027 y catálogo con 3554 ·
+  **previa aceptada → OT en espera** (0 usos en producción): `_vincularCotizacionRealizada` no
+  escribe `otId`/`otNumero`, así que esa CT sale sin HS y sin aviso, y su HS toma el texto de la OT
+  y no el de la CT · el link a la app (`?pdf=`, `verPDFById`) abre la HS cruda, sin nomenclatura ·
+  un correo que 943888e alcanzó a encolar en un teléfono sale con el enlace viejo (la cola no
+  reprocesa los params; `alertas` mostraba 0 pendientes) · 2 de 178 pares CT/HS antiguos siguen
+  sin calzar (13072621: la CT no resuelve CECO y la OT sí; 1072601 apunta a una OT preventiva).
+- ✅ **Recorrido en Chromium de TODAS las salidas** (verificación del 15-09): Ver PDF, Compartir
+  (con archivos, sin archivos y menú propio), compartir varias, correo "Descargar CT/HS", Ver OTs
+  por técnico, Preventivos (Ver PDF, Compartir y **"Enviar hojas", que mandaba el enlace crudo** —
+  arreglado), cierre con y sin señal: todas con la nomenclatura y enlaces que responden 206.
 - Cubierto por `tests/nombre-pdf-cotizacion.js`, `tests/la-hs-se-descarga.js` (con `--prod` pega a
   Cloudinary), `tests/cotizacion-y-hs-separadas.js` y `tests/offline/prueba-nombre-pdf.js`.
 

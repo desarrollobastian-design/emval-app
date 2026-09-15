@@ -20,7 +20,8 @@
       limpieza). Un tercero con su propia limpieza es como volvio a entrar el punto.
    3. EL LINK A LA APP NO SE TOCA: pegarle '.pdf' a `?pdf=<id>` dejaba el correo al local con
       "No encontramos el PDF" justo cuando Cloudinary fallo.
-   4. SI LA DESCARGA NOMBRADA FALLA, se abre el archivo SIN `fl_attachment`, no la misma URL rota.
+   4. SI LA DESCARGA NOMBRADA FALLA por un 400 se abre el archivo SIN `fl_attachment`; si fue la red,
+      la URL nombrada (valida). Y el correo "Enviar hojas" de preventivos lleva la nomenclatura.
    5. Con --prod: HEAD de verdad a Cloudinary con las URLs que arma el codigo para los casos reales
       (796863 con punto, 9618 con parentesis, 01082617 con coma). Tienen que responder 200/206 con
       Content-Disposition. Son GET de rango publicos: no suben nada ni gastan cuota.
@@ -173,10 +174,15 @@ console.log('La HS y la CT se pueden descargar\n');
 {
   const conNombre = F._urlPDFDescarga(RAW_796863, 'HS - 796863 - x');
   chequear(F._urlPDFSinNombre(conNombre) === RAW_796863, '_urlPDFSinNombre no devolvio el raw: "' + F._urlPDFSinNombre(conNombre) + '"');
+  // Un 400 (nombre rechazado) abre el raw; un corte de red o de tiempo reabre la URL NOMBRADA, que
+  // es valida — abrir el raw ahi bajaba la CT como "COT_…_SIN_CECO_…" (revision del 15-09).
   const d = texto('_descargarPDFNombrado') || '';
-  const respaldo = /window\.open\(\s*_urlPDFSinNombre\(u\)/.test(d) && !/window\.open\(\s*u\s*,/.test(d);
-  chequear(respaldo, '_descargarPDFNombrado reabre la misma URL que acaba de fallar');
-  console.log('4) Respaldo: ' + (respaldo ? 'abre el archivo sin fl_attachment ✓' : 'reabre la URL rota ✗'));
+  const respaldo = /window\.open\(\s*\/HTTP 400\/\.test\(.*?\)\)\s*\?\s*_urlPDFSinNombre\(u\)\s*:\s*u\s*,/.test(d);
+  chequear(respaldo, '_descargarPDFNombrado no distingue el 400 (raw) de un corte de red (URL nombrada)');
+  // El correo "Enviar hojas" de preventivos tambien sale con la nomenclatura y la lista blanca.
+  const envioHojas = /_urlPDFDescarga\(h\.pdfUrl, _nombrePDFHoja\(h\)\)/.test(src.slice(src.indexOf('async function _procesarEnvioHojas(')));
+  chequear(envioHojas, 'el correo de hojas preventivas manda el enlace crudo, sin la nomenclatura HS');
+  console.log('4) Respaldo y correo de hojas: ' + (respaldo && envioHojas ? '400 -> raw, red -> nombrada; hojas con nombre ✓' : '✗'));
 }
 
 // ── 5. Contra Cloudinary de verdad ──────────────────────────────────────────────────────────────

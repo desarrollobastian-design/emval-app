@@ -4652,8 +4652,10 @@ function _urlPDFDescarga(url, nombre) {
   if (u.indexOf(marca) === -1) return u;
   if (!/\.pdf($|\?)/i.test(u)) u += '.pdf';
   // Una URL que YA trae nombre se respeta si ese nombre esta limpio. Si no lo esta —la armo otro
-  // sitio sin esta funcion, o viene de un correo viejo— se rearma con la lista blanca: la
-  // garantia de que el enlace abre no puede depender de que nadie mas arme `fl_attachment`.
+  // sitio sin esta funcion, o un dato guardado— se rearma con la lista blanca: la garantia de que
+  // el enlace abre no puede depender de que nadie mas arme `fl_attachment`.
+  // ⚠️ Lo que NO pasa por aca: un correo que ya quedo encolado en un telefono con el enlace armado
+  // por 943888e sale con esos params congelados (sincronizarCorreosPendientes no los reprocesa).
   var previo = u.match(/\/raw\/upload\/fl_attachment(?::([^/]*))?\//);
   if (previo) {
     var viejo = '';
@@ -4861,10 +4863,11 @@ async function _descargarPDFNombrado(url, nombre) {
     setTimeout(function(){ URL.revokeObjectURL(obj); }, 30000);
     return true;
   } catch(e) {
-    // Se abre el archivo SIN `fl_attachment`: si lo que fallo fue el nombre, reabrir la misma URL
-    // da el mismo 400. Sale con el nombre del public_id, pero el documento se ve.
+    // Si Cloudinary RECHAZO el nombre (400), reabrir la misma URL da el mismo 400: se abre el archivo
+    // sin `fl_attachment` y sale con el nombre del public_id, pero el documento se ve. Si fue la
+    // red o el tiempo, la URL nombrada sigue siendo la buena: el Content-Disposition pone el nombre.
     console.warn('No se pudo fijar el nombre de descarga; se abre el PDF:', e);
-    window.open(_urlPDFSinNombre(u), '_blank');
+    window.open(/HTTP 400/.test(String(e && e.message)) ? _urlPDFSinNombre(u) : u, '_blank');
     return false;
   }
 }
@@ -10973,7 +10976,13 @@ async function verOTsTecnico(nombre, grupo) {
     const subDiv = document.createElement('div');
     subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
     const cecoValTec = ot.ceco || cecoMapTec[ot.local] || '';
-    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotDatosPorNumeroT[String(ot.numero || ot.otNumero || '')] || null;
+    // Por N° de OT solo vale la cotizacion del MISMO local y que no sea de otra OT: los numeros ya
+    // colisionaron (9530) y la HS toma de su COT el folio, el CECO y el texto breve — una ajena le
+    // pondria todo eso de otro trabajo. Mismo criterio que _obtenerHojaDeCot.
+    const cotPorNumT = cotDatosPorNumeroT[String(ot.numero || ot.otNumero || '')] || null;
+    const cotNumPropiaT = cotPorNumT && (!cotPorNumT.otId || cotPorNumT.otId === ot.id) &&
+      _normTexto(_localCanonico(cotPorNumT.local)) === _normTexto(_localCanonico(ot.local)) ? cotPorNumT : null;
+    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotNumPropiaT || null;
     const datosNombreHojaT = _datosHojaConCot(ot, cotDatosHojaT, cecoValTec);
     subDiv.innerHTML = '<b style="color:var(--azul)">#' + (ot.numero || '—') + '</b> · ' + (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
@@ -11339,7 +11348,10 @@ async function _procesarEnvioHojas(hojas, emails) {
   // invierte su regla dentro de esta zona: aqui el literal es obligatorio.
   let itemsHtml = '';
   conPdf.forEach(function(h, i) {
-    const verPdf = '<a href="' + h.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar hoja</a>';
+    // El enlace lleva la nomenclatura de SMU ("HS - <N°> - ceco <CECO> - MP Transpaletas <Mes> <Año>"),
+    // igual que Ver PDF y Compartir: crudo, al supervisor le bajaba "966-HS 574797-MP…_wc1bvf3.pdf".
+    // `_urlPDFDescarga` deja intacto el link a la app.
+    const verPdf = '<a href="' + _urlPDFDescarga(h.pdfUrl, _nombrePDFHoja(h)) + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar hoja</a>';
     itemsHtml +=
       '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
         '<div style="font-weight:700;font-size:15px;color:#1B3A6B;">' + (i+1) + '. ' + _escHtml(h.local) + ' &mdash; ' + _escHtml(h.fecha) + '</div>' +
