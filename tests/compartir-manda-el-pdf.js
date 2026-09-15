@@ -26,7 +26,7 @@ const fallos = [];
 function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); }
 
 // Extrae una funcion por nombre y la deja ejecutable, como hacen los demas tests de esta carpeta.
-function extraer(nombre) {
+function textoDe(nombre) {
   const i = src.indexOf('function ' + nombre + '(');
   if (i < 0) return null;
   // Corte por llaves balanceadas desde la primera '{' de la firma.
@@ -35,8 +35,14 @@ function extraer(nombre) {
     if (src[k] === '{') prof++;
     else if (src[k] === '}') { prof--; if (prof === 0) { fin = k + 1; break; } }
   }
-  if (fin < 0) return null;
-  try { return new Function('return ' + src.slice(i, fin) + ';')(); }
+  return fin < 0 ? null : src.slice(i, fin);
+}
+// `deps`: funciones que la extraida llama (p. ej. _urlPDFDescarga limpia el nombre con
+// _nombreAdjuntoSeguro). Sin ellas la funcion revienta y el test fallaria por la razon equivocada.
+function extraer(nombre, deps) {
+  const partes = [nombre].concat(deps || []).map(textoDe);
+  if (partes.some(t => !t)) return null;
+  try { return new Function(partes.slice(1).join('\n') + '\nreturn ' + partes[0] + ';')(); }
   catch (e) { return null; }
 }
 
@@ -68,7 +74,7 @@ console.log('Compartir tiene que mandar el PDF\n');
 
 // ── 2. El PDF se comparte con extension: sin ella llega como archivo sin tipo ────────────────
 {
-  const f = extraer('_urlPDFDescarga');
+  const f = extraer('_urlPDFDescarga', ['_nombreAdjuntoSeguro']);
   chequear(!!f, 'no se encontro _urlPDFDescarga en index.html');
   if (f) {
     const sinExt = 'https://res.cloudinary.com/dcrf29tna/raw/upload/emval/pdfs/Cotizacion_Unimarc';
@@ -76,6 +82,10 @@ console.log('Compartir tiene que mandar el PDF\n');
     const ok = f(sinExt) === conExt && f(conExt) === conExt;
     console.log('2) URL compartida: ' + (ok ? 'siempre termina en .pdf ✓' : 'puede salir sin extension ✗'));
     chequear(ok, '_urlPDFDescarga no normaliza la extension: ' + f(sinExt));
+    // El '.pdf' es solo para Cloudinary: pegado al link de la app lo convierte en ?pdf=<id>.pdf,
+    // un documento que no existe (el respaldo del correo cuando Cloudinary falla).
+    const app = 'https://desarrollobastian-design.github.io/emval-app/?pdf=KRUvZwab3Zb7QeebOBdv';
+    chequear(f(app, 'HS - 1 - x.pdf') === app, '_urlPDFDescarga modifico el link a la app: ' + f(app, 'x'));
   }
 }
 

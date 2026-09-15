@@ -2265,17 +2265,22 @@ function _cotFusionada(cot) {
 // `_pdfCotObsoleto` solo miraba si habia cambiado el CONTENIDO. Efecto: Pedro reenviaba la
 // cotizacion arreglada y le seguia saliendo cortada, con el fix ya desplegado. Subir este numero
 // al cambiar el dibujo hace que el proximo Ver PDF / envio / compartir lo regenere solo.
-var _PDF_COT_FORMATO = 4;   // 4 = 14-09-2026, la cotizacion ya no incluye la HS ni sus fotos
-// Gerencia exige que COT y HS sean archivos independientes. El bloque legado se conserva
-// temporalmente dentro de los generadores para poder comparar documentos antiguos, pero queda
-// fuera de toda emision nueva. Este sello tambien evita una lectura inutil de la OT.
-var _COTIZACION_INCLUYE_HS = false;
+var _PDF_COT_FORMATO = 4;   // 2 = 19-08-2026, el texto del item se imprime completo
                             // 3 = 25-08-2026, la hoja de la pagina 2 lleva la firma del tecnico
+                            // 4 = 14-09-2026, la cotizacion ya no incluye la HS ni sus fotos
 /* 👉 Al cambiar COMO se dibuja este PDF hay que subir este numero, o el cliente no ve el cambio
    por ningun camino: un PDF ya subido a Cloudinary es un archivo estatico y _pdfCotObsoleto
    solo miraba si habia cambiado el CONTENIDO. Pedro abrio su cotizacion con el fix del texto
    cortado ya desplegado y le seguia saliendo cortada — por poco eso deja el arreglo inservible
-   (19-08-2026). Ahora cambio el FORMATO otra vez: la pagina 2 lleva firma del tecnico. */
+   (19-08-2026).
+   ⚠️ Cambiar el NOMBRE no es cambiar el dibujo: el nombre con que se descarga va en
+   `fl_attachment` y no toca el archivo. El paso de COT a CT (15-09-2026) NO subio este numero
+   a proposito — regenerar es una subida desde el telefono y pisa el `pdfUrl` guardado. */
+
+// SMU Procurement exige que la cotizacion (CT) y la hoja de servicio (HS) sean archivos
+// independientes (14-09-2026). El bloque legado de la pagina 2 se conserva dentro de los
+// generadores, pero queda fuera de toda emision nueva. Tambien evita una lectura inutil de la OT.
+var _COTIZACION_INCLUYE_HS = false;
 
 // Los campos que acompanan a TODO pdfUrl que se guarde. Van juntos a proposito: son tres los
 // sitios que suben un PDF de cotizacion, y el que se olvide el sello deja un PDF sin version,
@@ -4490,10 +4495,14 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       serviciosPreventivo: snap.serviciosPreventivo,
       fotosAntes: urlsAntes, fotosDespues: urlsDespues,
       fotoTimbre: urlTimbre,
-      cotizacionId: snap.cotizacionId,
-      cotizacionNumero: snap.cotizacionNumero,
       firmada: true, firmaImagen: firmaBase64
     };
+    // El vinculo con la cotizacion se escribe SOLO si viene con valor. Un correctivo se cierra
+    // antes de que exista su COT, y una edicion carga la OT desde la tarjeta en memoria (que no
+    // se relee despues de "Adjuntar previa"): un '' con merge borraba el folio que guardarCotizacion
+    // o _confirmarAdjuntarPrevia ya habian escrito. Misma regla que el enlace del PDF.
+    if (snap.cotizacionId) otData.cotizacionId = snap.cotizacionId;
+    if (snap.cotizacionNumero) otData.cotizacionNumero = snap.cotizacionNumero;
     // No borrar audios existentes en una edicion sin nuevas grabaciones
     if (!esEdicion || urlsAudio.length) otData.audios = urlsAudio;
 
@@ -4608,20 +4617,67 @@ function _esPDFCompartible(url) {
   return /^https:\/\//i.test(u);
 }
 
+/* ─── EL NOMBRE QUE VIAJA DENTRO DE `fl_attachment:` ─────────────────────────────────────────
+   Caso HS 796863 / COT 15092601 (15-09-2026): Pedro y el supervisor de SMU no pudieron bajar la
+   HS — ERR_INVALID_RESPONSE en el PC, "descarga pendiente" en el celular. Cloudinary respondia
+   400 "Invalid flag in transformation: -" porque el nombre traia "Venta Asistida.-".
+   🔬 Medido con curl contra produccion, caracter por caracter: dentro de `fl_attachment:` SOLO
+   pasan letras y digitos ASCII, espacio, '-', '_', '!' y '$'. Rompen la descarga (400) el '.'
+   en medio, ',', '(', ')', "'", '#', '&', '+', ';', '=', '@', '~', '%', '"', '/', ':' y todo lo
+   que no es ASCII. El texto del trabajo es texto libre y trae casi siempre alguno: 99 de 276 HS
+   de produccion armaban un enlace roto.
+   🔴 Por eso la limpieza es LISTA BLANCA y vive aca, en el unico sitio que arma la URL — no en
+   quien arma el nombre. Un nombre que llegue sucio por cualquier camino (compartir, cola, correo)
+   sale igual con un enlace que abre. Una lista negra ya fallo una vez: "ASCII para Cloudinary"
+   dejaba pasar el punto. */
+function _nombreAdjuntoSeguro(nombre) {
+  return String(nombre == null ? '' : nombre)
+    .replace(/\.pdf$/i, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9 _-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/(\s-)+\s*$/, '')          // un separador colgando al final: "Asistida -"
+    .replace(/^[\s-]+|[\s-]+$/g, '')
+    .substring(0, 150).trim();
+}
+
 // Cloudinary sirve el raw sin extension; agregarsela hace que llegue como .pdf al que lo recibe.
+// ⚠️ Solo se toca una URL de Cloudinary. El respaldo cuando Cloudinary falla es el link a la APP
+// (`?pdf=<id>`): pegarle '.pdf' lo convertia en `?pdf=<id>.pdf`, un documento que no existe, y el
+// correo al local salia con "No encontramos el PDF" justo el dia que mas hacia falta.
 function _urlPDFDescarga(url, nombre) {
   var u = (url || '').toString().trim();
   if (!u) return '';
+  var marca = '/raw/upload/';
+  if (u.indexOf(marca) === -1) return u;
   if (!/\.pdf($|\?)/i.test(u)) u += '.pdf';
+  // Una URL que YA trae nombre se respeta si ese nombre esta limpio. Si no lo esta —la armo otro
+  // sitio sin esta funcion, o un dato guardado— se rearma con la lista blanca: la garantia de que
+  // el enlace abre no puede depender de que nadie mas arme `fl_attachment`.
+  // ⚠️ Lo que NO pasa por aca: un correo que ya quedo encolado en un telefono con el enlace armado
+  // por 943888e sale con esos params congelados (sincronizarCorreosPendientes no los reprocesa).
+  var previo = u.match(/\/raw\/upload\/fl_attachment(?::([^/]*))?\//);
+  if (previo) {
+    var viejo = '';
+    try { viejo = decodeURIComponent(previo[1] || ''); } catch(e) { viejo = previo[1] || ''; }
+    if (previo[1] && encodeURIComponent(_nombreAdjuntoSeguro(viejo)) === previo[1]) return u;
+    u = _urlPDFSinNombre(u);
+    nombre = nombre || viejo;
+  }
+  var i = u.indexOf(marca);
   // Los PDF ya existentes conservan su public_id historico. `fl_attachment` cambia solamente
   // el nombre con que se descarga/adjunta, sin duplicarlos ni romper sus enlaces guardados.
-  var marca = '/raw/upload/';
-  var i = u.indexOf(marca);
-  if (nombre && i !== -1 && u.indexOf('/raw/upload/fl_attachment:') === -1) {
-    var limpio = String(nombre).replace(/\.pdf$/i, '');
+  var limpio = _nombreAdjuntoSeguro(nombre);
+  if (limpio) {
     return u.slice(0, i + marca.length) + 'fl_attachment:' + encodeURIComponent(limpio) + '/' + u.slice(i + marca.length);
   }
   return u;
+}
+
+// La misma URL sin `fl_attachment`: el archivo tal cual, con el nombre del public_id. Es el camino
+// de respaldo de una descarga nombrada que fallo — reabrir la URL que acaba de dar 400 no abre nada.
+function _urlPDFSinNombre(url) {
+  return String(url || '').replace(/\/raw\/upload\/fl_attachment[^/]*\//, '/raw/upload/');
 }
 
 // El nombre bueno ya viaja en la URL: el public_id se arma con _nombreArchivoPDF / _slugPDFCot.
@@ -4807,10 +4863,29 @@ async function _descargarPDFNombrado(url, nombre) {
     setTimeout(function(){ URL.revokeObjectURL(obj); }, 30000);
     return true;
   } catch(e) {
+    // Si Cloudinary RECHAZO el nombre (400), reabrir la misma URL da el mismo 400: se abre el archivo
+    // sin `fl_attachment` y sale con el nombre del public_id, pero el documento se ve. Si fue la
+    // red o el tiempo, la URL nombrada sigue siendo la buena: el Content-Disposition pone el nombre.
     console.warn('No se pudo fijar el nombre de descarga; se abre el PDF:', e);
-    window.open(u, '_blank');
+    window.open(/HTTP 400/.test(String(e && e.message)) ? _urlPDFSinNombre(u) : u, '_blank');
     return false;
   }
+}
+
+// De varios registros de `pdfs` de la misma hoja, el de la generacion MAS ALTA. Corregir una hoja ya
+// cerrada sube `_v2`, `_v3`… (ver _sufijoGenPDF) y deja el original vivo: sin orden, Firestore los
+// devuelve por id y la OT 347723 traia primero la hoja SIN corregir. Solo cuentan los que tienen
+// URL de Cloudinary: un registro sin archivo no se adjunta.
+function _urlHojaMasReciente(docs) {
+  var mejor = '', genMejor = 0;
+  (docs || []).forEach(function(d) {
+    var u = String((d.data ? d.data() : d).pdfUrlCloudinary || '');
+    if (!_esPDFCompartible(u)) return;
+    var m = u.match(/_v(\d+)\.pdf(?:$|\?)/i);
+    var gen = m ? Number(m[1]) : 1;
+    if (gen > genMejor) { genMejor = gen; mejor = u; }
+  });
+  return mejor;
 }
 
 // Busca la HS independiente que corresponde a una cotizacion. Primero usa el enlace de la OT;
@@ -4826,15 +4901,23 @@ async function _obtenerHojaDeCot(cot) {
       if (otDoc.exists) ot = Object.assign({ id: otDoc.id }, otDoc.data());
     }
     var url = _pdfDeOT(ot);
-    if (!url) {
-      var pdfSnap = null;
+    // `_pdfDeOT` puede devolver el link a la APP (`?pdf=`), que no se adjunta: eso tambien es
+    // "no hay PDF" y tiene que caer al indice `pdfs`, no cortar la busqueda.
+    if (!_esPDFCompartible(url)) {
+      url = '';
       if (cot.otId) {
-        pdfSnap = await _conTimeout(db.collection('pdfs').where('otClientId', '==', cot.otId).limit(1).get(), 25000, 'buscar PDF de HS');
+        var porId = await _conTimeout(db.collection('pdfs').where('otClientId', '==', cot.otId).limit(10).get(), 25000, 'buscar PDF de HS');
+        url = _urlHojaMasReciente(porId.docs);
       }
-      if ((!pdfSnap || pdfSnap.empty) && cot.otNumero) {
-        pdfSnap = await _conTimeout(db.collection('pdfs').where('otNumero', '==', cot.otNumero).limit(1).get(), 25000, 'buscar PDF de HS legacy');
+      if (!url && cot.otNumero) {
+        var porNum = await _conTimeout(db.collection('pdfs').where('otNumero', '==', cot.otNumero).limit(10).get(), 25000, 'buscar PDF de HS legacy');
+        // Los N° de OT ya colisionaron entre locales (9016, 9502): por numero solo vale la hoja
+        // del MISMO local. Mandarle a SMU la HS de otro local es peor que avisar que falta.
+        var locCot = _normTexto(_localCanonico(cot.local));
+        url = _urlHojaMasReciente(porNum.docs.filter(function(d) {
+          return !locCot || _normTexto(_localCanonico(d.data().local)) === locCot;
+        }));
       }
-      if (pdfSnap && !pdfSnap.empty) url = pdfSnap.docs[0].data().pdfUrlCloudinary || '';
     }
     if (!_esPDFCompartible(url)) return null;
     var datos = _datosHojaConCot(ot, cot, cot.centro || '');
@@ -4860,7 +4943,7 @@ async function compartirCotizacion(cot) {
     if (hoja) docs.push({ url: hoja.url, nombre: hoja.nombre });
     await compartirDocumentos(docs, {
       titulo: _asuntoCotizaciones([cot]),
-      texto: _textoCompartirCot(cot) + (hoja ? '\n\nSe adjuntan COT y HS en archivos separados.' : '')
+      texto: _textoCompartirCot(cot) + (hoja ? '\n\nSe adjuntan CT y HS en archivos separados.' : '')
     });
   } finally { soltar(); }
 }
@@ -4886,7 +4969,7 @@ async function compartirCotizacionesSeleccionadas() {
     await compartirDocumentos(docs, {
       titulo: _asuntoCotizaciones(sel),
       texto: sel.length === 1 ? _textoCompartirCot(sel[0])
-        : sel.length + ' cotizaciones — COT y HS en archivos separados — EMVAL E.I.R.L.'
+        : sel.length + ' cotizaciones — CT y HS en archivos separados — EMVAL E.I.R.L.'
     });
   } finally { soltar(); }
 }
@@ -7747,7 +7830,7 @@ function verPDF() {
     // Congelado antes de generar: si el tecnico arranca la OT siguiente mientras se arma el PDF,
     // el archivo que se descarga saldria con el numero (y el tipo) de la otra hoja.
     const snapNombre = {
-      tipo: estado.tipo, ceco: estado.ceco, otNumero: estado.otNumero,
+      tipo: estado.tipo, ceco: estado.ceco, otNumero: estado.otNumero, local: estado.local,
       cotizacionNumero: estado.cotizacionNumero || '',
       descripcionTrabajo: document.getElementById('desc-trabajo') ? document.getElementById('desc-trabajo').value : ''
     };
@@ -10893,7 +10976,13 @@ async function verOTsTecnico(nombre, grupo) {
     const subDiv = document.createElement('div');
     subDiv.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:3px;display:flex;align-items:center;gap:6px;';
     const cecoValTec = ot.ceco || cecoMapTec[ot.local] || '';
-    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotDatosPorNumeroT[String(ot.numero || ot.otNumero || '')] || null;
+    // Por N° de OT solo vale la cotizacion del MISMO local y que no sea de otra OT: los numeros ya
+    // colisionaron (9530) y la HS toma de su COT el folio, el CECO y el texto breve — una ajena le
+    // pondria todo eso de otro trabajo. Mismo criterio que _obtenerHojaDeCot.
+    const cotPorNumT = cotDatosPorNumeroT[String(ot.numero || ot.otNumero || '')] || null;
+    const cotNumPropiaT = cotPorNumT && (!cotPorNumT.otId || cotPorNumT.otId === ot.id) &&
+      _normTexto(_localCanonico(cotPorNumT.local)) === _normTexto(_localCanonico(ot.local)) ? cotPorNumT : null;
+    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotNumPropiaT || null;
     const datosNombreHojaT = _datosHojaConCot(ot, cotDatosHojaT, cecoValTec);
     subDiv.innerHTML = '<b style="color:var(--azul)">#' + (ot.numero || '—') + '</b> · ' + (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
@@ -11259,7 +11348,10 @@ async function _procesarEnvioHojas(hojas, emails) {
   // invierte su regla dentro de esta zona: aqui el literal es obligatorio.
   let itemsHtml = '';
   conPdf.forEach(function(h, i) {
-    const verPdf = '<a href="' + h.pdfUrl + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar hoja</a>';
+    // El enlace lleva la nomenclatura de SMU ("HS - <N°> - ceco <CECO> - MP Transpaletas <Mes> <Año>"),
+    // igual que Ver PDF y Compartir: crudo, al supervisor le bajaba "966-HS 574797-MP…_wc1bvf3.pdf".
+    // `_urlPDFDescarga` deja intacto el link a la app.
+    const verPdf = '<a href="' + _urlPDFDescarga(h.pdfUrl, _nombrePDFHoja(h)) + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Ver / Descargar hoja</a>';
     itemsHtml +=
       '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">' +
         '<div style="font-weight:700;font-size:15px;color:#1B3A6B;">' + (i+1) + '. ' + _escHtml(h.local) + ' &mdash; ' + _escHtml(h.fecha) + '</div>' +
@@ -11504,15 +11596,29 @@ function _slugTexto(txt) {
     .substring(0, 60);
 }
 
-/* ─── NOMBRE DEL PDF DE UNA COTIZACIÓN ────────────────────────────────────────────────────────
-   Pedido de Gerencia recibido por Pedro, 14-09-2026. Formatos independientes:
+/* ─── NOMBRE DEL PDF DE LA COTIZACIÓN (CT) Y DE LA HOJA DE SERVICIO (HS) ──────────────────────
+   Exigencia de SMU Procurement (correo del 14-09-2026: sin la nomenclatura no se emite la HES) y
+   corrección por escrito del supervisor de SMU que recibe los archivos, sobre la COT 15092601
+   (15-09-2026): "debería decir CT - 15092601 - ceco 3164 - Destape piletas y camara · cotización
+   es CT, hoja de servicio es HS". Formatos:
 
-       COT - <N° cotización> - ceco <centro> - <trabajo>.pdf
-       HS - <N° hoja> - COT <N° cotización> - ceco <centro> - <trabajo>.pdf
+       CT - <N° cotización> - ceco <CECO> - <texto breve>.pdf
+       HS - <N° OT> - CT <N° cotización> - ceco <CECO> - <texto breve>.pdf
 
-   COT y HS no se mezclan en el nombre ni en el contenido. El folio se conserva tal como fue
-   asignado y el CECO numérico se completa a cuatro dígitos para recuperar ceros que Firestore
-   perdió al guardar centros antiguos como número.
+       CT - 15092601 - ceco 3164 - Destape piletas y camara.pdf
+       HS - 796863 - CT 15092601 - ceco 3164 - Destape piletas y camara.pdf
+
+   ⚠️ NO es el ejemplo literal del correo formal ("CT-2425-733-Rep grifería local"): es lo que
+   escribió el supervisor al ver un archivo real. Decisión de Bastián, 15-09-2026. Si Procurement
+   exige el literal, el cambio es de separadores y rótulos, todo dentro de este bloque.
+
+   🔑 EL TEXTO BREVE ES EL MISMO EN LOS DOS ARCHIVOS: el `nombreServicio` de la cotización, como en
+   los dos ejemplos de SMU. Es lo que le deja a Procurement parear CT y HS. La primera versión le
+   ponía a la HS la descripción larga de la OT, y en las 168 OT cotizadas el texto no calzaba.
+
+   🔴 EL CECO SE RESUELVE, NO SE COPIA A CIEGAS. Ver `_cecoDe`: la COT 15092601 salió "SIN-CECO"
+   porque su local ("S10 Concepcion") es una ficha de relleno sin `centro`, y `ALIAS_LOCALES` ya
+   sabía desde el 27-07 que ese local es M10 CONCEPCION, centro 3164.
 
    El folio se toma tal cual lo dejó `_asignarNumeroCotizacion` — ddmmaa + correlativo del día,
    con transacción. Acá NO se recalcula ni se rearma: ese fue el bug del '01' hardcodeado que
@@ -11550,53 +11656,116 @@ function _recortarPalabras(txt, max) {
   return (esp > max * 0.5 ? corte.substring(0, esp) : corte).trim();
 }
 
-// Los centros historicos quedaron a veces como numero (474) y a veces como texto (0474).
-// Para la nomenclatura nueva ambos representan el mismo CECO de cuatro digitos.
+// CECO de 4 digitos: es como viene en el ejemplo del pedido del 14-09 ("ceco 0474").
+// ⚠️ Sin confirmar: el correo formal de Procurement usa "733" sin rellenar, y ningun `centro` de
+// produccion tiene cero inicial (medido 15-09-2026). Si SMU lo quiere tal cual, se saca el padStart.
 function _cecoDocumento(valor) {
   const c = String(valor == null ? '' : valor).trim();
   if (!c) return 'SIN-CECO';
   return /^\d+$/.test(c) && c.length < 4 ? c.padStart(4, '0') : c;
 }
 
-// Una sola limpieza para COT y HS: ASCII para Cloudinary, sin caracteres prohibidos por
-// Windows/Android y sin separadores duplicados provenientes del texto libre.
-function _nombreDocumento(partes) {
-  return partes.filter(function(p){ return p != null && String(p).trim(); }).join(' - ')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\x20-\x7E]+/g, '')
-    .replace(/[\\/:*?"<>|]+/g, ' ')
-    .replace(/\s+/g, ' ').trim() + '.pdf';
+/* ─── DE DONDE SALE EL CECO ─────────────────────────────────────────────────────────────────────
+   1. El del propio documento: `ceco` de la OT (lo fijo el tecnico al elegir la sucursal) o
+      `centro` de la cotizacion. Es lo que quedo registrado ese dia, y gana.
+   2. Si viene vacio, el CATALOGO, resuelto con `_indexarCadenas` — nombre normalizado + alias.
+   🔑 Con nombre EXACTO no alcanza, y ese fue el caso 15092601: el tecnico eligio "S10 Concepcion",
+   una ficha de relleno de CADENAS_DEFAULT sin `centro`. `_obtenerCentroSucursal` busco por nombre
+   exacto, encontro la misma ficha vacia y la cotizacion nacio sin CECO. `ALIAS_LOCALES` ya dice
+   que S10 paso a llamarse M10 (3164). Medido 15-09-2026: por nombre exacto resuelven 174 de 185
+   cotizaciones; con el indice y el alias, 182.
+   ⚠️ Se lee el catalogo del CACHE local (`emval_cadenas_cache`), nunca de la red: esto corre al
+   nombrar un PDF, muchas veces en el telefono del tecnico y sin señal. Lo escribe
+   `cargarCadenasApp` al arrancar y al editar una sucursal.
+   Lo que no resuelve queda "SIN-CECO" a la vista — adivinarle el centro a un documento que va a
+   Procurement es peor que dejar el hueco. */
+var _cecoIdxCache = { raw: null, idx: null };
+function _cecoDelCatalogo(local) {
+  if (!local) return '';
+  try {
+    var raw = localStorage.getItem('emval_cadenas_cache') || '';
+    if (raw !== _cecoIdxCache.raw) {
+      _cecoIdxCache = { raw: raw, idx: raw ? _indexarCadenas(JSON.parse(raw) || []) : null };
+    }
+    return _cecoIdxCache.idx ? String(_cecoIdxCache.idx.ceco(local) || '') : '';
+  } catch(e) {
+    // SILENCIO-FIRMADO: sin cache legible el nombre sale con "SIN-CECO", que es visible.
+    return '';
+  }
+}
+function _cecoDe(datos) {
+  datos = datos || {};
+  const propio = String(datos.ceco || datos.centro || '').trim();
+  return propio || _cecoDelCatalogo(datos.local);
 }
 
+// Una sola limpieza para CT y HS, con la MISMA lista blanca que la URL (`_nombreAdjuntoSeguro`):
+// el nombre que baja el navegador y el que Cloudinary pone en Content-Disposition tienen que ser
+// el mismo, o el archivo compartido por WhatsApp y el del correo se llaman distinto.
+// Sin tildes ni ñ, y no es cosmetica: fuera de ASCII Cloudinary responde 400 (medido 14-08 con
+// "Destape baño"); y '/', ':' y compañia los rechazan ademas Windows y Android en un nombre.
+function _nombreDocumento(partes) {
+  const nombre = partes.filter(function(p){ return p != null && String(p).trim(); }).join(' - ');
+  return (_nombreAdjuntoSeguro(nombre) || 'documento') + '.pdf';
+}
+
+const _MESES_DOC = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Texto breve: una linea, sin puntuacion, cortado por palabra. La descripcion del trabajo es un
+// parrafo ("Asistencia por piletas tapadas en sector Venta Asistida.\n- Se realiza…"): se usa solo
+// su primera linea, y solo si la cotizacion no trae su `nombreServicio`.
 function _trabajoDocumento(datos) {
   datos = datos || {};
-  const t = String(datos.nombreServicio || datos.descripcionTrabajo || datos.descripcion || '').trim();
-  if (t) return _recortarPalabras(t, 60);
-  if (datos.tipo === 'preventivo') return 'MP Transpaletas';
-  return 'SIN-DESCRIPCION';
+  // Un preventivo no tiene cotizacion y su campo de texto son las OBSERVACIONES: ponerlas en el
+  // nombre dejaba "HS - 9464 - … - Para la proxima visita solicitar el cambio de 4 ruedas". El
+  // texto breve es el del servicio, con el mes de la hoja como lo archivaba el public_id.
+  if (datos.tipo === 'preventivo') {
+    // Sin `fecha` es una hoja que se esta cerrando AHORA (verPDF, el correo del cierre): su mes es este.
+    const m = String(datos.fecha || '').match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    const hoy = new Date();
+    const mes = m ? _MESES_DOC[Number(m[2]) - 1] : (datos.fecha ? '' : _MESES_DOC[hoy.getMonth()]);
+    const anio = m ? m[3] : hoy.getFullYear();
+    return 'MP Transpaletas' + (mes ? ' ' + mes + ' ' + anio : '');
+  }
+  const fuente = String(datos.nombreServicio || '').trim()
+    || String(datos.descripcionTrabajo || datos.descripcion || '');
+  const linea = fuente.split(/\r?\n/).map(_nombreAdjuntoSeguro).filter(Boolean)[0] || '';
+  return linea ? _recortarPalabras(linea, 60) : 'SIN-DESCRIPCION';
 }
 
-// Nomenclatura solicitada por Gerencia/Procurement el 14-09-2026.
-// Ejemplo: HS - 6537 - COT 5454 - ceco 0474 - reparacion corte electrico.pdf
 function _nombrePDFHoja(datos) {
   datos = datos || {};
-  const num = String(datos.otNumero || datos.numero || '').trim() || 'SIN-NUMERO';
+  // El 0 se descarta igual que el vacio: no existe la OT 0, y `otNumero` llega como numero desde
+  // Firestore (integerValue), asi que un 0 pasaria un filtro de string.
+  const crudo = (datos.otNumero != null && datos.otNumero !== '') ? datos.otNumero : datos.numero;
+  const n = String(crudo == null ? '' : crudo).trim();
   const cot = String(datos.cotizacionNumero || datos.numeroCotizacion || '').trim();
-  const partes = ['HS', num];
-  if (cot) partes.push('COT ' + cot);
-  partes.push('ceco ' + _cecoDocumento(datos.ceco || datos.centro));
+  const partes = ['HS', n && n !== '0' ? n : 'SIN-NUMERO'];
+  // "CT", no "COT": la HS nombra a su cotizacion con la misma sigla que lleva el archivo de la CT.
+  if (cot) partes.push('CT ' + cot);
+  partes.push('ceco ' + _cecoDocumento(_cecoDe(datos)));
   partes.push(_trabajoDocumento(datos));
   return _nombreDocumento(partes);
 }
 
+// La cotizacion que se tiene EN LA MANO manda sobre lo copiado en la OT: si la COT se borro y se
+// rehizo, la OT puede seguir apuntando al folio viejo.
+// 🔑 Con cotizacion, la HS toma el CECO y el texto breve EXACTAMENTE como los resuelve la CT: los dos
+// archivos viajan juntos a Procurement y se parean por esos datos. Barrido del 15-09-2026: 2 pares
+// salian con CECO distinto (la OT guardo uno y la ficha del catalogo dice otro — S10 Chillan 2,
+// 3027 vs 3554) y los que no traen `nombreServicio` salian con texto distinto.
 function _datosHojaConCot(ot, cot, cecoFallback) {
   ot = ot || {};
   cot = cot || {};
+  const hayCot = Object.keys(cot).length > 0;
+  const textoCot = String(cot.nombreServicio || '').trim() || String(cot.descripcionTrabajo || '');
   return Object.assign({}, ot, {
     otNumero: ot.otNumero || ot.numero || cot.otNumero || '',
-    cotizacionNumero: ot.cotizacionNumero || cot.numeroCotizacion || '',
-    ceco: ot.ceco || cot.centro || cecoFallback || '',
-    descripcionTrabajo: ot.descripcionTrabajo || cot.descripcionTrabajo || cot.nombreServicio || ''
+    cotizacionNumero: cot.numeroCotizacion || ot.cotizacionNumero || '',
+    ceco: (hayCot ? _cecoDe(cot) : '') || ot.ceco || cecoFallback || '',
+    local: ot.local || cot.local || '',
+    nombreServicio: (hayCot ? textoCot : '') || ot.nombreServicio || '',
+    descripcionTrabajo: ot.descripcionTrabajo || cot.descripcionTrabajo || ''
   });
 }
 
@@ -11604,22 +11773,14 @@ function _datosHojaConCot(ot, cot, cecoFallback) {
 // _slugPDFCot, que si va sin espacios. Son dos cosas distintas a proposito.
 function _nombrePDFCot(cot) {
   cot = cot || {};
-  const partes = ['COT'];
+  const partes = ['CT'];
   // Sin folio queda 'SIN-NUMERO' bien visible: es el sintoma de que el contador no respondio al
   // guardar (_asignarNumeroCotizacion marca esas como provisorias). Se ve y se corrige antes de
   // enviarla; un nombre que disimula el hueco la manda a SMU sin numero.
   partes.push(String(cot.numeroCotizacion || '').trim() || 'SIN-NUMERO');
-  partes.push('ceco ' + _cecoDocumento(cot.centro || cot.ceco));
-  partes.push(_trabajoDocumento(cot));
-  /* SIN TILDES NI Ñ, y no es cosmetica: el nombre viaja dentro de la URL de Cloudinary como
-     `fl_attachment:<nombre>` y un caracter fuera de ASCII la hace responder 400 — o sea, la
-     descarga se ROMPE, no es que salga fea.
-     ✅ Comprobado con HEAD contra produccion (14-08-2026): "Destape baño" devolvia 400 e "inline";
-     ya normalizado devuelve 200 con el nombre puesto. Es ademas lo que pide la regla de nombres
-     de archivo de CorexOn (sin tildes) y lo que hace Pedro a mano en sus 4 ejemplos.
-     Los caracteres de la segunda linea los RECHAZAN Windows y Android en un nombre de archivo, y
-     la descripcion del trabajo es texto libre: basta un "cambio 1/2 pulgada" para no poder
-     guardar el archivo. */
+  partes.push('ceco ' + _cecoDocumento(_cecoDe(cot)));
+  // Solo los dos campos de texto: una cotizacion no es un preventivo aunque traiga un `tipo`.
+  partes.push(_trabajoDocumento({ nombreServicio: cot.nombreServicio, descripcionTrabajo: cot.descripcionTrabajo }));
   return _nombreDocumento(partes);
 }
 
@@ -11639,18 +11800,17 @@ function _slugPDFCot(cot) {
 /* Cloudinary entrega el archivo con el nombre del public_id, que va sin espacios por fuerza. Para
    que la DESCARGA llegue con el nombre de arriba se usa `fl_attachment`, que fija el
    Content-Disposition sin tocar el archivo ni volver a subirlo.
-   ✅ Verificado con HEAD contra un PDF real de produccion (14-08-2026):
-        Content-Disposition: attachment; filename="01082604 HS 301143 Correctivo transpaletas Chillan.pdf"
+   ✅ Verificado con HEAD contra produccion (15-09-2026):
+        Content-Disposition: attachment; filename="CT - 15092601 - ceco 3164 - Destape piletas y camara.pdf"
+   🔴 El nombre pasa por `_nombreAdjuntoSeguro` (lista blanca) aunque `_nombrePDFCot` ya lo limpie:
+   una coma en el servicio ("Cambio ubicacion termo, retiro termo malo", COT 01082617) daba 400.
    ⚠️ Si la URL no es de Cloudinary —el link a la app (.../?pdf=<id>), o un PDF en Firestore— se
    devuelve TAL CUAL. Meterle una transformacion a una URL que no es de Cloudinary la rompe, y un
    link roto es mucho peor que un nombre feo. */
 function _urlDescargaCot(cot) {
   const url = String((cot && cot.pdfUrl) || '');
-  const marca = '/raw/upload/';
-  const i = url.indexOf(marca);
-  if (i === -1) return url;
-  const nombre = _nombrePDFCot(cot).replace(/\.pdf$/i, '');
-  return url.slice(0, i + marca.length) + 'fl_attachment:' + encodeURIComponent(nombre) + '/' + url.slice(i + marca.length);
+  // Delega en `_urlPDFDescarga`: UN solo sitio de la app arma `fl_attachment`, con UNA lista blanca.
+  return url.indexOf('/raw/upload/') === -1 ? url : _urlPDFDescarga(url, _nombrePDFCot(cot));
 }
 
 // Asunto descriptivo y buscable para el correo de cotizaciones
@@ -11740,7 +11900,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
         '</div>'
       : '';
     const verPdf = it.pdfUrl
-      ? '<a href="' + _urlDescargaCot(it) + '" style="display:inline-block;margin-top:8px;margin-right:6px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Descargar COT' + (_ver ? ' (v. ' + _ver + ')' : '') + '</a>'
+      ? '<a href="' + _urlDescargaCot(it) + '" style="display:inline-block;margin-top:8px;margin-right:6px;padding:7px 16px;background:#1B3A6B;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Descargar CT' + (_ver ? ' (v. ' + _ver + ')' : '') + '</a>'
       : '';
     const verHs = it._hojaEntrega
       ? '<a href="' + _urlPDFDescarga(it._hojaEntrega.url, it._hojaEntrega.nombre) + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#27785F;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Descargar HS</a>'
@@ -15346,10 +15506,11 @@ async function _subirPDFaCloudinary(pdfDataUri, datos) {
     /* Por la MISMA funcion que el derivador y que el cierre online. Una OT que sube desde la cola
        nunca fue editada, asi que siempre es la generacion 1 y el id sale IDENTICO al de antes del
        fix — pero deja de ser una cuarta copia del texto que puede quedar desalineada.
-       ⚠️ Lo que este cambio NO arregla: aca `tipo` no viaja, asi que una hoja PREVENTIVA que suba
-       desde la cola sigue subiendo con nombre de correctivo (`Recepcion_Obra_OT…`). Es un defecto
-       preexistente y contradice "el nombre del PDF es el unico indicio confiable del tipo"
-       (CLAUDE.md); no se toca aca para no mezclar dos arreglos en el mismo cambio. */
+       Desde el 14-09-2026 la cola le pasa tambien `tipo` y `ceco`, asi que una hoja PREVENTIVA
+       que sube desde la cola ya sale con su nombre de preventivo y no con `Recepcion_Obra_OT…`.
+       ⚠️ Borde abierto: `_nombreArchivoPDF` toma el mes de `new Date()` al SUBIR, no al cerrar —
+       una hoja cerrada el ultimo dia del mes y sincronizada al siguiente queda con un public_id
+       distinto del que guardo el rescate (`_urlPDFSiYaEsta`). */
     formData.append('public_id', _nombrePublicIdPDF({ otNumero: datos.numero, clientId: datos.clientId, pdfGen: 1, tipo: datos.tipo, ceco: datos.ceco, cotizacionNumero: datos.cotizacionNumero, descripcionTrabajo: datos.descripcionTrabajo }));
     const resp = await _fetchConTimeout('https://api.cloudinary.com/v1_1/' + CLOUDINARY.cloudName + '/raw/upload', { method: 'POST', body: formData }, 30000);
     const data = await resp.json();
@@ -15460,7 +15621,7 @@ async function sincronizarEnlacesPDFPendientes() {
         var _urlHSRescatada = it.pdfUrlCloudinary;
         if (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function') {
           var _nombreHSRescatada = _nombrePDFHoja({
-            otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco,
+            otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco, local: _a.local, fecha: _a.fecha,
             cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
           });
           _urlHSRescatada = _urlPDFDescarga(it.pdfUrlCloudinary, _nombreHSRescatada);
@@ -15723,8 +15884,6 @@ async function sincronizarOTsPendientes() {
         tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
         descripcionProblema: ot.descripcionProblema || '',
         ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
-        cotizacionId: ot.cotizacionId || '',
-        cotizacionNumero: ot.cotizacionNumero || '',
         pendientesMateriales: ot.pendientesMateriales || '',
         numEquipos: ot.numEquipos || '',
         serviciosPreventivo: ot.serviciosPreventivo || [],
@@ -15735,6 +15894,10 @@ async function sincronizarOTsPendientes() {
         pausa: false, enEspera: false, estado: 'Terminada',
         creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
       };
+      // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
+      // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
+      if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
+      if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
       if (ot.clientId) {
         // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
         await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');

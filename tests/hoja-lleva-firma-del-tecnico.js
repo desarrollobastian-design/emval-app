@@ -323,4 +323,4 @@ if (fallos.length) {
   console.error('\nFALLA — la hoja puede salir sin firmar:\n' + fallos.join('\n') + '\n');
   process.exit(1);
 }
-console.log('\nOK — la hoja de servicio sale firmada por quien la ejecuto, en los cinco sitios.\n');
+console.log('\nOK — la hoja de servicio sale firmada por quien la ejecuto, en los dos generadores de HS.\n');

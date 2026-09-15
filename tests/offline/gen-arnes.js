@@ -91,7 +91,15 @@ function __coleccion(nombre) {
         collection: __coleccion
       };
     },
-    where: function() { return { get: function(){ return __promesaNube('query:' + nombre, __snap([])); }, where: function(){ return this; }, orderBy: function(){ return this; } }; },
+    // Consulta: responde vacia. limit y onSnapshot existen porque la app los encadena (el panel
+    // de supervisor escucha alertas con where().onSnapshot); sin ellos la pagina lanzaba un
+    // TypeError que se confundia con un error de la app.
+    where: function() {
+      var q = { get: function(){ return __promesaNube('query:' + nombre, __snap([])); },
+                where: function(){ return q; }, orderBy: function(){ return q; }, limit: function(){ return q; },
+                onSnapshot: function(cb) { try { cb(__snap([])); } catch(e){} return function(){}; } };
+      return q;
+    },
     orderBy: function() { return this; },
     get: function() { return __promesaNube('get-all:' + nombre, __snap(__docsDe(nombre))); },
     onSnapshot: function(cb) { try { cb(__snap(__docsDe(nombre))); } catch(e){} return function(){}; }
