@@ -29,3 +29,7 @@ tests/offline/*.png
 # Bastian. Para regenerar el embebido: tools/embeber-firmas-tecnicos.js
 multimedia/
 index.html.antes-de-firmas-tecnicos-*.bak
+
+# Respaldos de documentos de PRODUCCION que escriben las herramientas de tools/.
+# Llevan datos del cliente: viven en el disco de Bastian, no en el repo.
+tools/respaldos/
