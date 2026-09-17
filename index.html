@@ -4529,6 +4529,7 @@ async function guardarEnFirebase(otBase, desc, fecha) {
     if (!esEdicion && snap.cotizacionId && snap.enEspera === true) {
       try {
         await _vincularCotizacionRealizada(snap.cotizacionId, {
+          otDocId: clientId,
           numero: otBase.numero, fecha: fecha,
           urlsAntes: urlsAntes, urlsDespues: urlsDespues,
           urlTimbre: urlTimbre, firmaBase64: firmaBase64,
@@ -4891,8 +4892,24 @@ function _urlHojaMasReciente(docs) {
 // Busca la HS independiente que corresponde a una cotizacion. Primero usa el enlace de la OT;
 // para documentos legacy cae al indice `pdfs`, donde quedaron varias hojas que nunca se
 // re-enlazaron a `ordenes` por mala senal.
+/* Un N de OT viaja con DOS tipos en la base: `ordenes.numero` es numerico en los 286 documentos
+   de produccion y `otCompletadaNumero` es texto en los 5 que lo traen (medido el 17-09-2026).
+   Una consulta de Firestore compara tipo Y valor: sin convertir devuelve vacio sin fallar, que es
+   la peor forma de no encontrar algo. Devuelve null si no es un numero: nunca se consulta a ojo. */
+function _numOTComparable(v) {
+  var t = String(v == null ? '' : v).trim();
+  return /^\d+$/.test(t) ? Number(t) : null;
+}
+
 async function _obtenerHojaDeCot(cot) {
-  if (!cot || (!cot.otId && !cot.otNumero) || !window._firebaseReady) return null;
+  if (!cot || !window._firebaseReady) return null;
+  /* `otCompletadaNumero` es el TERCER campo del vinculo y hasta el 17-09-2026 no lo leia nadie.
+     Una previa unida a su OT por `_vincularCotizacionRealizada` nacia sin `otId` ni `otNumero`, y
+     a la 17092602 el guardado de una correccion de precio se los borro: el correo a SMU salio sin
+     HS teniendo el numero de la hoja (425996) escrito en el propio documento. Es la regla de las
+     4 fuentes aplicada a un campo: no se concluye "no hay hoja" habiendo mirado uno solo. */
+  var nRescate = (!cot.otId && !cot.otNumero) ? _numOTComparable(cot.otCompletadaNumero) : null;
+  if (!cot.otId && !cot.otNumero && nRescate === null) return null;
   try {
     var db = window.firebase.firestore();
     var ot = {};
@@ -4900,21 +4917,50 @@ async function _obtenerHojaDeCot(cot) {
       var otDoc = await _conTimeout(db.collection('ordenes').doc(cot.otId).get(), 25000, 'buscar HS de cotizacion');
       if (otDoc.exists) ot = Object.assign({ id: otDoc.id }, otDoc.data());
     }
+    if (!ot.id && nRescate !== null) {
+      /* Se rescata contra `ordenes` y no contra el indice `pdfs`: la OT es la fuente autoritativa
+         y trae el local, el CeCo y el numero con los que se arma el nombre de la HS.
+         El numero SOLO vale junto al local del mismo documento (los N de OT ya colisionaron entre
+         locales: 9016, 9502) y si quedan DOS candidatas no se elige ninguna. Mandarle a SMU la
+         hoja equivocada es peor que avisar que falta. */
+      var porNum = await _conTimeout(db.collection('ordenes').where('numero', '==', nRescate).limit(10).get(), 25000, 'rescatar HS por N de OT');
+      var locRescate = _normTexto(_localCanonico(cot.local));
+      var cands = porNum.docs.filter(function(d) {
+        var x = d.data() || {};
+        return x.firmada === true && !!locRescate && _normTexto(_localCanonico(x.local)) === locRescate;
+      });
+      if (cands.length === 1) ot = Object.assign({ id: cands[0].id }, cands[0].data());
+    }
     var url = _pdfDeOT(ot);
     // `_pdfDeOT` puede devolver el link a la APP (`?pdf=`), que no se adjunta: eso tambien es
     // "no hay PDF" y tiene que caer al indice `pdfs`, no cortar la busqueda.
     if (!_esPDFCompartible(url)) {
       url = '';
-      if (cot.otId) {
-        var porId = await _conTimeout(db.collection('pdfs').where('otClientId', '==', cot.otId).limit(10).get(), 25000, 'buscar PDF de HS');
+      // Con la OT ya rescatada, su propio id sirve igual que el que traia la cotizacion.
+      var idHS = cot.otId || ot.id || '';
+      if (idHS) {
+        var porId = await _conTimeout(db.collection('pdfs').where('otClientId', '==', idHS).limit(10).get(), 25000, 'buscar PDF de HS');
         url = _urlHojaMasReciente(porId.docs);
       }
-      if (!url && cot.otNumero) {
-        var porNum = await _conTimeout(db.collection('pdfs').where('otNumero', '==', cot.otNumero).limit(10).get(), 25000, 'buscar PDF de HS legacy');
+      /* Tambien el numero rescatado: una hoja legacy puede vivir SOLO en el indice `pdfs` con su
+         documento de `ordenes` borrado o nunca sincronizado. Ahi `ot` queda vacio y lo unico que
+         queda para encontrarla —y para nombrarla— es el `otCompletadaNumero` de la cotizacion. */
+      var numHS = cot.otNumero || (ot.numero != null && ot.numero !== '' ? ot.numero : '') ||
+                  (nRescate !== null ? nRescate : '');
+      if (!url && numHS !== '') {
+        /* `pdfs.otNumero` es numerico en 328 de 330 documentos y `cotizaciones.otNumero` es texto
+           en 12 de 185: se pregunta primero por el numero y, si no hay nada, por el valor crudo.
+           Son dos lecturas solo en el camino de respaldo, y la alternativa es no encontrar una
+           hoja que esta ahi. */
+        var numPref = _numOTComparable(numHS);
+        var porNumPDF = await _conTimeout(db.collection('pdfs').where('otNumero', '==', numPref !== null ? numPref : numHS).limit(10).get(), 25000, 'buscar PDF de HS legacy');
+        if (porNumPDF.empty && numPref !== null && numPref !== numHS) {
+          porNumPDF = await _conTimeout(db.collection('pdfs').where('otNumero', '==', numHS).limit(10).get(), 25000, 'buscar PDF de HS legacy (texto)');
+        }
         // Los N° de OT ya colisionaron entre locales (9016, 9502): por numero solo vale la hoja
         // del MISMO local. Mandarle a SMU la HS de otro local es peor que avisar que falta.
         var locCot = _normTexto(_localCanonico(cot.local));
-        url = _urlHojaMasReciente(porNum.docs.filter(function(d) {
+        url = _urlHojaMasReciente(porNumPDF.docs.filter(function(d) {
           return !locCot || _normTexto(_localCanonico(d.data().local)) === locCot;
         }));
       }
@@ -5691,6 +5737,10 @@ async function _obtenerSupervisorSucursal(nombreLocal) {
 
 async function abrirCotizacion(docId) {
   try {
+    /* Entrar a cotizar una OT cancela cualquier edicion abierta y no guardada. Sin esto, salir
+       de "Editar cotizacion" sin guardar dejaba la bandera encendida, y el siguiente guardado
+       hacia `update` sobre la cotizacion ANTERIOR con los datos de esta OT en vez de crear una. */
+    window._editandoCotizacionId = null;
     window._cotizacionOrigen = document.querySelector('.screen.active') ? document.querySelector('.screen.active').id : 's-supervisor';
     // Guardar referencia al tecnico activo para recargar su vista despues
     const headerTec = document.getElementById('detalle-tecnico-nombre');
@@ -5897,8 +5947,7 @@ async function guardarCotizacion() {
       total: totales.total,
       carpeta: carpeta,
       fechaCodigo: _num.fechaCodigo,
-      numeroCotizacion: _num.numeroCotizacion,
-      creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+      numeroCotizacion: _num.numeroCotizacion
     };
     // Cotización previa: ciclo de estado propio, sin OT de origen, conserva branding de cadena
     if (cotizacionActual.esPrevia) {
@@ -5908,8 +5957,15 @@ async function guardarCotizacion() {
       cotData.cadenaLogo = cotizacionActual.cadenaLogo || '';
       cotData.cadenaColor = cotizacionActual.cadenaColor || '';
       cotData.cadenaLetra = cotizacionActual.cadenaLetra || '';
-      cotData.otId = null;
-      cotData.otNumero = '';
+      /* 🔴 EL VINCULO CON LA OT NO SE PISA CON VACIO. Una previa NACE sin OT —por eso esto
+         escribia null/'' — pero una previa YA UNIDA a su hoja se sigue editando, y hasta el
+         17-09-2026 estas dos lineas corrian tambien dentro del `update` de una edicion.
+         Caso 17092602 / HS 425996 (UNIMARC CHIGUAYANTE 2): Pedro corrigio $400 neto de un item,
+         el guardado le borro el vinculo y 39 segundos despues el correo a SMU salio SIN HS y con
+         la CT impresa con el campo "N OT" en blanco. Misma regla que el lado de `ordenes` en
+         guardarEnFirebase: el vinculo se escribe con lo que trae el documento, nunca con vacio. */
+      cotData.otId = cotizacionActual.otId || null;
+      cotData.otNumero = cotizacionActual.numero || '';
     }
     let savedDocId;
     const editId = window._editandoCotizacionId;
@@ -5918,6 +5974,11 @@ async function guardarCotizacion() {
       window._editandoCotizacionId = null;
       savedDocId = editId;
     } else {
+      /* `creadoEn` es la fecha de NACIMIENTO del documento: solo se escribe al crearlo. Hasta el
+         17-09-2026 viajaba dentro de `cotData` y cada edicion la reescribia — la 17092602 quedo
+         figurando creada hoy teniendo su documento del 28-07, y toda cotizacion corregida saltaba
+         al tope de Carpetas, Facturar y Ventas, que ordenan por ese campo. */
+      cotData.creadoEn = window.firebase.firestore.FieldValue.serverTimestamp();
       const docRef = await _conTimeout(db.collection('cotizaciones').add(cotData), 25000, 'add cotizacion');
       savedDocId = docRef.id;
     }
@@ -5993,6 +6054,13 @@ async function editarCotizacion(cotData) {
     centroSucursal: cotData.centro || '',
     esPrevia: cotData.tipoCot === 'previa',
     estadoCot: cotData.estadoCot || '',
+    /* 🔑 El folio y su codigo de fecha VIAJAN. `guardarCotizacion` decide si renumera mirando
+       `cotizacionActual.numeroCotizacion`, y hasta el 17-09-2026 esta funcion no lo cargaba: el
+       guard "una EDICION conserva su numero" estaba escrito y nunca se cumplia. Corregir un
+       precio renumeraba el documento (28072602 -> 17092602) y quemaba un correlativo del dia,
+       dejando a SMU con dos folios para un solo cobro. Chequeo bien escrito, mal anclado. */
+    numeroCotizacion: cotData.numeroCotizacion || '',
+    fechaCodigo: cotData.fechaCodigo || '',
     cadena: cotData.cadena || '',
     cadenaLogo: cotData.cadenaLogo || '',
     cadenaColor: cotData.cadenaColor || '',
@@ -9752,7 +9820,10 @@ async function generarPDFCotizacionGuardada(cotData, options) {
     doc.text('Fecha', 120, 32); doc.text(': ' + fecha, 142, 32);
     doc.text('Fecha ejecuci' + String.fromCharCode(243) + 'n', 120, 38); doc.text(': ' + (cotData.fecha||''), 142, 38);
     doc.text('Local', 120, 44); doc.text(': ' + (cotData.local||''), 142, 44);
-    doc.text('N OT', 120, 50); doc.text(': ' + (cotData.otNumero||''), 142, 50);
+    // El mismo respaldo que ya usa el NOMBRE de la HS (`_datosHojaConCot`). Sin esto, a SMU le
+    // llegaban dos archivos que se contradicen: la HS nombrada con su N de OT y la CT con el
+    // recuadro vacio, que es justo el dato con el que Procurement parea los dos para la HES.
+    doc.text('N OT', 120, 50); doc.text(': ' + (cotData.otNumero || cotData.otCompletadaNumero || ''), 142, 50);
     doc.text('Supervisor', 120, 56); doc.text(': ' + (cotData.supervisor || cotData.carpeta || cotData.tecnico||''), 142, 56);
 
     // ---- DETALLE TRABAJOS ----
@@ -10888,9 +10959,13 @@ async function verOTsTecnico(nombre, grupo) {
   const otsCotizadasPorNumero = {};
   const cotDatosPorIdT = {};
   const cotDatosPorNumeroT = {};
+  // Tercera fuente: la cotizacion indexada por SU PROPIO id, para poder resolverla cuando es la
+  // OT la que declara el vinculo (`ordenes.cotizacionId`) y la cotizacion perdio el suyo.
+  const cotFichasT = {};
   cotSnapT.docs.forEach(function(cd) {
     const cdata = cd.data();
     const ficha = Object.assign({ id: cd.id }, cdata);
+    cotFichasT[cd.id] = ficha;
     if (cdata.otId) { otsCotizadasT[cdata.otId] = cd.id; cotDatosPorIdT[cdata.otId] = ficha; }
     if (cdata.otNumero) {
       otsCotizadasPorNumero[String(cdata.otNumero)] = cd.id;
@@ -10899,7 +10974,7 @@ async function verOTsTecnico(nombre, grupo) {
   });
   // Previas pendientes (sin OT asignada aun) para el boton "Adjuntar previa".
   const previasPendientesT = cotSnapT.docs
-    .filter(function(cd){ var x = cd.data(); return x.tipoCot === 'previa' && x.estadoCot === 'Pendiente' && !x.otId; })
+    .filter(function(cd){ return _previaAdjuntable(cd.data()); })
     .map(function(cd){ return Object.assign({ id: cd.id }, cd.data()); });
 
   // Index de PDFs por clientId (preferente) y otNumero (fallback) para "Ver PDF" cuando el
@@ -10982,7 +11057,8 @@ async function verOTsTecnico(nombre, grupo) {
     const cotPorNumT = cotDatosPorNumeroT[String(ot.numero || ot.otNumero || '')] || null;
     const cotNumPropiaT = cotPorNumT && (!cotPorNumT.otId || cotPorNumT.otId === ot.id) &&
       _normTexto(_localCanonico(cotPorNumT.local)) === _normTexto(_localCanonico(ot.local)) ? cotPorNumT : null;
-    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotNumPropiaT || null;
+    const cotDatosHojaT = cotDatosPorIdT[ot.id] || cotNumPropiaT ||
+      (ot.cotizacionId ? (cotFichasT[ot.cotizacionId] || null) : null) || null;
     const datosNombreHojaT = _datosHojaConCot(ot, cotDatosHojaT, cecoValTec);
     subDiv.innerHTML = '<b style="color:var(--azul)">#' + (ot.numero || '—') + '</b> · ' + (ot.fecha||'') + (cecoValTec ? ' · CeCo:' + cecoValTec : '') + ' &nbsp;<span class="badge ' + badge + '">' + label + '</span>';
     headerInfo.appendChild(localDiv);
@@ -11126,7 +11202,12 @@ async function verOTsTecnico(nombre, grupo) {
     }
 
     // Boton segun si ya tiene cotizacion
-    const yaCotizadaT = otsCotizadasT[ot.id] || otsCotizadasPorNumero[String(ot.numero || ot.otNumero || '')];
+    /* Tercera fuente, y es la del PROPIO documento de la OT: si declara su `cotizacionId` y esa
+       cotizacion existe, la OT esta cotizada aunque la cotizacion haya perdido su `otId`/`otNumero`.
+       Sin esto la OT 425996 volvio a mostrar "+ Cotizacion" el 17-09-2026, y apretarlo habria
+       creado una SEGUNDA cotizacion del mismo trabajo — esa si entra a la planilla con su monto. */
+    const yaCotizadaT = otsCotizadasT[ot.id] || otsCotizadasPorNumero[String(ot.numero || ot.otNumero || '')] ||
+      ((ot.cotizacionId && cotFichasT[ot.cotizacionId]) ? ot.cotizacionId : null);
     console.log('OT', ot.id, 'numero:', ot.numero, 'cotizada:', !!yaCotizadaT);
     if (yaCotizadaT) {
       const badgeCotT = document.createElement('div');
@@ -11140,6 +11221,16 @@ async function verOTsTecnico(nombre, grupo) {
       btnVerCotT.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaCotizadaT);
       badgeCotT.appendChild(badgeV);
       badgeCotT.appendChild(btnVerCotT);
+      // Mientras el vinculo siga a medias la CT sale impresa sin su N de OT, y ese es el dato
+      // con el que Procurement de SMU parea CT y HS para emitir la HES.
+      if (_vinculoAMedias(cotFichasT[yaCotizadaT], ot)) {
+        const btnRepT = document.createElement('button');
+        btnRepT.textContent = 'Reponer vínculo';
+        btnRepT.title = 'La cotización no apunta a esta hoja: su PDF sale sin el N° de OT.';
+        btnRepT.style.cssText = 'background:var(--naranja);color:white;border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;';
+        btnRepT.onclick = (function(previa, otRef){ return function(){ _confirmarAdjuntarPrevia(previa, otRef, null, function(){ verOTsTecnico(nombre, grupo); }); }; })(cotFichasT[yaCotizadaT], ot);
+        badgeCotT.appendChild(btnRepT);
+      }
       btns.appendChild(badgeCotT);
     } else if (ot.tipo !== 'preventivo') {
       // Correctivos (y tipo desconocido): crear una cotizacion nueva O adjuntar una previa pendiente.
@@ -11760,7 +11851,7 @@ function _datosHojaConCot(ot, cot, cecoFallback) {
   const hayCot = Object.keys(cot).length > 0;
   const textoCot = String(cot.nombreServicio || '').trim() || String(cot.descripcionTrabajo || '');
   return Object.assign({}, ot, {
-    otNumero: ot.otNumero || ot.numero || cot.otNumero || '',
+    otNumero: ot.otNumero || ot.numero || cot.otNumero || cot.otCompletadaNumero || '',
     cotizacionNumero: cot.numeroCotizacion || ot.cotizacionNumero || '',
     ceco: (hayCot ? _cecoDe(cot) : '') || ot.ceco || cecoFallback || '',
     local: ot.local || cot.local || '',
@@ -11905,7 +11996,9 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
     const verHs = it._hojaEntrega
       ? '<a href="' + _urlPDFDescarga(it._hojaEntrega.url, it._hojaEntrega.nombre) + '" style="display:inline-block;margin-top:8px;padding:7px 16px;background:#27785F;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">Descargar HS</a>'
       : '';
-    const faltaHs = (it.otId || it.otNumero) && !it._hojaEntrega
+    // `otCompletadaNumero` cuenta: una cotizacion que declara trabajo ejecutado tiene hoja. Sin
+    // esto, el correo del 17-09-2026 salio sin HS y SIN avisar, como si fuera un presupuesto.
+    const faltaHs = (it.otId || it.otNumero || it.otCompletadaNumero) && !it._hojaEntrega
       ? '<div style="margin-top:8px;font-size:12px;color:#7A4E00;">HS no disponible para adjuntar; revisa que la hoja tenga PDF.</div>'
       : '';
     itemsHtml +=
@@ -12105,13 +12198,15 @@ async function cargarOTsSupervisor() {
     // Cargar cotizaciones existentes para saber que OTs ya tienen cotizacion
     const cotSnap = await db.collection('cotizaciones').get();
     const otsCotizadas = {};
+    const cotVivasSup = {};
     cotSnap.docs.forEach(function(cd) {
       const cdata = cd.data();
+      cotVivasSup[cd.id] = Object.assign({ id: cd.id }, cdata);
       if (cdata.otId) otsCotizadas[cdata.otId] = cd.id;
     });
     // Previas pendientes (sin OT asignada aun) para el boton "Adjuntar previa".
     const previasPendientesSup = cotSnap.docs
-      .filter(function(cd){ var x = cd.data(); return x.tipoCot === 'previa' && x.estadoCot === 'Pendiente' && !x.otId; })
+      .filter(function(cd){ return _previaAdjuntable(cd.data()); })
       .map(function(cd){ return Object.assign({ id: cd.id }, cd.data()); });
 
     /* Fichas MINIMAS para que las tarjetas de "trabajos pausados" puedan decir cuales de esas
@@ -12198,7 +12293,9 @@ async function cargarOTsSupervisor() {
       descEl.style.cssText = 'margin-top:4px;color:var(--texto2)';
       descEl.textContent = d.descripcionTrabajo ? d.descripcionTrabajo.substring(0,60)+'...' : '';
       // Badge y boton segun si ya tiene cotizacion
-      const yaTieneCot = otsCotizadas[docId];
+      // Misma regla que en el perfil del tecnico: el vinculo que declara la OT tambien cuenta.
+      const yaTieneCot = otsCotizadas[docId] ||
+        ((d.cotizacionId && cotVivasSup[d.cotizacionId]) ? d.cotizacionId : null);
       infoEl.appendChild(tituloEl);
       infoEl.appendChild(subEl);
       infoEl.appendChild(descEl);
@@ -12214,6 +12311,15 @@ async function cargarOTsSupervisor() {
         btnVerCot.onclick = (function(id){ return function(){ verCotizacionDirecta(id); }; })(yaTieneCot);
         badgeCot.appendChild(badgeVerde);
         badgeCot.appendChild(btnVerCot);
+        // Mismo caso que en el perfil del tecnico: vinculo a medias, reparable desde aca.
+        if (_vinculoAMedias(cotVivasSup[yaTieneCot], d)) {
+          const btnRepS = document.createElement('button');
+          btnRepS.textContent = 'Reponer vínculo';
+          btnRepS.title = 'La cotización no apunta a esta hoja: su PDF sale sin el N° de OT.';
+          btnRepS.style.cssText = 'background:var(--naranja);color:white;border:none;border-radius:var(--radio-sm);padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;';
+          btnRepS.onclick = (function(previa, otObj){ return function(){ _confirmarAdjuntarPrevia(previa, otObj, null, cargarOTsSupervisor); }; })(cotVivasSup[yaTieneCot], Object.assign({ id: docId }, d));
+          badgeCot.appendChild(btnRepS);
+        }
         infoEl.appendChild(badgeCot);
       } else if (d.tipo !== 'preventivo') {
         // Correctivos (y tipo desconocido): crear cotizacion nueva O adjuntar previa. Preventivos NO llevan
@@ -12756,7 +12862,7 @@ async function _vincularCotizacionRealizada(cotId, datos) {
     const db = window.firebase.firestore();
     // `_cotPdfCaduco()`: al pegarle el trabajo ejecutado (fotos, firma, fecha) el PDF que habia
     // quedo describiendo otra cosa. Se invalida para que el proximo "Ver PDF" o envio lo regenere.
-    await db.collection('cotizaciones').doc(cotId).update(Object.assign({
+    const _union = Object.assign({
       estadoCot: 'Realizada',
       otCompletadaNumero: datos.numero || '',
       fotosAntes: datos.urlsAntes || [],
@@ -12765,7 +12871,23 @@ async function _vincularCotizacionRealizada(cotId, datos) {
       firmaImagen: datos.firmaBase64 || '',
       fechaRealizada: datos.fecha || new Date().toLocaleDateString('es-CL'),
       tecnicoRealizo: datos.tecnico || ''
-    }, _cotPdfCaduco()));
+    }, _cotPdfCaduco());
+    /* EL VINCULO TAMBIEN SE ESCRIBE ACA. Hasta el 17-09-2026 esta funcion dejaba la cotizacion
+       "Realizada" con `otCompletadaNumero` pero SIN `otId` ni `otNumero`: exactamente el estado
+       en el que la 17092602 salio por correo sin su HS y sin que nadie pudiera repararla desde
+       la app. Toda previa aceptada que se cerrara por este camino nacia ya rota.
+       Se escriben SOLO si traen valor: un vacio borraria el vinculo que "Adjuntar previa" pudo
+       haber dejado antes. Misma regla que el lado de `ordenes` en guardarEnFirebase. */
+    if (datos.otDocId) _union.otId = datos.otDocId;
+    // Texto, igual que `_confirmarAdjuntarPrevia`: dos productores del mismo campo con tipos
+    // distintos es como una consulta de Firestore devuelve vacio sin fallar.
+    if (datos.numero) _union.otNumero = String(datos.numero);
+    /* 🔴 CON GUARDIA DE TIEMPO, como todo lo demas. Era la unica llamada sin `_conTimeout` del
+       bucle de `sincronizarOTsPendientes`, que corre en serie: un cuelgue aca se llevaba por
+       delante el correo al local, `_eliminarOTPendiente` (la OT volvia a subir sus fotos en cada
+       ciclo), el aviso a administracion y TODAS las OT siguientes de la cola. Es el bug de julio
+       en `guardarYEnviarPDF` escrito de nuevo, y este arreglo le acababa de sumar dos escrituras. */
+    await _conTimeout(db.collection('cotizaciones').doc(cotId).update(_union), 25000, 'vincular cotizacion realizada');
   } catch(e) {
     console.error('Error vinculando cotización realizada:', e);
   }
@@ -12774,8 +12896,49 @@ async function _vincularCotizacionRealizada(cotId, datos) {
 // --- Adjuntar una cotizacion PREVIA (pendiente) a una OT correctiva ya hecha ---
 // Camino inverso al de "aceptar": el tecnico ya hizo el correctivo por su cuenta y el admin le pega
 // una previa que tenia guardada. Adjuntar = aprobar: une las dos y marca la previa como Realizada.
+/* QUE PREVIA SE PUEDE ADJUNTAR, Y A QUE OT.
+   Hasta el 17-09-2026 las dos listas filtraban `estadoCot === 'Pendiente' && !otId`, y eso dejo
+   sin salida a la 17092602: perdio su `otId` (se lo borro el guardado de una correccion de
+   precio) pero conserva `estadoCot: 'Realizada'`, asi que ninguna lista la ofrecia. No habia
+   NINGUN boton en la app capaz de volver a unirla con su hoja.
+   Se agrega ese caso y solo ese, con una condicion dura: la previa ya ejecutada declara a que
+   hoja pertenece en `otCompletadaNumero`, y solo se ofrece en ESA hoja, mismo numero y mismo
+   local. Sin esa validacion se ofreceria en cualquier OT, que es como se termina cobrando el
+   trabajo de otro local. Una previa que YA tiene `otId` no se ofrece: no hay nada que reponer. */
+function _previaAdjuntable(c) {
+  if (!c || c.tipoCot !== 'previa' || c.otId) return false;
+  if (c.estadoCot === 'Pendiente') return true;
+  return c.estadoCot === 'Realizada' && !!String(c.otCompletadaNumero || '').trim();
+}
+
+/* El vinculo puede estar A MEDIAS: la OT declara su cotizacion (`ordenes.cotizacionId`) y la
+   cotizacion no declara su OT. Es el estado exacto en que quedo la 17092602, y son DOS hechos
+   distintos que no se pueden responder con una sola pregunta:
+     "esta cotizada"        -> si, y por eso NO se ofrece "+ Cotizacion" (seria un cobro doble)
+     "el vinculo esta bien" -> no, y por eso hay que poder repararlo
+   Vive en una funcion propia, y no repetida en las dos pantallas, porque el defecto que esto
+   arregla fue justamente un chequeo bien escrito y mal anclado: el test llamaba a las funciones
+   sueltas y nunca comprobaba que se pudiera llegar al boton. */
+function _vinculoAMedias(cot, ot) {
+  if (!cot || !ot || cot.otId) return false;
+  var suya = String(cot.otCompletadaNumero || '').trim();
+  var num = String((ot.numero != null && ot.numero !== '' ? ot.numero : ot.otNumero) || '').trim();
+  return !!suya && !!num && suya === num;
+}
+
+function _previasParaOT(candidatas, ot) {
+  var num = String((ot && (ot.numero != null && ot.numero !== '' ? ot.numero : ot.otNumero)) || '').trim();
+  var loc = _normTexto(_localCanonico(ot && ot.local));
+  return (candidatas || []).filter(function(c) {
+    var suya = String(c.otCompletadaNumero || '').trim();
+    if (!suya) return true;                   // previa pendiente: se puede unir a cualquier OT
+    if (!num || suya !== num) return false;   // ya declara su hoja: solo esa
+    return !loc || _normTexto(_localCanonico(c.local)) === loc;
+  });
+}
+
 function abrirAdjuntarPrevia(ot, previasPendientes, recargar) {
-  const pend = previasPendientes || [];
+  const pend = _previasParaOT(previasPendientes, ot);
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.onclick = function(e){ if (e.target === overlay) document.body.removeChild(overlay); };
@@ -12789,7 +12952,7 @@ function abrirAdjuntarPrevia(ot, previasPendientes, recargar) {
   const body = document.createElement('div');
   body.style.cssText = 'padding:12px 14px;';
   if (!pend.length) {
-    body.innerHTML = _vacio('No hay cotizaciones previas pendientes', 'Créalas desde la carpeta de cotizaciones.');
+    body.innerHTML = _vacio('No hay cotizaciones previas para esta OT', 'Créalas desde la carpeta de cotizaciones.');
   } else {
     pend.forEach(function(p){
       const row = document.createElement('div');
@@ -12799,7 +12962,9 @@ function abrirAdjuntarPrevia(ot, previasPendientes, recargar) {
       info.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--texto);">' + _escHtml(p.local || 'Sin local') + '</div>' +
         '<div style="font-size:12px;color:var(--texto2);margin-top:2px;">' + (p.numeroCotizacion ? 'Cot ' + _escHtml(String(p.numeroCotizacion)) + ' &middot; ' : '') + '$' + Number(p.total || 0).toLocaleString('es-CL') + '</div>';
       const btn = document.createElement('button');
-      btn.textContent = 'Adjuntar';
+      // Una previa ya ejecutada no se esta "adjuntando": se le repone un vinculo que existia.
+      // Decirle Adjuntar haria pensar que se va a aprobar algo que ya se aprobo.
+      btn.textContent = p.estadoCot === 'Realizada' ? 'Reponer' : 'Adjuntar';
       btn.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;';
       btn.onclick = (function(previa){ return function(){ _confirmarAdjuntarPrevia(previa, ot, overlay, recargar); }; })(p);
       row.appendChild(info); row.appendChild(btn);
@@ -12813,7 +12978,12 @@ function abrirAdjuntarPrevia(ot, previasPendientes, recargar) {
 
 async function _confirmarAdjuntarPrevia(previa, ot, overlay, recargar) {
   const otNum = String(ot.numero || ot.otNumero || '');
-  if (!await _confirmar('Se unirá la cotización de ' + (previa.local || '') + ' a la OT #' + otNum + ' y quedará aprobada.', { titulo: 'Adjuntar cotización previa', okTexto: 'Adjuntar' })) return;
+  const _reponer = previa.estadoCot === 'Realizada';
+  if (!await _confirmar(_reponer
+        ? 'Esta cotización ya está ejecutada pero perdió el vínculo con su hoja. Se volverá a unir a la OT #' + otNum + '.'
+        : 'Se unirá la cotización de ' + (previa.local || '') + ' a la OT #' + otNum + ' y quedará aprobada.',
+      { titulo: _reponer ? 'Reponer el vínculo con la hoja' : 'Adjuntar cotización previa',
+        okTexto: _reponer ? 'Reponer' : 'Adjuntar' })) return;
   if (!navigator.onLine || !window._firebaseReady) { toast('Necesitas conexión para adjuntar la cotización'); return; }
   if (_ocupado('adjuntar-previa')) { toast('Espera, se está adjuntando...'); return; }
   const soltar = _tomar('adjuntar-previa');
@@ -12840,7 +13010,7 @@ async function _confirmarAdjuntarPrevia(previa, ot, overlay, recargar) {
         cotizacionNumero: previa.numeroCotizacion || ''
       }), 25000, 'vincular previa a HS');
     } catch(e) {}
-    toast('✓ Cotización adjuntada a la OT #' + otNum);
+    toast(_reponer ? '✓ Vínculo repuesto con la OT #' + otNum : '✓ Cotización adjuntada a la OT #' + otNum);
     if (overlay && overlay.parentNode) document.body.removeChild(overlay);
     if (typeof recargar === 'function') recargar();
   } catch(e) {
@@ -14591,8 +14761,26 @@ function _plDatosCorrectivos() {
   // Se lista SIN monto — el valor lo fija quien cotiza, estimarlo seria inventarlo.
   var conCot = {};
   todas.forEach(function(c) { if (c.otNumero != null && c.otNumero !== '') conCot[String(c.otNumero).trim()] = true; });
+  /* Segunda fuente, y es la del PROPIO documento de la OT. El indice de arriba se arma solo con
+     `otNumero` de la cotizacion, asi que una cotizacion que perdio ese campo deja a su trabajo
+     figurando como no cotizado: el 17-09-2026 la OT 425996 aparecia en el bloque "sin cotizar"
+     de la MISMA planilla en la que su cotizacion (17092602) sumaba $1.478.850 neto — el mismo
+     trabajo dos veces, arriba cobrado y abajo pendiente.
+     Se exige que la cotizacion EXISTA, y se mira el cache COMPLETO y no el del cliente en
+     pantalla: un `cotizacionId` que apunta a un documento borrado es trabajo que nadie esta
+     cobrando y tiene que seguir a la vista. */
+  /* ⚠️ No basta con que la cotizacion EXISTA: tiene que estar COBRANDOSE. Una previa 'Aceptada'
+     cuyo cierre no logro pasarla a 'Realizada' (mala senal) deja la OT firmada y la cotizacion
+     fuera de `cobrables`: si ademas la sacaramos de "sin cotizar", el trabajo no estaria en
+     NINGUN bloque con monto ni en ninguna lista de pendientes. El default del proyecto para
+     cobranza es dejar el hueco a la vista, no esconderlo — es la red de los 59 locales de julio. */
+  var cotVivas = {};
+  (_plCache.cotizaciones || []).forEach(function(c) { if (c.id) cotVivas[c.id] = _esCobrable(c); });
   var correctivasOT = _dedupeOTs(_plCache.ordenes.filter(function(o) { return !_plEsPreventiva(o) && _plDelCliente(o); })).lista;
-  var sinCotizar = correctivasOT.filter(function(o) { return !conCot[String(o.numero).trim()]; })
+  var sinCotizar = correctivasOT.filter(function(o) {
+    if (o.cotizacionId && cotVivas[o.cotizacionId]) return false;
+    return !conCot[String(o.numero).trim()];
+  })
     .sort(function(a, b) { return (_fechaOTms(b) || 0) - (_fechaOTms(a) || 0); });
 
   /* Un N de OT que aparece en las DOS planillas es lo mas caro que puede pasar aca: SMU ve el
@@ -14725,7 +14913,10 @@ function _plRenderCorrectivos() {
   d.cobrables.forEach(function(c) {
     var tr = document.createElement('tr');
     var trabajo = c.nombreServicio || c.descripcionTrabajo || '';
-    tr.setAttribute('data-buscar', _normTexto([c.local, c.centro, trabajo, c.numeroCotizacion, c.otNumero].join(' ')));
+    // Mismo respaldo que la CT: el buscador tiene que encontrar la fila por el N de OT, que es
+    // como Pedro busca un trabajo. Con el vinculo a medias, buscar "425996" no devolvia nada.
+    var _nOT = c.otNumero != null && c.otNumero !== '' ? c.otNumero : (c.otCompletadaNumero || '');
+    tr.setAttribute('data-buscar', _normTexto([c.local, c.centro, trabajo, c.numeroCotizacion, _nOT].join(' ')));
     function td(txt, clase) {
       var e = document.createElement('td');
       e.textContent = txt;
@@ -14737,7 +14928,7 @@ function _plRenderCorrectivos() {
     td(c.centro || '—', 'pl-num pl-cen');
     td(trabajo, 'pl-trab');
     td(c.numeroCotizacion || '—', 'pl-num pl-cen');
-    td(c.otNumero != null ? String(c.otNumero) : '—', 'pl-num pl-cen');
+    td(_nOT !== '' ? String(_nOT) : '—', 'pl-num pl-cen');
     td(_plPesos(c.total || 0), 'pl-money');
     td(c.fecha || '—', 'pl-cen');
     var tdEnv = document.createElement('td');
@@ -14971,7 +15162,7 @@ function descargarExcelPlanilla() {
       var f1 = [['Local', 'CeCo', 'Trabajo', 'N Cotizacion', 'HS (N OT)', 'Monto', 'Fecha', 'Enviada', 'SolPed', 'OC', 'HES', 'Factura']];
       c.cobrables.forEach(function(x) {
         f1.push([x.local || '', x.centro || '', x.nombreServicio || x.descripcionTrabajo || '',
-          x.numeroCotizacion || '', x.otNumero != null ? x.otNumero : '', x.total || 0, x.fecha || '',
+          x.numeroCotizacion || '', (x.otNumero != null && x.otNumero !== '') ? x.otNumero : (x.otCompletadaNumero || ''), x.total || 0, x.fecha || '',
           x.enviado ? 'Si' : 'No', x.solped || '', x.oc || '', x.hes || '', x.factura || '']);
       });
       f1.push([]);
@@ -15925,6 +16116,7 @@ async function sincronizarOTsPendientes() {
       // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
       if (ot.cotizacionId) {
         await _vincularCotizacionRealizada(ot.cotizacionId, {
+          otDocId: ot.clientId,
           numero: ot.numero, fecha: ot.fecha,
           urlsAntes: urlsAntes, urlsDespues: urlsDespues,
           urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,

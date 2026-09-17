@@ -82,9 +82,13 @@ console.log('5) El vinculo COT-HS no se pisa con vacio: ' + (!intrusas.length &&
 //    (c) por N° de OT solo vale la del MISMO local (9016 y 9502 colisionaron entre locales);
 //    (d) solo registros de otro local -> null, y el correo dice "HS no disponible".
 (async function () {
+  // `_numOTComparable` entro el 17-09-2026: `_obtenerHojaDeCot` lo usa para no comparar un N de OT
+  // de texto contra el numerico que guarda `pdfs`. Sin extraerlo, la funcion revienta dentro de su
+  // propio try/catch y devuelve null — el caso c) fallaba sin decir por que.
   const FN = ['_normTexto', '_localCanonico', '_indexarCadenas', '_esPDFCompartible', '_pdfDeOT',
     '_nombreAdjuntoSeguro', '_recortarPalabras', '_cecoDocumento', '_cecoDelCatalogo', '_cecoDe',
-    '_nombreDocumento', '_trabajoDocumento', '_nombrePDFHoja', '_datosHojaConCot', '_urlHojaMasReciente'];
+    '_nombreDocumento', '_trabajoDocumento', '_nombrePDFHoja', '_datosHojaConCot', '_urlHojaMasReciente',
+    '_numOTComparable'];
   const fuentes = FN.map(n => cuerpo('function ' + n + '('));
   const obt = cuerpo('async function _obtenerHojaDeCot(');
   const faltan = FN.filter((n, i) => !fuentes[i]).concat(obt ? [] : ['_obtenerHojaDeCot']);
