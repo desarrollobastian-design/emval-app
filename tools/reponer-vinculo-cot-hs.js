@@ -19,6 +19,7 @@
    Uso:
      node tools/reponer-vinculo-cot-hs.js                     # simula el caso 17092602
      node tools/reponer-vinculo-cot-hs.js --caducar           # ademas invalida el PDF viejo
+     node tools/reponer-vinculo-cot-hs.js --solo-caducar      # SOLO invalida el PDF (ya reparada)
      node tools/reponer-vinculo-cot-hs.js --creado            # ademas restaura creadoEn
      node tools/reponer-vinculo-cot-hs.js --respaldo <ruta>   # donde dejar el respaldo
      node tools/reponer-vinculo-cot-hs.js --ejecutar          # escribe (pide confirmacion)
@@ -40,6 +41,8 @@ const CREADO = args.includes('--creado');
 // El folio en la OT es cosmetico (la nomenclatura lo resuelve desde la propia cotizacion): va
 // aparte para poder escribir SOLO los dos campos del vinculo cuando eso es lo autorizado.
 const CON_OT = args.includes('--con-ot');
+// Operacion aparte, para DESPUES de reparar: invalida el PDF que se dibujo antes del arreglo.
+const SOLO_CADUCAR = args.includes('--solo-caducar');
 const RESPALDO = (function () {
   const i = args.indexOf('--respaldo');
   return i >= 0 && args[i + 1] ? args[i + 1] : path.join(__dirname, 'respaldos');
@@ -101,6 +104,30 @@ async function diagnosticar(caso) {
   if (!o.ok) problemas.push('la OT ' + caso.otId + ' no responde (HTTP ' + o.estado + ')');
   if (!c.ok || !o.ok) return { problemas: problemas };
   const cot = c.doc, ot = o.doc;
+
+  /* `--solo-caducar` es la operacion INVERSA y va despues de reparar: el vinculo ya esta bien,
+     pero el PDF que SMU tiene se dibujo ANTES de la reparacion, asi que sigue mostrando el
+     recuadro "N OT" vacio. Un PDF es un archivo estatico: arreglar el dato no lo cambia.
+     Se invalida para que el proximo "Ver PDF" o envio lo vuelva a dibujar. No se pierde nada:
+     la URL anterior queda en `enviosCot` y en `pdfUrlEnviado`. */
+  if (SOLO_CADUCAR) {
+    if (vacio(cot.otId) || vacio(cot.otNumero))
+      problemas.push('el vinculo TODAVIA esta roto: primero se repara (sin --solo-caducar) y ' +
+        'despues se caduca el PDF, o se regenera con el recuadro vacio igual.');
+    if (vacio(cot.pdfUrl))
+      problemas.push('la cotizacion ya no tiene pdfUrl: no hay nada que caducar.');
+    const genMs = Number(cot.pdfGeneradoEn || 0);
+    const repMs = Date.parse(cot._updateTime || 0);
+    if (genMs && repMs && genMs > repMs)
+      problemas.push('el PDF es POSTERIOR a la ultima escritura del documento (' +
+        new Date(genMs).toISOString() + '): ya refleja el vinculo, no hace falta caducarlo.');
+    if (!problemas.length) {
+      return { problemas: [], cot: cot, ot: ot, soloCaducar: true,
+        cambiosCot: { pdfUrl: S(''), contenidoActualizadoEn: { integerValue: String(Date.now()) } },
+        cambiosOT: {}, crudo: { cot: c.crudo, ot: o.crudo } };
+    }
+    return { problemas: problemas, cot: cot, ot: ot };
+  }
 
   // Precondiciones: sin las cuatro, no se escribe. El vinculo NO se deduce por parecido.
   if (!vacio(cot.otId) || !vacio(cot.otNumero))
