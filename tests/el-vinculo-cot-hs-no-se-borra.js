@@ -547,6 +547,32 @@ async function bloqueResto() {
     check(/otCompletadaNumero/.test(excel),
       '14) el Excel que se le manda a SMU exporta la celda del N de OT vacia');
   console.log('14) La CT, la planilla y el Excel imprimen el N de OT que la app conoce: ' + (ok14 ? 'OK' : 'FALLA'));
+
+  /* --- 15 · los documentos que recibe SMU dicen HS, no OT -----------------------------
+     SMU dejo de llamarlo orden de trabajo (decision de Bastian, 19-09-2026). El archivo ya se
+     llamaba `HS - 425996 - CT 17092602 - …`, asi que un recuadro que decia "N OT" contradecia
+     al nombre del propio documento. Son TRES documentos: la CT, la hoja de servicio (3
+     generadores: la suelta y las dos copias como pagina 2 de la cotizacion) y el registro
+     fotografico (3 sitios). Firmar uno solo deja la mitad del paquete diciendo lo contrario. */
+  // Linea por linea y sin comentarios: un `[^)]*` cruza lineas y se lleva por delante el
+  // comentario de al lado, que es justo donde el codigo EXPLICA el cambio.
+  const impresos = src.split('\n')
+    .map(l => l.replace(/\/\/.*$/, '').trim())
+    .filter(l => /doc\.text\(/.test(l) && /(['"])[^'"]*\bOT\b[^'"]*\1/.test(l));
+  const subHS = (src.match(/'mero de HS\)'/g) || []).length;
+  const regHS = (src.match(/'HS #'\s*\+/g) || []).length;
+  const formato = Number((src.match(/var\s+_PDF_COT_FORMATO\s*=\s*(\d+)/) || [0, 0])[1]);
+  const ok15 = check(!impresos.length,
+      '15) todavia se IMPRIME "OT" en un PDF que recibe SMU: ' + impresos.join(' | ')) &
+    check(/doc\.text\('N' \+ String\.fromCharCode\(176\) \+ ' HS'/.test(src),
+      '15) el recuadro de la CT no dice "N° HS"') &
+    check(subHS === 3, '15) el subtitulo del folio dice HS en ' + subHS + ' de los 3 generadores de hoja') &
+    check(regHS === 3, '15) el registro fotografico dice HS en ' + regHS + ' de los 3 sitios') &
+    check(formato >= 5,
+      '15) no subio _PDF_COT_FORMATO (esta en ' + formato + '): cambio COMO se dibuja el PDF, y sin ' +
+      'subir el sello las cotizaciones ya subidas no se redibujan y el cliente no ve el cambio por ' +
+      'ningun camino');
+  console.log('15) Los 3 documentos que recibe SMU dicen HS (formato ' + formato + '): ' + (ok15 ? 'OK' : 'FALLA'));
 }
 
 /* Linea de control: cada bloque corre UNA vez y en orden. Si uno revienta se declara en falla

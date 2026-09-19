@@ -2265,7 +2265,7 @@ function _cotFusionada(cot) {
 // `_pdfCotObsoleto` solo miraba si habia cambiado el CONTENIDO. Efecto: Pedro reenviaba la
 // cotizacion arreglada y le seguia saliendo cortada, con el fix ya desplegado. Subir este numero
 // al cambiar el dibujo hace que el proximo Ver PDF / envio / compartir lo regenere solo.
-var _PDF_COT_FORMATO = 4;   // 2 = 19-08-2026, el texto del item se imprime completo
+var _PDF_COT_FORMATO = 5;   // 5 = 19-09-2026, el recuadro dice "N° HS" y no "N° OT" (SMU)
                             // 3 = 25-08-2026, la hoja de la pagina 2 lleva la firma del tecnico
                             // 4 = 14-09-2026, la cotizacion ya no incluye la HS ni sus fotos
 /* 👉 Al cambiar COMO se dibuja este PDF hay que subir este numero, o el cliente no ve el cambio
@@ -7709,7 +7709,7 @@ async function generarPDFRecepcionObra(tecnicoNombre) {
     doc.text('N  ' + (estado.otNumero || '----'), 167, 28, { align: 'center' });
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, { align: 'center' });
+    doc.text('(N' + String.fromCharCode(250) + 'mero de HS)', 167, 34, { align: 'center' });
 
     // ---- CAJA FECHA/LOCAL/DIRECCION ----
     doc.rect(140, 44, 55, 24);
@@ -8062,7 +8062,7 @@ async function agregarFotosAlPDF(doc) {
   doc.setFontSize(12);
   doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W/2, 15, { align: 'center' });
   doc.setFontSize(9);
-  doc.text('OT #' + (estado.otNumero || '') + ' - ' + (estado.local || ''), W/2, 22, { align: 'center' });
+  doc.text('HS #' + (estado.otNumero || '') + ' - ' + (estado.local || ''), W/2, 22, { align: 'center' });
 
   let currentY = 30;
   const imgW = 85;
@@ -9823,7 +9823,12 @@ async function generarPDFCotizacionGuardada(cotData, options) {
     // El mismo respaldo que ya usa el NOMBRE de la HS (`_datosHojaConCot`). Sin esto, a SMU le
     // llegaban dos archivos que se contradicen: la HS nombrada con su N de OT y la CT con el
     // recuadro vacio, que es justo el dato con el que Procurement parea los dos para la HES.
-    doc.text('N OT', 120, 50); doc.text(': ' + (cotData.otNumero || cotData.otCompletadaNumero || ''), 142, 50);
+    /* "N° HS", no "N° OT": SMU dejo de llamarlo orden de trabajo (decision de Bastian,
+       19-09-2026). El archivo ya se llama `HS - 425996 - CT 17092602 - ceco 0601 - …`, asi que
+       el recuadro que dice OT contradecia al nombre del propio documento. El grado se escribe
+       con su codigo, igual que los acentos del resto del PDF: mide 8,83 mm de los 22 que hay
+       entre el rotulo y el valor. */
+    doc.text('N' + String.fromCharCode(176) + ' HS', 120, 50); doc.text(': ' + (cotData.otNumero || cotData.otCompletadaNumero || ''), 142, 50);
     doc.text('Supervisor', 120, 56); doc.text(': ' + (cotData.supervisor || cotData.carpeta || cotData.tecnico||''), 142, 56);
 
     // ---- DETALLE TRABAJOS ----
@@ -9978,7 +9983,7 @@ async function generarPDFCotizacionGuardada(cotData, options) {
         doc.setFont('helvetica','bold'); doc.setFontSize(13);
         doc.text('N  ' + (otData.numero||''), 167, 28, {align:'center'});
         doc.setFontSize(7); doc.setFont('helvetica','normal');
-        doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, {align:'center'});
+        doc.text('(N' + String.fromCharCode(250) + 'mero de HS)', 167, 34, {align:'center'});
         doc.rect(140,44,55,24); doc.line(140,52,195,52); doc.line(140,60,195,60); doc.line(158,44,158,68);
         doc.setFont('helvetica','bold'); doc.setFontSize(8);
         doc.text('Fecha',142,50); doc.text('Local',142,58); doc.text('Direcci' + String.fromCharCode(243) + 'n',142,66);
@@ -10047,7 +10052,7 @@ async function generarPDFCotizacionGuardada(cotData, options) {
         doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
         doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W2/2, 15, {align:'center'});
         doc.setFontSize(9);
-        doc.text('OT #'+(otData.numero||'')+' - '+(otData.local||''), W2/2, 22, {align:'center'});
+        doc.text('HS #'+(otData.numero||'')+' - '+(otData.local||''), W2/2, 22, {align:'center'});
         var curY=30;
         const imgW=85, imgH=65;
         for (var pi=0; pi<Math.max(fotosA.length,fotosD.length); pi++){
@@ -10311,7 +10316,7 @@ async function generarPDFCotizacion() {
         doc.text('N  ' + (otData.numero || ''), 167, 28, { align: 'center' });
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
-        doc.text('(N' + String.fromCharCode(250) + 'mero de OT)', 167, 34, { align: 'center' });
+        doc.text('(N' + String.fromCharCode(250) + 'mero de HS)', 167, 34, { align: 'center' });
 
         // Caja fecha/local
         doc.rect(140, 44, 55, 24);
@@ -10416,7 +10421,7 @@ async function generarPDFCotizacion() {
           doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
           doc.text('REGISTRO FOTOGR' + String.fromCharCode(193) + 'FICO', W2/2, 15, { align: 'center' });
           doc.setFontSize(9);
-          doc.text('OT #' + (otData.numero||'') + ' - ' + (otData.local||''), W2/2, 22, { align: 'center' });
+          doc.text('HS #' + (otData.numero||'') + ' - ' + (otData.local||''), W2/2, 22, { align: 'center' });
 
           var curY2 = 30;
           const imgW2 = 85, imgH2 = 65;

@@ -14,7 +14,8 @@
      4. Al confirmar, la app escribe el vinculo por los DOS lados en una sola accion.
      5. Con el vinculo roto, el envio igual encuentra la HS por `otCompletadaNumero` (el correo
         que Pedro tuvo que mandar a mano) y la nombra con la nomenclatura que exige SMU.
-     6. El PDF de la CT, generado con el jsPDF REAL, imprime su N de OT en vez del recuadro vacio.
+     6. El PDF de la CT, generado con el jsPDF REAL, imprime "N HS: 425996" en vez del recuadro
+        vacio (y ya no dice "N OT": SMU dejo de llamarlo orden de trabajo).
 
    Uso:
      node tests/offline/preparar.js HEAD
@@ -264,19 +265,21 @@ const SEMILLA = `(function(){
       await generarPDFCotizacionGuardada(cot, { modoSubir: true });
     } catch (e) { return { error: String(e).slice(0, 180), escritos: escritos.length }; }
     finally { window.jspdf = jspdfOrig; }
-    const etiqueta = escritos.find(e => /^N.? ?OT$/i.test(e.t.trim()));
+    const etiqueta = escritos.find(e => /^N.? ?HS$/i.test(e.t.trim()));
     const enLinea = etiqueta ? escritos.filter(e => Math.abs(e.y - etiqueta.y) < 1.5 && e.x > etiqueta.x) : [];
-    return { total: escritos.length, etiqueta: !!etiqueta, enLinea: enLinea.map(e => e.t) };
+    return { total: escritos.length, etiqueta: !!etiqueta, rotulo: etiqueta ? etiqueta.t : null,
+             enLinea: enLinea.map(e => e.t) };
   }, COT_ID);
   if (pdf.error) {
     chequear(false, '6) no se pudo generar el PDF de la CT: ' + pdf.error);
   } else {
     const dice = (pdf.enLinea || []).join(' ');
-    chequear(pdf.etiqueta, '6) el PDF no imprime la etiqueta "N OT"');
+    chequear(pdf.etiqueta, '6) el PDF de la CT no imprime la etiqueta "N HS": SMU dejo de llamarlo OT ' +
+      'y el archivo ya se llama HS - ... , asi que el recuadro contradecia al propio documento');
     chequear(/425996/.test(dice),
-      '6) el recuadro "N OT" de la CT sale VACIO (dice ' + JSON.stringify(dice) + '): a SMU le llega ' +
+      '6) el recuadro "N HS" de la CT sale VACIO (dice ' + JSON.stringify(dice) + '): a SMU le llega ' +
       'una CT sin el numero junto a una HS que si lo lleva, y es el dato con el que parean para la HES');
-    P('6) El PDF de la CT imprime: "N OT ' + dice.trim() + '"  (' + pdf.total + ' textos dibujados)');
+    P('6) El PDF de la CT imprime: "' + (pdf.rotulo || '?') + ' ' + dice.trim() + '"  (' + pdf.total + ' textos dibujados)');
   }
 
   await page.screenshot({ path: 'tests/offline/reponer-vinculo.png', fullPage: false }).catch(() => {});
