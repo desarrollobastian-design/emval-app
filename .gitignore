@@ -33,3 +33,17 @@ index.html.antes-de-firmas-tecnicos-*.bak
 # Respaldos de documentos de PRODUCCION que escriben las herramientas de tools/.
 # Llevan datos del cliente: viven en el disco de Bastian, no en el repo.
 tools/respaldos/
+
+# Documentos internos y multimedia del cliente: NO van en este repo.
+# El repo es PUBLICO y GitHub Pages (build con Jekyll, rama main, raiz) sirve todo lo
+# versionado; Jekyll ademas convierte cada .md en .html. Hasta el 23-sep-2026 se servian
+# CLAUDE.md, el brief de soporte, DESIGN.md, el alcance de la baja de activo, la
+# documentacion tecnica (.docx) y las fotos/audio de WhatsApp de Pedro. Viven en el disco
+# de Bastian (fotos y audio: copia en multimedia/). La app no usa ninguno de estos archivos.
+/CLAUDE.md
+/BRIEF-*.md
+/DESIGN.md
+/ALCANCE-*.md
+/Documentacion_Tecnica_*.docx
+/Fotos/
+/Audios/
