@@ -105,7 +105,7 @@
   .screen.active { display: flex; }
   
   /* TOPBAR */
-  .topbar { background: var(--azul); color: white; padding: 14px 16px 12px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 100; }
+  .topbar { background: var(--azul); color: white; padding: 14px 16px 12px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 100; padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
   .topbar .back { width: 32px; height: 32px; border-radius: var(--radio-sm); background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; color: white; font-size: 16px; flex-shrink: 0; }
   /* h1 a 15px NO es un error de escala. El topbar ES el titulo de la pantalla: un segundo
      titulo de 22px en el contenido repetiria la misma palabra dos veces. La jerarquia la dan
@@ -434,9 +434,12 @@
   .ot-info { flex: 1; }
   .ot-titulo { font-size: 15px; font-weight: 600; }
   .ot-sub { font-size: 12px; color: var(--texto3); margin-top: 2px; }
+  /* Pausada que vive solo en el telefono de un tecnico (panel del administrador). */
+  .ot-sub.sup-pausada-origen { margin-top: 4px; color: var(--texto2); }
+  .ot-sub.sup-pausada-espera { color: var(--texto2); font-style: italic; }
   
   /* LOGO SCREEN */
-  .login-hero { background: white; padding: 36px 8px 28px; text-align: center; border-bottom: 1px solid var(--gris2); }
+  .login-hero { background: white; padding: 36px 8px 28px; text-align: center; border-bottom: 1px solid var(--gris2); padding-top: calc(36px + env(safe-area-inset-top, 0px)); }
   .login-logo { width: 100%; max-width: 500px; height: 220px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
   .login-logo img { width: 100%; height: 100%; object-fit: contain; }
   .login-brand { display: none; }
@@ -451,7 +454,7 @@
   
   /* SUCCESS */
   /* Lleva texto encima -> usa el verde de ACCION. Con --verde el subtitulo de 13px daba 2.6:1. */
-  .success-hero { background: linear-gradient(160deg, var(--verde-btn) 0%, #17603D 100%); padding: 40px 24px; text-align: center; color: white; }
+  .success-hero { background: linear-gradient(160deg, var(--verde-btn) 0%, #17603D 100%); padding: 40px 24px; text-align: center; color: white; padding-top: calc(40px + env(safe-area-inset-top, 0px)); }
   .success-icon { width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 28px; }
   
   /* SKELETON DE CARGA — el tercer estado de una lista, junto a _vacio() y _listaConError().
@@ -476,7 +479,7 @@
      centrado y recortado, y el boton "Confirmar" es inalcanzable. Los 3 modales viejos ya tenian
      max-height (80/84/86vh); este, escrito para "arreglar la accesibilidad", no lo tenia.
      `align-items: flex-start` + `margin: auto` centra cuando cabe y deja scrollear cuando no. */
-  .dlg-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 10000; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; overscroll-behavior: contain; }
+  .dlg-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 10000; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; overscroll-behavior: contain; padding-top: calc(24px + env(safe-area-inset-top, 0px)); }
   .dlg-overlay[hidden] { display: none; }
   .dlg { background: white; border-radius: var(--radio); padding: 20px; width: 100%; max-width: 420px; max-height: calc(100dvh - 48px); overflow-y: auto; margin: auto; box-shadow: var(--sombra-lg); }
   .dlg-titulo { font-size: 16px; font-weight: 700; color: var(--texto); margin-bottom: 6px; }
@@ -957,7 +960,7 @@
 
 <!-- ============ MODAL: VISTA PREVIA COTIZACION ============ -->
 <div id="modal-preview-cot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;">
-  <div role="dialog" aria-modal="true" aria-labelledby="modal-preview-cot-titulo" style="background:white;margin:20px auto;border-radius:var(--radio-lg);max-width:520px;padding:20px;position:relative;">
+  <div role="dialog" aria-modal="true" aria-labelledby="modal-preview-cot-titulo" style="background:white;margin:20px auto;margin-top:calc(20px + env(safe-area-inset-top, 0px));border-radius:var(--radio-lg);max-width:520px;padding:20px;position:relative;">
     <div id="modal-preview-cot-titulo" style="font-size:16px;font-weight:700;margin-bottom:14px;color:var(--texto);">Vista previa de cotización</div>
     <div id="preview-cot-contenido"></div>
     <div style="display:flex;gap:10px;margin-top:18px;">
@@ -1429,7 +1432,7 @@
 <!-- MODAL: cola de avisos por correo. La barra antes reintentaba de una al tocarla; ahora abre
      esto, porque cuando la cola se atasca lo primero que hace falta es VER que hay adentro y
      desde cuando — y poder vaciarla, que es lo unico que se puede hacer desde el dispositivo. -->
-<div id="modal-correos" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalCorreos(event)">
+<div id="modal-correos" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;padding-top:calc(20px + env(safe-area-inset-top, 0px));" onclick="cerrarModalCorreos(event)">
   <div role="dialog" aria-modal="true" aria-labelledby="modal-correos-titulo" style="background:white;border-radius:var(--radio-lg);max-width:460px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-correos-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Avisos por correo</div>
@@ -1446,7 +1449,7 @@
 </div>
 
 <!-- MODAL: Reasignar OT pausada a otro tecnico -->
-<div id="modal-reasignar" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalReasignar(event)">
+<div id="modal-reasignar" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;padding-top:calc(20px + env(safe-area-inset-top, 0px));" onclick="cerrarModalReasignar(event)">
   <div role="dialog" aria-modal="true" aria-labelledby="modal-reasignar-titulo" aria-describedby="modal-reasignar-sub" style="background:white;border-radius:var(--radio-lg);max-width:420px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-reasignar-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Reasignar OT</div>
@@ -1460,7 +1463,7 @@
 </div>
 
 <!-- MODAL: enviar cotización a uno o varios correos -->
-<div id="modal-enviar-cot" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalEnviarCot(event)">
+<div id="modal-enviar-cot" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;padding-top:calc(20px + env(safe-area-inset-top, 0px));" onclick="cerrarModalEnviarCot(event)">
   <div role="dialog" aria-modal="true" aria-labelledby="modal-enviar-cot-titulo" aria-describedby="modal-enviar-cot-sub" style="background:white;border-radius:var(--radio-lg);max-width:440px;width:100%;max-height:84vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-enviar-cot-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Enviar cotización</div>
@@ -1486,7 +1489,7 @@
 <!-- MODAL: compartir — RESPALDO para cuando el navegador no tiene menú nativo (PC de escritorio).
      No reemplaza al menú del sistema: solo aparece cuando ese menú no existe o falla. Un botón
      que no hace nada al tocarlo es peor que no tenerlo. -->
-<div id="modal-compartir" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;" onclick="cerrarModalCompartir(event)">
+<div id="modal-compartir" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px;padding-top:calc(20px + env(safe-area-inset-top, 0px));" onclick="cerrarModalCompartir(event)">
   <div role="dialog" aria-modal="true" aria-labelledby="modal-compartir-titulo" aria-describedby="modal-compartir-sub" style="background:white;border-radius:var(--radio-lg);max-width:400px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
     <div style="padding:18px 20px;border-bottom:1px solid var(--gris2);">
       <div id="modal-compartir-titulo" style="font-size:16px;font-weight:700;color:var(--texto);">Compartir</div>
@@ -2053,6 +2056,135 @@ function _limpiarBorradoresCompletados() {
   }
 }
 
+/* LAS PAUSADAS QUE SOLO VIVEN EN EL TELEFONO ───────────────────────────────────────────────
+   Caso del 25-09-2026. Pedro: "a Lucas cuando abre su sesión le aparecen esas pausadas pero no
+   me aparecen a mí como administrador para eliminarlas". Lucas tenia 10 y el panel de Pedro
+   ninguna: la lista del tecnico sale del localStorage de SU telefono y el panel solo lee la nube.
+   Una "Autoguardada" no se sube nunca; una "En Pausa" cuyo documento se borro (a mano el 24-08,
+   o con el boton Eliminar) la conservaba para siempre el paso 1 de _reconciliarPausadasFirebase.
+   Y nada llevaba un borrado del administrador al telefono.
+   Dos canales, los dos en `alertas`, donde los telefonos ya escriben el reporte de correos:
+     · alertas/pausadas_<dispositivo>: el telefono cuenta lo que tiene guardado (sin fotos ni
+       firmas) y el panel muestra lo que no esta en la nube como "solo en un teléfono".
+     · alertas/descartes_pausadas: las lapidas que deja el administrador al eliminar. El telefono
+       las aplica al sincronizar, aunque la sesion abierta sea de otro tecnico.
+   REGLA: una lapida cubre la entrada solo si esta NO se toco despues (version <= hastaMs): si el
+      tecnico siguio trabajando en esa hoja, gana el tecnico y la hoja vuelve a salir en el panel.
+   REGLA: nunca se quita la hoja que el tecnico tiene abierta en ese momento. */
+var _KEY_DESCARTES_PAUSADAS = 'emval_descartes_pausadas';
+var _descartesLeidosEn = 0;
+var _ultimoReportePausadas = { firma: '', en: 0 };
+
+// Version de una entrada local: la ultima vez que se guardo (cada autoguardado la sube).
+function _versionPausadaMs(ot) {
+  return (ot && Date.parse(ot.actualizadoEn || '')) || _creadoEnMs(ot);
+}
+
+// ¿Esta lapida cubre esta entrada? numero + local + tecnico, y que nadie la haya tocado despues.
+// Los numeros de OT son aleatorios de 6 digitos y ya colisionaron: nunca el numero solo.
+function _descarteCubrePausada(l, ot) {
+  if (!l || !ot || ot.numero == null) return false;
+  if (_claveOT(ot) !== _claveOT(l)) return false;
+  if (_normTexto(ot.tecnico) !== _normTexto(l.tecnico)) return false;
+  const v = _versionPausadaMs(ot);
+  return !v || v <= (Number(l.hastaMs) || 0);
+}
+
+function _leerDescartesPausadas() {
+  try {
+    const l = JSON.parse(localStorage.getItem(_KEY_DESCARTES_PAUSADAS) || '[]');
+    return Array.isArray(l) ? l : [];
+  } catch(e) { return []; }
+}
+
+// Quita de este telefono lo que el administrador elimino. Devuelve cuantas quito.
+function _aplicarDescartesPausadas(lapidas) {
+  try {
+    const lista = lapidas || _leerDescartesPausadas();
+    if (!lista.length) return 0;
+    const abierta = estado.otNumero != null ? String(estado.otNumero) : null;
+    const quitadas = [];
+    const quedan = cargarOTsPausadas().filter(function(ot) {
+      if (!ot || (abierta && String(ot.numero) === abierta)) return true;
+      if (lista.some(function(l){ return _descarteCubrePausada(l, ot); })) { quitadas.push(ot); return false; }
+      return true;
+    });
+    if (!quitadas.length) return 0;
+    // Solo se quita del telefono. La nube no se toca desde aca: esa cola borra por numero +
+    // tecnico, sin mirar local ni version, y podria llevarse una hoja mas nueva de otro equipo.
+    // Lo que alcanzara a subir antes de la lapida sale en el panel y ahi se decide.
+    guardarOTsPausadas(quedan);
+    return quitadas.length;
+  } catch(e) {
+    console.error('Error aplicando los descartes de pausadas:', e);
+    return 0;
+  }
+}
+
+// Baja las lapidas (a lo mas cada 10 min, o ya si `forzar`: es 1 lectura de 1 documento), las
+// aplica y reporta. Devuelve false si tocaba leerlas y no se pudo.
+async function _sincronizarDescartesPausadas(forzar) {
+  let frescas = null, leidas = true;
+  if (window._firebaseReady && navigator.onLine && (forzar || Date.now() - _descartesLeidosEn > 600000)) {
+    try {
+      const snap = await _conTimeout(window.firebase.firestore().collection('alertas').doc('descartes_pausadas').get(),
+        15000, 'leer los descartes de pausadas');
+      const items = (snap && snap.exists && (snap.data() || {}).items) || [];
+      frescas = items.map(function(l){ return { numero: l.numero, tecnico: l.tecnico, local: l.local, hastaMs: l.hastaMs }; });
+      try { localStorage.setItem(_KEY_DESCARTES_PAUSADAS, JSON.stringify(frescas)); } catch(e2) {}
+      _descartesLeidosEn = Date.now();
+    } catch(e) {
+      // SILENCIO-FIRMADO: sin señal o sin respuesta se aplican las lapidas que ya estaban en el
+      // telefono; las nuevas llegan en el ciclo siguiente (90 s). Nada se borra ni se sube de mas.
+      console.warn('No se pudieron leer los descartes de pausadas:', e);
+      // Si las reglas lo prohiben no hay lapidas que esperar: no se frena la subida por eso.
+      leidas = !!(e && e.code === 'permission-denied');
+    }
+  }
+  const n = _aplicarDescartesPausadas(frescas);
+  if (n > 0) {
+    if (estado.usuario) toast('El administrador quitó ' + n + ' trabajo(s) pausado(s) de este teléfono.');
+    const cad = document.getElementById('s-cadena');
+    if (cad && cad.classList.contains('active')) _renderPausadasEnCadena();
+  }
+  _reportarPausadasDelTelefono();
+  return leidas;
+}
+
+// El telefono le cuenta al panel lo que tiene guardado. Solo datos de la tarjeta: nada de fotos
+// ni firmas (localStorage ya anda al borde de la cuota por ellas y el documento topa en 1 MB).
+async function _reportarPausadasDelTelefono(forzar) {
+  try {
+    if (!window._firebaseReady || !navigator.onLine) return;
+    const items = cargarOTsPausadas().filter(function(ot){ return ot && ot.numero != null; }).slice(0, 100).map(function(ot) {
+      const c = _creadoEnMs(ot);
+      return {
+        numero: String(ot.numero), local: ot.local || '', cadena: ot.cadena || '',
+        cadenaColor: ot.cadenaColor || '', cadenaLetra: ot.cadenaLetra || '',
+        tipo: ot.tipo || '', tecnico: ot.tecnico || '', ceco: ot.ceco || '',
+        fecha: ot.fecha || '', hora: ot.hora || '',
+        descripcion: String(ot.descripcionProblema || ot.descripcion || '').slice(0, 120),
+        creadoEn: c ? new Date(c).toISOString() : '',
+        actualizadoEn: ot.actualizadoEn ? String(ot.actualizadoEn) : '',
+        autoDraft: ot.autoDraft === true, pendienteSync: ot.pendienteSync === true,
+        enEspera: !!ot.enEspera, cotizacionNumero: ot.cotizacionNumero || ''
+      };
+    });
+    const firma = JSON.stringify(items);
+    // Sin cambios basta con refrescar el "visto hace" cada 6 h.
+    if (!forzar && firma === _ultimoReportePausadas.firma && Date.now() - _ultimoReportePausadas.en < 21600000) return;
+    await _conTimeout(window.firebase.firestore().collection('alertas').doc('pausadas_' + _deviceIdCorreos()).set({
+      tipo: 'pausadas',            // sin `activa`: cargarAlertaCorreos no lo confunde con correos
+      dispositivo: _deviceIdCorreos(),
+      usuario: _tecnicoActual() || '',
+      items: items,
+      total: items.length,
+      actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+    }), 15000, 'reportar las pausadas del teléfono');
+    _ultimoReportePausadas = { firma: firma, en: Date.now() };
+  } catch(e) { console.warn('No se pudieron reportar las pausadas del teléfono:', e); }
+}
+
 // =========== ESTADO GLOBAL ===========
 let estado = {
   usuario: null, cargo: null, avatar: null, emailSucursal: '',
@@ -2114,6 +2246,12 @@ function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const screen = document.getElementById(id);
   if (screen) screen.classList.add('active');
+  // Volver al panel con la flecha no pasa por el login: sin esto las pausadas quedaban congeladas
+  // (la escucha se corto al salir) y un Eliminar no se reflejaba en pantalla.
+  if (id === 's-supervisor') {
+    try { if (!_unsubPausadasSup) cargarPausadasSupervisor(); }
+    catch(e) { console.warn('No se pudo reanudar la lista de pausadas:', e); }
+  }
   window.scrollTo(0,0);
   // Las 16 pantallas viven en el mismo DOM. Al cambiar, el boton que tocaste desaparece y el foco
   // cae al <body>: con teclado hay que volver a tabular desde arriba en cada paso del wizard, y un
@@ -3188,6 +3326,9 @@ async function _sincronizarPausadaFirebase(ot, fotosAntesSnap, fotosDespuesSnap)
       pausa: true,
       enEspera: !!ot.enEspera,
       cotizacionId: ot.cotizacionId || '',
+      // La version de la hoja, con el reloj del telefono que la guardo. Es lo que la lapida del
+      // administrador cubre (ver _registrarDescartePausada): lo que el tecnico guarde despues no.
+      actualizadoEn: ot.actualizadoEn || '',
       firmada: false
     };
 
@@ -3266,8 +3407,14 @@ function _marcarPausadaSincronizada(numero, tecnico) {
 // Reintenta subir a Firestore todas las pausadas locales que quedaron pendientes
 // (p. ej. se pausó con mala señal). Idempotente: _sincronizarPausadaFirebase hace
 // add/update por numero+tecnico y limpia la marca al lograrlo.
-function sincronizarPausadasPendientes() {
+async function sincronizarPausadasPendientes() {
   if (!window._firebaseReady || !navigator.onLine) return;
+  // Primero lo que el administrador elimino: una pausa pendiente que el borro no se vuelve a
+  // subir. Si hay algo por subir, las lapidas se leen AHORA (sin la espera de 10 min) y, si no
+  // se pudieron leer, este ciclo no sube nada: una lectura atrasada no puede revivir un borrado.
+  // De paso el telefono reporta lo que tiene guardado (ver _reportarPausadasDelTelefono).
+  const hayPorSubir = cargarOTsPausadas().some(function(ot){ return ot && !ot.autoDraft && ot.pendienteSync; });
+  if (!await _sincronizarDescartesPausadas(hayPorSubir) && hayPorSubir) return;
   let pendientes;
   try {
     pendientes = cargarOTsPausadas().filter(function(ot) {
@@ -6807,7 +6954,8 @@ function _firebaseADTOPausada(fo) {
     cotizacionNumero: fo.cotizacionNumero || '',
     firmada: !!fo.firmada,
     firmaImagen: fo.firmaImagen || '',
-    creadoEn: (fo.creadoEn && fo.creadoEn.toDate) ? fo.creadoEn.toDate().toISOString() : (fo.creadoEn || new Date().toISOString())
+    creadoEn: (fo.creadoEn && fo.creadoEn.toDate) ? fo.creadoEn.toDate().toISOString() : (fo.creadoEn || new Date().toISOString()),
+    actualizadoEn: fo.actualizadoEn || ''
   };
 }
 
@@ -6848,8 +6996,12 @@ async function _reconciliarPausadasFirebase() {
        ahora se reintenta solo (ver _cerrarPausadaEnLaNube); esto corta el bucle mientras tanto,
        y de paso lo vuelve a intentar para las que ya venían arrastradas. */
     const misCerradas = _numerosCerradosLocalmente(estado.usuario);
+    const lapidas = _leerDescartesPausadas();
     const nuevas = misEnFb.filter(function(fo) {
       if (numerosLocalesMios[String(fo.numero)]) return false;
+      // Lo que el administrador elimino no se vuelve a bajar. Solo se filtra: si el documento
+      // sigue en la nube, el panel lo muestra y ahi se decide (no se borra desde aca).
+      if (lapidas.some(function(l){ return _descarteCubrePausada(l, fo); })) return false;
       // Mismo criterio estricto que _limpiarPausadasYaCerradas: numero + tecnico + local.
       // Los numeros de OT son aleatorios y ya colisionaron (la 9530); sin el local, una OT
       // ajena con el mismo numero taparia trabajo de verdad.
@@ -6898,6 +7050,8 @@ function _renderPausadasEnCadena() {
     // Y las pausas REALES cuyo trabajo este mismo telefono ya cerro y firmo: son las que se
     // acumulaban en la lista del tecnico cuando el borrado en la nube no alcanzaba a salir.
     _limpiarPausadasYaCerradas();
+    // Y lo que el administrador elimino desde su panel (lapidas ya bajadas; sirve sin señal).
+    _aplicarDescartesPausadas();
     const otsPausadas = cargarOTsPausadas();
     const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
 
@@ -11262,7 +11416,16 @@ async function verOTsTecnico(nombre, grupo) {
       const btnDelOT = document.createElement('button');
       btnDelOT.textContent = 'Eliminar OT';
       btnDelOT.style.cssText = 'flex:1;background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
-      btnDelOT.onclick = (function(id, cardRef){ return async function() {
+      btnDelOT.onclick = (function(id, cardRef, otRef){ return async function() {
+        /* Una pausada vive tambien en el telefono del tecnico: va por eliminarPausadaSup, que le
+           deja la lapida. Y una tarjeta 'local_' ni siquiera esta en la nube: antes se "borraba"
+           doc('local_N'), salia "OT eliminada" y la hoja seguia ahi. */
+        const esLocal = String(id).indexOf('local_') === 0;
+        if (esLocal || otRef.pausa === true) {
+          const idNube = esLocal ? '' : id;
+          if (await eliminarPausadaSup(idNube, otRef, null, _estadoRealPausada(idNube, otRef))) cardRef.remove();
+          return;
+        }
         if (!await _confirmar('Esta acción no se puede deshacer.', { titulo: 'Eliminar OT', okTexto: 'Eliminar', peligro: true })) return;
         const ok = await verificarPasswordAdmin();
         if (!ok) return;
@@ -11271,7 +11434,7 @@ async function verOTsTecnico(nombre, grupo) {
           toast('OT eliminada');
           cardRef.remove();
         } catch(e) { _error('eliminar la OT', e); }
-      }; })(ot.id, card);
+      }; })(ot.id, card, ot);
       btns.appendChild(btnDelOT);
     }
     card.appendChild(btns);
@@ -12418,6 +12581,12 @@ async function cargarAlertaCorreos() {
 // Suscripción en vivo (onSnapshot) para que las pausadas aparezcan al instante.
 let _unsubPausadasSup = null;
 let _cadenaMapSup = null;
+// Lo que cada telefono reporta tener guardado y las lapidas que dejo el administrador
+// (ver _reportarPausadasDelTelefono). Se escuchan aparte de `ordenes`.
+let _unsubTelefonosSup = null;
+let _reportesPausadasSup = [];
+let _descartesPausadasSup = [];
+let _pausadasSupSnap = null;
 
 async function cargarPausadasSupervisor() {
   const seccion = document.getElementById('sup-pausadas-seccion');
@@ -12454,11 +12623,34 @@ async function cargarPausadasSupervisor() {
   // Escuchar en tiempo real: se actualiza sola al pausar/completar/eliminar
   _unsubPausadasSup = db.collection('ordenes').where('pausa', '==', true)
     .onSnapshot(function(snap) {
+      _pausadasSupSnap = snap;
       _renderPausadasSup(snap, seccion, listaEl, countEl);
     }, function(err) {
       console.error('Error escuchando pausadas supervisor:', err);
       _mostrarErrorPausadasSup(seccion, listaEl, countEl);
     });
+
+  // Las que viven solo en el telefono de un tecnico. Se repinta solo cuando ya llego la lista
+  // de la nube: antes, una pausada de la nube saldria un instante como "solo en un teléfono".
+  try {
+    _unsubTelefonosSup = db.collection('alertas').where('tipo', 'in', ['pausadas', 'descartes_pausadas'])
+      .onSnapshot(function(snap) {
+        const reportes = [];
+        let descartes = [];
+        snap.forEach(function(d) {
+          const a = d.data() || {};
+          if (a.tipo === 'descartes_pausadas') descartes = a.items || [];
+          else reportes.push(a);
+        });
+        _reportesPausadasSup = reportes;
+        _descartesPausadasSup = descartes;
+        if (_pausadasSupSnap) _renderPausadasSup(_pausadasSupSnap, seccion, listaEl, countEl);
+      }, function(err) { console.warn('No se pudieron escuchar las pausadas de los teléfonos:', err); });
+  } catch(e) {
+    // SILENCIO-FIRMADO: el panel sigue mostrando las pausadas de la nube como siempre; solo
+    // faltan las que viven unicamente en los telefonos.
+    console.warn('No se pudieron escuchar las pausadas de los teléfonos:', e);
+  }
 }
 
 function detenerPausadasSupervisor() {
@@ -12466,6 +12658,11 @@ function detenerPausadasSupervisor() {
     try { _unsubPausadasSup(); } catch(e) {}
     _unsubPausadasSup = null;
   }
+  if (_unsubTelefonosSup) {
+    try { _unsubTelefonosSup(); } catch(e) {}
+    _unsubTelefonosSup = null;
+  }
+  _pausadasSupSnap = null;
 }
 
 // Estado honesto si el listener en vivo falla: en vez de una lista congelada
@@ -12484,13 +12681,9 @@ function _mostrarErrorPausadasSup(seccion, listaEl, countEl) {
 
 function _renderPausadasSup(snap, seccion, listaEl, countEl) {
   try {
-    if (!snap || snap.empty) {
-      seccion.style.display = 'none';
-      listaEl.innerHTML = '';
-      return;
-    }
-    // Ocultar cuentas de prueba
-    const docs = snap.docs.filter(function(d){ return !_ocultoTecnico((d.data() || {}).tecnico); });
+    // Ocultar cuentas de prueba. La nube vacia ya no oculta la seccion: puede haber pausadas
+    // que viven solo en el telefono de un tecnico.
+    const docs = ((snap && snap.docs) || []).filter(function(d){ return !_ocultoTecnico((d.data() || {}).tecnico); });
 
     // COLAPSAR DUPLICADOS: dos documentos de la MISMA visita (mismo numero + local) son UNA
     // tarjeta. Sin esto el supervisor ve el mismo trabajo pausado dos veces y no sabe cual
@@ -12500,10 +12693,11 @@ function _renderPausadasSup(snap, seccion, listaEl, countEl) {
     const lista = _ded.lista.sort(function(a, b) {
       return _msCreado(b.creadoEn) - _msCreado(a.creadoEn);
     });
-    if (lista.length === 0) { seccion.style.display = 'none'; listaEl.innerHTML = ''; return; }
+    const soloTel = _pausadasSoloTelefono(lista);
+    if (lista.length + soloTel.length === 0) { seccion.style.display = 'none'; listaEl.innerHTML = ''; return; }
 
     seccion.style.display = 'block';
-    if (countEl) { countEl.style.display = ''; countEl.textContent = lista.length; }
+    if (countEl) { countEl.style.display = ''; countEl.textContent = lista.length + soloTel.length; }
     listaEl.innerHTML = '';
 
     lista.forEach(function(ot, idx) {
@@ -12511,10 +12705,42 @@ function _renderPausadasSup(snap, seccion, listaEl, countEl) {
       card.style.animationDelay = Math.min(idx * 55, 440) + 'ms';
       listaEl.appendChild(card);
     });
+    soloTel.forEach(function(x, idx) {
+      const card = _crearCardPausadaSup('', x.ot, _cadenaMapSup || {}, x.tel);
+      card.style.animationDelay = Math.min((lista.length + idx) * 55, 440) + 'ms';
+      listaEl.appendChild(card);
+    });
   } catch(e) {
     console.error('Error render pausadas supervisor:', e);
     seccion.style.display = 'none';
   }
+}
+
+/* Las pausadas que un telefono reporta y que NO estan en la nube (clave numero + local, sin el
+   tecnico: una copia vieja que quedo en el telefono de Lucas tras reasignarla a Jose no sale
+   repetida). Ignora telefonos que no reportan hace 14 dias —equipos dados de baja o con los
+   datos borrados— y, si dos telefonos traen la misma hoja, gana el visto mas reciente.
+   `pendiente` = el administrador ya la elimino y el telefono aun no se entera. */
+function _pausadasSoloTelefono(listaNube) {
+  const enNube = {};
+  (listaNube || []).forEach(function(o){ enNube[_claveOT(o)] = true; });
+  const porClave = {};
+  (_reportesPausadasSup || []).forEach(function(r) {
+    const visto = _msCreado(r.actualizadoEn);
+    if (visto && Date.now() - visto > 14 * 86400000) return;
+    (r.items || []).forEach(function(it) {
+      if (!it || it.numero == null || it.numero === '' || _ocultoTecnico(it.tecnico)) return;
+      if (enNube[_claveOT(it)]) return;
+      const k = _claveOT(it) + '|' + _normTexto(it.tecnico);
+      if (porClave[k] && porClave[k].visto >= visto) return;
+      porClave[k] = { visto: visto, ot: it, tel: { usuario: r.usuario || '', vistoEn: r.actualizadoEn } };
+    });
+  });
+  return Object.keys(porClave).map(function(k) {
+    const x = porClave[k];
+    x.tel.pendiente = (_descartesPausadasSup || []).some(function(l){ return _descarteCubrePausada(l, x.ot); });
+    return x;
+  }).sort(function(a, b){ return _versionPausadaMs(b.ot) - _versionPausadaMs(a.ot); });
 }
 
 // Calcula milisegundos desde un campo creadoEn (Timestamp de Firestore o ISO string)
@@ -12578,8 +12804,10 @@ function _estadoRealPausada(docId, d) {
   return null;
 }
 
-// Crea la card visual de una OT pausada en el panel admin/supervisor
-function _crearCardPausadaSup(docId, d, cadenaMap) {
+// Crea la card visual de una OT pausada en el panel admin/supervisor.
+// `tel` viene solo cuando la hoja NO esta en la nube y la trajo el reporte de un telefono
+// (ver _pausadasSoloTelefono): { usuario, vistoEn, pendiente }. Entonces docId va vacio.
+function _crearCardPausadaSup(docId, d, cadenaMap, tel) {
   const esAdmin = estado.cargo === 'Administrador';
   const cad = cadenaMap[d.cadena] || cadenaMap[d.local] || null;
   const logoUrl = d.cadenaLogo || (cad && cad.logo) || '';
@@ -12627,7 +12855,8 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   meta.style.cssText = 'margin-top:4px;color:var(--texto2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
   const pausaBadge = d.enEspera
     ? '<span style="background:#1E40AF;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radio-pill);"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg> EN ESPERA' + (d.cotizacionNumero ? ' · Cot ' + d.cotizacionNumero : '') + '</span>'
-    : '<span style="background:var(--naranja-btn);color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radio-pill);"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> EN PAUSA</span>';
+    : '<span style="background:var(--naranja-btn);color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radio-pill);"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-0.12em"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> '
+      + (tel ? (d.autoDraft ? 'AUTOGUARDADA' : (d.pendienteSync ? 'PAUSA SIN SUBIR' : 'EN PAUSA')) : 'EN PAUSA') + '</span>';
   const tecnicoTxt = '<span><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + (d.tecnico || 'Sin técnico') + '</span>';
   const tiempoTxt = _haceCuanto(d.creadoEn) ? '<span>· ' + _haceCuanto(d.creadoEn) + '</span>' : '';
   meta.innerHTML = pausaBadge + tecnicoTxt + tiempoTxt;
@@ -12635,6 +12864,14 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   info.appendChild(titulo);
   info.appendChild(sub);
   info.appendChild(meta);
+
+  if (tel) {
+    const origen = document.createElement('div');
+    origen.className = 'ot-sub sup-pausada-origen';
+    origen.textContent = 'Solo en un teléfono' + (tel.usuario ? ' (última sesión: ' + tel.usuario + ')' : '')
+      + ' · visto ' + _haceCuantoDesde(tel.vistoEn) + '. No está en la nube.';
+    info.appendChild(origen);
+  }
 
   if (d.descripcion) {
     const desc = document.createElement('div');
@@ -12680,9 +12917,15 @@ function _crearCardPausadaSup(docId, d, cadenaMap) {
   btnReasignar.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
   btnReasignar.onclick = function() { abrirModalReasignar(docId, d); };
 
-  acciones.appendChild(btnReasignar);
+  // Una hoja que vive solo en un telefono no se puede reasignar (no hay documento que cambiar).
+  if (!tel) acciones.appendChild(btnReasignar);
 
-  if (esAdmin) {
+  if (tel && tel.pendiente) {
+    const espera = document.createElement('div');
+    espera.className = 'ot-sub sup-pausada-espera';
+    espera.textContent = 'Eliminada: se borrará de ese teléfono cuando abra la app con señal.';
+    acciones.appendChild(espera);
+  } else if (esAdmin) {
     const btnEliminar = document.createElement('button');
     btnEliminar.className = 'sup-accion-btn';
     btnEliminar.innerHTML = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Eliminar';
@@ -13122,7 +13365,44 @@ function verTrabajoCotizacion(cotId) {
    se pierde nada, y donde la cotizacion apunta a ESTA hoja, si se pierde el vinculo.
    `real` viene de _estadoRealPausada() y puede ser null: entonces se avisa lo unico cierto,
    que es que no se pudo comprobar. */
+/* Deja la lapida que le dice a los telefonos que quiten esa hoja (ver _aplicarDescartesPausadas).
+   Un solo documento con arreglo: 1 lectura por telefono, y `alertas` es donde los telefonos ya
+   leen y escriben. hastaMs = hasta que version de la hoja cubre: si el tecnico la toca despues,
+   no se la quita. Firestore no acepta serverTimestamp() dentro de un arreglo: van milisegundos.
+   Lanza si no se pudo escribir; quien la llama decide. */
+async function _registrarDescartePausada(d, hastaMs, origen) {
+  const lapida = {
+    numero: String(d.numero == null ? '' : d.numero).trim(),
+    tecnico: d.tecnico || '', local: d.local || '',
+    hastaMs: Number(hastaMs) || Date.now(),
+    descartadaEnMs: Date.now(), descartadaPor: estado.usuario || '', origen: origen
+  };
+  const fv = window.firebase.firestore.FieldValue;
+  const ref = window.firebase.firestore().collection('alertas').doc('descartes_pausadas');
+  await _conTimeout(ref.set({
+    tipo: 'descartes_pausadas', items: fv.arrayUnion(lapida), actualizadoEn: fv.serverTimestamp()
+  }, { merge: true }), 25000, 'registrar el descarte de la pausada');
+  // Poda aparte: pasadas las 200, se quitan las de mas de 120 dias UNA POR UNA (arrayRemove
+  // compara por valor). Con la lista del panel atrasada lo peor es no podar algo; nunca se pierde
+  // una lapida recien escrita, que es lo que pasaba reescribiendo el arreglo entero.
+  const previas = _descartesPausadasSup || [];
+  const viejas = previas.length > 200
+    ? previas.filter(function(l){ return Date.now() - (Number(l.descartadaEnMs) || 0) >= 120 * 86400000; }) : [];
+  if (viejas.length) {
+    ref.update({ items: fv.arrayRemove.apply(fv, viejas) })
+      .catch(function(e){ console.warn('No se pudieron podar las lapidas viejas:', e); });
+  }
+  _descartesLeidosEn = 0;
+  // Si el panel se mira en el mismo telefono que guarda la hoja, se quita aqui mismo.
+  const aqui = _aplicarDescartesPausadas([lapida]);
+  if (aqui) _reportarPausadasDelTelefono(true);
+  return aqui;
+}
+
 async function eliminarPausadaSup(docId, d, card, real) {
+  // Sin docId la hoja no esta en la nube: la trajo al panel el reporte de un telefono, y lo
+  // unico que se puede hacer es dejarle la lapida para que ese telefono la quite.
+  var enTelefono = !docId;
   var detalle;
   if (real && real.tipo === 'cerrada') {
     detalle = 'El trabajo ya está cerrado y firmado en otra OT; esto solo borra la hoja que quedó pausada.';
@@ -13135,24 +13415,59 @@ async function eliminarPausadaSup(docId, d, card, real) {
   } else {
     detalle = 'No hay ninguna OT cerrada ni cotización que respalde este trabajo: si se ejecutó, esta hoja es el único registro.';
   }
+  detalle += enTelefono
+    ? '\nNo está en la nube: vive solo en un teléfono. Se borrará de ahí cuando abra la app con señal, con las fotos y textos que tenga guardados.'
+    : '\nTambién se quitará del teléfono del técnico la próxima vez que abra la app con señal.';
   if (!await _confirmar('OT #' + (d.numero||'') + ' de ' + (d.local||'') + '.\n' + detalle + '\nEsta acción no se puede deshacer.',
-      { titulo: 'Eliminar OT pausada', okTexto: 'Eliminar', peligro: true })) return;
+      { titulo: enTelefono ? 'Eliminar del teléfono' : 'Eliminar OT pausada', okTexto: 'Eliminar', peligro: true })) return false;
   const ok = await verificarPasswordAdmin();
-  if (!ok) return;
+  if (!ok) return false;
   try {
     const db = window.firebase.firestore();
-    // Con guardia: sin ella, con mala señal el SDK se cuelga y el boton parece no hacer nada.
-    await _conTimeout(db.collection('ordenes').doc(docId).delete(), 25000, 'eliminar la OT pausada');
-    toast('OT pausada eliminada');
-    if (card) card.remove();
-    // Actualizar contador
-    const countEl = document.getElementById('sup-pausadas-count');
-    const seccion = document.getElementById('sup-pausadas-seccion');
-    const restantes = document.querySelectorAll('#sup-pausadas-lista .ot-card').length;
-    if (countEl) countEl.textContent = restantes;
-    if (restantes === 0 && seccion) seccion.style.display = 'none';
+    // PRIMERO la lapida, despues el documento: si la lapida no se puede escribir (sin señal), no
+    // se borra nada. Borrar solo el documento dejaba la copia del telefono para siempre.
+    let aqui = 0, sinAviso = false;
+    try {
+      // Cubre la version que Pedro esta viendo, NO "hasta ahora": si el tecnico siguio trabajando
+      // esa hoja en su telefono sin volver a subirla, lo nuevo no se borra y reaparece en el panel
+      // como "solo en un teléfono", con lo que de verdad tiene.
+      aqui = await _registrarDescartePausada(d, _versionPausadaMs(d), enTelefono ? 'telefono' : 'nube');
+    } catch(eL) {
+      // Si la nube RECHAZA la lapida por permisos, el documento se sigue pudiendo borrar como
+      // siempre; lo unico que se pierde es el aviso al telefono, y se dice.
+      if (enTelefono || !eL || eL.code !== 'permission-denied') throw eL;
+      sinAviso = true;
+    }
+    if (!enTelefono) {
+      // Con guardia: sin ella, con mala señal el SDK se cuelga y el boton parece no hacer nada.
+      await _conTimeout(db.collection('ordenes').doc(docId).delete(), 25000, 'eliminar la OT pausada');
+    }
+    toast(enTelefono
+      ? (aqui ? 'Borrada de este teléfono' : 'Se borrará del teléfono cuando abra la app con señal')
+      : (sinAviso ? 'OT pausada eliminada. No se pudo avisar al teléfono del técnico.' : 'OT pausada eliminada'));
+    if (card && enTelefono) {
+      // Sin esperar a la escucha en vivo: la tarjeta dice ya lo que paso.
+      const btn = card.querySelector('.sup-accion-btn');
+      if (btn) {
+        const espera = document.createElement('div');
+        espera.className = 'ot-sub sup-pausada-espera';
+        espera.textContent = aqui ? 'Eliminada de este teléfono.' : 'Eliminada: se borrará de ese teléfono cuando abra la app con señal.';
+        btn.replaceWith(espera);
+      }
+    }
+    if (card && !enTelefono) {
+      card.remove();
+      // Actualizar contador
+      const countEl = document.getElementById('sup-pausadas-count');
+      const seccion = document.getElementById('sup-pausadas-seccion');
+      const restantes = document.querySelectorAll('#sup-pausadas-lista .ot-card').length;
+      if (countEl) countEl.textContent = restantes;
+      if (restantes === 0 && seccion) seccion.style.display = 'none';
+    }
+    return true;
   } catch(e) {
     _error('eliminar la OT pausada', e);
+    return false;
   }
 }
 

@@ -113,7 +113,9 @@ var __firestore = function() {
     enablePersistence: function(){ return Promise.resolve(); }
   };
 };
-__firestore.FieldValue = { serverTimestamp: function(){ return 'ts_falso'; }, delete: function(){ return null; } };
+// arrayUnion: el borrado de una pausada deja su lapida con el (alertas/descartes_pausadas).
+__firestore.FieldValue = { serverTimestamp: function(){ return 'ts_falso'; }, delete: function(){ return null; },
+  arrayUnion: function(){ return [].slice.call(arguments); }, arrayRemove: function(){ return [].slice.call(arguments); } };
 
 window.firebase = {
   initializeApp: function(){ return {}; },

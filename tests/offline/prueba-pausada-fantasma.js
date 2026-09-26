@@ -106,6 +106,9 @@ const SEMILLA = `(function(){
     };
     return db;
   };
+  // El SDK real cuelga FieldValue de firestore; al reemplazar la funcion hay que conservarlo.
+  // Sin el, el borrado (que ahora deja su lapida con arrayUnion) se caia en el arnes, no en la app.
+  window.firebase.firestore.FieldValue = base.FieldValue;
 })()`;
 
 (async () => {
