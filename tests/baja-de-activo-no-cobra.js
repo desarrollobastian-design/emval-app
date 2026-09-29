@@ -187,11 +187,14 @@ chequear(C.asignarFolio.indexOf("'cot_'") === -1 && C.asignarFolio.indexOf('"cot
   'la baja usa el contador de COTIZACIONES: le abriria huecos a la numeracion que ve SMU');
 
 // ── 10 y 11. Cola de correos y dato congelado ───────────────────────────────────────────────
-chequear(/_enviarCorreo\s*\(/.test(C.guardarYEnviarBaja),
+// `_enviarCorreoConDetalle` es la misma cola (`_enviarCorreo` solo lo envuelve y devuelve el
+// booleano). Desde el caso OT #271080 (24-09-2026) la baja usa la variante con detalle para no
+// prometer "sale solo" cuando la direccion esta mal escrita.
+chequear(/_enviarCorreo(ConDetalle)?\s*\(/.test(C.guardarYEnviarBaja),
   'el correo de la baja no pasa por _enviarCorreo (la cola): se perderia con un toast');
 chequear(!/emailjs\s*\.\s*send/.test(TODAS),
   'la baja manda con emailjs.send directo en vez de la cola');
-chequear(/_enviarCorreo\s*\(/.test(C.enviarSel) && !/emailjs\s*\.\s*send/.test(C.enviarSel),
+chequear(/_enviarCorreo(ConDetalle)?\s*\(/.test(C.enviarSel) && !/emailjs\s*\.\s*send/.test(C.enviarSel),
   'el envio al supervisor no pasa por la cola de correos');
 // La instantanea: despues del primer await no se vuelve a leer la seleccion ni el DOM.
 const trasPrimerAwait = C.guardarYEnviarBaja.slice(C.guardarYEnviarBaja.indexOf('await'));

@@ -897,7 +897,8 @@
 
     <div class="field">
       <label for="email-admin">Email del administrador</label>
-      <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional" oninput="estado.emailAdmin=this.value;programarAutoguardadoOT()" />
+      <input type="email" id="email-admin" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Opcional" oninput="estado.emailAdmin=this.value;_avisarEmailAdminMalo(this.value, true);programarAutoguardadoOT()" onblur="_avisarEmailAdminMalo(this.value)" />
+      <div id="email-admin-error" style="font-size:12px;color:var(--rojo);font-weight:600;margin-top:4px;display:none;"></div>
       <div id="email-sucursal-hint" style="font-size:11px;color:var(--verde-btn);margin-top:4px;display:none;"></div>
       <div id="email-hint-default" style="font-size:11px;color:var(--texto3);margin-top:4px;">Si lo dejas vacío y la sucursal tiene email, se envía sola.</div>
     </div>
@@ -1739,6 +1740,11 @@ function _cargarEstadoDesdeOTGuardada(ot) {
   estado.numEquipos = ot.numEquipos || '';
   estado.serviciosPreventivo = ot.serviciosPreventivo || [];
   estado.emailAdmin = ot.emailAdmin || '';
+  // La pausada guarda en emailAdmin el correo que valia al pausar (el tecleado o el de la sucursal,
+  // ver el guardado de la pausada). El emailSucursal que quede en `estado` es el de la OT ANTERIOR:
+  // como el cierre lo pone primero (emailSucursal || emailAdmin), la hoja retomada de un local se
+  // le enviaba al administrador de otro. Revision del caso OT #271080, 24-09-2026.
+  estado.emailSucursal = '';
   estado.firmada = !!ot.firmada;
   estado.firmaImagen = ot.firmaImagen || '';
   estado.creadoEnBorrador = ot.creadoEn || new Date().toISOString();
@@ -1771,6 +1777,7 @@ function _restaurarCamposDOMDesdeEstado() {
   const email = document.getElementById('email-admin');
   if (email) email.value = estado.emailAdmin || estado.emailSucursal || '';
   _actualizarHintEmail(estado.emailAdmin || estado.emailSucursal);
+  _avisarEmailAdminMalo(estado.emailAdmin || '');
   const equipos = document.getElementById('num-equipos');
   if (equipos) equipos.value = estado.numEquipos || '';
   const prev = document.getElementById('t-prev');
@@ -2570,6 +2577,15 @@ function nuevaOT() {
   limpiarFirma();
   document.getElementById('desc-problema').value = '';
   document.getElementById('desc-trabajo').value = '';
+  // El correo escrito a mano tambien es de ESTA OT. Antes el campo quedaba con el de la anterior
+  // (y cerrarOT lo relee del DOM): el correo de una OT podia irse al local de la siguiente, y el
+  // aviso rojo de "le falta la @" quedaba pegado. Un borrador que se retoma lo vuelve a poner
+  // despues, desde _restaurarCamposDOMDesdeEstado.
+  estado.emailSucursal = '';
+  const _emAdm = document.getElementById('email-admin');
+  if (_emAdm) _emAdm.value = '';
+  _avisarEmailAdminMalo('');
+  _actualizarHintEmail('');
   document.getElementById('firma-status').textContent = 'Pídele al administrador que firme con el dedo';
   document.getElementById('firma-container').classList.remove('signed');
   _actualizarBadgesOT();
@@ -2665,6 +2681,26 @@ function _actualizarHintEmail(emailSuc) {
     hint.style.display = dest ? 'block' : 'none';
   }
   if (hintDef) hintDef.style.display = dest ? 'none' : 'block';
+}
+
+// El correo que el tecnico escribe a mano en terreno, avisado MIENTRAS lo escribe: todavia esta
+// en el local y puede pedir la direccion bien. Caso OT #271080 (24-09-2026): "admin095mayorista10.cl",
+// sin la @, detuvo todos los correos del telefono de Lucas. No bloquea nada —el campo es
+// opcional y un tecnico sin señal no puede quedar atrapado—: solo dice la verdad a tiempo.
+// `soloLimpiar` (mientras teclea): solo APAGA el aviso cuando la direccion ya sirve. Encenderlo
+// letra por letra marcaba en rojo "jefe@unimarc.cl" hasta llegar a la @; se enciende al salir
+// del campo. Y solo avisa si lo tecleado es lo que se va a usar: con correo en el catalogo, el
+// cierre usa el de la sucursal (snap.email = emailSucursal || emailAdmin), y decir "no le llega"
+// contradecia al "Se enviará a …" verde de al lado.
+function _avisarEmailAdminMalo(valor, soloLimpiar) {
+  const el = document.getElementById('email-admin-error');
+  if (!el) return;
+  const v = String(valor == null ? '' : valor).trim();
+  const usaLoTecleado = !String((typeof estado !== 'undefined' && estado && estado.emailSucursal) || '').trim();
+  const problema = (v && usaLoTecleado) ? _problemaDireccionCorreo(v) : '';
+  if (soloLimpiar && problema) return;
+  el.textContent = problema ? ('A este correo ' + problema + ': así no le llega al local.') : '';
+  el.style.display = problema ? 'block' : 'none';
 }
 
 function seleccionarLocal(nombre, direccion, emailAdmin, centro) {
@@ -3761,6 +3797,18 @@ function _backoffCorreo(intentos) {
 //   clase   → ¿se reintenta, o se corta la cola?      (no cambia: es la regla que salvo la cuota)
 //   ambiguo → ¿el POST alcanzo a llegar al servidor?  (nuevo: decide si el reenvio va MARCADO)
 // El 5xx entra como ambiguo a proposito: EmailJS pudo despachar el correo y fallar al responder.
+//
+// 🔴 destinatario → 4xx que habla del DESTINATARIO ("The recipients address is corrupted" /
+//               "…is empty"). Es un problema de ESE aviso, no de la cuenta: los demas salen igual.
+//               Caso OT #271080 (24-09-2026, S10 Concepcion, Lucas): el tecnico escribio a mano
+//               "admin095mayorista10.cl", sin la @. EmailJS contesto 422 y este clasificador lo
+//               ("…is empty" NO entra aca: ver _textoEsDeDestinatario)
+//               tomo por 'cuenta' → detuvo TODA la cola del telefono, sin reintento automatico, y
+//               la copia a administracion quedo atascada detras. Peor: "Reintentar" volvia a
+//               chocar con el mismo correo malo, que iba primero en la fila — 3 rechazos en la
+//               alerta del dispositivo. Y el mensaje mandaba a revisar el panel de EmailJS, que
+//               estaba sano. Se corta la cola cuando insistir con el RESTO da el mismo error; un
+//               correo mal escrito no le hace nada al resto.
 function _clasificarErrorCorreo(e) {
   const status = (e && typeof e.status === 'number') ? e.status : null;
   const texto = String((e && (e.text || e.message)) || e || '');
@@ -3769,14 +3817,60 @@ function _clasificarErrorCorreo(e) {
   if (status === null || status === 0) clase = 'red';
   else if (status === 426 || status === 429 || status === 402 || dice) clase = 'cuota';
   else if (status >= 500) clase = 'proveedor';
+  else if (status >= 400 && _textoEsDeDestinatario(texto)) clase = 'destinatario';
   else if (status >= 400) clase = 'cuenta';
   else clase = 'proveedor';
   const ambiguo = (!!e && e._fase === 'en-duda') || clase === 'proveedor';
   return { clase: clase, status: status, texto: texto, ambiguo: ambiguo, ms: (e && e._ms) || 0 };
 }
 
+// El texto con que EmailJS rechaza un destinatario: "The recipients address is corrupted". Se
+// mira la palabra, no el 422: el mismo status puede traer otros problemas que SI son de la cuenta,
+// y esos tienen que seguir deteniendo la cola.
+// ⚠️ "The recipients address is EMPTY" queda FUERA a proposito: una direccion vacia ya la ataja
+// `_problemaDireccionCorreo` antes del POST, asi que si el servidor igual dice "empty" es que la
+// PLANTILLA no esta leyendo el destinatario (el campo "To" del panel de EmailJS). Eso le pega a
+// TODOS los avisos, y tiene que detener la cola como problema de la cuenta — si no, cada aviso
+// bueno se rendiria uno por uno como "mal escrito", gastando cuota. (Revision adversarial 24-09.)
+function _textoEsDeDestinatario(texto) {
+  const t = String(texto || '');
+  return /recipient/i.test(t) && !/empty/i.test(t);
+}
+
+// ¿Esta direccion puede llegar a alguna parte? Devuelve '' si si, o POR QUE no, en palabras que
+// entiende un tecnico. Es CONSERVADORA a proposito: solo marca lo que ningun servidor de correo
+// acepta — vacia, o un pedazo sin @ (la de la OT #271080). Un falso "esta mal escrita" dejaria sin
+// enviar un correo bueno; un falso "esta bien" solo gasta la request que EmailJS rechaza con 422,
+// y ese rechazo ya se trata por aviso, sin detener al resto. Acepta listas separadas por coma o
+// punto y coma, porque EmailJS manda a varios destinatarios en el mismo campo.
+function _problemaDireccionCorreo(dir) {
+  const partes = String(dir == null ? '' : dir).split(/[,;]/)
+    .map(function(p) { return p.trim(); }).filter(Boolean);
+  if (!partes.length) return 'no tiene dirección';
+  if (partes.some(function(p) { return p.indexOf('@') < 0; })) return 'le falta la @';
+  return '';
+}
+
+// Lo que queda escrito en el aviso que no se puede enviar. Nombra la direccion completa: es lo
+// unico que le permite a quien mira la barra saber A QUIEN no le llego y a quien preguntarle.
+function _textoDireccionMala(dir, problema) {
+  return 'Dirección mal escrita ("' + String(dir || '') + '", ' + problema + '): este aviso no se va a enviar. ' +
+    'Hay que mandarlo a mano a la dirección correcta.';
+}
+
 function _cargarBloqueoCorreos() {
-  try { return JSON.parse(localStorage.getItem(_CORREOS_BLOQUEO_KEY) || 'null'); } catch(e) { return null; }
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(_CORREOS_BLOQUEO_KEY) || 'null'); } catch(e) { return null; }
+  // Migracion del caso OT #271080: la version anterior guardo como bloqueo de CUENTA —sin
+  // reintento automatico— un rechazo de destinatario. Ese bloqueo quedo escrito en el telefono y
+  // no se levanta solo: sin esto, Lucas tendria que apretar algo para que salieran avisos que ya
+  // estaban bien. No es un bloqueo, asi que se borra al leerlo; el aviso culpable queda marcado
+  // por su direccion en el proximo ciclo, y el resto sale.
+  if (b && b.clase === 'cuenta' && _textoEsDeDestinatario(b.texto)) {
+    try { localStorage.removeItem(_CORREOS_BLOQUEO_KEY); } catch(e) {}
+    return null;
+  }
+  return b;
 }
 function _guardarBloqueoCorreos(b) {
   try {
@@ -3975,7 +4069,10 @@ function _numOTCorreo(n) {
 // `amb`: el envio que fallo pudo haber salido igual. No cambia si se reintenta —eso lo decide
 // `clase`— sino COMO: un aviso con `posibleEnvio` se reenvia MARCADO. Antes los dos casos iban
 // en la misma bolsa y por eso el reenvio del 15-08 llego indistinguible del original.
-function _encolarCorreo(params, motivo, opts, amb) {
+// `rendido`: el aviso no puede salir tal como esta (direccion mal escrita). Se guarda IGUAL
+// —el invariante es que ningun aviso desaparece— pero ya rendido y visible, sin reintentos: la
+// direccion viaja congelada en el aviso, asi que insistir solo gasta cuota contra el mismo 422.
+function _encolarCorreo(params, motivo, opts, amb, rendido) {
   opts = opts || {};
   const clave = _claveCorreo(params, opts.template);
   const desp = _idDespacho(params, opts);
@@ -3988,11 +4085,14 @@ function _encolarCorreo(params, motivo, opts, amb) {
     // intento el POST pudo haber salido, todos los reenvios siguientes van marcados.
     if (amb && !ya.posibleEnvio) { ya.posibleEnvio = true; ya.intentadoEn = ya.intentadoEn || Date.now(); }
     if (!ya.despacho) ya.despacho = desp;
+    if (rendido) { ya.fallido = true; ya.motivoFallo = 'destinatario'; ya.ultimoError = motivo || ya.ultimoError; }
     _guardarCorreosPendientes(lista);
+    if (rendido) actualizarIndicadorPendientes();
     return;
   }
   lista.push({
-    clave: clave, intentos: 0, creadoEn: Date.now(), fallido: false,
+    clave: clave, intentos: 0, creadoEn: Date.now(), fallido: !!rendido,
+    motivoFallo: rendido ? 'destinatario' : '',
     proximoIntento: 0, ultimoError: motivo || '', params: params,
     service: opts.service || '', template: opts.template || '', post: opts.post || null,
     despacho: desp, posibleEnvio: !!amb, intentadoEn: amb ? Date.now() : 0
@@ -4074,6 +4174,15 @@ async function _enviarCorreoConDetalle(params, opts) {
   // caso de los DOS productores —el cierre de la OT y la cola offline mandan el mismo aviso— y
   // ademas devuelve gratis una request de las 200 del mes.
   if (_yaDespachado(desp)) { console.warn('Aviso ya despachado, no se reenvia:', desp); return { ok: true, err: null, bloqueo: null }; }
+  // Una direccion que no puede llegar a ninguna parte no se manda: ni gasta una request, ni —lo
+  // que de verdad importa— arriesga detener la cola. Queda guardado y visible, ya rendido. Va
+  // ANTES del bloqueo y de la señal: sea cual sea el estado del correo, este aviso no va a salir.
+  const _dirMala = _problemaDireccionCorreo(params.email_admin);
+  if (_dirMala) {
+    const _txt = _textoDireccionMala(params.email_admin, _dirMala);
+    _encolarCorreo(params, _txt, opts, false, true);
+    return { ok: false, err: { clase: 'destinatario', status: null, texto: _txt, ambiguo: false, ms: 0 }, bloqueo: null };
+  }
   if (typeof emailjs === 'undefined') {
     _encolarCorreo(params, 'el servicio de correo no cargó', opts, false);
     return { ok: false, err: null, bloqueo: null };
@@ -4105,6 +4214,13 @@ async function _enviarCorreoConDetalle(params, opts) {
     const err = _clasificarErrorCorreo(e);
     console.warn('Error enviando correo, se encola:', err.clase, err.status, err.texto, err.ambiguo ? '(pudo haber salido)' : '');
     _anotarMsFallo(err);
+    // El servidor rechazo la DIRECCION: se rinde este aviso y nada mas. La cola sigue viva para
+    // todos los demas — ese fue el bug de la OT #271080.
+    if (err.clase === 'destinatario') {
+      _encolarCorreo(params, _textoDireccionMala(params.email_admin,
+        'rechazada por el servicio de correo: ' + ((err.status || '') + ' ' + err.texto).trim()), opts, false, true);
+      return { ok: false, err: err, bloqueo: null };
+    }
     let b = null;
     if (err.clase === 'cuota' || err.clase === 'cuenta') b = _bloquearColaCorreos(err);
     _encolarCorreo(params, ((err.status || '') + ' ' + err.texto).trim(), opts, err.ambiguo);
@@ -4139,6 +4255,7 @@ async function sincronizarCorreosPendientes() {
   const ahora = Date.now();
   const quedan = [];
   let enviados = 0, vencidos = 0, cortada = null;
+  const malEscritos = [];
   try {
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];
@@ -4153,6 +4270,17 @@ async function sincronizarCorreosPendientes() {
     // Ya salio por la otra via (el cierre de la OT y esta cola mandan el mismo aviso). Se
     // descarta porque llego, no porque se rindio: el invariante sigue en pie.
     if (_yaDespachado(c.despacho)) { continue; }
+    // Direccion que no puede llegar a ninguna parte: se rinde sin gastar una request. Va ANTES
+    // del backoff para que el aviso culpable de un bloqueo viejo (OT #271080: esperaba 1 h por el
+    // corte) quede marcado en el primer ciclo, y no vuelva a pasar por el servidor.
+    const _dm = _problemaDireccionCorreo((c.params || {}).email_admin);
+    if (_dm) {
+      c.fallido = true; c.motivoFallo = 'destinatario';
+      c.ultimoError = _textoDireccionMala((c.params || {}).email_admin, _dm);
+      malEscritos.push(String((c.params || {}).email_admin || ''));
+      quedan.push(c);
+      continue;
+    }
     // Backoff: este aviso todavia esta esperando su turno. (Los encolados por la version
     // anterior no traen `proximoIntento` y se intentan de inmediato, como antes.)
     if (c.proximoIntento && ahora < c.proximoIntento) { quedan.push(c); continue; }
@@ -4171,7 +4299,14 @@ async function sincronizarCorreosPendientes() {
       c.ultimoError = ((err.status || '') + ' ' + err.texto).trim();
       // La duda solo sube. Un aviso que alguna vez pudo salir se reenvia marcado para siempre.
       if (err.ambiguo && !c.posibleEnvio) { c.posibleEnvio = true; c.intentadoEn = c.intentadoEn || ahora; }
-      if (err.clase === 'cuota' || err.clase === 'cuenta') {
+      if (err.clase === 'destinatario') {
+        // Rechazo de ESTA direccion: se rinde este aviso y el ciclo SIGUE con los demas. La
+        // direccion viaja congelada en el aviso, asi que reintentarlo solo repetiria el 422.
+        c.fallido = true; c.motivoFallo = 'destinatario';
+        c.ultimoError = _textoDireccionMala((c.params || {}).email_admin,
+          'rechazada por el servicio de correo: ' + c.ultimoError);
+        malEscritos.push(String((c.params || {}).email_admin || ''));
+      } else if (err.clase === 'cuota' || err.clase === 'cuenta') {
         // No es "no llego": es "no va a llegar por mas que insista". Se detiene TODA la cola.
         cortada = _bloquearColaCorreos(err);
         c.proximoIntento = cortada.reintentarDespues || (ahora + _CORREOS_BACKOFF_TOPE_MS);
@@ -4179,7 +4314,9 @@ async function sincronizarCorreosPendientes() {
         c.proximoIntento = ahora + _backoffCorreo(c.intentos);
         // El TTL solo corre para fallas transitorias: un aviso no se da por perdido porque la
         // cuenta estuviera mal configurada una semana.
-        if (ahora - c.creadoEn > _CORREOS_TTL_MS) { c.fallido = true; vencidos++; }
+        // Se rinde por TIEMPO, no por direccion: si un motivo viejo quedo de antes de un
+        // Reintentar, la barra diria "mal escrita" de un aviso que murio por la señal.
+        if (ahora - c.creadoEn > _CORREOS_TTL_MS) { c.fallido = true; c.motivoFallo = ''; vencidos++; }
       }
       quedan.push(c);
     }
@@ -4192,6 +4329,7 @@ async function sincronizarCorreosPendientes() {
   } finally { _sincronizandoCorreos = false; }
   if (enviados) toast(enviados + ' aviso(s) pendiente(s) enviado(s)');
   if (vencidos) toast(vencidos + ' aviso(s) no se pudieron enviar. Quedan en la barra para reintentar.');
+  if (malEscritos.length) toast('No se envió a ' + malEscritos.join(', ') + ': la dirección está mal escrita. Los demás avisos siguen saliendo.');
   if (cortada) toast('Correo detenido: ' + _textoBloqueoCorreos(cortada));
   actualizarIndicadorPendientes();
   _reportarEstadoCorreos();
@@ -4211,6 +4349,12 @@ function _fusionarCorreosPendientes(procesados) {
     if (vistos[d.clave]) return;
     vistos[d.clave] = true;
     const c = porClave[d.clave];
+    // Rendido por direccion mientras este ciclo corria (el otro productor del mismo aviso recibio
+    // el 422): eso NO se pisa con la copia rancia del ciclo, o el siguiente ciclo le vuelve a
+    // pegar al servidor con la misma direccion. Rendirse, igual que la duda, solo sube.
+    if (c && d.fallido && d.motivoFallo === 'destinatario' && !c.fallido) {
+      c.fallido = true; c.motivoFallo = 'destinatario'; c.ultimoError = d.ultimoError;
+    }
     if (c) { final.push(c); return; }
     // No estaba en este ciclo: se encolo mientras corriamos. Se respeta tal cual.
     if (!_yaDespachado(d.despacho)) final.push(d);
@@ -4228,7 +4372,9 @@ async function reintentarCorreosAhora() {
   // ⚠️ NO se toca `posibleEnvio` ni `intentadoEn`. Quien aprieta Reintentar esta pidiendo otra
   // ventana de 7 dias, no declarando que el aviso jamas salio: eso no lo sabe nadie. Si el aviso
   // pudo haber salido, el reenvio manual sale marcado igual que el automatico.
-  lista.forEach(function(c) { c.fallido = false; c.creadoEn = Date.now(); c.intentos = 0; c.proximoIntento = 0; });
+  // `motivoFallo` se limpia: si la direccion sigue mala, el ciclo la vuelve a marcar sin gastar
+  // una request; si el aviso despues muere por otra causa, no puede quedar diciendo "mal escrita".
+  lista.forEach(function(c) { c.fallido = false; c.motivoFallo = ''; c.creadoEn = Date.now(); c.intentos = 0; c.proximoIntento = 0; });
   _guardarCorreosPendientes(lista);
   const dudosos = lista.filter(function(c){ return c.posibleEnvio; }).length;
   toast('Reintentando ' + lista.length + ' aviso(s)...' +
@@ -4297,9 +4443,23 @@ async function _reportarEstadoCorreos() {
       msFallos: JSON.stringify(msFallos),
       masAntiguo: lista.length ? new Date(masAntiguo).toISOString() : '',
       bloqueo: bloqueo ? _textoBloqueoCorreos(bloqueo) : '',
+      // A QUIEN no le llego por direccion mal escrita. "1 se rindio" no le dice a Pedro que hacer;
+      // esto si: la direccion y la OT, para mandarlo a mano (caso OT #271080).
+      malEscritos: lista.filter(function(c){ return c.fallido && c.motivoFallo === 'destinatario'; })
+        .map(function(c){ const p = c.params || {}; return String(p.email_admin || '') + (p.ot_numero ? ' (OT #' + p.ot_numero + ')' : ''); })
+        .join(', '),
       actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   } catch(e) { console.warn('No se pudo reportar el estado de la cola de correos:', e); }
+}
+
+// La otra cara del "el local no tiene correo configurado": el local SI tenia correo, pero mal
+// escrito, y su OT no le llego. Sin esta nota la copia a administracion llega como cualquier otra
+// y nadie se entera — caso OT #271080, 24-09-2026. Vacia si la direccion sirvio.
+function _notaDireccionLocalMala(local, dir) {
+  if (!dir) return '';
+  return 'ATENCION: el correo del local "' + (local || '') + '" esta mal escrito (' + dir + '), ' +
+    'no se le envio la OT. Hay que mandarsela a la direccion correcta.';
 }
 
 // nota: texto de aviso que viaja en el cuerpo (ej. "el local no tiene correo configurado").
@@ -8396,12 +8556,15 @@ async function guardarYEnviarPDF() {
   // --- Enviar email al admin del local con PDF adjunto (base64) ---
   // En una edicion de OT (solo admin) NO se reenvía correo.
   const email = snap.email;
+  // La direccion del local que NO sirvio (mal escrita). Viaja a la notificacion de
+  // administracion: es la unica forma de que Pedro se entere de que el local no recibio su OT.
+  let _dirLocalMala = '';
   if (email && !snap.editandoOTId) {
     toast('Enviando email con PDF...');
     const _urlLocal = pdfUrlCloudinary || pdfUrlFirestore || '';
     const _urlLocalEntrega = (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
       ? _urlPDFDescarga(_urlLocal, _nombrePDFHoja(snap)) : _urlLocal;
-    const enviado = await _enviarCorreo({
+    const _rLocal = await _enviarCorreoConDetalle({
       email_admin: email,
       ot_numero: _numOTCorreo(snap.otNumero),
       local: String(snap.local || ''),
@@ -8414,10 +8577,22 @@ async function guardarYEnviarPDF() {
       // dos avisos distintos del mismo trabajo y no se pueden tapar entre si.
       // Y lleva ademas SI TRAE PDF: ver _SELLO_SIN_PDF.
     }, snap.clientId ? { sello: 'ot_' + snap.clientId + '__local' + (_urlLocal ? '' : _SELLO_SIN_PDF) } : undefined);
+    const enviado = _rLocal.ok;
+    if (!enviado && _rLocal.err && _rLocal.err.clase === 'destinatario') _dirLocalMala = email;
     // El toast no puede prometer un PDF que no viajo: el tecnico se va del local creyendo que
-    // el comprobante ya llego.
-    toast(enviado ? (_urlLocal ? 'Email enviado con PDF' : 'Aviso enviado. El PDF va en un segundo correo.')
-                  : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
+    // el comprobante ya llego. Y con la direccion mal escrita tampoco puede prometer que "se
+    // enviara solo": no va a salir nunca, y es AHORA, parado en el local, cuando puede pedirla bien.
+    // Por eso va en un DIALOGO y no en un toast: sin señal, el toast de "Aviso a administración
+    // pendiente" lo pisaba al milisegundo y el tecnico nunca lo veia. No se espera al dialogo: el
+    // cierre sigue (enlace del PDF, aviso a administracion) mientras el tecnico lo lee.
+    if (_dirLocalMala) {
+      _avisar('El correo del local está mal escrito (' + email + '): no se le envió la OT. ' +
+        'Pide la dirección correcta. La OT quedó guardada y administración recibe el aviso.',
+        { titulo: 'Correo del local mal escrito' });
+    } else {
+      toast(enviado ? (_urlLocal ? 'Email enviado con PDF' : 'Aviso enviado. El PDF va en un segundo correo.')
+                    : 'PDF listo. El correo se enviara solo al recuperar el servicio.');
+    }
   }
 
   // --- Actualizar orden en Firestore con URL del PDF ---
@@ -8492,7 +8667,8 @@ async function guardarYEnviarPDF() {
       (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
         ? _urlPDFDescarga(pdfUrlCloudinary || pdfUrlFirestore || '', _nombrePDFHoja(snap))
         : (pdfUrlCloudinary || pdfUrlFirestore || ''),
-      email ? '' : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.',
+      email ? _notaDireccionLocalMala(snap.local, _dirLocalMala)
+            : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.',
       snap.clientId
     );
   }
@@ -9109,9 +9285,13 @@ async function guardarYEnviarBaja() {
         { titulo: 'Falta el PDF' });
     } else if (snap.emailLocal) {
       toast('Enviando al local...');
-      const ok = await _enviarCorreo(_paramsCorreoBaja(snap, snap.emailLocal),
+      const _rBaja = await _enviarCorreoConDetalle(_paramsCorreoBaja(snap, snap.emailLocal),
         { sello: 'baja_' + snap.clientId + '__local' });
-      toast(ok ? 'Hoja enviada al local' : 'Hoja guardada. El correo sale solo al recuperar la señal.');
+      // Con la direccion mal escrita el aviso queda rendido: prometer que "sale solo" es falso.
+      toast(_rBaja.ok ? 'Hoja enviada al local'
+        : (_rBaja.err && _rBaja.err.clase === 'destinatario')
+          ? 'Hoja guardada, pero el correo del local está mal escrito (' + snap.emailLocal + '): no se le va a enviar.'
+          : 'Hoja guardada. El correo sale solo al recuperar la señal.');
     } else {
       toast('Hoja guardada. El local no tiene correo cargado.');
     }
@@ -9380,7 +9560,7 @@ async function enviarBajasSeleccionadas() {
       ' a ' + unicos.length + (unicos.length === 1 ? ' destinatario' : ' destinatarios') + ':\n\n' +
       unicos.join('\n'), { titulo: 'Enviar bajas de activo', okTexto: 'Enviar' })) return;
 
-  var enviados = 0, pendientes = 0;
+  var enviados = 0, pendientes = 0, malos = [];
   for (var i = 0; i < sel.length; i++) {
     var b = sel[i];
     var destino = b.emailSupervisor || b.emailLocal;
@@ -9391,14 +9571,21 @@ async function enviarBajasSeleccionadas() {
        "Enviar" es una accion deliberada y tiene que salir; lo que el sello sigue frenando es el
        doble toque accidental dentro del mismo minuto. */
     var selloMin = Math.floor(Date.now() / 60000);
-    var ok = await _enviarCorreo(_paramsCorreoBaja(b, destino),
+    var r = await _enviarCorreoConDetalle(_paramsCorreoBaja(b, destino),
       { sello: 'baja_' + b.id + '__' + destino + '__' + selloMin });
-    if (ok) enviados++; else pendientes++;
+    // Rendido por direccion (S10 TOME tiene emailSupervisor "admin", sin @): no va a salir
+    // nunca, asi que no se cuenta como "pendiente que sale solo" — se nombra aparte.
+    if (r.ok) enviados++;
+    else if (r.err && r.err.clase === 'destinatario') { if (malos.indexOf(destino) < 0) malos.push(destino); }
+    else pendientes++;
   }
   await _avisar(enviados + (enviados === 1 ? ' hoja enviada' : ' hojas enviadas') +
     (pendientes ? '.\n\n' + pendientes + ' qued' + (pendientes === 1 ? String.fromCharCode(243) : 'aron') +
       ' en la cola: sale' + (pendientes === 1 ? '' : 'n') + ' solo' + (pendientes === 1 ? '' : 's') +
-      ' al recuperar la señal.' : '.'),
+      ' al recuperar la señal.' : '.') +
+    (malos.length ? '\n\nNo se envi' + String.fromCharCode(243) + ' a ' + malos.join(', ') +
+      ': la direcci' + String.fromCharCode(243) + 'n est' + String.fromCharCode(225) +
+      ' mal escrita. Hay que corregirla en la ficha del local y mandarla a mano.' : ''),
     { titulo: 'Env' + String.fromCharCode(237) + 'o de bajas' });
 }
 
@@ -11467,7 +11654,7 @@ async function _procesarEnvioHojas(hojas, emails) {
   const asunto = 'Hojas de trabajo · ' + locStr + ' · ' + fecha;
   if (typeof emailjs === 'undefined') { _avisar('El servicio de correo no está disponible en este dispositivo. Recarga la app e intenta de nuevo.'); return; }
   toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
-  let enviados = 0; const fallidos = []; let corte = null;
+  let enviados = 0; const fallidos = []; const malos = []; let corte = null;
   for (var k = 0; k < emails.length; k++) {
     const _params = {
       email_admin: emails[k], email: emails[k], name: 'EMVAL E.I.R.L.',
@@ -11484,6 +11671,9 @@ async function _procesarEnvioHojas(hojas, emails) {
     });
     if (r.ok) { enviados++; continue; }
     fallidos.push(emails[k]);
+    // Direccion rechazada por el servidor: no se reenvia sola (va congelada en el aviso). Se
+    // sigue con los demas destinatarios y se dice cual no llego.
+    if (r.err && r.err.clase === 'destinatario') malos.push(emails[k]);
     // Si el problema es la cuenta o la cuota, seguir con los demas destinatarios solo quema
     // mas cuota y da el mismo error. Se corta y se dice POR QUE. Los que faltan NO se pierden:
     // se encolan abajo para que salgan cuando el servicio vuelva.
@@ -11509,6 +11699,11 @@ async function _procesarEnvioHojas(hojas, emails) {
       { titulo: 'El correo está caído' });
   } else if (fallidos.length === 0) {
     toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : '') + (sinPdf.length ? ' (' + sinPdf.length + ' sin PDF no se enviaron)' : ''));
+  } else if (malos.length) {
+    _avisar('No se envió a ' + malos.join(', ') + ': el servicio de correo rechazó la dirección. Revisa cómo está escrita.' +
+      (enviados ? ' Sí salió a ' + enviados + '.' : '') +
+      (fallidos.length > malos.length ? ' Los demás quedaron pendientes y se reenvían solos.' : ''),
+      { titulo: 'Dirección rechazada' });
   } else if (enviados > 0) {
     toast('Enviado a ' + enviados + '; quedó pendiente ' + fallidos.join(', ') + ' — se reenvía solo');
   } else {
@@ -12049,6 +12244,7 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
   toast('Enviando a ' + emails.length + ' correo' + (emails.length !== 1 ? 's' : '') + '...');
   let enviados = 0;
   const fallidos = [];
+  const malos = [];
   let corte = null;
   for (var k = 0; k < emails.length; k++) {
     const _cotParams = {
@@ -12075,6 +12271,9 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
     });
     if (r.ok) { enviados++; continue; }
     fallidos.push(emails[k]);
+    // Direccion rechazada por el servidor: no se reenvia sola (va congelada en el aviso). Se
+    // sigue con los demas destinatarios y se dice cual no llego.
+    if (r.err && r.err.clase === 'destinatario') malos.push(emails[k]);
     // Cuota o cuenta: insistir con el resto de los destinatarios da el mismo error y quema
     // mas cuota. Se corta y se le dice al usuario cual es el problema de verdad. Los que
     // faltaban se encolan igual: el correo se atrasa, no se pierde.
@@ -12106,6 +12305,11 @@ async function _procesarEnvioCotizaciones(seleccionadas, emails, comentario) {
       { titulo: 'El correo está caído' });
   } else if (fallidos.length === 0) {
     toast('✓ Enviado a ' + enviados + ' correo' + (enviados !== 1 ? 's' : ''));
+  } else if (malos.length) {
+    _avisar('No se envió a ' + malos.join(', ') + ': el servicio de correo rechazó la dirección. Revisa cómo está escrita.' +
+      (enviados ? ' Sí salió a ' + enviados + '.' : '') +
+      (fallidos.length > malos.length ? ' Los demás quedaron pendientes y se reenvían solos.' : ''),
+      { titulo: 'Dirección rechazada' });
   } else if (enviados > 0) {
     toast('Enviado a ' + enviados + '; quedó pendiente ' + fallidos.join(', ') + ' — se reenvía solo');
   } else {
@@ -12402,6 +12606,7 @@ async function cargarAlertaCorreos() {
         + (a.fallidos ? ', ' + a.fallidos + ' se rindieron' : '')
         + (desde ? '<br>El más antiguo: ' + _escHtml(desde) : '')
         + (a.bloqueo ? '<br><span style="color:var(--rojo);">Envíos detenidos: ' + _escHtml(a.bloqueo) + '</span>' : '')
+        + (a.malEscritos ? '<br><span style="color:var(--rojo);">Dirección mal escrita, no se va a enviar: ' + _escHtml(a.malEscritos) + '. Hay que mandarlo a mano.</span>' : '')
         + '</div>';
     });
     html += '<button class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px;" onclick="cargarAlertaCorreos()">Actualizar</button></div>';
@@ -15948,7 +16153,12 @@ function _actualizarBarraCorreos(hayBarraDeOTs) {
   if (bloqueo) {
     texto.textContent = correos.length + ' aviso(s) SIN ENVIAR — ' + (bloqueo.clase === 'cuota' ? 'sin cuota de correo' : 'problema de la cuenta');
   } else if (fallidos) {
-    texto.textContent = fallidos + ' aviso(s) no se enviaron';
+    // Si TODOS los que se rindieron son por direccion, se dice: "no se enviaron" a secas empuja
+    // a apretar Reintentar, y con la direccion congelada en el aviso eso no arregla nada.
+    var malDir = correos.filter(function(c) { return c.fallido && c.motivoFallo === 'destinatario'; }).length;
+    // Corto a proposito: la barra va en una linea (nowrap) y en un telefono de 360 px el texto
+    // largo se salia por los dos lados (medido en la revision del 24-09).
+    texto.textContent = malDir === fallidos ? (fallidos + ' aviso(s): correo mal escrito') : (fallidos + ' aviso(s) no se enviaron');
   // "No se enviaron" en rojo es una orden implicita de reenviar, y el tecnico la obedece. Cuando
   // el aviso PUDO haber salido, decirle eso es empujarlo a fabricar el duplicado a mano.
   } else if (ambiguos) {
@@ -16018,11 +16228,16 @@ function abrirModalCorreos() {
         + '<div style="font-size:13px;font-weight:600;color:var(--texto);">' + ot + (p.local && !p.asunto ? ' · ' + _escHtml(p.local) : '') + '</div>'
         + '<div style="font-size:11px;color:var(--texto2);margin-top:2px;">' + _escHtml(p.email_admin || 'sin destinatario')
         + ' · encolado ' + _haceCuantoDesde(c.creadoEn) + ' · ' + (c.intentos || 0) + ' intento(s)'
-        + (c.fallido ? ' · <span style="color:var(--rojo);font-weight:700;">se rindió</span>' : '') + '</div>'
+        + (c.fallido && c.motivoFallo !== 'destinatario' ? ' · <span style="color:var(--rojo);font-weight:700;">se rindió</span>' : '') + '</div>'
+        // Por direccion no es "se rindio": no va a salir nunca por mas que se reintente. Lo que
+        // sirve es saber a quien no le llego y que alguien se lo mande a mano.
+        + (c.fallido && c.motivoFallo === 'destinatario' ? '<div style="font-size:12px;color:var(--rojo);margin-top:2px;font-weight:700;">No se va a enviar: la dirección "' + _escHtml(p.email_admin || '') + '" está mal escrita. Mándalo a mano a la dirección correcta.</div>' : '')
         // Decirle la verdad a quien mira: no es "no salió", es "no se pudo confirmar". La
         // diferencia es la que hace que no lo reenvie a mano creyendo que no llego.
         + (c.posibleEnvio ? '<div style="font-size:11px;color:var(--naranja);margin-top:2px;font-weight:600;">Puede haber salido: no se pudo confirmar. Si se reenvía, va marcado como reenvío.</div>' : '')
-        + (c.ultimoError ? '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">Último error: ' + _escHtml(String(c.ultimoError).slice(0, 120)) + '</div>' : '')
+        // Con la direccion mal escrita la linea roja de arriba ya lo dice todo; repetirlo aca salia
+        // cortado a los 120 caracteres a media frase.
+        + (c.ultimoError && c.motivoFallo !== 'destinatario' ? '<div style="font-size:11px;color:var(--texto3);margin-top:2px;">Último error: ' + _escHtml(String(c.ultimoError).slice(0, 120)) + '</div>' : '')
         + '</div>';
     });
     lista.innerHTML = html;
@@ -16131,10 +16346,11 @@ async function sincronizarOTsPendientes() {
 
       // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
       // Si falla, _enviarCorreo lo encola y se reintenta solo.
+      let _dirLocalMalaSync = '';
       if (ot.emailLocal && pdfUrlSync) {
         // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
         // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
-        await _enviarCorreo({
+        const _rLocalSync = await _enviarCorreoConDetalle({
           email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
           fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
           tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
@@ -16142,6 +16358,7 @@ async function sincronizarOTsPendientes() {
           pdf_url: (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
             ? _urlPDFDescarga(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
         }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
+        if (!_rLocalSync.ok && _rLocalSync.err && _rLocalSync.err.clase === 'destinatario') _dirLocalMalaSync = ot.emailLocal;
       }
 
       await _eliminarOTPendiente(ot.id);
@@ -16149,7 +16366,8 @@ async function sincronizarOTsPendientes() {
       _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
         (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
           ? _urlPDFDescarga(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
-        ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
+        ot.emailLocal ? _notaDireccionLocalMala(ot.local, _dirLocalMalaSync)
+                      : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
         ot.clientId);
     } catch(err) {
       console.error('Error sincronizando OT pendiente:', err);
