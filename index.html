@@ -4101,6 +4101,32 @@ function _paramsReenvio(params, item) {
   return copia;
 }
 
+// El enlace de la HS de un aviso que YA estaba encolado, pasado a vista previa al despacharlo.
+// Los params viajan congelados en la cola, asi que un aviso que la version anterior dejo en el
+// telefono trae el `pdf_url` con `fl_attachment` (descarga forzada) y saldria asi aunque la app
+// ya este actualizada. INFERIDO, no medido, el 24-09-2026: a las 16:18 `alertas` reporto 2 avisos
+// pendientes del telefono de Lucas, minutos despues de subirse la HS 271080, y la v59 arma esos
+// avisos con `.../raw/upload/fl_attachment:<nombre>/...pdf`. A las 16:28 esa cola estaba en 0. Si
+// una copia asi es la primera que Pedro abre despues del despliegue, "sigue igual" se leeria como
+// que el arreglo no funciono. Ver el bloque de `_urlPDFVista`.
+// Solo el template del aviso de OT (correo al local y copia a administracion; las bajas tambien
+// van por aca, pero su enlace no trae nombre forzado y sale igual). Cotizaciones y "Enviar hojas"
+// van por otro template y su enlace va dentro del cuerpo: no se tocan. Sin nombre nuevo:
+// `_urlPDFVista` rescata el de SMU del segmento `fl_attachment` que quita.
+// Devuelve una COPIA y no toca el aviso guardado: la clave, el despacho y el sello no dependen del
+// enlace, y un aviso que no se logra enviar sigue en la cola tal como estaba.
+function _paramsCorreoCola(params, template) {
+  if (!params || (template && template !== _EMAILJS_TEMPLATE_OT)) return params;
+  const u = params.pdf_url;
+  if (!u || typeof u !== 'string' || typeof _urlPDFVista !== 'function') return params;
+  const v = _urlPDFVista(u, '');
+  if (!v || v === u) return params;
+  const copia = {};
+  for (const k in params) if (Object.prototype.hasOwnProperty.call(params, k)) copia[k] = params[k];
+  copia.pdf_url = v;
+  return copia;
+}
+
 function _cargarCorreosPendientes() {
   try { return JSON.parse(localStorage.getItem(_CORREOS_KEY) || '[]'); } catch(e) { return []; }
 }
@@ -4306,7 +4332,10 @@ async function sincronizarCorreosPendientes() {
     try {
       // El service/template viajan con el aviso: la cola ya no despacha solo avisos de OT, y
       // mandar una cotizacion por el template del aviso llegaria con el cuerpo en blanco.
-      const envio = c.posibleEnvio ? _paramsReenvio(c.params, c) : c.params;
+      // El enlace de la HS sale en vista previa aunque el aviso lo haya encolado la version
+      // anterior (_paramsCorreoCola). El aviso guardado no se toca.
+      const _base = _paramsCorreoCola(c.params, c.template);
+      const envio = c.posibleEnvio ? _paramsReenvio(_base, c) : _base;
       await _emailjsSend(envio, c.service, c.template);
       _marcarDespachado(c.despacho);
       enviados++;
@@ -4802,8 +4831,10 @@ function _urlPDFDescarga(url, nombre) {
   // Una URL que YA trae nombre se respeta si ese nombre esta limpio. Si no lo esta —la armo otro
   // sitio sin esta funcion, o un dato guardado— se rearma con la lista blanca: la garantia de que
   // el enlace abre no puede depender de que nadie mas arme `fl_attachment`.
-  // ⚠️ Lo que NO pasa por aca: un correo que ya quedo encolado en un telefono con el enlace armado
-  // por 943888e sale con esos params congelados (sincronizarCorreosPendientes no los reprocesa).
+  // ⚠️ Lo que NO pasa por aca: un correo que ya quedo encolado en un telefono. La cola guarda los
+  // params tal como se armaron; `sincronizarCorreosPendientes` solo reprocesa el `pdf_url` del
+  // template del aviso de OT, y por `_urlPDFVista` (`_paramsCorreoCola`), no por esta funcion. Las
+  // cotizaciones y "Enviar hojas" salen con sus params congelados, con el enlace que traian.
   var previo = u.match(/\/raw\/upload\/fl_attachment(?::([^/]*))?\//);
   if (previo) {
     var viejo = '';
@@ -4826,6 +4857,93 @@ function _urlPDFDescarga(url, nombre) {
 // de respaldo de una descarga nombrada que fallo — reabrir la URL que acaba de dar 400 no abre nada.
 function _urlPDFSinNombre(url) {
   return String(url || '').replace(/\/raw\/upload\/fl_attachment[^/]*\//, '/raw/upload/');
+}
+
+/* ─── EL ENLACE DEL CORREO DE LA HS SE ABRE, NO SE DESCARGA ──────────────────────────────────
+   Caso Pedro, 24-09-2026 (audio): "antiguamente (...) pinchaba el link y se hacia como una vista
+   previa. Y ahora no, volvio al antiguo otra vez: volvio a que tenis que descargar el archivo".
+   Hasta 943888e (14-09) el correo al local y el aviso a
+   administracion llevaban la URL cruda de Cloudinary. Ese commit la paso por `_urlPDFDescarga`
+   para que la HS bajara con la nomenclatura de SMU, y `fl_attachment` hace que Cloudinary responda
+   `Content-Disposition: attachment`: el navegador descarga en vez de mostrar. PR #51 lo heredo.
+   SMU pidio el NOMBRE del archivo, no que el correo obligara a descargar.
+   MEDIDO el 24-09-2026 con HEAD/GET publicos (sin tocar produccion), HS 796863:
+     · raw cruda      .../raw/upload/v.../emval/pdfs/<id>.pdf     200 application/pdf, sin
+                      Content-Disposition: se ve, pero se guarda como "Recepcion_Obra_OT796863_qp9imoz.pdf".
+     · fl_attachment  .../raw/upload/fl_attachment:<nombre>/v.../... 200 + attachment: DESCARGA.
+     · /files/+sufijo .../files/v.../emval/pdfs/<id sin .pdf>/<nombre>.pdf  200 application/pdf, sin
+                      Content-Disposition, mismo ETag y largo que la raw. Chrome y Edge 153 de
+                      escritorio lo abren en el visor, sin descarga (el telefono de Pedro no esta
+                      medido), y lo guardan con el nombre del sufijo, el mismo que daria la descarga
+                      nombrada de esa URL: Chrome con el boton Descargar del visor, Edge con Ctrl+S.
+     · Barrido de las 561 URLs de Cloudinary guardadas en Firestore: las 558 que terminan en .pdf
+       abren asi, con y sin segmento de version, con %20 en el public_id y con `_v2`.
+   POR ESO /files/ y no la raw cruda: la cruda devuelve la vista previa pero pierde el nombre que
+   SMU exige para emitir la HES. Con /files/ el nombre viaja en la RUTA, no en un header que obliga
+   a descargar.
+   Reglas, todas medidas:
+     1. Solo se toca una URL `/raw/upload/` de Cloudinary. El link a la app (`?pdf=<id>`) es el
+        respaldo cuando Cloudinary fallo: sale TAL CUAL, sin '.pdf' pegado (ver `_urlPDFDescarga`).
+     2. Todo nombre forzado previo se quita (sobre /files/ tambien obliga a descargar), repitiendo
+        `_urlPDFSinNombre` hasta que no quede ninguno; el primero sirve de respaldo si no llega uno.
+     3. El public_id se copia como viene codificado (%20 de las preventivas) y SIN su '.pdf': la
+        extension la pone el sufijo. `/files/.../<id>.pdf/<nombre>.pdf` da 404 ("<id>.pdf.pdf").
+     4. El nombre pasa por `_nombreAdjuntoSeguro`, la MISMA lista blanca de la descarga. /files/ no
+        la necesita para abrir (acepta los 95 ASCII imprimibles con encodeURIComponent), pero asi el
+        archivo guardado desde la vista se llama igual que el de la descarga nombrada.
+     5. Sin nombre, o con una forma que /files/ no sirve, se entrega la raw SIN el nombre forzado.
+        Los 3 PDF legacy de mayo sin '.pdf' en el public_id (OT_9502, OT_9562, OT_9554) no tienen
+        forma en linea: /files/ da 404 y la raw baja como octet-stream (preexistente; ningun
+        productor del correo recibe esas URLs). Un sufijo vacio ('/.pdf') tambien da 404.
+   Nunca devuelve vacio si recibio algo: el sello del aviso (`_SELLO_SIN_PDF`) y `_NOTA_SIN_PDF` se
+   deciden por si HAY URL, y esta funcion no puede convertir un aviso con PDF en uno "sin PDF".
+   Un aviso que ya estaba encolado en un telefono trae sus params congelados con el enlace de
+   descarga: `_paramsCorreoCola` lo pasa por aca al despacharlo (solo el template del aviso de OT).
+   TAMBIEN SE USA EN LA APP. Decision de Bastian, 24-09-2026: "Compartir y los Ver PDF de la app
+   tambien pasan a vista previa". 943888e les habia puesto `fl_attachment` a los mismos enlaces:
+     · Compartir (`compartirDocumentos`): el enlace que viaja en el texto (WhatsApp, correo del
+       equipo, Copiar enlace, varios documentos) y el `url` de `navigator.share` con uno solo.
+     · "Abrir el PDF" del menu propio de Compartir (`_compartirPor`).
+     · "Ver PDF" de Preventivos y de "Ver OTs por tecnico". El link a la app (`?pdf=`) sigue
+       abriendose tal cual, igual que antes.
+     · "Ver PDF" de Cotizaciones, por decision de Bastian del 25-09-2026. Descargaba con nombre
+       desde el 14-08-2026 (`_descargarPDFNombrado`, f61bae9), no por 943888e. Si hay que
+       regenerar el PDF, la pestana se abre en el mismo toque y recibe la URL al terminar
+       (`_abrirPDFEnPestana`): un window.open despues de la subida lo bloquea el navegador. En la
+       app instalada de iPhone, donde window.open no abre nada, va por un enlace
+       (`_esAppInstaladaIOS`).
+   Con eso ya nada de la app obliga a descargar, salvo esto, que sigue con `_urlPDFDescarga` a
+   proposito:
+     · Lo que promete "Descargar" en el correo de cotizaciones a SMU (Descargar CT por
+       `_urlDescargaCot`, Descargar HS) y "Ver / Descargar hoja" de "Enviar hojas" de preventivos.
+     · Los bytes que Compartir adjunta (`_archivosParaCompartir`): esa URL no la ve nadie, y el
+       archivo lleva su nombre en el `File`.
+   Tambien con `_urlPDFDescarga`, pero sin descarga forzada: el "Ver PDF" de Bajas va sin nombre y
+   ya abre en linea. Y los correos que ya SALIERON siguen con su enlace de descarga.
+   Vigilado por tests/el-correo-de-la-hs-abre-en-linea.js. */
+function _urlPDFVista(url, nombre) {
+  var u = (url || '').toString().trim();
+  if (!u) return '';
+  var marca = '/raw/upload/';
+  var i = u.indexOf(marca);
+  if (i === -1) return u;
+  // Esta funcion no arma ni desarma el nombre forzado: lo saca la que ya lo sabe sacar.
+  var cruda = _urlPDFSinNombre(u);
+  var viejo = '';
+  if (cruda !== u) {
+    // Lo que se saco es "<segmento>/" justo despues de la marca; el nombre va tras el ':'.
+    var seg = u.slice(i + marca.length, i + marca.length + (u.length - cruda.length) - 1);
+    var dp = seg.indexOf(':');
+    if (dp !== -1) {
+      try { viejo = decodeURIComponent(seg.slice(dp + 1)); } catch(e) { viejo = seg.slice(dp + 1); }
+    }
+  }
+  // Un segundo segmento de nombre forzado tambien obligaria a descargar sobre /files/.
+  for (var sig = _urlPDFSinNombre(cruda); sig !== cruda; sig = _urlPDFSinNombre(cruda)) cruda = sig;
+  var m = cruda.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+)\/raw\/upload\/(v\d+\/)?([^?#]+?)\.pdf$/);
+  var limpio = _nombreAdjuntoSeguro(nombre) || _nombreAdjuntoSeguro(viejo);
+  if (!m || !limpio) return cruda;
+  return m[1] + '/files/' + (m[2] || '') + m[3] + '/' + encodeURIComponent(limpio) + '.pdf';
 }
 
 // El nombre bueno ya viaja en la URL: el public_id se arma con _nombreArchivoPDF / _slugPDFCot.
@@ -4879,7 +4997,10 @@ async function compartirDocumentos(docs, opts) {
   });
 
   var titulo = opts.titulo || 'EMVAL E.I.R.L.';
-  var enlaces = validos.map(function(d){ return _urlPDFDescarga(d.url, d.nombre); }).join('\n');
+  // El enlace que ve quien lo recibe abre la VISTA, con el nombre de SMU en la ruta (ver
+  // _urlPDFVista, decision de Bastian del 24-09-2026). Los bytes que se adjuntan siguen bajando
+  // por `_urlPDFDescarga` en _archivosParaCompartir: esa URL no la ve nadie.
+  var enlaces = validos.map(function(d){ return _urlPDFVista(d.url, d.nombre); }).join('\n');
   var texto = (opts.texto || titulo);
   _compartirActual = { docs: validos, titulo: titulo, texto: texto, enlaces: enlaces };
 
@@ -4893,7 +5014,7 @@ async function compartirDocumentos(docs, opts) {
       // Con archivos NO va `url`: algunas plataformas descartan el adjunto si ademas hay enlace.
       await navigator.share({ files: files, title: titulo, text: texto });
     } else if (validos.length === 1) {
-      await navigator.share({ title: titulo, text: texto, url: _urlPDFDescarga(validos[0].url, validos[0].nombre) });
+      await navigator.share({ title: titulo, text: texto, url: _urlPDFVista(validos[0].url, validos[0].nombre) });
     } else {
       await navigator.share({ title: titulo, text: texto + '\n\n' + enlaces });
     }
@@ -4943,7 +5064,8 @@ async function _compartirPor(via) {
   } else if (via === 'copiar') {
     await _copiarAlPortapapeles(c.enlaces);
   } else if (via === 'abrir') {
-    window.open(_urlPDFDescarga(c.docs[0].url, c.docs[0].nombre), '_blank');
+    // "Abrir" abre: la vista en linea, con el nombre de SMU en la ruta (ver _urlPDFVista).
+    window.open(_urlPDFVista(c.docs[0].url, c.docs[0].nombre), '_blank');
   }
   cerrarModalCompartir();
 }
@@ -4993,8 +5115,65 @@ async function _asegurarPDFCotizacion(cot) {
   return url || '';
 }
 
+/* La app instalada en un iPhone o iPad (agregada a la pantalla de inicio). Ahi `window.open`
+   devuelve null y no abre nada (web.dev, "Window management", leido el 25-09-2026; no medido en un
+   iPhone), y un enlace con target _blank abre el visor sobre la app: es lo que ya hace el "Ver PDF"
+   de Preventivos. En Android, en el PC y en Safari sin instalar, `navigator.standalone` no existe o
+   es false. */
+function _esAppInstaladaIOS() {
+  try { return typeof navigator !== 'undefined' && navigator.standalone === true; } catch(e) { return false; }
+}
+
+// Abre `url` con un enlace target _blank, el mismo camino del "Ver PDF" de Preventivos. Tiene que
+// correr dentro de un toque.
+function _abrirConEnlace(url) {
+  var a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.click();
+}
+
+/* Lleva a la VISTA de un PDF en una pestana nueva. Lo usa el "Ver PDF" de Cotizaciones (decision de
+   Bastian del 25-09-2026). `pestana` es la que ese boton abrio en el MISMO toque, antes de
+   regenerar el PDF, o null si no regenero o si el navegador la bloqueo. `huboEspera` es true si
+   antes hubo que regenerar: el toque ya vencio.
+   El navegador solo deja abrir pestanas durante el toque. Si la de antes no esta (bloqueada o
+   cerrada), se intenta otra; si tambien la bloquea, se ofrece el enlace con un boton, que es un
+   toque nuevo, y si ni asi se abre, queda copiado. Nunca se lleva la propia app al PDF: en la app
+   instalada no queda boton para volver.
+   En la app instalada de iPhone no hay pestana previa (window.open no abre nada, ver
+   `_esAppInstaladaIOS`): sin espera se abre con un enlace en el mismo toque; despues de regenerar,
+   el aviso "PDF listo" pide un toque nuevo y ese toque abre el enlace. */
+async function _abrirPDFEnPestana(url, pestana, huboEspera) {
+  if (_esAppInstaladaIOS()) {
+    if (huboEspera) {
+      var listo = await _avisar('El PDF está listo. Toca "Abrir el PDF" para verlo.', { titulo: 'PDF listo', okTexto: 'Abrir el PDF' });
+      if (listo !== true) return false;
+    }
+    _abrirConEnlace(url);
+    return true;
+  }
+  if (pestana && !pestana.closed) {
+    try {
+      pestana.opener = null;   // el PDF no necesita acceso a la app que lo abrio
+      pestana.location.replace(url);
+      return true;
+    } catch(e) { console.warn('No se pudo llevar la pestana al PDF; se abre otra:', e); }
+  }
+  if (window.open(url, '_blank')) return true;
+  var abrir = await _avisar('El navegador bloqueó la pestaña nueva del PDF. Toca "Abrir el PDF" para verlo.',
+    { titulo: 'PDF listo', okTexto: 'Abrir el PDF' });
+  if (abrir === true && !window.open(url, '_blank')) await _copiarAlPortapapeles(url);
+  return false;
+}
+
 // Descarga con nombre explicito. Chromium puede abrir el visor PDF en un blob interno y cambiar
 // el nombre sugerido por un UUID aun cuando Cloudinary manda Content-Disposition correctamente.
+// Hoy NADIE la llama: su unico llamador, el "Ver PDF" de Cotizaciones, paso a la vista el
+// 25-09-2026 (decision de Bastian, ver _abrirPDFEnPestana). Se conserva a proposito: es el camino
+// listo si hay que volver a la descarga con nombre, y tests/la-hs-se-descarga.js vigila su
+// respaldo (un 400 abre el archivo sin nombre; un corte de red, la URL nombrada).
 async function _descargarPDFNombrado(url, nombre) {
   var u = _urlPDFDescarga(url, nombre);
   try {
@@ -6442,21 +6621,39 @@ function _renderItemsCotizacion(items, contenido, mostrarSupervisor) {
     btnPdf.textContent = 'Ver PDF';
     btnPdf.style.cssText = 'flex:1;background:var(--verde-btn);color:white;border:none;border-radius:var(--radio-sm);padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
     btnPdf.onclick = (function(data){ return async function(){
+      // Abre la VISTA en una pestana nueva, con el nombre de SMU en la ruta (ver _urlPDFVista).
+      // Decision de Bastian del 25-09-2026: hasta ahi descargaba con nombre (_descargarPDFNombrado,
+      // f61bae9). El nombre sale igual de `_nombrePDFCot`, tambien para los PDF subidos antes del
+      // 14-08-2026 con el public_id viejo, sin volver a subir nada.
       // Antes bastaba con que EXISTIERA un pdfUrl para abrirlo, sin preguntar de cuando era.
-      // `_urlDescargaCot` no cambia el archivo: le pega el nombre bueno a la descarga. Los PDF
-      // subidos ANTES del 14-08-2026 tienen el public_id viejo y esto los renombra igual, que es
-      // lo unico que se puede hacer sin volver a subir 45 archivos a produccion.
       var url = data.pdfUrl || '';
-      if (!url || _pdfCotObsoleto(data)) {
+      var pestana = null;
+      var regenera = !url || _pdfCotObsoleto(data);
+      if (regenera) {
+        // Regenerar SUBE un PDF y tarda: un window.open despues de ese await ya no cuenta como
+        // toque y el navegador lo bloquea (iOS sobre todo). La pestana se abre AHORA, en el mismo
+        // toque y antes del primer await, y recibe la URL al terminar (_abrirPDFEnPestana).
+        // En la app instalada de iPhone window.open no abre nada: ahi no hay pestana previa y, al
+        // terminar, el aviso "PDF listo" pide un toque nuevo.
+        if (!_esAppInstaladaIOS()) {
+          pestana = window.open('', '_blank');
+          if (pestana) {
+            try { pestana.document.title = 'EMVAL'; pestana.document.body.textContent = 'Preparando el PDF...'; } catch(e) {}
+          }
+        }
         toast('Actualizando PDF al formato separado...');
-        url = await _asegurarPDFCotizacion(data);
-      }
-      if (url) {
+        try { url = await _asegurarPDFCotizacion(data); }
+        catch(e) { console.warn('No se pudo regenerar el PDF de la cotizacion:', e); url = ''; }
+        if (!url) {
+          // Sin PDF no queda una pestana en blanco: se cierra y se avisa, como siempre.
+          if (pestana) { try { pestana.close(); } catch(e) {} }
+          await _avisar('No se pudo preparar el PDF separado. Revisa la señal e intenta de nuevo.', { titulo: 'PDF no disponible' });
+          return;
+        }
         data.pdfUrl = url;
-        await _descargarPDFNombrado(_urlDescargaCot(data), _nombrePDFCot(data));
-      } else {
-        await _avisar('No se pudo preparar el PDF separado. Revisa la señal e intenta de nuevo.', { titulo: 'PDF no disponible' });
       }
+      // Sin regenerar no hubo await: el toque sigue vigente y la pestana se abre directo.
+      await _abrirPDFEnPestana(_urlPDFVista(url, _nombrePDFCot(data)), pestana, regenera);
     }; })(it);
     const btnEdit = document.createElement('button');
     btnEdit.textContent = 'Editar';
@@ -8553,8 +8750,10 @@ async function guardarYEnviarPDF() {
   if (email && !snap.editandoOTId) {
     toast('Enviando email con PDF...');
     const _urlLocal = pdfUrlCloudinary || pdfUrlFirestore || '';
-    const _urlLocalEntrega = (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
-      ? _urlPDFDescarga(_urlLocal, _nombrePDFHoja(snap)) : _urlLocal;
+    // Enlace a la VISTA, con el nombre de SMU en la ruta (ver _urlPDFVista). Con `_urlPDFDescarga`
+    // el local tenia que bajar el archivo para verlo (caso Pedro, 24-09-2026).
+    const _urlLocalEntrega = (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+      ? _urlPDFVista(_urlLocal, _nombrePDFHoja(snap)) : _urlLocal;
     const enviado = await _enviarCorreo({
       email_admin: email,
       ot_numero: _numOTCorreo(snap.otNumero),
@@ -8640,11 +8839,13 @@ async function guardarYEnviarPDF() {
     // ESTE es el aviso que le llega a administracion (PEDRO_NOTIF_EMAIL) y el que quedaba con el
     // numero de la OT siguiente: es la ultima linea de la funcion, la mas lejos del snapshot y la
     // que mas se alcanzo a pisar. 6 de los 23 casos revisados salieron por aca.
+    // Es la copia que abre Pedro en cotizaciones.emval@gmail.com: el enlace va a la VISTA
+    // (_urlPDFVista), no a la descarga. Es exactamente el correo de su audio del 24-09-2026.
     _notificarOTCompletada(
       snap.otNumero, snap.local, snap.tecnico, snap.tipo,
       new Date().toLocaleDateString('es-CL'),
-      (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
-        ? _urlPDFDescarga(pdfUrlCloudinary || pdfUrlFirestore || '', _nombrePDFHoja(snap))
+      (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+        ? _urlPDFVista(pdfUrlCloudinary || pdfUrlFirestore || '', _nombrePDFHoja(snap))
         : (pdfUrlCloudinary || pdfUrlFirestore || ''),
       email ? '' : 'ATENCION: el local "' + (snap.local || '') + '" no tiene correo configurado, no se le envio la OT.',
       snap.clientId
@@ -11013,14 +11214,15 @@ async function cargarPreventivos() {
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
 
-      // Descargar: usa Cloudinary URL si existe, si no, abre Firestore PDF
+      // Ver PDF: la VISTA de Cloudinary con el nombre de SMU en la ruta (ver _urlPDFVista); sin
+      // Cloudinary, el link a la app tal cual.
       if (pdfCloudUrl || pdfFirestoreUrl) {
         const btnDesc = document.createElement('button');
         btnDesc.textContent = 'Ver PDF';
         btnDesc.style.cssText = 'flex:1;background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
         btnDesc.onclick = (function(cUrl, fUrl, hoja){ return function(){
           var a = document.createElement('a');
-          a.href = cUrl ? _urlPDFDescarga(cUrl, _nombrePDFHoja(hoja)) : fUrl;
+          a.href = cUrl ? _urlPDFVista(cUrl, _nombrePDFHoja(hoja)) : fUrl;
           a.target = '_blank';
           a.click();
         }; })(pdfCloudUrl, pdfFirestoreUrl, _datosHojaConCot(ot, null, cecoValPrev));
@@ -11335,13 +11537,13 @@ async function verOTsTecnico(nombre, grupo) {
       btnPdf.style.cssText = 'flex:1;background:var(--azul-claro);color:white;border:none;border-radius:var(--radio-sm);padding:9px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;';
       btnPdf.onclick = (function(url, hoja){ return function(){
         // Si es URL de la app (Firestore), abrir directamente
-        // Si es URL de Cloudinary, forzar descarga con nombre correcto
+        // Si es URL de Cloudinary, abrir la VISTA con el nombre de SMU en la ruta (ver _urlPDFVista)
         if (url.includes('github.io') || url.includes('?pdf=')) {
           window.open(url, '_blank');
         } else {
-          // Cloudinary raw - descargar con nombre PDF
+          // Cloudinary raw - se abre en linea; el nombre de SMU viaja en la ruta, no en un header
           var a = document.createElement('a');
-          a.href = _urlPDFDescarga(url, _nombrePDFHoja(hoja));
+          a.href = _urlPDFVista(url, _nombrePDFHoja(hoja));
           a.target = '_blank';
           a.click();
         }
@@ -16130,12 +16332,14 @@ async function sincronizarEnlacesPDFPendientes() {
       if (it.aviso && it.pdfUrlCloudinary) {
         var _a = it.aviso;
         var _urlHSRescatada = it.pdfUrlCloudinary;
-        if (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function') {
+        // A la VISTA, como el cierre (ver _urlPDFVista). La URL rescatada viene sin segmento de
+        // version (_urlPDFSiYaEsta) y /files/ la sirve igual: medido 24-09-2026.
+        if (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function') {
           var _nombreHSRescatada = _nombrePDFHoja({
             otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco, local: _a.local, fecha: _a.fecha,
             cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
           });
-          _urlHSRescatada = _urlPDFDescarga(it.pdfUrlCloudinary, _nombreHSRescatada);
+          _urlHSRescatada = _urlPDFVista(it.pdfUrlCloudinary, _nombreHSRescatada);
         }
         await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
           _urlHSRescatada, '', _a.clientId);
@@ -16454,16 +16658,17 @@ async function sincronizarOTsPendientes() {
           fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
           tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
           trabajo: String(ot.descripcionTrabajo || ''),
-          pdf_url: (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
-            ? _urlPDFDescarga(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
+          // A la VISTA con el nombre de SMU, igual que el cierre online (ver _urlPDFVista).
+          pdf_url: (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+            ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
         }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
       }
 
       await _eliminarOTPendiente(ot.id);
       toast('OT #' + ot.numero + ' sincronizada ✓');
       _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
-        (typeof _urlPDFDescarga === 'function' && typeof _nombrePDFHoja === 'function')
-          ? _urlPDFDescarga(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
+        (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+          ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
         ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
         ot.clientId);
     } catch(err) {
