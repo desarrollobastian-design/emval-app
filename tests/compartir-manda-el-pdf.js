@@ -72,7 +72,46 @@ console.log('Compartir tiene que mandar el PDF\n');
   }
 }
 
-// ── 2. El PDF se comparte con extension: sin ella llega como archivo sin tipo ────────────────
+// ── 2. El PDF se comparte con extension, salvo el legacy sin '.pdf' (con ella da 404) ────────
+/* 24-09-2026 — decision de Bastian: el ENLACE que entrega Compartir (el texto, el `url` de
+   `navigator.share` con un documento y "Abrir el PDF") es la VISTA (`_urlPDFVista`): abre en el
+   navegador con el nombre de SMU en la ruta, en vez de obligar a descargar. Este chequeo media
+   "la URL compartida termina en .pdf" sobre `_urlPDFDescarga`, que ya no arma ese enlace; el
+   invariante se mide ahora (2a) sobre la funcion que si lo arma. Los BYTES que se adjuntan siguen
+   bajando por `_urlPDFDescarga` (_archivosParaCompartir), asi que su chequeo (2b) queda igual.
+   La excepcion del titulo es de los datos, no del codigo: los 3 PDF legacy de mayo se subieron
+   con un public_id SIN '.pdf' (OT_9502, OT_9562, OT_9554). Medido con HEAD publico el
+   25-09-2026, 01:50, OT_9502: la raw tal cual responde 200 (octet-stream,
+   `attachment; filename="OT_9502"`), y con '.pdf' pegado o por /files/ responde 404. El enlace
+   que se comparte de uno de esos es la raw SIN tocar: sin extension, pero es el unico que
+   responde 200 (baja como octet-stream).
+   Que compartirDocumentos use una para el enlace y otra para los bytes lo vigila, ejecutandolo,
+   tests/el-correo-de-la-hs-abre-en-linea.js. */
+{
+  const v = extraer('_urlPDFVista', ['_nombreAdjuntoSeguro', '_urlPDFSinNombre']);
+  chequear(!!v, 'no se encontro _urlPDFVista en index.html');
+  if (v) {
+    const raw = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1785791175/emval/pdfs/Recepcion_Obra_OT597587_rml807w.pdf';
+    const r = v(raw, 'HS - 597587 - ceco 0474 - Reparacion.pdf');
+    const ok = /^https:\/\/res\.cloudinary\.com\/dcrf29tna\/files\/.*\.pdf$/.test(r) && !/fl_attachment/.test(r);
+    chequear(ok, 'el enlace que entrega Compartir no es la vista terminada en .pdf: ' + r);
+    // Legacy sin '.pdf' en el public_id: sale la raw tal cual, SIN '.pdf' (con '.pdf', 404).
+    const legacy = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1780088835/emval/pdfs/OT_9502';
+    const rl = v(legacy, 'HS - 9502 - ceco 0474 - Reparacion.pdf');
+    const okLegacy = rl === legacy;
+    chequear(okLegacy, 'el enlace de un PDF legacy sin .pdf en el public_id no es la raw tal cual ' +
+      '(esperado "' + legacy + '"; con .pdf o por /files/ Cloudinary da 404): ' + rl);
+    console.log('2a) Enlace compartido: ' + (ok && okLegacy
+      ? 'la vista, terminada en .pdf; el legacy sin .pdf, la raw tal cual ✓'
+      : 'no es la vista terminada en .pdf, o el legacy sin .pdf cambio ✗'));
+    const app = 'https://desarrollobastian-design.github.io/emval-app/?pdf=KRUvZwab3Zb7QeebOBdv';
+    chequear(v(app, 'HS - 1 - x.pdf') === app, '_urlPDFVista modifico el link a la app: ' + v(app, 'x'));
+  }
+}
+/* 2b. PENDIENTE CONOCIDO, anterior a esta rama y fuera de su alcance (no se arregla aca): para los
+   3 PDF legacy de mayo sin '.pdf' en el public_id (OT_9502, OT_9562, OT_9554), el '.pdf' que pega
+   `_urlPDFDescarga` da 404 (medido el 25-09-2026 con HEAD publico sobre OT_9502). Este chequeo
+   vigila la regla general, que vale para todo el resto. */
 {
   const f = extraer('_urlPDFDescarga', ['_nombreAdjuntoSeguro']);
   chequear(!!f, 'no se encontro _urlPDFDescarga en index.html');
@@ -80,7 +119,7 @@ console.log('Compartir tiene que mandar el PDF\n');
     const sinExt = 'https://res.cloudinary.com/dcrf29tna/raw/upload/emval/pdfs/Cotizacion_Unimarc';
     const conExt = sinExt + '.pdf';
     const ok = f(sinExt) === conExt && f(conExt) === conExt;
-    console.log('2) URL compartida: ' + (ok ? 'siempre termina en .pdf ✓' : 'puede salir sin extension ✗'));
+    console.log('2b) Bytes que se adjuntan: ' + (ok ? 'la URL siempre termina en .pdf ✓' : 'puede salir sin extension ✗'));
     chequear(ok, '_urlPDFDescarga no normaliza la extension: ' + f(sinExt));
     // El '.pdf' es solo para Cloudinary: pegado al link de la app lo convierte en ?pdf=<id>.pdf,
     // un documento que no existe (el respaldo del correo cuando Cloudinary falla).
