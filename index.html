@@ -1604,20 +1604,37 @@ function _conteoFotos(fotos) {
   return (fotos || []).filter(function(f){ return !!f; }).length;
 }
 
+/* ¿Tiene esta hoja trabajo PROPIO, algo que se pierde si no se guarda? Sirve igual para `estado`,
+   para una hoja guardada en el telefono y para el reporte que el telefono manda al panel (ese trae
+   `conContenido` ya calculado, porque viaja sin fotos).
+   Elegir el local o el tipo, o el N° de equipos, NO cuenta: se repite en tres toques, y es justo lo
+   que la hoja siguiente HEREDA. Caso del 30-09-2026 (103 "pausados" en el panel de Pedro): nuevaOT()
+   —el boton "Hacer otra OT"— no limpia estado.local ni el N° de equipos del formulario, asi que la
+   hoja nueva ya "tenia datos" y el autoguardado la guardaba como Autoguardada con el local del
+   trabajo recien cerrado y otro numero. En produccion, 77 de las 109 autoguardadas eran eso. */
+function _hojaTieneContenido(o) {
+  if (!o) return false;
+  if (typeof o.conContenido === 'boolean') return o.conContenido;
+  // Tolera datos mal formados sin lanzar: la llama el reporte del telefono, y un error ahi lo
+  // callaria entero (el panel se quedaria mirando el reporte anterior).
+  const lista = function(x) { return Array.isArray(x) ? x : []; };
+  const textos = [o.descripProblema, o.descripcionProblema, o.descripcion, o.descripcionTrabajo, o.pendientesMateriales];
+  return textos.some(function(t){ return String(t == null ? '' : t).trim() !== ''; })
+    || _conteoFotos(lista(o.fotosAntes)) > 0 || _conteoFotos(lista(o.fotosDespues)) > 0 || !!o.fotoTimbre
+    || o.firmada === true || !!o.firmaImagen
+    || lista(o.serviciosPreventivo).some(function(s){ return s && s.respuesta; });
+}
+
+/* ¿Hay algo que el autoguardado deba proteger? El trabajo propio de la hoja (ver arriba), o el
+   vinculo con una cotizacion, que es el dato mismo de una hoja en espera.
+   ⚠️ No se limpia estado.local en nuevaOT(): el cierre anterior puede seguir generando su PDF, y ya
+   hubo casos de "la OT siguiente pisa el estado" (ver guardarEnFirebase y guardarYEnviarPDF). Aca
+   se decide que se guarda, no que se borra. */
 function _hayDatosOTEnCurso() {
   if (typeof estado === 'undefined' || !estado || !estado.usuario || !estado.otNumero) return false;
   sincronizarCamposOTEnEstado();
-  return !!(
-    estado.local ||
-    estado.tipo ||
-    estado.descripProblema ||
-    estado.descripcion ||
-    estado.numEquipos ||
-    estado.fotoTimbre ||
-    _conteoFotos(estado.fotosAntes) ||
-    _conteoFotos(estado.fotosDespues) ||
-    (estado.serviciosPreventivo || []).some(function(s){ return s && s.respuesta; })
-  );
+  if (estado.enEspera || estado.cotizacionId) return true;
+  return _hojaTieneContenido(estado);
 }
 
 function _capturarFirmaBorrador() {
@@ -2023,9 +2040,44 @@ function _limpiarPausadasYaCerradas() {
   }
 }
 
+/* Indice de los trabajos CERRADOS Y FIRMADOS, para reconocer lo que ya se hizo. Lo usan el
+   telefono (con 'emval_ots': lo que se cerro en ese equipo) y el panel (con las fichas de la nube).
+   Una OT sin firma, o todavia pausada, no prueba que el trabajo se haya cerrado.
+     · porNumero: numero + local, la MISMA OT. Nunca el numero solo: ya colisionaron (la 9530).
+     · porDia: tecnico + local + dia, la visita. */
+function _indiceTrabajosCerrados(ots) {
+  const porNumero = {}, porDia = {};
+  (ots || []).forEach(function(c) {
+    if (!c || c.firmada !== true || c.pausa === true) return;
+    const local = _normTexto(_localCanonico(c.local));
+    if (!local) return;
+    if (c.numero != null && String(c.numero).trim() !== '') porNumero[String(c.numero).trim() + '|' + local] = c;
+    const dia = _fechaOTms({ fecha: c.fecha });
+    if (dia) porDia[_normTexto(c.tecnico) + '|' + local + '|' + dia] = c;
+  });
+  return { porNumero: porNumero, porDia: porDia };
+}
+
+/* ¿Es esta Autoguardada una hoja VACIA que quedo junto a un trabajo que el mismo tecnico ya cerro
+   ese dia en ese local? Devuelve esa OT cerrada, o null.
+   Es el fantasma del 30-09 (ver _hojaTieneContenido): nace al tocar "Hacer otra OT" con el local
+   de la OT recien cerrada y OTRO numero, asi que la limpieza por numero no la veia nunca.
+   Solo si esta VACIA: una con texto, fotos, firma o pauta puede ser un segundo trabajo en el mismo
+   local, y esa la decide una persona. Nunca una En Pausa, una por subir ni una de cotizacion. */
+function _borradorVacioDeTrabajoCerrado(b, indice) {
+  if (!b || !indice || b.autoDraft !== true || b.pendienteSync || b.enEspera || b.cotizacionId || b.cotizacionNumero) return null;
+  if (_hojaTieneContenido(b)) return null;
+  const local = _normTexto(_localCanonico(b.local));
+  const dia = _fechaOTms({ fecha: b.fecha });
+  if (!local || !dia) return null;
+  return indice.porDia[_normTexto(b.tecnico) + '|' + local + '|' + dia] || null;
+}
+
 // Elimina borradores autoguardados (autoDraft) que corresponden a OTs ya completadas.
 // Una OT completada queda registrada en localStorage 'emval_ots'; si un borrador
 // comparte numero+tecnico con una completada, es un "zombi" que debe desaparecer.
+// Y tambien la hoja VACIA que quedo junto a una OT cerrada y firmada aca, del mismo tecnico, local
+// y dia (ver _borradorVacioDeTrabajoCerrado); esa nunca si es la hoja abierta.
 // Solo toca autoDraft===true (nunca una "En Pausa" real). Devuelve true si hubo cambios.
 function _limpiarBorradoresCompletados() {
   try {
@@ -2037,12 +2089,16 @@ function _limpiarBorradoresCompletados() {
     completadas.forEach(function(o) {
       if (o && o.numero != null) claveCompletada[String(o.numero) + '|' + (o.tecnico || '')] = true;
     });
+    const indice = _indiceTrabajosCerrados(completadas);
+    const abierta = estado.otNumero != null ? String(estado.otNumero) : null;
 
     const pausadas = cargarOTsPausadas();
     const filtradas = pausadas.filter(function(ot) {
       if (!ot || ot.autoDraft !== true) return true; // solo borradores autoguardados
       const clave = String(ot.numero) + '|' + (ot.tecnico || '');
-      return !claveCompletada[clave]; // descartar si ya se completó
+      if (claveCompletada[clave]) return false; // descartar si ya se completó
+      if (abierta && String(ot.numero) === abierta) return true;
+      return !_borradorVacioDeTrabajoCerrado(ot, indice);
     });
 
     if (filtradas.length !== pausadas.length) {
@@ -2167,7 +2223,9 @@ async function _reportarPausadasDelTelefono(forzar) {
         creadoEn: c ? new Date(c).toISOString() : '',
         actualizadoEn: ot.actualizadoEn ? String(ot.actualizadoEn) : '',
         autoDraft: ot.autoDraft === true, pendienteSync: ot.pendienteSync === true,
-        enEspera: !!ot.enEspera, cotizacionNumero: ot.cotizacionNumero || ''
+        enEspera: !!ot.enEspera, cotizacionNumero: ot.cotizacionNumero || '',
+        // Las fotos y la firma no viajan: sin esto el panel no sabria si la hoja esta vacia.
+        conContenido: _hojaTieneContenido(ot)
       };
     });
     const firma = JSON.stringify(items);
@@ -12926,6 +12984,11 @@ function _renderPausadasSup(snap, seccion, listaEl, countEl) {
 function _pausadasSoloTelefono(listaNube) {
   const enNube = {};
   (listaNube || []).forEach(function(o){ enNube[_claveOT(o)] = true; });
+  /* Lo que ya se cerro no es trabajo pendiente: la misma OT cerrada y firmada (numero + local), o la
+     Autoguardada VACIA que quedo junto a un trabajo cerrado ese dia (ver _borradorVacioDeTrabajoCerrado).
+     Caso del 30-09: con los datos de produccion de ese dia el panel mostraba 113 y 78 eran eso
+     (quedan 35). Sin las fichas cargadas no se esconde nada: se muestran hasta poder comprobarlo. */
+  const cerradas = window._supFichas ? _indiceTrabajosCerrados(window._supFichas.ots) : null;
   const porClave = {};
   (_reportesPausadasSup || []).forEach(function(r) {
     const visto = _msCreado(r.actualizadoEn);
@@ -12933,6 +12996,8 @@ function _pausadasSoloTelefono(listaNube) {
     (r.items || []).forEach(function(it) {
       if (!it || it.numero == null || it.numero === '' || _ocultoTecnico(it.tecnico)) return;
       if (enNube[_claveOT(it)]) return;
+      if (cerradas && (cerradas.porNumero[String(it.numero).trim() + '|' + _normTexto(_localCanonico(it.local))]
+                       || _borradorVacioDeTrabajoCerrado(it, cerradas))) return;
       const k = _claveOT(it) + '|' + _normTexto(it.tecnico);
       if (porClave[k] && porClave[k].visto >= visto) return;
       porClave[k] = { visto: visto, ot: it, tel: { usuario: r.usuario || '', vistoEn: r.actualizadoEn } };
