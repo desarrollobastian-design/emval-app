@@ -68,7 +68,11 @@ const NUEVAS = ['_versionPausadaMs', '_descarteCubrePausada', '_leerDescartesPau
   '_sincronizarDescartesPausadas', '_reportarPausadasDelTelefono', '_registrarDescartePausada', '_pausadasSoloTelefono'];
 const REALES = ['_normTexto', '_claveOT', '_creadoEnMs', '_msCreado', '_haceCuantoDesde', '_mismoTecnico',
   'cargarOTsPausadas', 'guardarOTsPausadas', 'sincronizarPausadasPendientes', 'eliminarPausadaSup',
-  '_renderPausadasSup', '_reconciliarPausadasFirebase', '_firebaseADTOPausada'];
+  '_renderPausadasSup', '_reconciliarPausadasFirebase', '_firebaseADTOPausada',
+  // Desde el 30-09 el reporte dice si la hoja tiene contenido y el panel esconde lo ya cerrado
+  // (tests/cerrar-no-deja-autoguardada-fantasma.js).
+  '_hojaTieneContenido', '_conteoFotos', '_indiceTrabajosCerrados', '_borradorVacioDeTrabajoCerrado',
+  '_localCanonico', '_fechaOTms'];
 
 console.log('Las pausadas que viven solo en el telefono las ve y las borra el administrador\n');
 

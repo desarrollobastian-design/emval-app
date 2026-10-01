@@ -46,7 +46,8 @@ const log = (...a) => console.log(...a);
   });
 
   log('\n══ ' + ARCHIVO + ' · escenario ' + ESC + ' ══');
-  await page.goto('http://localhost:8765/' + ARCHIVO);
+  // Puerto y host por variable de entorno, para no chocar con otro servidor del arnes. Default: 8765.
+  await page.goto('http://' + (process.env.EMVAL_HOST || 'localhost') + ':' + (process.env.EMVAL_PUERTO || '8765') + '/' + ARCHIVO);
   await page.waitForTimeout(2500);
 
   // ── Flujo del tecnico, por la interfaz ────────────────────────────────────────────────────
@@ -131,9 +132,11 @@ const log = (...a) => console.log(...a);
   }
 
   const fin = await page.evaluate(() => ({
-    correos: window.__CORREOS.map(c => ({ a: c.params && c.params.email_admin, ot: c.params && c.params.ot_numero })),
+    // `u`: el enlace que viaja en el correo. Desde el 24-09-2026 tiene que ser la VISTA (/files/),
+    // no la descarga forzada (fl_attachment) — caso Pedro, ver _urlPDFVista.
+    correos: window.__CORREOS.map(c => ({ a: c.params && c.params.email_admin, ot: c.params && c.params.ot_numero, u: c.params && c.params.pdf_url })),
     colaCorreos: (JSON.parse(localStorage.getItem('emval_correos_pendientes') || '[]') || [])
-      .map(c => ({ a: c.params && c.params.email_admin, ot: c.params && c.params.ot_numero })),
+      .map(c => ({ a: c.params && c.params.email_admin, ot: c.params && c.params.ot_numero, u: c.params && c.params.pdf_url })),
     colgadas: window.__COLGADAS,
     escrituras: window.__ESCRITURAS.filter(e => e.op).map(e => e.op + ':' + e.coleccion + (e.docId ? '/' + e.docId : '')),
     colaEnlaces: JSON.parse(localStorage.getItem('emval_enlaces_pdf_pendientes') || '[]'),
@@ -166,10 +169,12 @@ const log = (...a) => console.log(...a);
       updates: window.__ESCRITURAS.filter(e => e.op === 'update' && e.coleccion === 'ordenes').map(e => e.datos),
       sets: window.__ESCRITURAS.filter(e => e.op === 'set' && e.coleccion === 'ordenes').length,
       notFound: window.__ESCRITURAS.filter(e => e.op === 'update-not-found').length,
+      correos: window.__CORREOS.map(c => ({ a: c.params && c.params.email_admin, u: c.params && c.params.pdf_url })),
     }));
     log('  cola de enlaces despues de sincronizar: ' + JSON.stringify(tras.cola));
     log('  updates a ordenes: ' + JSON.stringify(tras.updates));
     log('  ordenes creadas con set: ' + tras.sets + ' · updates rechazados por doc inexistente: ' + tras.notFound);
+    log('  correos y su enlace despues de sincronizar: ' + JSON.stringify(tras.correos));
   }
 
   if (errores.length) log('\nerrores JS: ' + errores.slice(0, 3).join(' | '));
