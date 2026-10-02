@@ -151,6 +151,10 @@ function motor(op) {
     'function limpiarFirma() {}\n' +
     'function _setVozBtn() {}\n' +
     'function _actualizarBadgesOT() {}\n' +
+    // Desde el caso OT #271080 (24-09-2026) nuevaOT limpia el aviso del correo del local escrito a
+    // mano. Son pintura del formulario: lo que este test vigila son las autoguardadas.
+    'function _avisarEmailAdminMalo() {}\n' +
+    'function _actualizarHintEmail() {}\n' +
     'function go(id) { esp.navegaciones.push(id); }\n' +
     'function cargarOTsPausadasEnCadena() {}\n' +
     'function cargarCadenasApp() {}\n' +
