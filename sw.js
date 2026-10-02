@@ -1,4 +1,4 @@
-const CACHE_NAME = 'emval-v66';
+const CACHE_NAME = 'emval-v68';
 // El SDK de EmailJS se precachea junto al shell: si se baja recien cuando hace falta enviar,
 // una carga fria sin red deja `emailjs` en undefined y todo se encola en silencio.
 const APP_SHELL = [
@@ -26,13 +26,17 @@ self.addEventListener('activate', function(e) {
 self.addEventListener('fetch', function(e) {
   const url = e.request.url;
 
-  // No interceptar Firebase, Cloudinary, EmailJS ni APIs externas
+  // No interceptar Firebase, Cloudinary, EmailJS ni APIs externas.
+  // reCAPTCHA (App Check) carga su script desde www.google.com/recaptcha: con la cache de
+  // abajo (cache-first) quedaria congelado hasta la proxima version, y Google lo cambia solo.
   if (url.includes('firestore.googleapis.com') ||
       url.includes('firebase') ||
       url.includes('cloudinary.com') ||
       url.includes('emailjs.com') ||
       url.includes('googleapis.com') ||
       url.includes('gstatic.com') ||
+      url.includes('google.com/recaptcha') ||
+      url.includes('recaptcha.net') ||
       e.request.method !== 'GET') {
     return;
   }
