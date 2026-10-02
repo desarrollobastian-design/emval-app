@@ -1535,6 +1535,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
 <script>
 firebase.initializeApp({
   apiKey: "AIzaSyAlIQW1wl8rRx4MlbOBz3Zgq9pS01Ys7B4",
@@ -1544,6 +1545,33 @@ firebase.initializeApp({
   messagingSenderId: "492457737194",
   appId: "1:492457737194:web:c27c754e74d46ec290d093"
 });
+// ---- App Check (02-10-2026) ----
+// Las reglas de Firestore no pueden distinguir a la app de un tercero: la app no tiene
+// inicio de sesión de Firebase y la apiKey es pública. App Check hace que Firestore solo
+// acepte pedidos que traen un token de reCAPTCHA Enterprise emitido para ESTE dominio.
+// - Va antes de cualquier uso de Firestore: los pedidos anteriores saldrían sin token.
+// - Solo en el dominio de producción: la clave está registrada para él, y localhost y los
+//   arneses de tests/ no deben pedir tokens (ni gastar la cuota de evaluaciones).
+// - NUNCA bota la app: sin señal en frío el script puede no cargar, y una OT en terreno
+//   vale más que el token. Mientras App Check esté "sin aplicar" en la consola, un token
+//   faltante no bloquea nada; cuando se aplique, ese pedido lo rechaza Firestore, no la app.
+window.APP_CHECK_SITE_KEY = '6LfYptstAAAAAIszjPS_oP3Z4d-TfsboFr8PVVMK';
+window._appCheckActivo = false;
+if (location.hostname === 'desarrollobastian-design.github.io') {
+  try {
+    if (firebase.appCheck && firebase.appCheck.ReCaptchaEnterpriseProvider) {
+      firebase.appCheck().activate(
+        new firebase.appCheck.ReCaptchaEnterpriseProvider(window.APP_CHECK_SITE_KEY),
+        true // renovar el token solo
+      );
+      window._appCheckActivo = true;
+    } else {
+      console.warn('App Check no cargó: Firestore sigue sin token en esta sesión');
+    }
+  } catch (e) {
+    console.warn('App Check no se pudo activar:', e);
+  }
+}
 window._firebaseReady = true;
 console.log('Firebase v9 compat listo');
 </script>
