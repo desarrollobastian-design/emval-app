@@ -20,7 +20,7 @@
    a medias se parece demasiado a uno que aprueba. */
 
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2] || 'index.html', 'utf8');
+const src = fs.readFileSync(process.argv[2] || 'index.html', 'utf8').replace(/\r\n/g, '\n');
 
 function extraer(desde, hasta) {
   const i = src.indexOf(desde);

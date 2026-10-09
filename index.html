@@ -4031,11 +4031,11 @@ function _backoffCorreo(intentos) {
 //   ambiguo → ¿el POST alcanzo a llegar al servidor?  (nuevo: decide si el reenvio va MARCADO)
 // El 5xx entra como ambiguo a proposito: EmailJS pudo despachar el correo y fallar al responder.
 //
-// 🔴 destinatario → 4xx que habla del DESTINATARIO ("The recipients address is corrupted" /
-//               "…is empty"). Es un problema de ESE aviso, no de la cuenta: los demas salen igual.
+//   destinatario → 4xx que habla del DESTINATARIO ("The recipients address is corrupted"; el
+//               "…is empty" NO entra aca: ver _textoEsDeDestinatario). Es un problema de ESE
+//               aviso, no de la cuenta: los demas salen igual.
 //               Caso OT #271080 (24-09-2026, S10 Concepcion, Lucas): el tecnico escribio a mano
 //               "admin095mayorista10.cl", sin la @. EmailJS contesto 422 y este clasificador lo
-//               ("…is empty" NO entra aca: ver _textoEsDeDestinatario)
 //               tomo por 'cuenta' → detuvo TODA la cola del telefono, sin reintento automatico, y
 //               la copia a administracion quedo atascada detras. Peor: "Reintentar" volvia a
 //               chocar con el mismo correo malo, que iba primero en la fila — 3 rechazos en la
@@ -4060,7 +4060,7 @@ function _clasificarErrorCorreo(e) {
 // El texto con que EmailJS rechaza un destinatario: "The recipients address is corrupted". Se
 // mira la palabra, no el 422: el mismo status puede traer otros problemas que SI son de la cuenta,
 // y esos tienen que seguir deteniendo la cola.
-// ⚠️ "The recipients address is EMPTY" queda FUERA a proposito: una direccion vacia ya la ataja
+// OJO: "The recipients address is EMPTY" queda FUERA a proposito: una direccion vacia ya la ataja
 // `_problemaDireccionCorreo` antes del POST, asi que si el servidor igual dice "empty" es que la
 // PLANTILLA no esta leyendo el destinatario (el campo "To" del panel de EmailJS). Eso le pega a
 // TODOS los avisos, y tiene que detener la cola como problema de la cuenta — si no, cada aviso
