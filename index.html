@@ -6272,7 +6272,8 @@ function calcTotalCot() {
 }
 
 /* ─── NUMERO DE COTIZACION — UN SOLO LUGAR ────────────────────────────────────────────────
-   Formato: dia(2) + mes(2) + anio(2) + correlativo del dia(2).  Ej: 13-07-2026, la 3ra -> 13072603
+   Formato: dia (sin cero) + mes(2) + anio(2) + correlativo del dia(2).
+   Ej: 13-07-2026, la 3ra -> 13072603 · 2-08-2026, la 8va -> 2082608
 
    Antes se armaba en DOS sitios y siempre ganaba el malo:
      · al GUARDAR se escribia el sufijo '01' HARDCODEADO -> todas las cotizaciones cargadas el
@@ -6287,9 +6288,15 @@ function calcTotalCot() {
    ya habia una, DOS cotizaciones comparten numero"), y ademas se contaba a si misma al regenerar
    el PDF, con lo que el numero de una misma cotizacion cambiaba entre una descarga y otra.
 
-   El dia va con cero a la izquierda a proposito: sin el, "1072601" era ambiguo — podia leerse
-   como 1-jul correlativo 01 o como 10-jul correlativo 7. Los numeros viejos de un digito quedan
-   como estan; no se renumera nada hacia atras (eso lo decide Pedro, hay documentos ya enviados).
+   El dia va SIN cero a la izquierda (Bastian, 09-10-2026, a pedido de Pedro): Pedro buscaba en
+   Gmail el folio sin el 0 y no aparecia, porque Gmail busca palabras completas y el correo decia
+   "02082608". Del 13-07 al 09-10-2026 el dia llevo el 0, por temor a que "1072601" fuera ambiguo;
+   con el mes y el correlativo siempre de 2 digitos no lo es: del 1 al 9 el folio tiene 7 digitos,
+   del 10 al 31 tiene 8, y nunca se pisan (medido el 09-10: 0 choques hasta 2035 con 99 por dia, ni
+   contra las 233 cotizaciones de produccion). Los folios ya emitidos quedan como estan, con o sin
+   0: no se renumera nada hacia atras (eso lo decide Pedro, hay documentos ya enviados).
+   El contador sigue siendo `cot_<ddmmaa>` CON cero: cambiarle la clave reiniciaria el correlativo
+   el dia del despliegue. Lo vigila tests/numero-cotizacion-sin-cero.js.
    ────────────────────────────────────────────────────────────────────────────────────────── */
 function _fechaCodigoHoy() {
   const h = new Date();
@@ -6316,7 +6323,7 @@ async function _asignarNumeroCotizacion(db) {
   }
   return {
     fechaCodigo: fechaCodigo,
-    numeroCotizacion: fechaCodigo + String(correlativo).padStart(2, '0'),
+    numeroCotizacion: fechaCodigo.replace(/^0/, '') + String(correlativo).padStart(2, '0'),
     numeroProvisorio: false
   };
 }
