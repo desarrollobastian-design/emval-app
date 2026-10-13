@@ -90,6 +90,14 @@ async function correr(otInicial, etiqueta) {
       if (p.email_admin === 'notif@emval') escritos.notificacion = p; else escritos.correo = p;
       return true;
     },
+    // Desde el caso OT #271080 (24-09-2026) el correo al local va por la variante con detalle:
+    // el cierre necesita saber si la direccion estaba mal escrita para avisarle a administracion.
+    // Mismo registro que _enviarCorreo; lo que este test vigila es el NUMERO, no la direccion.
+    async _enviarCorreoConDetalle(p) {
+      const ok = await sandbox._enviarCorreo(p);
+      return { ok: ok, err: null, bloqueo: null };
+    },
+    _notaDireccionLocalMala: () => '',
     window: {
       PEDRO_NOTIF_EMAIL: 'notif@emval',
       _firebaseReady: true,
