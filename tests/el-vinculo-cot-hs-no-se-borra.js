@@ -201,7 +201,8 @@ async function bloqueGuardar() {
     const ok4 = check(!nueva.obj.otId && !nueva.obj.otNumero,
         '4) una previa NUEVA nace vinculada a una OT: ' + JSON.stringify(nueva.obj.otId)) &
       check(B.db.tx.length === 1, '4) una previa nueva ya no reserva su correlativo con transaccion') &
-      check(/^\d{8}$/.test(String(nueva.obj.numeroCotizacion || '')),
+      // 7 u 8 digitos: desde el 09-10-2026 el dia va sin cero (tests/numero-cotizacion-sin-cero.js).
+      check(/^\d{7,8}$/.test(String(nueva.obj.numeroCotizacion || '')),
         '4) una previa nueva salio sin folio: ' + JSON.stringify(nueva.obj.numeroCotizacion)) &
       check('creadoEn' in nueva.obj, '4) una previa nueva ya no guarda creadoEn');
     console.log('4) Una previa nueva nace sin OT, con folio nuevo y con creadoEn: ' + (ok4 ? 'OK' : 'FALLA'));
