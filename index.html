@@ -1054,6 +1054,8 @@
     <div style="margin-bottom:12px;">
       <input type="text" id="preventivo-buscar" aria-label="Buscar preventivo" placeholder="Buscar local, técnico o N° de OT..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:8px;" onkeyup="filtrarPreventivos();">
       <div style="font-size:11px;color:var(--texto3);text-align:right;margin-bottom:4px;" id="preventivo-contador">0 hojas</div>
+      <!-- Solo el administrador: lo muestra cargarPreventivos si hay notas internas de los tecnicos -->
+      <button id="prev-pendientes-xlsx" onclick="descargarExcelPendientes()" style="display:none;width:100%;background:#FEF3C7;color:#78350F;border:1.5px solid var(--naranja);border-radius:var(--radio-sm);padding:9px 12px;font-size:13px;cursor:pointer;font-weight:600;font-family:inherit;margin-bottom:4px;">Descargar pendientes en Excel</button>
     </div>
     <div id="prev-acciones-bar" style="display:none;gap:8px;align-items:center;margin-bottom:10px;padding:10px 12px;background:var(--gris1);border-radius:var(--radio-sm);">
       <span id="prev-seleccionadas-count" style="font-size:12px;color:var(--texto2);flex:1;">0 seleccionadas</span>
@@ -11129,6 +11131,10 @@ async function cargarPreventivos() {
     const db = window.firebase.firestore();
     const lista = document.getElementById('lista-preventivos');
     _cargando(lista, 4);
+    // El boton de pendientes no sobrevive a la carga anterior: se muestra al final, si hay que.
+    window._prevPendientes = [];
+    const _btnPendXlsx = document.getElementById('prev-pendientes-xlsx');
+    if (_btnPendXlsx) _btnPendXlsx.style.display = 'none';
 
     // SIN orderBy A PROPOSITO: en Firestore un orderBy('creadoEn') EXCLUYE en silencio todo
     // documento que no tenga ese campo — una OT guardada por una ruta que no lo escribio
@@ -11182,6 +11188,10 @@ async function cargarPreventivos() {
     }
 
     window._todosPreventivos = {};
+    // Los pendientes van en su PROPIO arreglo, nunca en _todosPreventivos: ese alimenta "Enviar
+    // hojas" y "Compartir" hacia SMU, y la nota interna no sale al cliente (AGENTS.md, regla 8).
+    const _prevPendientes = [];
+    window._prevPendientes = _prevPendientes;
     const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const _folders = {};  // mesKey -> {content, countEl, n}. Se crean en orden de aparición (fecha desc = mes más nuevo primero).
     function _folderMes(mesKey, label) {
@@ -11220,7 +11230,7 @@ async function cargarPreventivos() {
       }; })(content, chev);
       carp.appendChild(header); carp.appendChild(content);
       lista.appendChild(carp);
-      const f = { content: content, countEl: cnt, n: 0, carp: carp };
+      const f = { content: content, countEl: cnt, n: 0, p: 0, carp: carp };
       _folders[mesKey] = f;
       return f;
     }
@@ -11303,6 +11313,17 @@ async function cargarPreventivos() {
         }
       }
 
+      // ---- Pendientes y materiales: nota interna del tecnico, SOLO el administrador ----
+      // Aca es donde Pedro la busca: la hoja de preventivo es la unica que la lleva.
+      const pendDivP = _bloquePendientesMateriales(ot);
+      if (pendDivP) {
+        card.appendChild(pendDivP);
+        _prevPendientes.push({
+          fecha: ot.fecha || '', tecnico: ot.tecnico || '', local: ot.local || '',
+          ceco: cecoValPrev, numero: otNum, texto: String(ot.pendientesMateriales).trim()
+        });
+      }
+
       // ---- Botones ----
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gris2);';
@@ -11348,7 +11369,10 @@ async function cargarPreventivos() {
       const _f = _folderMes(mesKey, mesLabel);
       _f.content.appendChild(card);
       _f.n++;
-      _f.countEl.textContent = _f.n + (_f.n === 1 ? ' hoja' : ' hojas');
+      if (pendDivP) _f.p++;
+      // "· N con pendientes" le dice a Pedro que carpeta abrir. Solo hay pendDivP si es administrador.
+      _f.countEl.textContent = _f.n + (_f.n === 1 ? ' hoja' : ' hojas') +
+        (_f.p > 0 ? ' · ' + _f.p + ' con pendientes' : '');
     });
 
     // Carpetas de mes en orden real (mes mas nuevo primero). Antes se creaban en el orden en
@@ -11367,10 +11391,37 @@ async function cargarPreventivos() {
     }
     const _prevBar = document.getElementById('prev-acciones-bar');
     if (_prevBar) _prevBar.style.display = prevOTs.length > 0 ? 'flex' : 'none';
+    // Solo se llena si el que mira es administrador (_bloquePendientesMateriales filtra el rol).
+    if (_btnPendXlsx) {
+      _btnPendXlsx.style.display = (estado.cargo === 'Administrador' && _prevPendientes.length > 0) ? 'block' : 'none';
+      _btnPendXlsx.textContent = 'Descargar pendientes (' + _prevPendientes.length + ') en Excel';
+    }
     actualizarSeleccionadasPrev();
   } catch(e) {
     _error('cargar las OTs preventivas', e);
   }
+}
+
+/* PENDIENTES Y MATERIALES: el unico sitio que dibuja la nota interna del tecnico.
+   SOLO el administrador. El rol Supervisor no lo ve (decision de Pedro, 13-08-2026). Va con
+   textContent, no innerHTML: lo escribe un tecnico en terreno y no tiene por que ser HTML valido.
+   OJO: del 13-08 al 13-10-2026 este bloque vivio solo en verOTsTecnico, que filtra los
+   preventivos: Pedro nunca vio un pendiente y la prueba pasaba porque corria el bloque suelto.
+   Por eso ahora es una funcion y la llama cargarPreventivos, donde viven las hojas que lo llevan. */
+function _bloquePendientesMateriales(ot) {
+  if (estado.cargo !== 'Administrador' || !ot || !String(ot.pendientesMateriales || '').trim()) return null;
+  const pendDiv = document.createElement('div');
+  pendDiv.className = 'pend-materiales-admin';
+  pendDiv.style.cssText = 'padding:8px 10px;margin-top:8px;background:#FEF3C7;border-left:3px solid var(--naranja);border-radius:var(--radio-sm);';
+  const pendTit = document.createElement('div');
+  pendTit.style.cssText = 'font-size:11px;font-weight:700;color:#78350F;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px;';
+  pendTit.textContent = 'Pendientes y materiales';
+  const pendTxt = document.createElement('div');
+  pendTxt.style.cssText = 'font-size:12px;color:#78350F;line-height:1.5;white-space:pre-wrap;';
+  pendTxt.textContent = ot.pendientesMateriales;
+  pendDiv.appendChild(pendTit);
+  pendDiv.appendChild(pendTxt);
+  return pendDiv;
 }
 
 async function verOTsTecnico(nombre, grupo) {
@@ -11529,22 +11580,10 @@ async function verOTsTecnico(nombre, grupo) {
       card.appendChild(descDiv);
     }
 
-    // Pendientes y materiales — SOLO el administrador. El rol Supervisor no lo ve (decision de
-    // Pedro, 13-08-2026). Va con textContent, no innerHTML: lo escribe un tecnico en terreno y
-    // no tiene por que ser HTML valido.
-    if (estado.cargo === 'Administrador' && ot.pendientesMateriales) {
-      const pendDiv = document.createElement('div');
-      pendDiv.style.cssText = 'padding:8px 10px;margin-top:8px;background:#FEF3C7;border-left:3px solid var(--naranja);border-radius:var(--radio-sm);';
-      const pendTit = document.createElement('div');
-      pendTit.style.cssText = 'font-size:11px;font-weight:700;color:#78350F;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px;';
-      pendTit.textContent = 'Pendientes y materiales';
-      const pendTxt = document.createElement('div');
-      pendTxt.style.cssText = 'font-size:12px;color:#78350F;line-height:1.5;white-space:pre-wrap;';
-      pendTxt.textContent = ot.pendientesMateriales;
-      pendDiv.appendChild(pendTit);
-      pendDiv.appendChild(pendTxt);
-      card.appendChild(pendDiv);
-    }
+    // Pendientes y materiales: aca casi nunca hay (es campo de preventivos y esta lista los
+    // excluye), pero una OT con tipo dudoso cae aca y no debe esconder su nota.
+    const pendDivT = _bloquePendientesMateriales(ot);
+    if (pendDivT) card.appendChild(pendDivT);
 
     // Stats fotos
     const statsDiv = document.createElement('div');
@@ -13847,6 +13886,39 @@ function filtrarPreventivos() {
   if (contador) contador.textContent = (!buscar && window._prevContadorFull)
     ? window._prevContadorFull
     : visibles + ' hoja' + (visibles !== 1 ? 's' : '');
+}
+
+/* EXCEL DE PENDIENTES Y MATERIALES (pedido de Pedro, 13-10-2026): las notas internas de los
+   tecnicos en los preventivos, para comprar material o cotizar. Sale de lo que cargarPreventivos
+   ya leyo (deduplicado, sin cuentas de prueba, mas nuevo primero) y solo lo descarga el
+   administrador: es interno de EMVAL y la primera fila lo dice, por si el archivo se reenvia. */
+function descargarExcelPendientes() {
+  if (estado.cargo !== 'Administrador') { toast('Solo el administrador puede descargar los pendientes'); return; }
+  const filas = window._prevPendientes || [];
+  if (!filas.length) { toast('No hay pendientes anotados en los preventivos'); return; }
+  if (typeof XLSX === 'undefined') { toast('No se pudo cargar el generador de Excel. Revisa la señal.'); return; }
+  try {
+    const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const aoa = [
+      ['PENDIENTES Y MATERIALES — USO INTERNO EMVAL, NO SE ENVÍA AL CLIENTE'],
+      [],
+      ['Mes', 'Fecha', 'Técnico', 'Local', 'CECO', 'N° OT', 'Pendientes y materiales']
+    ];
+    filas.forEach(function(p) {
+      const pp = String(p.fecha || '').split('-');
+      const mes = (pp.length === 3 && +pp[1] >= 1 && +pp[1] <= 12) ? (MESES[+pp[1]] + ' ' + pp[2]) : 'Sin fecha';
+      aoa.push([mes, p.fecha, p.tecnico, p.local, p.ceco, p.numero, p.texto]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 28 }, { wch: 8 }, { wch: 10 }, { wch: 80 }];
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 2, c: 0 }, e: { r: 2 + filas.length, c: 6 } }) };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pendientes');
+    const h = new Date();
+    const hoy = h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
+    XLSX.writeFile(wb, 'EMVAL_Pendientes_y_Materiales_' + hoy + '.xlsx');
+    toast('Excel descargado: ' + filas.length + (filas.length === 1 ? ' pendiente' : ' pendientes'));
+  } catch(e) { _error('generar el Excel de pendientes', e); }
 }
 
 function limpiarFiltrosPreventivos() {
