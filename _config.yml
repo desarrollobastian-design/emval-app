@@ -6,13 +6,22 @@
 #
 # Notas para quien lo edite:
 # - En Jekyll 3, `exclude` REEMPLAZA la lista por defecto, no se suma (en Jekyll 4 si se suma).
-#   La lista que trae GitHub Pages es solo CNAME, asi que se repite aqui para no cambiarla.
+#   Sin este archivo, Pages excluye los 7 nombres por defecto de Jekyll (Gemfile ...
+#   vendor/ruby/) mas CNAME. Esos 8 se repiten primero aqui para no cambiar eso; despues van
+#   los propios. Hoy ninguno de esos 8 existe en el repo.
 # - Jekyll nunca publica lo que empieza con . _ # ~ (.github/, .claude/...): no hace falta listarlo.
 # - Los patrones parten de la raiz del repo. Un nombre sin barra (tests) excluye ese nombre y todo
 #   lo que cuelga de el; `check-*` es un glob (File.fnmatch).
 # - Lo que la app cargue en el futuro va en la raiz o en vendor/ (y en el APP_SHELL de sw.js si
 #   debe andar sin senal). Nada que la app use puede vivir en tests/, tools/ ni check-*.
 exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
   - CNAME
   - tests
   - tools
