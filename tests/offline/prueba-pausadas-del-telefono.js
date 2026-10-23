@@ -34,8 +34,8 @@ const fallos = [];
 const P = (...a) => console.log(...a);
 function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); return !!ok; }
 
-// sha256('Pedro123') — la contraseña temporal que la propia app asigna al Administrador.
-const HASH_PEDRO = 'cefdf4148cc0bdd9b6b4e6f125a65088e5340d9cf15d58000015b254bcf5168d';
+const CLAVE_PRUEBA = 'clave-solo-de-prueba';   // no es la de nadie: el arnes siembra su hash
+const HASH_PEDRO = require('crypto').createHash('sha256').update(CLAVE_PRUEBA).digest('hex');
 const LUCAS = 'Lucas Fernández';
 const AHORA = Date.now();
 const iso = ms => new Date(ms).toISOString();
@@ -105,7 +105,7 @@ async function eliminarDesdePanel(page, numero) {
   const msg = await page.evaluate(() => (document.getElementById('dlg-msg') || {}).textContent || '');
   await page.click('#dlg-ok');
   await page.waitForTimeout(400);
-  await page.fill('#dlg-input', 'Pedro123');
+  await page.fill('#dlg-input', CLAVE_PRUEBA);
   await page.click('#dlg-ok');
   await page.waitForTimeout(1200);
   return msg;
@@ -158,7 +158,7 @@ async function eliminarDesdePanel(page, numero) {
   await abrirApp(pedro);
   await pedro.click('text=Pedro Arce');
   await pedro.waitForTimeout(400);
-  await pedro.fill('#admin-pass-input', 'Pedro123');
+  await pedro.fill('#admin-pass-input', CLAVE_PRUEBA);
   await pedro.keyboard.press('Enter');
   await pedro.waitForTimeout(1200);
   await pedro.evaluate(() => cargarOTsSupervisor());

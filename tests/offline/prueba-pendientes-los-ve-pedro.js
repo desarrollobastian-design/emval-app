@@ -32,8 +32,8 @@ const fallos = [];
 const P = (...a) => console.log(...a);
 function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); return !!ok; }
 
-// sha256('Pedro123') — la contraseña temporal que la propia app asigna al Administrador.
-const HASH_PEDRO = 'cefdf4148cc0bdd9b6b4e6f125a65088e5340d9cf15d58000015b254bcf5168d';
+const CLAVE_PRUEBA = 'clave-solo-de-prueba';   // no es la de nadie: el arnes siembra su hash
+const HASH_PEDRO = require('crypto').createHash('sha256').update(CLAVE_PRUEBA).digest('hex');
 const LUCAS = 'Lucas Fernández';
 const AHORA = Date.now();
 const NOTA = 'Faltaron 2 neumáticos para la transpaleta N°2.\nComprar rueda <grande> para la próxima visita.';
@@ -124,7 +124,7 @@ const carpetas = page => page.$$eval('#lista-preventivos .prev-mes-folder', els 
   await abrirApp(pedro);
   await pedro.click('text=Pedro Arce');
   await pedro.waitForTimeout(400);
-  await pedro.fill('#admin-pass-input', 'Pedro123');
+  await pedro.fill('#admin-pass-input', CLAVE_PRUEBA);
   await pedro.keyboard.press('Enter');
   await pedro.waitForTimeout(1200);
   await abrirPreventivos(pedro);

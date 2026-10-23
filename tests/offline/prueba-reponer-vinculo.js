@@ -33,8 +33,8 @@ const fallos = [];
 const P = (...a) => console.log(...a);
 function chequear(ok, detalle) { if (!ok) fallos.push('  X ' + detalle); return ok; }
 
-// sha256('Pedro123') — la contraseña temporal que la propia app asigna al Administrador.
-const HASH_PEDRO = 'cefdf4148cc0bdd9b6b4e6f125a65088e5340d9cf15d58000015b254bcf5168d';
+const CLAVE_PRUEBA = 'clave-solo-de-prueba';   // no es la de nadie: el arnes siembra su hash
+const HASH_PEDRO = require('crypto').createHash('sha256').update(CLAVE_PRUEBA).digest('hex');
 const COT_ID = 'VTgrtHCjJ9pEnRAmDcIg';
 const OT_ID = 'ot_msz6tmso_ko60cfs';
 const HS_URL = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1787089888/emval/pdfs/Recepcion_Obra_OT425996_ko60cfs.pdf';
@@ -131,7 +131,7 @@ const SEMILLA = `(function(){
 
   await page.click('text=Pedro Arce');
   await page.waitForTimeout(400);
-  await page.fill('#admin-pass-input', 'Pedro123');
+  await page.fill('#admin-pass-input', CLAVE_PRUEBA);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(1200);
   const quien = await page.evaluate(() => estado.usuario + ' / ' + estado.cargo);

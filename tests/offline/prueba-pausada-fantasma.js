@@ -28,8 +28,8 @@ const fallos = [];
 const P = (...a) => console.log(...a);
 function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); }
 
-// sha256('Pedro123') — la contraseña temporal que la propia app asigna al Administrador.
-const HASH_PEDRO = 'cefdf4148cc0bdd9b6b4e6f125a65088e5340d9cf15d58000015b254bcf5168d';
+const CLAVE_PRUEBA = 'clave-solo-de-prueba';   // no es la de nadie: el arnes siembra su hash
+const HASH_PEDRO = require('crypto').createHash('sha256').update(CLAVE_PRUEBA).digest('hex');
 
 const SEMILLA = `(function(){
   function ts(iso) {
@@ -124,7 +124,7 @@ const SEMILLA = `(function(){
 
   await page.click('text=Pedro Arce');
   await page.waitForTimeout(500);
-  await page.fill('#admin-pass-input', 'Pedro123');
+  await page.fill('#admin-pass-input', CLAVE_PRUEBA);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(1200);
   const quien = await page.evaluate(() => estado.usuario + ' / ' + estado.cargo);
@@ -180,7 +180,7 @@ const SEMILLA = `(function(){
     await page.waitForTimeout(500);
     const pidePass = await page.evaluate(() => !document.getElementById('dlg-campo').hidden);
     chequear(pidePass, 'no pidio la contraseña de administrador');
-    await page.fill('#dlg-input', 'Pedro123');
+    await page.fill('#dlg-input', CLAVE_PRUEBA);
     await page.click('#dlg-ok');
     await page.waitForTimeout(1200);
 
