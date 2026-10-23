@@ -47,3 +47,10 @@ tools/respaldos/
 /Documentacion_Tecnica_*.docx
 /Fotos/
 /Audios/
+
+# Dependencias de pruebas que las necesitan (tests/reglas, tools): se instalan con npm, no se versionan.
+node_modules/
+# Registros que dejan los emuladores de Firebase al correr tests/reglas.
+*-debug.log
+# Volcados de Java cuando el emulador no arranca por memoria.
+hs_err_pid*.log

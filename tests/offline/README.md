@@ -151,3 +151,32 @@ falla con `exit 1`.
 **Cuándo repetirla:** ante cualquier cambio en `_emailjsSend`, en la clasificación de errores de
 correo, en el libro de despachos o en los sellos que pasan `guardarYEnviarPDF` y
 `sincronizarOTsPendientes`.
+
+# `prueba-entrar-sin-senal.js` — entrar con Firebase Auth (etapa 1, 23-10-2026)
+
+Desde la etapa 1, la app entra con Firebase Auth, y los dos arneses (`gen-arnes.js` y
+`nube-compartida.js`) traen un **Auth falso**, `stub-auth.js`.
+
+**Qué hace el Auth falso.** Sale de la misma semilla de `tecnicos` que ya usaban todas las pruebas.
+Así las pruebas que entran con PIN no se reescribieron.
+- El directorio se arma desde `tecnicos`, sin PIN ni hash.
+- La clave de cada técnico es la que la app deriva de su PIN.
+- El Administrador entra con la clave cuyo hash trae la semilla (`CLAVE_PRUEBA`).
+- Sin red (`setOffline` o `__OFFLINE`) rechaza como el SDK real.
+- La sesión sobrevive a recargar la página.
+
+**Qué recorre la prueba, por la interfaz:**
+1. Con señal, Ana entra con su PIN de siempre.
+2. Sin señal, Ana vuelve a entrar.
+3. Sin señal, quien nunca entró en ese teléfono no entra, y se le dice que la primera vez necesita
+   señal.
+4. Sin señal, un PIN ajeno no entra.
+5. Al volver la señal, la sesión de Firebase se abre sola.
+6. No queda ningún PIN, clave ni hash en `localStorage`.
+7. Pedro entra con su contraseña.
+
+La contraprueba es `prefix.html` con la versión anterior a la etapa 1 (el #63). Falla porque sin señal
+entraba cualquiera y el teléfono guardaba PIN y hash.
+
+**Cuándo repetirla:** ante cualquier cambio en `_entrarConCuenta`, `validarPin`, `validarPassword`, el
+verificador local, `cargarUsuariosApp` o `stub-auth.js`.

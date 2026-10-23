@@ -1,0 +1,114 @@
+rules_version = '2';
+
+// REGLAS DE FIRESTORE — ETAPA 2 DE FIREBASE AUTH (EMVAL). NO PUBLICADAS.
+//
+// Se publican recien cuando conste que TODOS los telefonos tienen la version con Firebase Auth y
+// vaciaron su cola (reporte del telefono en `alertas`, ver tools/estado-telefonos.js). Si se publican
+// antes, un telefono con la version vieja queda con sus OT encoladas sin poder subirlas.
+// Publicarlas: consola de Firebase -> Firestore Database -> Reglas -> pegar este archivo -> Publicar.
+// Lo hace Bastian. Prueba: tests/reglas/reglas.test.js contra el emulador (README de esta carpeta).
+//
+// Quien es quien: `directorio/{uid}` (lo escribe solo el Admin SDK, tools/cuentas-auth.js). Una cuenta de Firebase sin
+// ficha en el directorio, o con `activo: false`, NO es usuario de la app aunque haya iniciado sesion:
+// el alta de cuentas de Firebase Auth no se puede cerrar sin Identity Platform, asi que cualquiera
+// puede crear una; lo que no puede es darse una ficha.
+//
+// La matriz y el porque de cada fila: progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md, D.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function ficha() {
+      return get(/databases/$(database)/documents/directorio/$(request.auth.uid));
+    }
+    function esUsuario() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/directorio/$(request.auth.uid))
+        && ficha().data.get('activo', true) != false;
+    }
+    function esAdmin() { return esUsuario() && ficha().data.cargo == 'Administrador'; }
+    function esPanel() { return esUsuario() && ficha().data.cargo in ['Administrador', 'Supervisor']; }
+
+    // La pantalla de entrada lista a la gente ANTES de iniciar sesion: el directorio no tiene
+    // secretos (nombre, cargo, letra, correo de la cuenta, activo). Lo escribe SOLO
+    // tools/cuentas-auth.js con el Admin SDK (que no pasa por estas reglas): desde la app, nadie
+    // (D1-B, 23-10-2026). Asi nadie puede darse una ficha ni cambiarse el cargo.
+    match /directorio/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Todavia guarda PIN y hash (hasta la etapa 3): lo lee solo el Administrador y no lo escribe
+    // nadie desde la app (D1-B: altas, bajas y PIN los hace CorexOn con el Admin SDK).
+    match /tecnicos/{id} {
+      allow read: if esAdmin();
+      allow write: if false;
+    }
+
+    // ORDENES (revision de Codex del PR #64, 23-10-2026: cualquier usuario podia desfirmar una hoja
+    // ajena y despues borrarla, o cambiarle el tecnico).
+    // - Una hoja firmada no se desfirma (nadie) y no la borra nadie salvo el Administrador (como hoy,
+    //   con su contraseña, desde el panel).
+    // - El tecnico atribuido no lo cambia nadie salvo el panel (Reasignar).
+    // - En una hoja YA firmada, un tecnico solo toca el enlace de su PDF y la fecha de subida: es lo
+    //   que reescribe la cola al reintentar (guardarYEnviarPDF, sincronizarEnlacesPDFPendientes,
+    //   sincronizarOTsPendientes). Corregir una hoja firmada es del Administrador (Editar OT).
+    // - Crear: cualquier usuario, con un tecnico escrito. NO se exige que sea el mismo de la sesion:
+    //   la cola de un telefono compartido sube las OT de quien las cerro con la sesion de quien entro
+    //   despues (riesgo aceptado: crear a nombre de otro, no cambiar lo ajeno).
+    // Sus consultas (numero==, pausa==true) no filtran por tecnico: no hay regla de "solo lo suyo".
+    function firmadaAntes() { return resource.data.get('firmada', false) == true; }
+    function noDesfirma() { return !firmadaAntes() || request.resource.data.get('firmada', false) == true; }
+    function mismoTecnico() { return request.resource.data.get('tecnico', null) == resource.data.get('tecnico', null); }
+    function cambia() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    match /ordenes/{id} {
+      allow read: if esUsuario();
+      allow create: if esUsuario() && request.resource.data.get('tecnico', '') is string;
+      allow update: if esUsuario() && noDesfirma() && (
+        esPanel() ||
+        (mismoTecnico() && (!firmadaAntes() ||
+          cambia().hasOnly(['pdfUrl', 'pdfUrlCloudinary', 'pdfHojaGen', 'creadoEn', 'actualizadoEn']))));
+      allow delete: if esAdmin()
+        || (esUsuario() && !firmadaAntes()
+            && (resource.data.get('pausa', false) == true || resource.data.get('estado', '') == 'En Pausa'));
+    }
+
+    // COTIZACIONES: las crea, edita y borra el panel. Un tecnico SOLO la marca "Realizada" al cerrar
+    // la OT en espera (_vincularCotizacionRealizada): esos campos y ninguno mas (no importes, no
+    // items, no destinatarios). Revision de Codex del PR #64.
+    match /cotizaciones/{id} {
+      allow read: if esUsuario();
+      allow create, delete: if esPanel();
+      allow update: if esPanel() || (esUsuario()
+        && request.resource.data.get('estadoCot', '') == 'Realizada'
+        && cambia().hasOnly(['estadoCot', 'otCompletadaNumero', 'fotosAntes', 'fotosDespues', 'fotoTimbre',
+                             'firmaImagen', 'fechaRealizada', 'tecnicoRealizo', 'otId', 'otNumero',
+                             'pdfUrl', 'contenidoActualizadoEn']));
+    }
+
+    match /cadenas/{id} {
+      allow read: if esUsuario();
+      allow write: if esAdmin();
+    }
+
+    // Visor publico ?pdf=<id>: quien tiene el enlace abre ESE documento (id aleatorio); nadie lista.
+    match /pdfs/{id} {
+      allow get: if true;
+      allow list, create: if esUsuario();
+    }
+
+    match /alertas/{id} {
+      allow read, create, update: if esUsuario();
+    }
+    match /bajas/{id} {
+      allow read, create, update: if esUsuario();
+    }
+    match /contadores/{id} {
+      allow read, create, update: if esUsuario();
+    }
+    match /correos_purgados/{id} {
+      allow read: if esPanel();
+      allow create: if esUsuario();
+    }
+  }
+}

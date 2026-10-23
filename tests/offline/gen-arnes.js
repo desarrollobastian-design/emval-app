@@ -8,6 +8,7 @@
    Se usa desde preparar.js; tambien sirve suelto:
      node gen-arnes.js <index.html origen> <destino.html>  */
 const fs = require('fs');
+const { STUB_AUTH } = require('./stub-auth');   // firebase.auth() falso + directorio (etapa 1 de Auth)
 
 function generar(origen, destino) {
 let html = fs.readFileSync(origen, 'utf8');
@@ -156,7 +157,8 @@ window.emailjs = {
 // 3. El stub entra justo antes del initializeApp de la app.
 const ancla = html.indexOf('firebase.initializeApp({');
 const aperturaScript = html.lastIndexOf('<script>', ancla);
-html = html.slice(0, aperturaScript) + STUB + html.slice(aperturaScript);
+// Despues del stub de Firestore va el de Auth (stub-auth.js): sin el, nadie entra con su PIN.
+html = html.slice(0, aperturaScript) + STUB + '<script>\n' + STUB_AUTH + '\n</script>\n' + html.slice(aperturaScript);
 
 fs.writeFileSync(destino, html);
 console.log('arnes escrito: ' + destino + ' (' + Math.round(html.length / 1024) + ' KB)');

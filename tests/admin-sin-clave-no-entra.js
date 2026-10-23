@@ -1,233 +1,193 @@
-/* Prueba de regresion — un Administrador sin passwordHash NO entra con ninguna clave.
+/* Prueba de regresion — no hay clave por defecto y el telefono no guarda secretos.
 
-   Hasta el 22-10-2026, al cargar la lista de usuarios, a todo Administrador sin passwordHash la
-   app le calculaba el hash de una clave temporal ESCRITA EN index.html y lo guardaba en Firestore
-   («Migracion primera vez»). El repo es publico: cualquiera podia leer esa clave, y todo
-   administrador nuevo quedaba con ella. Pedro ya tenia su hash; el agujero era para el siguiente.
+   Origen (PR #63, 22-10-2026): al cargar la lista de usuarios, a todo Administrador sin passwordHash
+   la app le calculaba el hash de una clave temporal ESCRITA EN index.html y lo guardaba en
+   Firestore. El repo es publico: cualquiera podia leer esa clave. Desde la etapa 1 de Firebase Auth
+   (23-10-2026) la clave la verifica Firebase, y esta prueba vigila que eso no se deshaga:
 
-   Lo que se exige ahora:
-   1. Cargar la lista no inventa hashes ni escribe en Firestore.
-   2. En el codigo no hay ningun sha256('<literal>'): una clave fija en un repo publico no es clave.
-   3. validarPassword: sin hash no entra con NADA (ni vacio, ni cualquier texto, ni la clave que el
-      codigo viejo usaba: esta prueba la captura en memoria al correr el render y nunca la imprime)
-      y dice por que. Con hash, entra con su clave y no con otra.
-   4. verificarPasswordAdmin (confirmar acciones): sin hash dice por que y ni siquiera pide clave.
-   5. seleccionarUsuario avisa al entrar a la pantalla, antes de que escriba.
-   6. La carrera de los 200 ms (Codex, 23-10-2026): elegir a un Administrador mientras se valida el
-      PIN de otra persona no lo hace entrar, y un Administrador nunca entra con un PIN.
+   1. En el codigo no hay ningun sha256('<texto fijo>'): una clave fija en un repo publico no es clave.
+   2. La entrada ya no usa `pin` ni `passwordHash`: la lista sale de `directorio`, no de `tecnicos`.
+   3. Un Administrador sin cuenta en Firebase no entra con NADA (ni vacio, ni cualquier texto, ni la
+      clave quemada del historial: se saca de git al correr y nunca se imprime), y entrar no escribe
+      en Firestore.
+   4. La clave vacia ni siquiera se le pregunta a Firebase.
+   5. El cache de la lista no guarda PIN ni hash aunque le lleguen, y el cache viejo se borra.
+   6. La carrera de los 200 ms (Codex, PR #63, 23-10-2026): elegir a un Administrador mientras se
+      valida el PIN de otra persona no lo hace entrar, y un Administrador nunca entra con un PIN. La
+      guardia corta ANTES de preguntarle a Firebase (que igual lo rechazaria: asi se mide la guardia).
 
    Uso:  node tests/admin-sin-clave-no-entra.js index.html
-   Sale 0 si no hay clave por defecto; 1 si un administrador sin hash puede entrar o se escribe algo. */
+   Sale 0 si no hay clave por defecto ni secretos; 1 si los hay. */
 
 const fs = require('fs');
-const crypto = require('crypto');
+const path = require('path');
+const { execFileSync } = require('child_process');
 const src = fs.readFileSync(process.argv[2] || 'index.html', 'utf8');
 
 const fallos = [];
 function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); return !!ok; }
-const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 
-// Extrae una funcion COMPLETA de index.html contando llaves (saltando strings y comentarios). No se
-// reimplementa nada: si la funcion cambia, este test corre el codigo nuevo.
 function extraerFuncion(nombre) {
   const m = src.match(new RegExp('(async\\s+)?function\\s+' + nombre + '\\s*\\('));
   if (!m) { chequear(false, 'no se encontro ' + nombre + ' (¿se renombro?)'); return null; }
-  const ini = m.index;
-  let i = src.indexOf('{', ini), prof = 0;
+  let i = src.indexOf('{', m.index), prof = 0;
   for (; i < src.length; i++) {
     const c = src[i];
-    if (c === '"' || c === "'" || c === '`') {
-      for (i++; i < src.length && src[i] !== c; i++) if (src[i] === '\\') i++;
-    } else if (c === '/' && src[i + 1] === '/') { i = src.indexOf('\n', i); }
+    if (c === '"' || c === "'" || c === '`') { for (i++; i < src.length && src[i] !== c; i++) if (src[i] === '\\') i++; }
+    else if (c === '/' && src[i + 1] === '/') { i = src.indexOf('\n', i); }
     else if (c === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i) + 1; }
     else if (c === '{') prof++;
-    else if (c === '}' && --prof === 0) return src.slice(ini, i + 1);
+    else if (c === '}' && --prof === 0) return src.slice(m.index, i + 1);
   }
-  chequear(false, 'no se encontro el final de ' + nombre);
   return null;
 }
-function el() {
-  return { style: {}, value: '', textContent: '', innerHTML: '', hijos: [],
-    appendChild(h) { this.hijos.push(h); }, focus() {} };
-}
-function docFalso() {
-  const mapa = {};
-  return { mapa, getElementById(id) { return mapa[id] || (mapa[id] = el()); }, createElement: el };
-}
 
-const mAviso = src.match(/const ADMIN_SIN_ACCESO = (['"])(.*?)\1;/);
-const AVISO = mAviso ? mAviso[2] : null;
-const PEDRO = 'Pedro Arce', NUEVO = 'Admin Nuevo';
-const CLAVE_PEDRO = 'clave-solo-de-prueba';
+// La clave quemada, del historial (commit anterior al PR #63). Solo en memoria; nunca se imprime.
+function claveQuemada() {
+  try {
+    const viejo = execFileSync('git', ['show', 'bdeea89:index.html'], { cwd: path.resolve(__dirname, '..'),
+      maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8');
+    const lits = Array.from(new Set((viejo.match(/sha256\('([^']+)'\)/g) || []).map(m => m.slice(8, -2))));
+    return lits.length === 1 ? lits[0] : null;
+  } catch (e) { return null; }
+}
 
 (async () => {
-  console.log('Administrador sin passwordHash: sin clave por defecto\n');
-  chequear(!!AVISO && /CorexOn/.test(AVISO), 'no hay aviso ADMIN_SIN_ACCESO que le diga al administrador a quien pedir el acceso');
+  console.log('Sin clave por defecto y sin secretos en el telefono\n');
 
-  // Lo que el codigo pasa a sha256 se guarda SOLO en memoria: si el render viejo hashea su clave
-  // temporal, aca queda capturada para probarla en el paso 3. Jamas se imprime.
-  const fSha = extraerFuncion('sha256');
-  const shaReal = fSha ? new Function(fSha + '; return sha256;')() : (async t => sha(t));
-  const entradas = [];
-  const sha256 = async t => { entradas.push(t); return shaReal(t); };
-
-  // ── 1. Cargar la lista: no inventa hashes ni escribe ─────────────────────────────────────────
-  const ADMIN_HASHES = {}, PINS = {};
-  const escrituras = [];
-  const window = { firebase: { firestore() { return { collection(c) { return { doc(id) { return {
-    update(d) { escrituras.push(c + '/' + id + ' ' + Object.keys(d).join(',')); return Promise.resolve(); },
-    set(d) { escrituras.push(c + '/' + id + ' set ' + Object.keys(d).join(',')); return Promise.resolve(); }
-  }; } }; } }; } } };
-  const fRender = extraerFuncion('_renderListaUsuarios');
-  if (fRender) {
-    const render = new Function('document', 'window', 'ADMIN_HASHES', 'PINS', 'sha256', '_ocultoTecnico',
-      '_colorPorNombre', '_crearUsuarioItem', fRender + '; return _renderListaUsuarios;')(
-      docFalso(), window, ADMIN_HASHES, PINS, sha256, () => false, () => '#000', () => el());
-    render([
-      { _id: 'u_nuevo', nombre: NUEVO, cargo: 'Administrador', letra: 'A' },
-      { _id: 'u_pedro', nombre: PEDRO, cargo: 'Administrador', letra: 'P', passwordHash: sha(CLAVE_PEDRO) },
-      { _id: 'u_lucas', nombre: 'Lucas', cargo: 'Tecnico en terreno', letra: 'L', pin: '2222' }
-    ]);
-    await new Promise(r => setTimeout(r, 50));   // la migracion vieja era asincrona
-    const sinHash = ADMIN_HASHES[NUEVO] === undefined;
-    console.log('1) Lista       → admin sin hash: ' + (sinHash ? 'sin clave ✓' : 'LE INVENTO UNA ✗') +
-      ', escrituras a Firestore: ' + escrituras.length + (escrituras.length ? ' ✗' : ' ✓') +
-      ', Pedro: ' + (ADMIN_HASHES[PEDRO] === sha(CLAVE_PEDRO) ? 'su hash ✓' : 'SIN SU HASH ✗'));
-    chequear(sinHash, 'al cargar la lista, el administrador sin passwordHash quedo con un hash que nadie le asigno');
-    chequear(escrituras.length === 0, 'cargar la lista escribio en Firestore: ' + escrituras.join(' | '));
-    chequear(ADMIN_HASHES[PEDRO] === sha(CLAVE_PEDRO), 'el administrador CON passwordHash no quedo con el suyo');
-  }
-
-  // ── 2. Ninguna clave fija en el codigo ───────────────────────────────────────────────────────
+  // ── 1. Ninguna clave fija ────────────────────────────────────────────────────────────────────
   const fijas = (src.match(/sha256\(\s*(['"`])[^'"`]+\1\s*\)/g) || []).length;
-  console.log('2) Codigo      → sha256 con texto fijo: ' + fijas + (fijas ? ' ✗' : ' ✓'));
+  console.log('1) Codigo      → sha256 con texto fijo: ' + fijas + (fijas ? ' ✗' : ' ✓'));
   chequear(fijas === 0, 'index.html calcula sha256 de un texto fijo: es una clave publicada en un repo publico');
 
-  // ── 3. validarPassword ───────────────────────────────────────────────────────────────────────
+  // ── 2. La entrada no usa pin ni passwordHash ─────────────────────────────────────────────────
+  const fRender = extraerFuncion('_renderListaUsuarios') || '';
+  const fCargar = extraerFuncion('cargarUsuariosApp') || '';
+  const usaSecretos = /\.pin\b|passwordHash/.test(fRender) || /\.pin\b|passwordHash/.test(fCargar);
+  const leeTecnicos = /collection\('tecnicos'\)/.test(fCargar);
+  const leeDirectorio = /collection\('directorio'\)/.test(fCargar);
+  console.log('2) Lista       → ' + (leeDirectorio && !leeTecnicos ? 'sale de directorio ✓' : 'NO sale de directorio ✗') + ', usa PIN o hash: ' + (usaSecretos ? 'SI ✗' : 'no ✓'));
+  chequear(leeDirectorio && !leeTecnicos, 'la pantalla de entrada sigue leyendo `tecnicos` (PIN y hash) en vez de `directorio`');
+  chequear(!usaSecretos, 'la lista de entrada usa `pin` o `passwordHash`: el secreto se volveria a verificar en el navegador');
+
+  // ── 3 y 4. Un Administrador sin cuenta no entra con nada; vacio ni se pregunta ──────────────
+  const i0 = src.indexOf('const AUTH_ETAPA = 1;'), i1 = src.indexOf('// =========== NAVEGACION', i0);
+  const mTimeout = src.match(/function _conTimeout\(promise, ms, etiqueta\) \{[\s\S]*?\n\}/);
   const fVal = extraerFuncion('validarPassword');
-  if (fVal) {
-    const intentar = async (usuario, clave) => {
-      const doc = docFalso();
-      doc.getElementById('admin-pass-input').value = clave;
-      let entro = false;
-      const validar = new Function('document', 'estado', 'ADMIN_HASHES', 'sha256', 'loginExitoso', 'ADMIN_SIN_ACCESO',
-        fVal + '; return validarPassword;')(doc, { usuario }, ADMIN_HASHES, shaReal, () => { entro = true; }, AVISO);
-      await validar();
-      return { entro, msg: doc.getElementById('admin-pass-error').textContent };
-    };
-    // Lo que el render paso a sha256 (en el codigo viejo, su clave temporal) + claves cualquiera.
-    const candidatas = ['', 'cualquier-cosa', '1234', CLAVE_PEDRO].concat(entradas);
-    let entroSin = 0, avisos = 0;
-    for (const c of candidatas) {
-      const r = await intentar(NUEVO, c);
-      if (r.entro) entroSin++;
-      if (AVISO && r.msg === AVISO) avisos++;
-    }
-    const ok = await intentar(PEDRO, CLAVE_PEDRO);
-    const mal = await intentar(PEDRO, 'otra-clave');
-    console.log('3) Login       → sin hash entro ' + entroSin + ' de ' + candidatas.length + ' intentos' +
-      (entroSin ? ' ✗' : ' ✓') + ' (aviso en ' + avisos + '); Pedro con su clave ' + (ok.entro ? 'entra ✓' : 'NO ENTRA ✗') +
-      ', con otra ' + (mal.entro ? 'ENTRA ✗' : 'no ✓'));
-    chequear(entroSin === 0, 'un administrador sin passwordHash entro con una clave que nadie le asigno (' + entroSin + ' de ' + candidatas.length + ')');
-    chequear(avisos === candidatas.length, 'sin passwordHash no siempre se dice por que (aviso en ' + avisos + ' de ' + candidatas.length + ' intentos)');
-    chequear(ok.entro, 'Pedro, con passwordHash, no entra con su clave');
-    chequear(!mal.entro, 'Pedro entra con una clave que no es la suya');
+  chequear(i0 >= 0 && i1 > i0 && !!mTimeout && !!fVal, 'no se encontro el bloque de Firebase Auth o validarPassword');
+  if (i0 >= 0 && i1 > i0 && mTimeout && fVal) {
+    const intentos = [], escrituras = [];
+    const auth = { currentUser: null, onAuthStateChanged() {},
+      signInWithEmailAndPassword(c) { intentos.push(c); return Promise.reject(Object.assign(new Error('x'), { code: 'auth/invalid-credential' })); } };
+    const firestore = () => ({ collection: () => ({ doc: () => ({
+      set() { escrituras.push('set'); return Promise.resolve(); }, update() { escrituras.push('update'); return Promise.resolve(); } }),
+      add() { escrituras.push('add'); return Promise.resolve({}); } }) });
+    const mem = {};
+    const doc = { mapa: {}, getElementById(id) { return this.mapa[id] || (this.mapa[id] = { value: '', textContent: '', style: {}, focus() {} }); } };
+    let entro = 0;
+    const api = new Function('window', 'localStorage', 'toast', '_pedirTexto', 'estado', 'document', 'loginExitoso',
+      mTimeout[0] + '\n' + src.slice(i0, i1) + '\nlet _entrando = false;\n' + fVal +
+      '\nreturn { validarPassword, FICHAS: _FICHAS, correo: _correoDeCuenta };')(
+      { firebase: { auth: () => auth, firestore } },
+      { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } },
+      () => {}, async () => null, { usuario: 'Admin Nuevo' }, doc, () => { entro++; });
+    api.FICHAS['Admin Nuevo'] = { uid: 'u_nuevo', correo: api.correo('u_nuevo'), cargo: 'Administrador' };
+    const quemada = claveQuemada();
+    const candidatas = ['cualquier-cosa', '1234', 'admin123'].concat(quemada ? [quemada] : []);
+    for (const c of candidatas) { doc.getElementById('admin-pass-input').value = c; await api.validarPassword(); }
+    const preguntadas = intentos.length;
+    doc.getElementById('admin-pass-input').value = '';
+    await api.validarPassword();
+    const vacioPregunto = intentos.length > preguntadas;
+    const secretoGuardado = Object.values(mem).join('|');
+    console.log('3) Sin cuenta  → entro ' + entro + ' de ' + candidatas.length + ' intentos' + (entro ? ' ✗' : ' ✓') +
+      (quemada ? ' (incluida la clave quemada, sin imprimirla)' : ' (sin git: la clave quemada no se probo)') +
+      ', escrituras a Firestore: ' + escrituras.length + (escrituras.length ? ' ✗' : ' ✓'));
+    console.log('4) Clave vacia → ' + (vacioPregunto ? 'SE LE PREGUNTO A FIREBASE ✗' : 'ni se pregunta ✓'));
+    chequear(entro === 0, 'un Administrador sin cuenta en Firebase entro con una clave (' + entro + ' de ' + candidatas.length + ')');
+    chequear(escrituras.length === 0, 'intentar entrar escribio en Firestore');
+    chequear(!vacioPregunto, 'la clave vacia se le pregunta a Firebase');
+    chequear(!candidatas.some(c => secretoGuardado.includes(c)), 'un intento fallido dejo la clave guardada en el telefono');
   }
 
-  // ── 4. verificarPasswordAdmin (confirmar acciones de administrador) ───────────────────────────
-  const fVer = extraerFuncion('verificarPasswordAdmin');
-  if (fVer) {
-    const confirmar = async (usuario, clave) => {
-      const toasts = []; let pidio = 0;
-      const ver = new Function('estado', 'ADMIN_HASHES', 'sha256', '_pedirTexto', 'toast', 'ADMIN_SIN_ACCESO',
-        fVer + '; return verificarPasswordAdmin;')(
-        { usuario }, ADMIN_HASHES, shaReal, async () => { pidio++; return clave; }, m => toasts.push(m), AVISO);
-      return { ok: await ver(), toasts, pidio };
-    };
-    const sin = await confirmar(NUEVO, entradas[0] || 'cualquier-cosa');
-    const con = await confirmar(PEDRO, CLAVE_PEDRO);
-    console.log('4) Confirmar   → sin hash ' + (sin.ok ? 'CONFIRMA ✗' : 'no ✓') + (sin.pidio ? ', pidio clave' : ', no pide clave') +
-      '; Pedro ' + (con.ok ? 'confirma ✓' : 'NO CONFIRMA ✗'));
-    chequear(!sin.ok, 'verificarPasswordAdmin acepta a un administrador sin passwordHash');
-    chequear(sin.pidio === 0 && !!AVISO && sin.toasts.includes(AVISO), 'sin passwordHash se le pide clave en vez de decirle por que no puede');
-    chequear(con.ok, 'Pedro no puede confirmar acciones con su clave');
+  // ── 5. El cache de la lista no guarda secretos ───────────────────────────────────────────────
+  const mCache = src.match(/var _CAMPOS_FICHA = [^\n]*\n[\s\S]*?function _cacheUsuarios\(docs\) \{[\s\S]*?\n\}/);
+  chequear(!!mCache, 'no se encontro _cacheUsuarios con su lista de campos');
+  if (mCache) {
+    const mem = {};
+    new Function('localStorage', mCache[0] + '\n_cacheUsuarios([{ _id: "u1", nombre: "Ana", cargo: "Tecnico en terreno", letra: "A", pin: "4821", passwordHash: "abc123" }]);')(
+      { setItem: (k, v) => { mem[k] = v; } });
+    const guardado = Object.values(mem).join('|');
+    const limpio = guardado.includes('Ana') && !guardado.includes('4821') && !guardado.includes('abc123') && !/pin|passwordHash/.test(guardado);
+    const borraViejo = /localStorage\.removeItem\('emval_users_cache'\)/.test(src);
+    const escribeViejo = /localStorage\.setItem\('emval_users_cache'/.test(src);
+    console.log('5) Cache       → ' + (limpio ? 'solo nombre, cargo, letra y correo ✓' : 'GUARDA SECRETOS ✗') + ', cache viejo con PIN: ' + (borraViejo && !escribeViejo ? 'se borra ✓' : 'SIGUE ✗'));
+    chequear(limpio, 'el cache de la pantalla de entrada guarda PIN o hash');
+    chequear(borraViejo && !escribeViejo, 'el cache viejo `emval_users_cache` (PIN y hash) no se borra o se sigue escribiendo');
   }
 
-  // ── 5. seleccionarUsuario avisa al entrar ────────────────────────────────────────────────────
-  const fSel = extraerFuncion('seleccionarUsuario');
-  if (fSel) {
-    const pantalla = (nombre) => {
-      const doc = docFalso();
-      new Function('document', 'estado', 'ADMIN_HASHES', 'localStorage', '_colorPorNombre', 'actualizarDots', 'go',
-        'setTimeout', 'ADMIN_SIN_ACCESO', 'var pinActual = "", _pinTimer = null;\n' + fSel + '; return seleccionarUsuario;')(
-        doc, {}, ADMIN_HASHES, { setItem() {} }, () => '#000', () => {}, () => {}, () => {}, AVISO)(nombre, 'Administrador', 'A');
-      const e = doc.getElementById('admin-pass-error');
-      return { visible: e.style.display === 'block', texto: e.textContent };
-    };
-    const sin = pantalla(NUEVO), con = pantalla(PEDRO);
-    const avisa = sin.visible && !!AVISO && sin.texto === AVISO;
-    console.log('5) Pantalla    → sin hash ' + (avisa ? 'avisa al entrar ✓' : 'NO AVISA ✗') + '; Pedro ' + (con.visible ? 'VE UN ERROR ✗' : 'sin aviso ✓'));
-    chequear(avisa, 'la pantalla de contrasena no le avisa al administrador sin acceso antes de que escriba');
-    chequear(!con.visible, 'a Pedro, que tiene su clave, le aparece un error al entrar');
-  }
-
-  // ── 6. La carrera de los 200 ms (Codex, 23-10-2026) ──────────────────────────────────────────
-  // pinInput validaba 200 ms despues del cuarto digito, con el usuario de ESE momento: eligiendo a
-  // un Administrador en ese intervalo se entraba como el con un PIN, sin su contraseña. Se corre el
-  // flujo real (lista → elegir → teclear → cambiar de persona → vencer el temporizador).
-  const fPin = extraerFuncion('pinInput'), fValPin = extraerFuncion('validarPin'), fDots = extraerFuncion('actualizarDots');
-  if (fRender && fSel && fPin && fValPin && fDots) {
-    const PIN_ANA = '4821', PIN_PEDRO = '5555';   // valores SOLO de prueba
-    const correr = (pasos) => {
-      const doc = docFalso();
+  // ── 6. La carrera de los 200 ms ──────────────────────────────────────────────────────────────
+  const fSel = extraerFuncion('seleccionarUsuario'), fPin = extraerFuncion('pinInput');
+  const fValPin = extraerFuncion('validarPin'), fDots = extraerFuncion('actualizarDots');
+  if (i0 >= 0 && i1 > i0 && mTimeout && fRender && fSel && fPin && fValPin && fDots) {
+    const PIN_ANA = '4821', CLAVE_PEDRO = 'clave-solo-de-prueba-admin';   // valores SOLO de prueba
+    const correr = async (pasos) => {
       const clases = {};
-      const conClases = id => { const e = doc.getElementById(id); e.classList = e.classList || {
-        add: c => { (clases[id] = clases[id] || {})[c] = true; }, remove: c => { if (clases[id]) delete clases[id][c]; },
-        contains: c => !!(clases[id] && clases[id][c]), toggle: () => {} }; return e; };
-      ['s-pin', 's-usuarios', 'dot0', 'dot1', 'dot2', 'dot3'].forEach(conClases);
-      const go = id => { ['s-pin', 's-usuarios'].forEach(s => conClases(s).classList.remove('active')); conClases(id).classList.add('active'); };
+      const el = id => ({ id, value: '', textContent: '', style: {}, innerHTML: '', focus() {}, appendChild() {},
+        classList: { add: c => { (clases[id] = clases[id] || {})[c] = true; }, remove: c => { if (clases[id]) delete clases[id][c]; },
+          contains: c => !!(clases[id] && clases[id][c]), toggle() {} } });
+      const els = {};
+      const document = { getElementById: id => els[id] || (els[id] = el(id)), createElement: () => el('x') };
+      const go = id => { ['s-pin', 's-usuarios'].forEach(s => document.getElementById(s).classList.remove('active')); document.getElementById(id).classList.add('active'); };
       const cola = [];
-      const setT = (fn, ms) => { cola.push(fn); return cola.length; };
-      const entradas = [];
+      const intentos = [], entradas = [];
       const estado = { usuario: null, cargo: null };
-      const api = new Function('document', 'window', 'estado', 'ADMIN_HASHES', 'PINS', 'sha256', '_ocultoTecnico', '_colorPorNombre',
-        '_crearUsuarioItem', 'localStorage', 'go', 'setTimeout', 'clearTimeout', 'toast', 'loginExitoso', 'ADMIN_SIN_ACCESO',
-        'var pinActual = "", _pinTimer = null;\n' + fRender + '\n' + fSel + '\n' + fPin + '\n' + fValPin + '\n' + fDots +
-        '\nreturn { render: _renderListaUsuarios, elegir: seleccionarUsuario, tecla: pinInput };')(
-        doc, { firebase: { firestore() { return { collection() { return { doc() { return { update() { return Promise.resolve(); } }; } }; } }; } } },
-        estado, {}, {}, async t => sha(t), () => false, () => '#000', () => el(), { setItem() {} }, go, setT,
-        id => { if (id) cola[id - 1] = null; }, () => {}, () => entradas.push(estado.usuario + '|' + estado.cargo), AVISO);
+      let api;
+      const auth = { currentUser: null, onAuthStateChanged() {},
+        signInWithEmailAndPassword(correo, clave) {
+          intentos.push(correo);
+          const ok = (correo === api.correo('u_ana') && clave === api.clavePin(PIN_ANA)) || (correo === api.correo('u_pedro') && clave === CLAVE_PEDRO);
+          // El UID de la cuenta es el de la ficha (la app lo comprueba: Codex P1-2).
+          return ok ? Promise.resolve({ user: { uid: correo.split('@')[0] } }) : Promise.reject(Object.assign(new Error('x'), { code: 'auth/invalid-credential' }));
+        } };
+      const mem = {};
+      api = new Function('window', 'localStorage', 'toast', '_pedirTexto', 'estado', 'document', 'loginExitoso', 'go', 'setTimeout',
+        'clearTimeout', '_ocultoTecnico', '_colorPorNombre', '_crearUsuarioItem',
+        mTimeout[0].replace(/setTimeout/g, '__realSetTimeout').replace(/clearTimeout/g, '__realClearTimeout') + '\n' +
+        'var __realSetTimeout = globalThis.setTimeout, __realClearTimeout = globalThis.clearTimeout;\n' +
+        src.slice(i0, i1) + '\nlet _entrando = false;\n' + fRender + '\n' + fSel + '\n' + fPin + '\n' + fValPin + '\n' + fDots +
+        '\nreturn { render: _renderListaUsuarios, elegir: seleccionarUsuario, tecla: pinInput, correo: _correoDeCuenta, clavePin: _claveFirebaseDePin };')(
+        { firebase: { auth: () => auth } },
+        { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } },
+        () => {}, async () => null, estado, document, () => entradas.push(estado.usuario + '|' + estado.cargo), go,
+        (fn) => { cola.push(fn); return cola.length; }, id => { if (id) cola[id - 1] = null; }, () => false, () => '#000', () => el('item'));
       api.render([
-        { _id: 'u_ana', nombre: 'Ana Prueba', cargo: 'Tecnico en terreno', letra: 'A', pin: PIN_ANA },
-        { _id: 'u_pedro', nombre: PEDRO, cargo: 'Administrador', letra: 'P', pin: PIN_PEDRO, passwordHash: sha(CLAVE_PEDRO) }
+        { _id: 'u_ana', nombre: 'Ana Prueba', cargo: 'Tecnico en terreno', letra: 'A' },
+        { _id: 'u_pedro', nombre: 'Pedro Prueba', cargo: 'Administrador', letra: 'P' }
       ]);
       go('s-usuarios');
-      pasos(api, go);
-      cola.splice(0).forEach(f => { if (f) f(); });   // vence todo lo agendado
-      return entradas;
+      pasos(api);
+      cola.splice(0).forEach(f => { if (f) f(); });          // vence todo lo agendado
+      for (let t = 0; t < 60 && !entradas.length; t++) await new Promise(r => setTimeout(r, 50));   // PBKDF2 tarda
+      return { entradas, aPedro: intentos.filter(c => c === api.correo('u_pedro')).length };
     };
-    // El ataque: se elige a Ana, se teclea el PIN de Pedro y, antes de los 200 ms, se elige a Pedro.
-    const ataque = correr((api) => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_PEDRO.split('').forEach(api.tecla); api.elegir(PEDRO, 'Administrador', 'P'); });
-    // Igual, con el PIN de la propia Ana (no puede entrar como Pedro ni quedar adentro como Ana).
-    const ataque2 = correr((api) => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_ANA.split('').forEach(api.tecla); api.elegir(PEDRO, 'Administrador', 'P'); });
-    // El PIN de Pedro tecleado con Pedro elegido (el teclado esta oculto, pero la funcion existe).
-    const porPin = correr((api) => { api.elegir(PEDRO, 'Administrador', 'P'); PIN_PEDRO.split('').forEach(api.tecla); });
-    // Linea de control: Ana con su PIN entra (si esto falla, la prueba no mide nada).
-    const control = correr((api) => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_ANA.split('').forEach(api.tecla); });
-    const comoAdmin = l => l.some(x => /\|Administrador$/.test(x));
-    console.log('6) Carrera     → cambiar a Pedro en los 200 ms: ' + (comoAdmin(ataque) || comoAdmin(ataque2) || ataque2.length ? 'ENTRA ✗' : 'no entra ✓') +
-      '; Pedro por PIN: ' + (comoAdmin(porPin) ? 'ENTRA ✗' : 'no ✓') + '; control (Ana con su PIN): ' + (control.join() === 'Ana Prueba|Tecnico en terreno' ? 'entra ✓' : 'NO ENTRA ✗'));
-    chequear(!comoAdmin(ataque), 'eligiendo a un Administrador en los 200 ms se entra como el con un PIN, sin su contraseña');
-    chequear(!comoAdmin(ataque2) && ataque2.length === 0, 'al cambiar de persona en los 200 ms se entra igual (como uno u otro)');
-    chequear(!comoAdmin(porPin), 'un Administrador entra con un PIN en vez de su contraseña');
-    chequear(control.join() === 'Ana Prueba|Tecnico en terreno', 'LINEA DE CONTROL: un tecnico con su PIN no entra: la prueba no mide nada');
+    const ataque = await correr(api => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); '5555'.split('').forEach(api.tecla); api.elegir('Pedro Prueba', 'Administrador', 'P'); });
+    const porPin = await correr(api => { api.elegir('Pedro Prueba', 'Administrador', 'P'); '5555'.split('').forEach(api.tecla); });
+    const control = await correr(api => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_ANA.split('').forEach(api.tecla); });
+    const comoAdmin = r => r.entradas.some(x => /\|Administrador$/.test(x));
+    console.log('6) Carrera     → cambiar a Pedro en los 200 ms: ' + (comoAdmin(ataque) || ataque.entradas.length ? 'ENTRA ✗' : 'no entra ✓') +
+      (ataque.aPedro ? ' (pero le pregunto a Firebase por Pedro con un PIN ✗)' : ' (ni le pregunta a Firebase ✓)') +
+      '; Pedro por PIN: ' + (comoAdmin(porPin) || porPin.aPedro ? 'LO INTENTA ✗' : 'no ✓') +
+      '; control (Ana con su PIN): ' + (control.entradas.join() === 'Ana Prueba|Tecnico en terreno' ? 'entra ✓' : 'NO ENTRA ✗'));
+    chequear(!comoAdmin(ataque) && ataque.entradas.length === 0, 'eligiendo a un Administrador en los 200 ms se entra (como el o como el anterior)');
+    chequear(ataque.aPedro === 0, 'la validacion pendiente le pregunto a Firebase por el Administrador con un PIN: la guardia no corto');
+    chequear(!comoAdmin(porPin) && porPin.aPedro === 0, 'un Administrador intenta entrar con un PIN en vez de su contraseña');
+    chequear(control.entradas.join() === 'Ana Prueba|Tecnico en terreno', 'LINEA DE CONTROL: un tecnico con su PIN no entra: la prueba no mide nada');
+  } else {
+    chequear(false, 'no se encontraron las funciones del login para probar la carrera de los 200 ms');
   }
 
   console.log('');
-  if (fallos.length) {
-    console.log('FALLA (' + fallos.length + '):');
-    fallos.forEach(f => console.log(f));
-    process.exit(1);
-  }
-  console.log('OK — sin passwordHash no se entra con ninguna clave, y Pedro entra con la suya.');
+  if (fallos.length) { console.log('FALLA (' + fallos.length + '):'); fallos.forEach(f => console.log(f)); process.exit(1); }
+  console.log('OK — sin clave por defecto: el secreto lo verifica Firebase y el telefono no lo guarda.');
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });
