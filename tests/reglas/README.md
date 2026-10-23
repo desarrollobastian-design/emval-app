@@ -2,7 +2,7 @@
 
 Aquí vive lo que necesita el emulador de Firebase:
 - las reglas de Firestore de la **etapa 2** (`firestore.rules`);
-- la **transición** que habilita la etapa 1 (`transicion-etapa1*.rules`);
+- la **transición** que habilita la etapa 1 (`transicion-etapa1.rules`, el paso 1b de Bastián);
 - las pruebas de las dos herramientas de `tools/`: `cuentas-auth.js` y `estado-telefonos.js`.
 
 Nada de esto toca producción. El proyecto `demo-emval` solo existe en el emulador, y las herramientas
@@ -14,12 +14,16 @@ se niegan a correr con un modo emulador a medias. Pages no publica `tests/`.
 > en un teléfono viejo no puede subir. Lo publica Bastián: consola de Firebase → Firestore Database →
 > Reglas → pegar el archivo → Publicar.
 >
-> 🔑 **Antes de fusionar el PR de la etapa 1, Bastián agrega a las reglas de HOY el bloque (1) de
-> `transicion-etapa1.rules`:** `directorio` se lee sin sesión y no lo escribe nadie. Sin eso, un teléfono
-> sin caché no tiene lista de entrada.
-> - Es agregar un bloque, no reemplazar las reglas.
-> - El cambio (2) de `transicion-etapa1-recomendada.rules`, que cierra la escritura de `tecnicos`, es
->   opcional y lo decide él. El archivo explica el costo.
+> 🔑 **Antes de fusionar el PR de la etapa 1, Bastián hace el paso 1b: los dos cambios de
+> `transicion-etapa1.rules`, juntos, sobre las reglas de HOY** (decidido por él el 23-10-2026):
+> 1. **Agregar** el bloque `directorio`: se lee sin sesión y no lo escribe nadie. Sin eso, un teléfono sin
+>    caché no tiene lista de entrada.
+> 2. **Cambiar** la regla general: sacar `tecnicos` de las listas de crear, modificar y borrar. La
+>    lectura sigue abierta.
+> - **Costo aceptado:** en un teléfono con la versión vieja (v72 o menos), Pedro ya no puede agregar,
+>   editar ni eliminar técnicos, ni cambiar su clave desde el panel. La versión nueva ya no los escribe.
+> - El archivo es una reconstrucción para probar: los cambios se hacen sobre las reglas reales. La guía
+>   clic a clic está en el diseño (`progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md`).
 
 ## Requisitos (una vez)
 - **Java 21** en el `PATH`. En este equipo está en `C:\Users\corex\Herramientas\jdk-21` (Temurin JRE,
@@ -45,7 +49,7 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
 |---|---|---|
 | Reglas de la etapa 2 (63 casos, con los ataques de la revisión de Codex) | `npm run reglas` | `OK`, exit 0 |
 | **Contraprueba**: las mismas pruebas con las reglas de hoy (`capa1-referencia.rules`, reconstrucción) | `npm run reglas-capa1` | `FALLA`, exit 1 |
-| Transición de la etapa 1 (con su contraprueba adentro) | `npm run transicion` | `OK`, exit 0 |
+| Transición de la etapa 1, paso 1b (10 casos, con su contraprueba adentro) | `npm run transicion` | `OK`, exit 0 |
 | Herramienta de cuentas (8 tramos y el 4b) | `npm run cuentas` | `OK`, exit 0 |
 | Estado de los teléfonos (6 tramos) | `npm run estado` | `OK`, exit 0 |
 
@@ -57,11 +61,12 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
     solo el enlace de su PDF y la fecha de subida, que es lo que reescribe la cola.
   - Un técnico solo marca una cotización «Realizada», con los campos que manda la app.
   - `directorio` y `tecnicos` no los escribe nadie desde la app: solo el Admin SDK.
-- **`transicion.test.js`**:
-  - Con la transición, el directorio se lee sin sesión y nadie lo escribe.
-  - La versión vieja de la app sigue funcionando.
-  - La recomendada además niega crear o cambiar `tecnicos` sin sesión.
-  - Contraprueba: con las reglas de hoy, el directorio no se lee.
+- **`transicion.test.js`** (paso 1b, 10 casos):
+  - El directorio se lee sin sesión y nadie lo escribe.
+  - La versión vieja de la app sigue funcionando: lee y crea órdenes, y lee `tecnicos` para entrar.
+  - `tecnicos` no se crea, no se cambia ni se borra desde afuera, ni sin sesión ni con una cuenta.
+  - Contraprueba: con las reglas de hoy, el directorio no se lee y `tecnicos` sí se escribe sin sesión.
+    Con la transición anterior, que solo traía el bloque del directorio, fallan los 4 casos de `tecnicos`.
 - **`cuentas-auth.test.js`**:
   - Simular no escribe.
   - El técnico nuevo entra con **su PIN de siempre**.
