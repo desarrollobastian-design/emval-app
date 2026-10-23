@@ -11,6 +11,9 @@
    4. Con --autorizar: el Administrador conserva SU clave (en el emulador la autoprueba de la
       importacion falla siempre —no verifica hashes SHA-256—, asi que se prueba --clave-admin) y el
       Supervisor entra con su PIN; el de la clave quemada no recibe cuenta ni autorizado.
+   4b. El camino de la IMPORTACION del hash, forzado con EMVAL_PRUEBA_IMPORTACION (solo vale en el
+      emulador): si Firebase la rechaza, sale con 2 y esa persona queda sin cuenta ni ficha (revisor del
+      PR #64, punto 1); si la acepta, crea la cuenta; una segunda corrida NO la reimporta (punto 6).
    5. Correrla otra vez no cambia ninguna cuenta.
    6. --deshacer con el respaldo de la corrida 2 borra lo que esa corrida creo y deja el directorio
       como estaba (sin los campos de mas).
@@ -43,10 +46,10 @@ const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 
 // Valores SOLO de prueba (no son de nadie).
 const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190';
-const CLAVE_ADMIN = 'clave-solo-de-prueba-admin', CLAVE_VIEJA_B = 'clave-vieja-de-beto';
-const SECRETOS = [PIN_A, PIN_B, PIN_S, CLAVE_ADMIN, CLAVE_VIEJA_B, sha(CLAVE_ADMIN), 'nota-secreta-de-prueba'];
+const CLAVE_ADMIN = 'clave-solo-de-prueba-admin', CLAVE_VIEJA_B = 'clave-vieja-de-beto', CLAVE_RITA = 'clave-solo-de-prueba-rita';
+const SECRETOS = [PIN_A, PIN_B, PIN_S, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, sha(CLAVE_ADMIN), sha(CLAVE_RITA), 'nota-secreta-de-prueba'];
 const UID = { a: 'tecA0000000000000001', b: 'tecB0000000000000002', c: 'tecC0000000000000003',
-  p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006' };
+  p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006', r: 'admR0000000000000007' };
 const DIR_RESP = path.join(RAIZ, 'tools', 'respaldos');
 
 async function entra(uid, clave) {
@@ -68,6 +71,7 @@ function correr(extra, opciones) {
   salidas.push(salida);
   return { status: r.status, salida };
 }
+const lineaRita = s => (s.split('\n').find(l => l.includes('Rita Prueba')) || '');
 const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filter(f => f.startsWith('cuentas-auth-antes-')).sort() : [];
 
 (async () => {
@@ -85,6 +89,8 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   await db.doc('tecnicos/' + UID.p).set({ nombre: 'Pedro Prueba', cargo: 'Administrador', pin: '0000', passwordHash: sha(CLAVE_ADMIN), letra: 'P' });
   await db.doc('tecnicos/' + UID.q).set({ nombre: 'Quemado Prueba', cargo: 'Administrador', passwordHash: quemado || 'x', letra: 'Q' });
   await db.doc('tecnicos/' + UID.s).set({ nombre: 'Sara Prueba', cargo: 'Supervisor', pin: PIN_S, letra: 'S' });
+  // Otra Administradora, para recorrer el camino de la IMPORTACION del hash (revisor del PR #64).
+  await db.doc('tecnicos/' + UID.r).set({ nombre: 'Rita Prueba', cargo: 'Administrador', passwordHash: sha(CLAVE_RITA), letra: 'R' });
   // Beto ya tiene cuenta: DESHABILITADA, con un dato propio y otra clave. No se puede tocar.
   await auth.createUser({ uid: UID.b, email: _correoDeCuenta(UID.b), password: CLAVE_VIEJA_B, displayName: 'Beto (cuenta vieja)', disabled: true });
   await auth.setCustomUserClaims(UID.b, { marca: 'no-tocar' });
@@ -140,6 +146,29 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   chequear(sOk, 'la Supervisora autorizada no entra con su PIN');
   chequear(!qCuenta, 'el Administrador con la clave quemada recibio cuenta por estar autorizado');
   chequear(aut.status === 2, 'quedando gente sin cuenta, salio con ' + aut.status);
+
+  // 4b. El camino de la IMPORTACION (revisor del PR #64, puntos 1 y 6). El emulador no deja recorrerlo
+  //     (no verifica hashes SHA-256): la herramienta acepta forzarlo SOLO con el emulador.
+  const rech = correr(['--ejecutar', '--autorizar', UID.r], { env: { EMVAL_PRUEBA_IMPORTACION: 'rechazar' } });
+  // El exit 2 ya salia por Ciro y el quemado: lo que prueba el punto 1 es que el rechazo SUME uno a los
+  // «sin cuenta» del plan (Rita entra al plan como importar-hash, no como omitida).
+  const nPlan = +((rech.salida.match(/(\d+) sin cuenta\s*$/m) || [])[1]), nFinal = +((rech.salida.match(/(\d+) SIN cuenta/) || [])[1] || 0);
+  const rechazoCuenta = Number.isFinite(nPlan) && nFinal === nPlan + 1;
+  const ritaTrasRechazo = !!(await cuenta(UID.r)), fichaRitaTrasRechazo = (await db.doc('directorio/' + UID.r).get()).exists;
+  const imp = correr(['--ejecutar', '--autorizar', UID.r], { env: { EMVAL_PRUEBA_IMPORTACION: 'autoprueba-ok' } });
+  const ritaImportada = await cuenta(UID.r);
+  const ritaAntes = ritaImportada ? ritaImportada.toJSON() : null;
+  const imp2 = correr(['--ejecutar', '--autorizar', UID.r], { env: { EMVAL_PRUEBA_IMPORTACION: 'autoprueba-ok' } });
+  const ritaDespues = (await cuenta(UID.r) || { toJSON: () => null }).toJSON();
+  const ritaIgual = !!ritaAntes && !!ritaDespues && ritaAntes.passwordHash === ritaDespues.passwordHash &&
+    ritaAntes.metadata.creationTime === ritaDespues.metadata.creationTime && ritaAntes.displayName === ritaDespues.displayName;
+  console.log('4b) Importacion → rechazada: ' + (rech.status === 2 && rechazoCuenta && !ritaTrasRechazo && !fichaRitaTrasRechazo && /rechazo la importacion/.test(rech.salida) ? 'exit 2, contada entre los sin cuenta, sin cuenta ni ficha ✓' : 'exit ' + rech.status + ', sin cuenta: plan ' + nPlan + ' → final ' + nFinal + ' ✗') +
+    ' · aceptada: ' + (ritaImportada && (await db.doc('directorio/' + UID.r).get()).exists ? 'cuenta y ficha ✓' : 'NO ✗') +
+    ' · otra vez: ' + (ritaIgual && /ya existe: no se toca/.test(lineaRita(imp2.salida)) ? 'no la reimporta ✓' : 'LA TOCA ✗'));
+  chequear(rech.status === 2 && rechazoCuenta && /rechazo la importacion/.test(rech.salida), 'Firebase rechazo la importacion y la herramienta no la conto como sin cuenta o no salio con 2 (revisor del PR #64, punto 1)');
+  chequear(!ritaTrasRechazo && !fichaRitaTrasRechazo, 'tras un rechazo de la importacion quedo una cuenta o una ficha');
+  chequear(!!ritaImportada && imp.status !== 1, 'la importacion aceptada no creo la cuenta');
+  chequear(ritaIgual && /ya existe: no se toca/.test(lineaRita(imp2.salida)), 'una segunda corrida reimporto o toco la cuenta importada (revisor, punto 6)');
 
   // 5. Otra vez: nada cambia en las cuentas
   const foto = async () => JSON.stringify(await Promise.all(Object.values(UID).map(async u => { const c = await cuenta(u); return c ? [u, c.disabled, c.passwordHash, JSON.stringify(c.customClaims || {})] : [u, null]; })));

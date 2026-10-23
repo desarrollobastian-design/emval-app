@@ -27,10 +27,14 @@ se niegan a correr con un modo emulador a medias. Pages no publica `tests/`.
   («insufficient memory»). Se corre con `JAVA_TOOL_OPTIONS="-Xmx384m -Xms32m -XX:+UseSerialGC"`.
 - **Las dependencias:**
   ```
-  cd tests/reglas && npm install
+  cd tests/reglas && npm ci
   npm --prefix ../../tools install
   ```
   - `tests/reglas`: `firebase-tools@15.32.1`, `@firebase/rules-unit-testing@6.0.0` y `firebase@13.0.0`.
+    `npm ci` instala exactamente lo del lock y no lo cambia.
+  - Para regenerar el lock: `rm -rf node_modules package-lock.json && npm install && npm prune`.
+    🔬 Con npm 11.6.2, `npm install` solo deja un `google-logging-utils` marcado `extraneous`, y
+    `npm prune` lo saca (23-10-2026, observación del revisor del PR #64).
   - `tools`: `firebase-admin@14.4.0`.
 
 ## Correr (desde `tests/reglas`)
@@ -42,7 +46,7 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
 | Reglas de la etapa 2 (63 casos, con los ataques de la revisión de Codex) | `npm run reglas` | `OK`, exit 0 |
 | **Contraprueba**: las mismas pruebas con las reglas de hoy (`capa1-referencia.rules`, reconstrucción) | `npm run reglas-capa1` | `FALLA`, exit 1 |
 | Transición de la etapa 1 (con su contraprueba adentro) | `npm run transicion` | `OK`, exit 0 |
-| Herramienta de cuentas (8 tramos) | `npm run cuentas` | `OK`, exit 0 |
+| Herramienta de cuentas (8 tramos y el 4b) | `npm run cuentas` | `OK`, exit 0 |
 | Estado de los teléfonos (6 tramos) | `npm run estado` | `OK`, exit 0 |
 
 ## Qué mide cada una
@@ -70,6 +74,13 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
   - Con un modo emulador a medias, la herramienta se detiene.
   - 🔬 El emulador de Auth **no verifica hashes SHA-256 importados**. Por eso aquí se prueba
     `--clave-admin`; en producción decide la autoprueba.
+  - El camino de la **importación** se recorre forzándolo con `EMVAL_PRUEBA_IMPORTACION`
+    (`autoprueba-ok` o `rechazar`), que **solo vale con el emulador**: contra un proyecto real la
+    herramienta lo ignora. Tramo 4b:
+    - si Firebase rechaza la importación, esa persona cuenta como «sin cuenta», no le queda ni cuenta ni
+      ficha y la herramienta sale con 2;
+    - si la acepta, crea la cuenta;
+    - una segunda corrida no la reimporta.
 - **`estado-telefonos.test.js`**:
   - Asigna bien cada estado.
   - **Un reporte del teléfono de hace 10 días no se da por bueno aunque haya un reporte de correos de

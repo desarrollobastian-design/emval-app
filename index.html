@@ -2333,7 +2333,14 @@ const DOMINIO_CORREO_CUENTA = 'emval-app.firebaseapp.com';
 function _claveFirebaseDePin(pin) { return 'emval-pin-' + String(pin); }
 function _correoDeCuenta(uid) { return String(uid).toLowerCase() + '@' + DOMINIO_CORREO_CUENTA; }
 const ACCESO_DESACTIVADO = 'Tu acceso no está activado. Pídele a CorexOn que lo active.';
+// La entrada con cuenta no esta habilitada en el proyecto de Firebase (proveedor apagado, apiKey o dominio
+// no autorizados): no es la señal ni el PIN de nadie, y no se arregla reintentando (revisor del PR #64).
+const ENTRADA_NO_ACTIVADA = 'La entrada no está activada. Pídele a CorexOn que la revise.';
+const _AUTH_SIN_CONFIGURAR = ['auth/operation-not-allowed', 'auth/app-not-authorized', 'auth/invalid-api-key', 'auth/unauthorized-domain'];
 const PRIMERA_VEZ_CON_SENAL = 'Sin señal: la primera vez en este teléfono tienes que entrar con señal.';
+// Ya entro aqui, pero el verificador vencio o se borro: el mensaje dice cual de las dos (regla 11).
+const SIN_SENAL_VENCIDO = 'Sin señal: pasaron más de 14 días sin entrar con señal en este teléfono. Entra con señal.';
+const SIN_SENAL_TRAS_FALLOS = 'Sin señal: hubo 5 PIN equivocados en este teléfono. Entra con señal.';
 const SIN_SENAL_PRIVILEGIADO = 'Sin señal no se puede entrar como administrador o supervisor. Entra con señal.';
 const AUTH_MS_INICIO = 15000;
 const _FICHAS = {};          // nombre -> { uid, correo, cargo } (del directorio)
@@ -2411,17 +2418,23 @@ async function _guardarVerificador(uid, secreto) {
     _escribirVerificadores(todos);
   } catch (e) { console.warn('No se pudo guardar el verificador local:', e && e.message); }
 }
-// true / false, o null si no hay verificador vigente (nunca entro con señal aqui, vencio o se borro).
+// true / false; null si nunca entro con señal aqui; 'vencido' o 'fallos' si ya no sirve. Lo que queda
+// en su lugar es una lapida { fin, en } SIN sal ni hash: solo dice por que, para el mensaje.
 async function _verificarLocal(uid, secreto) {
   const todos = _leerVerificadores();
   const v = todos[uid];
+  if (v && (v.fin === 'vencido' || v.fin === 'fallos')) return v.fin;
   if (!v || !v.sal || !v.h) return null;
-  if (!v.en || Date.now() - v.en > VERIF_MAX_DIAS * 86400000) { _borrarVerificador(uid); return null; }
+  if (!v.en || Date.now() - v.en > VERIF_MAX_DIAS * 86400000) {
+    todos[uid] = { fin: 'vencido', en: Date.now() };
+    _escribirVerificadores(todos);
+    return 'vencido';
+  }
   let ok;
   try { ok = (await _pbkdf2(secreto, v.sal, v.it || VERIF_ITER)) === v.h; } catch (e) { return null; }
   if (!ok) {
     v.fallos = (v.fallos || 0) + 1;
-    if (v.fallos >= VERIF_MAX_FALLOS) delete todos[uid]; else todos[uid] = v;
+    todos[uid] = v.fallos >= VERIF_MAX_FALLOS ? { fin: 'fallos', en: Date.now() } : v;
     _escribirVerificadores(todos);
   }
   return ok;
@@ -2448,8 +2461,9 @@ function _limpiarFallos(uid) {
 }
 
 // Inicio de sesion en Firebase. 'ok' | 'rechazada' | 'bloqueada' | 'desactivada' | 'otra-cuenta' |
-// 'sin-red'. Un timeout es 'sin-red': no saber no es un rechazo (regla 3 de AGENTS.md).
+// 'no-activada' | 'sin-red'. Un timeout es 'sin-red': no saber no es un rechazo (regla 3 de AGENTS.md).
 // 'otra-cuenta': Firebase entro, pero con un UID que no es el de la ficha (Codex P1-2): se sale.
+// 'no-activada': el proyecto no acepta la entrada (_AUTH_SIN_CONFIGURAR); no cuenta como fallo.
 async function _iniciarSesionFirebase(correo, clave, uidEsperado) {
   let a = _authFirebase();
   if (!a && await _cargarSdkAuth()) a = _authFirebase();
@@ -2469,6 +2483,7 @@ async function _iniciarSesionFirebase(correo, clave, uidEsperado) {
         c === 'auth/user-not-found' || c === 'auth/invalid-email') return 'rechazada';
     if (c === 'auth/too-many-requests') return 'bloqueada';
     if (c === 'auth/user-disabled') return 'desactivada';
+    if (_AUTH_SIN_CONFIGURAR.indexOf(c) >= 0) return 'no-activada';
     return 'sin-red';
   }
 }
@@ -2499,6 +2514,7 @@ async function _entrarConCuenta(nombre, secreto, esClave) {
   if (r === 'bloqueada') return { ok: false, msg: 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.' };
   if (r === 'desactivada') return { ok: false, msg: ACCESO_DESACTIVADO };
   if (r === 'otra-cuenta') return { ok: false, msg: 'No se pudo comprobar tu cuenta. Avísale a CorexOn.' };
+  if (r === 'no-activada') return { ok: false, msg: ENTRADA_NO_ACTIVADA };
   // Sin señal. Administrador y Supervisor no entran sin señal: no hay verificador suyo en el telefono.
   if (privilegiado) return { ok: false, msg: SIN_SENAL_PRIVILEGIADO };
   const v = await _verificarLocal(f.uid, claveFb);
@@ -2514,6 +2530,8 @@ async function _entrarConCuenta(nombre, secreto, esClave) {
     return { ok: true, sinSenal: true };
   }
   if (v === false) { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
+  if (v === 'vencido') return { ok: false, msg: SIN_SENAL_VENCIDO };
+  if (v === 'fallos') return { ok: false, msg: SIN_SENAL_TRAS_FALLOS };
   return { ok: false, msg: PRIMERA_VEZ_CON_SENAL };
 }
 
@@ -2524,6 +2542,7 @@ async function _reintentarSesionPendiente() {
   if (!p) return;
   if (_uidSesionFirebase() === p.uid) { _credPendiente = null; return; }
   const r = await _iniciarSesionFirebase(p.correo, p.clave, p.uid);
+  // 'sin-red' y 'no-activada' la conservan: la señal vuelve, y la entrada la reactiva CorexOn.
   if (r === 'ok' || r === 'rechazada' || r === 'desactivada' || r === 'otra-cuenta') _credPendiente = null;
 }
 
@@ -2600,6 +2619,8 @@ async function verificarPasswordAdmin() {
   if (r === 'ok') { _limpiarFallos(f.uid); return true; }
   if (r === 'sin-red') { toast('Sin señal no se puede confirmar. Intenta con señal.'); return false; }
   if (r === 'bloqueada') { toast('Demasiados intentos seguidos. Espera unos minutos.'); return false; }
+  if (r === 'no-activada') { toast(ENTRADA_NO_ACTIVADA); return false; }
+  if (r === 'desactivada') { toast(ACCESO_DESACTIVADO); return false; }
   if (r === 'rechazada') _registrarFallo(f.uid);
   toast(r === 'otra-cuenta' ? 'No se pudo comprobar tu cuenta. Avísale a CorexOn.' : 'Contraseña incorrecta');
   return false;

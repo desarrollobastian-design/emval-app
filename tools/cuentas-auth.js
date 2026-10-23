@@ -210,17 +210,26 @@ async function principal() {
   if (confirmar.trim() !== 'CREAR CUENTAS') { console.log('Cancelado: no se escribio nada.'); process.exit(1); }
 
   // ── Autoprueba del formato de importacion (antes de tocar a un administrador) ──────────────
+  // SOLO CON EL EMULADOR, la prueba puede forzar el camino de la importacion, que el emulador no deja
+  // recorrer (no verifica hashes SHA-256): EMVAL_PRUEBA_IMPORTACION = 'autoprueba-ok' (la autoprueba
+  // se da por buena) o 'rechazar' (ademas Firebase rechaza la importacion de la persona). En
+  // produccion la variable se ignora (EMULADOR exige hosts locales y un proyecto demo-).
+  const PRUEBA_IMPORT = EMULADOR ? (process.env.EMVAL_PRUEBA_IMPORTACION || '') : '';
   let importOk = false;
   if (plan.some(p => p.accion === 'importar-hash')) {
-    const uidPrueba = 'autoprueba-sha256-' + crypto.randomBytes(6).toString('hex');
-    const clavePrueba = crypto.randomBytes(18).toString('base64url');
-    try {
-      const r = await auth.importUsers([{ uid: uidPrueba, email: _correoDeCuenta(uidPrueba),
-        passwordHash: Buffer.from(sha256hex(clavePrueba), 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
-      importOk = r.failureCount === 0 && await puedeEntrar(_correoDeCuenta(uidPrueba), clavePrueba);
-    } catch (e) { importOk = false; }
-    try { await auth.deleteUser(uidPrueba); } catch (e) {}
-    console.log('Autoprueba de importacion SHA-256: ' + (importOk ? 'OK, Firebase acepta el hash tal cual' : 'FALLO'));
+    if (PRUEBA_IMPORT) importOk = true;
+    else {
+      const uidPrueba = 'autoprueba-sha256-' + crypto.randomBytes(6).toString('hex');
+      const clavePrueba = crypto.randomBytes(18).toString('base64url');
+      try {
+        const r = await auth.importUsers([{ uid: uidPrueba, email: _correoDeCuenta(uidPrueba),
+          passwordHash: Buffer.from(sha256hex(clavePrueba), 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
+        importOk = r.failureCount === 0 && await puedeEntrar(_correoDeCuenta(uidPrueba), clavePrueba);
+      } catch (e) { importOk = false; }
+      try { await auth.deleteUser(uidPrueba); } catch (e) {}
+    }
+    console.log('Autoprueba de importacion SHA-256: ' + (importOk ? 'OK, Firebase acepta el hash tal cual' : 'FALLO') +
+      (PRUEBA_IMPORT ? ' (forzada por la prueba, emulador)' : ''));
   }
 
   const hechos = [];
@@ -230,9 +239,11 @@ async function principal() {
     try {
       if (p.accion === 'importar-hash') {
         if (importOk) {
-          const r = await auth.importUsers([{ uid: p.uid, email: p.correo, displayName: p.nombre,
-            passwordHash: Buffer.from(p.hash, 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
-          if (r.failureCount) { console.log('  ✗ ' + p.nombre + ': Firebase rechazo la importacion'); sinCuenta++; continue; }
+          const r = PRUEBA_IMPORT === 'rechazar' ? { failureCount: 1 }
+            : await auth.importUsers([{ uid: p.uid, email: p.correo, displayName: p.nombre,
+              passwordHash: Buffer.from(p.hash, 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
+          // Revisor del PR #64 (punto 1): un rechazo deja a esa persona SIN cuenta y se cuenta (exit 2).
+          if (r.failureCount) { console.log('  ✗ ' + p.nombre + ': Firebase rechazo la importacion. NO tiene cuenta.'); sinCuenta++; continue; }
         } else if (CLAVE_ADMIN) {
           // La escribe el propio administrador; se comprueba contra SU hash y no se guarda en ningun lado.
           // Solo contra el EMULADOR la prueba puede pasarla por variable; en produccion se teclea siempre.

@@ -13,11 +13,15 @@
       SDK y se entra (Codex P2-6).
    7. Firebase devuelve un UID que no es el de la ficha: no entra y se sale (Codex P1-2).
    8. Limite persistente: tras 5 fallos hay espera, ni el PIN correcto entra, y sobrevive a "recargar".
-   9. El verificador se borra tras 5 fallos sin señal y vence a los 14 dias sin entrar con señal.
+   9. El verificador se borra tras 5 fallos sin señal y vence a los 14 dias sin entrar con señal; lo que
+      queda no tiene sal ni hash, y el mensaje dice cual de las dos paso (no "la primera vez").
    10. Administrador: no deja verificador; sin señal no entra; confirmar acciones lo hace Firebase.
    11. Entrar sin señal cierra la sesion de Firebase de OTRA persona que hubiera en el telefono.
    12. Salir cierra la sesion de Firebase: el Administrador en el acto; el tecnico con trabajo sin
        subir, cuando su cola se vacia (Codex P1-2).
+   13. La entrada no esta habilitada en Firebase (proveedor apagado, apiKey o dominio no autorizados):
+       dice eso y que se avise a CorexOn, no "sin señal"; no entra con el verificador, no cuenta como
+       fallo y la sesion pendiente se conserva (revisor del PR #64, punto 2).
 
    Uso:  node tests/entrar-con-firebase-auth.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -83,6 +87,9 @@ function montar(op) {
     // Con el codigo anterior a la revision no existen: la prueba falla en su tramo, no se cae.
     ' _completarSalidaDiferida: typeof _completarSalidaDiferida === "function" ? _completarSalidaDiferida : async function(){},' +
     ' diferida: function(){ return typeof _salidaDiferida !== "undefined" && _salidaDiferida; },' +
+    ' SIN_SENAL_VENCIDO: typeof SIN_SENAL_VENCIDO !== "undefined" ? SIN_SENAL_VENCIDO : "(no existe)",' +
+    ' SIN_SENAL_TRAS_FALLOS: typeof SIN_SENAL_TRAS_FALLOS !== "undefined" ? SIN_SENAL_TRAS_FALLOS : "(no existe)",' +
+    ' ENTRADA_NO_ACTIVADA: typeof ENTRADA_NO_ACTIVADA !== "undefined" ? ENTRADA_NO_ACTIVADA : "(no existe)",' +
     ' SIN_SENAL_PRIVILEGIADO: typeof SIN_SENAL_PRIVILEGIADO !== "undefined" ? SIN_SENAL_PRIVILEGIADO : "(no existe)" };';
   const api = new Function('window', 'localStorage', 'toast', '_pedirTexto', 'estado', 'document', 'navigator',
     '_obtenerOTsPendientes', 'cargarOTsPausadas', '_cargarCorreosPendientes', '_leerEnlacesPDFPendientes',
@@ -188,14 +195,22 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
   await v.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);      // con señal: deja verificador
   v.modo.red = false;
   for (let k = 0; k < 5; k++) await v.api._entrarConCuenta('Ana Prueba', '000' + k, false);
-  const sinVerif = !verifDe(v, 'u_ana');
+  const sinMaterial = x => !x || (!x.sal && !x.h);
+  const sinVerif = sinMaterial(verifDe(v, 'u_ana'));
+  delete v.mem['emval_intentos'];                                    // paso la espera de los 5 fallos
+  const r15f = await v.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
   const v2 = montar({ mem: Object.assign({}, memAna) }); fichas(v2);
   const viejo = JSON.parse(v2.mem[v2.api.VERIF_KEY]); viejo['u_ana'].en = Date.now() - 15 * DIA; v2.mem[v2.api.VERIF_KEY] = JSON.stringify(viejo);
   v2.modo.red = false;
   const r15 = await v2.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
-  console.log('9) Verificador   → tras 5 fallos sin señal: ' + (sinVerif ? 'borrado ✓' : 'SIGUE ✗') + '; con 15 dias sin señal: ' + (!r15.ok && r15.msg === v2.api.PRIMERA_VEZ_CON_SENAL ? 'vencido, pide señal ✓' : 'ENTRA ✗'));
+  const r15b = await v2.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);   // y la vez siguiente
+  const vencidoSinMaterial = sinMaterial(verifDe(v2, 'u_ana'));
+  console.log('9) Verificador   → tras 5 fallos sin señal: ' + (sinVerif ? 'borrado ✓' : 'SIGUE ✗') + (r15f.msg === v.api.SIN_SENAL_TRAS_FALLOS ? ', lo dice ✓' : ', dice otra cosa ✗') +
+    '; con 15 dias sin señal: ' + (!r15.ok && vencidoSinMaterial ? 'vencido, borrado' : 'ENTRA o SIGUE ✗') + (r15.msg === v2.api.SIN_SENAL_VENCIDO && r15b.msg === v2.api.SIN_SENAL_VENCIDO ? ', lo dice (tambien despues) ✓' : ', dice otra cosa ✗'));
   chequear(sinVerif, 'el verificador sobrevive a 5 PIN equivocados sin señal (se puede seguir probando fuera de linea)');
-  chequear(!r15.ok && r15.msg === v2.api.PRIMERA_VEZ_CON_SENAL, 'un verificador de 15 dias sin entrar con señal sigue sirviendo');
+  chequear(!r15f.ok && r15f.msg === v.api.SIN_SENAL_TRAS_FALLOS, 'tras 5 PIN equivocados sin señal, el mensaje no dice por que hay que entrar con señal (dice "' + r15f.msg + '")');
+  chequear(!r15.ok && !r15b.ok && vencidoSinMaterial, 'un verificador de 15 dias sin entrar con señal sigue sirviendo, o queda guardado');
+  chequear(r15.msg === v2.api.SIN_SENAL_VENCIDO && r15b.msg === v2.api.SIN_SENAL_VENCIDO, 'con el verificador vencido, el mensaje dice "la primera vez" u otra cosa (regla 11)');
 
   // 10. Administrador
   const a = montar(); fichas(a);
@@ -236,6 +251,36 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
     (cerradaAlVaciar ? ' y la cierra al vaciarse ✓' : ' ✗'));
   chequear(adminFuera, 'al salir, la sesion de Firebase del Administrador sigue abierta en el navegador (Codex P1-2)');
   chequear(conservada && cerradaAlVaciar, 'al salir, la sesion del tecnico con trabajo sin subir se cierra antes de tiempo o no se cierra nunca');
+
+  // 13. La entrada no esta habilitada en el proyecto
+  const CODIGOS = ['auth/operation-not-allowed', 'auth/app-not-authorized', 'auth/invalid-api-key', 'auth/unauthorized-domain'];
+  const res13 = [];
+  for (const cod of CODIGOS) {
+    const n = montar({ mem: Object.assign({}, memAna) }); fichas(n);
+    n.modo.codigo = cod;
+    const msg = n.api.ENTRADA_NO_ACTIVADA;
+    const rA = await n.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);       // tiene verificador
+    const rB = await n.api._entrarConCuenta('Beto Prueba', '7305', false);       // no tiene
+    const rP = await n.api._entrarConCuenta('Pedro Prueba', CLAVE_PEDRO, true);
+    for (let k = 0; k < 5; k++) await n.api._entrarConCuenta('Beto Prueba', '7305', false);
+    n.estado.usuario = 'Pedro Prueba'; n.setPedir(CLAVE_PEDRO);
+    const conf = await n.api.verificarPasswordAdmin();
+    const toastConf = n.toasts[n.toasts.length - 1];
+    n.modo.codigo = null;
+    const rB2 = await n.api._entrarConCuenta('Beto Prueba', '7305', false);      // ya habilitada: sin espera
+    const p = montar({ mem: Object.assign({}, memAna) }); fichas(p);
+    p.modo.red = false; await p.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
+    p.modo.red = true; p.modo.codigo = cod; await p.api._reintentarSesionPendiente();
+    const ok = { avisa: [rA, rB, rP].every(r => !r.ok && r.msg === msg), conf: !conf && toastConf === msg, sinFallo: rB2.ok, pendiente: !!p.api.pendiente() };
+    res13.push(Object.assign({ cod }, ok));
+    chequear(ok.avisa, cod + ': no dice que la entrada no esta activada (o entra con el verificador, o dice "sin señal")');
+    chequear(ok.conf, cod + ': al confirmar una accion del administrador no dice que la entrada no esta activada');
+    chequear(ok.sinFallo, cod + ': cuenta como intento fallido (despues de habilitarla, el PIN correcto queda esperando)');
+    chequear(ok.pendiente, cod + ': se descarto la sesion pendiente de quien entro sin señal');
+  }
+  const todo = k => res13.every(r => r[k]) ? '✓' : '✗';
+  console.log('13) No activada  → ' + CODIGOS.length + ' codigos: lo dice (tecnico con y sin verificador, Pedro) ' + todo('avisa') + ', al confirmar ' + todo('conf') +
+    ', no cuenta como fallo ' + todo('sinFallo') + ', conserva la pendiente ' + todo('pendiente'));
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });
