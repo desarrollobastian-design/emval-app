@@ -3,16 +3,16 @@
    Las reglas nuevas (tests/reglas/firestore.rules) piden sesion de Firebase para leer y escribir. Si
    se publican mientras un telefono tiene la version vieja, o no tiene sesion, o tiene trabajo en su
    cola, ese trabajo queda trabado en el telefono (no se pierde: no sube). Por eso cada telefono, desde
-   la etapa 1, reporta en `alertas`:
-     - pausadas_<dispositivo>: `auth` { etapa, sesion, uid }, `otsPendientes` (cola de OT cerradas sin
-       subir) y sus pausadas (`items`, con `pendienteSync`);
-     - correos_<dispositivo>: `pendientes` (avisos sin salir).
-   Esta herramienta los junta y dice, telefono por telefono, si esta listo:
-     LISTO          version con Auth + sesion de Firebase + nada en cola.
-     VERSION VIEJA  el reporte no trae `auth`: ese telefono no abrio la app nueva.
+   la etapa 1, reporta en `alertas/pausadas_<dispositivo>`: `auth` { etapa, sesion, uid } y `colas`
+   { ots, pausadas, correos, enlaces, cierres, bajas } (lo que tiene sin subir, cola por cola).
+   La decision sale de ESE reporte y de SU fecha (Codex P2-7). `alertas/correos_<dispositivo>` solo
+   suma cola si es reciente; nunca hace pasar por fresco un reporte viejo.
+   Telefono por telefono:
+     LISTO          version con Auth + sesion de Firebase + todas las colas en 0.
+     VERSION VIEJA  el reporte no trae `auth` ni `colas`: ese telefono no abrio la app nueva.
      SIN SESION     version nueva, pero nadie entro con señal todavia en ese telefono.
-     CON COLA       OT, pausadas o correos sin subir.
-     SIN NOTICIAS   no reporta hace mas de --dias (3 por defecto): no se sabe; hay que pedirle a ese
+     CON COLA       algo sin subir, o una cola que el telefono no pudo contar.
+     SIN NOTICIAS   su reporte tiene mas de --dias (3 por defecto): no se sabe; hay que pedirle a ese
                     tecnico que abra la app con señal.
    Un telefono que no reporta hace mas de --olvidar (30) dias se lista aparte: decide Bastian.
 
@@ -42,7 +42,13 @@ function ms(v) {
 }
 function fecha(t) { return t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') : '—'; }
 
-// Junta los dos reportes de cada telefono y decide. Exportada para la prueba.
+// Decide telefono por telefono. Exportada para la prueba.
+// La decision sale de UN reporte: pausadas_<dispositivo>, que el telefono escribe con su sesion y trae
+// `auth` y TODAS sus colas (`colas`: ots, pausadas, correos, enlaces, cierres y bajas). Su fecha es la
+// que cuenta: antes se tomaba la mas reciente entre ese reporte y el de correos, y un correo de hoy
+// "refrescaba" una sesion y una cola de hace diez dias (Codex P2-7, 23-10-2026). El reporte de correos
+// solo puede AGREGAR cola (si es reciente y dice que hay pendientes); nunca da por fresco a un telefono.
+const NOMBRES_COLA = { ots: 'OT', pausadas: 'pausadas', correos: 'correos', enlaces: 'enlaces de PDF', cierres: 'cierres', bajas: 'bajas' };
 function evaluar(docs, ahora) {
   const tel = {};
   for (const d of docs) {
@@ -50,29 +56,36 @@ function evaluar(docs, ahora) {
     const m = /^(pausadas|correos)_(.+)$/.exec(d.id);
     if (!m) continue;
     const t = tel[m[2]] = tel[m[2]] || { dispositivo: m[2], usuario: '', ultimo: 0 };
-    t.ultimo = Math.max(t.ultimo, ms(x.actualizadoEn));
     if (x.usuario) t.usuario = x.usuario;
     if (m[1] === 'pausadas') {
       t.conReporte = true;
+      t.ultimo = ms(x.actualizadoEn);
       t.auth = x.auth || null;
-      t.otsPendientes = typeof x.otsPendientes === 'number' ? x.otsPendientes : null;
-      t.pausadasSinSubir = (x.items || []).filter(i => i && i.pendienteSync === true).length;
+      // `colas` desde esta version; un reporte de la primera version de la etapa 1 traia solo `otsPendientes`.
+      t.colas = x.colas && typeof x.colas === 'object' ? Object.assign({}, x.colas)
+        : (typeof x.otsPendientes === 'number' ? { ots: x.otsPendientes, pausadas: (x.items || []).filter(i => i && i.pendienteSync === true).length } : null);
     } else {
-      t.correos = typeof x.pendientes === 'number' ? x.pendientes : 0;
+      t.correosReporte = { pendientes: typeof x.pendientes === 'number' ? x.pendientes : 0, en: ms(x.actualizadoEn) };
     }
   }
   const activos = [], olvidados = [];
   for (const t of Object.values(tel)) {
     const edad = ahora - t.ultimo;
     if (t.ultimo && edad > OLVIDAR * DIA) { t.estado = 'OLVIDADO'; olvidados.push(t); continue; }
-    const cola = (t.otsPendientes || 0) + (t.pausadasSinSubir || 0) + (t.correos || 0);
-    if (!t.ultimo || edad > DIAS * DIA) t.estado = 'SIN NOTICIAS';
-    else if (!t.conReporte || !t.auth || !(t.auth.etapa >= 1)) t.estado = 'VERSION VIEJA';
+    const colas = t.colas ? Object.assign({}, t.colas) : null;
+    // Un reporte de correos RECIENTE con pendientes suma cola (es otra señal, no reemplaza a la principal).
+    if (colas && t.correosReporte && t.correosReporte.pendientes > 0 && ahora - t.correosReporte.en <= DIAS * DIA) {
+      colas.correos = Math.max(colas.correos || 0, t.correosReporte.pendientes);
+    }
+    const valores = colas ? Object.keys(colas).map(k => colas[k]) : [];
+    const noSe = valores.some(v => v === null || typeof v !== 'number');
+    t.detalleCola = colas ? Object.keys(colas).filter(k => colas[k] === null || colas[k] > 0)
+      .map(k => (colas[k] === null ? '¿?' : colas[k]) + ' ' + (NOMBRES_COLA[k] || k)).join(', ') : '';
+    if (!t.conReporte || !t.ultimo || edad > DIAS * DIA) t.estado = 'SIN NOTICIAS';
+    else if (!t.auth || !(t.auth.etapa >= 1) || !colas) t.estado = 'VERSION VIEJA';
     else if (!t.auth.sesion) t.estado = 'SIN SESION';
-    else if (t.otsPendientes === null) t.estado = 'VERSION VIEJA';
-    else if (cola > 0) t.estado = 'CON COLA';
+    else if (noSe || valores.some(v => v > 0)) t.estado = 'CON COLA';
     else t.estado = 'LISTO';
-    t.cola = cola;
     activos.push(t);
   }
   const listo = activos.length > 0 && activos.every(t => t.estado === 'LISTO');
@@ -88,7 +101,7 @@ async function principal() {
   const fila = t => '  ' + t.estado.padEnd(14) + ' ' + String(t.usuario || '(sin usuario)').padEnd(22) +
     ' tel ' + String(t.dispositivo).slice(0, 14).padEnd(14) + ' ultimo ' + fecha(t.ultimo) +
     (t.auth ? ' · sesion ' + (t.auth.sesion ? 'si' : 'no') : '') +
-    (t.cola ? ' · en cola: ' + [t.otsPendientes ? t.otsPendientes + ' OT' : '', t.pausadasSinSubir ? t.pausadasSinSubir + ' pausadas' : '', t.correos ? t.correos + ' correos' : ''].filter(Boolean).join(', ') : '');
+    (t.detalleCola ? ' · en cola: ' + t.detalleCola : '');
   r.activos.sort((a, b) => a.estado.localeCompare(b.estado)).forEach(t => console.log(fila(t)));
   if (r.olvidados.length) {
     console.log('\nSin reportar hace mas de ' + OLVIDAR + ' dias (no cuentan; confirmar con Bastian si ese telefono sigue en uso):');

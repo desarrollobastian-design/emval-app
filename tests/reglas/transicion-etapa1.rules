@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// TRANSICION PARA LA ETAPA 1 DE FIREBASE AUTH — lo que Bastian AGREGA a las reglas de hoy ANTES de
+// fusionar el PR #64. Sin esto, un telefono sin cache no puede leer `directorio` (las reglas "capa 1"
+// solo abren las 9 colecciones de siempre) y la pantalla de entrada le sale vacia (Codex P1-5).
+//
+// Lo que se publica es SOLO el bloque marcado (1) [y, si Bastian quiere, el cambio (2)], dentro del
+// `match /databases/{database}/documents { ... }` que ya existe en la consola. El resto de este archivo
+// es la RECONSTRUCCION de las reglas de hoy (capa1-referencia.rules), solo para probarlo: no se pega.
+// Prueba: `npm run transicion` (tests/reglas/transicion.test.js).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── reconstruccion de "capa 1" (NO se pega) ──
+    match /{col}/{id} {
+      allow read, create, update: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow delete: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos'];
+    }
+
+    // ── (1) OBLIGATORIO: el directorio se lee sin sesion y no lo escribe nadie desde afuera ──
+    // Lo escribe solo tools/cuentas-auth.js con el Admin SDK, que no pasa por estas reglas.
+    match /directorio/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

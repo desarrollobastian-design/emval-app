@@ -1,15 +1,17 @@
 /* Prueba de tools/estado-telefonos.js contra el EMULADOR de Firestore (nada de produccion).
 
    Que se exige:
-   1. Cada telefono sale con el estado correcto: LISTO, VERSION VIEJA (reporte sin `auth`), SIN SESION,
-      CON COLA (OT, pausadas o correos sin subir), SIN NOTICIAS (no reporta hace mas de 3 dias) y
-      OLVIDADO (mas de 30 dias: aparte, no cuenta).
-   2. Con UN telefono no listo, la respuesta es "todavia NO" y sale con 2.
-   3. Con todos los activos listos, la respuesta es "se pueden publicar" y sale con 0.
-   4. La herramienta no escribe nada: `alertas` queda igual, documento por documento.
+   1. Cada telefono sale con el estado correcto: LISTO, VERSION VIEJA (reporte sin `auth`/`colas`),
+      SIN SESION, CON COLA (cualquier cola > 0, o una que el telefono no pudo contar), SIN NOTICIAS (su
+      reporte tiene mas de 3 dias) y OLVIDADO (mas de 30 dias: aparte, no cuenta).
+   2. EL CASO DE CODEX (P2-7): un reporte del telefono de hace 10 dias con un reporte de correos de hoy
+      sale SIN NOTICIAS, no LISTO: el correo reciente no refresca la sesion ni la cola.
+   3. Un reporte de correos reciente con pendientes suma cola aunque el reporte principal diga 0.
+   4. Con un telefono no listo: "todavia NO", exit 2. Con todos los activos listos: luz verde, exit 0.
+   5. La herramienta no escribe nada.
 
    Uso (desde tests/reglas, con Java 21 en el PATH y `npm --prefix ../../tools install` hecho):
-     npx firebase emulators:exec --only firestore --project demo-emval "node estado-telefonos.test.js"
+     npm run estado
    Sale 0 si todo se cumple; 1 si no. */
 
 const path = require('path');
@@ -30,54 +32,61 @@ function correr() {
   return { status: r.status, salida: (r.stdout || '') + (r.stderr || '') };
 }
 const lineaDe = (salida, usuario) => (salida.split('\n').find(l => l.includes(usuario)) || '').trim();
+const vacias = { ots: 0, pausadas: 0, correos: 0, enlaces: 0, cierres: 0, bajas: 0 };
 
 (async () => {
   initializeApp({ projectId: 'demo-emval' });
   const db = getFirestore();
   const auth = (sesion) => ({ etapa: 1, sesion, uid: sesion ? 'u_x' : '' });
   const reportes = {
-    'pausadas_dev_listo':  { tipo: 'pausadas', usuario: 'Ana Prueba', auth: auth(true), otsPendientes: 0, items: [], actualizadoEn: hace(2) },
-    'correos_dev_listo':   { tipo: 'correos', usuario: 'Ana Prueba', pendientes: 0, actualizadoEn: hace(2) },
+    'pausadas_dev_listo':  { tipo: 'pausadas', usuario: 'Ana Prueba', auth: auth(true), colas: vacias, items: [], actualizadoEn: hace(2) },
     'pausadas_dev_viejo':  { tipo: 'pausadas', usuario: 'Beto Prueba', items: [], actualizadoEn: hace(5) },
-    'pausadas_dev_sinses': { tipo: 'pausadas', usuario: 'Ciro Prueba', auth: auth(false), otsPendientes: 0, items: [], actualizadoEn: hace(1) },
-    'pausadas_dev_cola':   { tipo: 'pausadas', usuario: 'Dora Prueba', auth: auth(true), otsPendientes: 1, items: [{ numero: '1', pendienteSync: true }], actualizadoEn: hace(1) },
-    'correos_dev_cola':    { tipo: 'correos', usuario: 'Dora Prueba', pendientes: 2, actualizadoEn: hace(1) },
-    'pausadas_dev_mudo':   { tipo: 'pausadas', usuario: 'Eva Prueba', auth: auth(true), otsPendientes: 0, items: [], actualizadoEn: hace(24 * 5) },
+    'pausadas_dev_sinses': { tipo: 'pausadas', usuario: 'Ciro Prueba', auth: auth(false), colas: vacias, items: [], actualizadoEn: hace(1) },
+    'pausadas_dev_cola':   { tipo: 'pausadas', usuario: 'Dora Prueba', auth: auth(true), colas: Object.assign({}, vacias, { ots: 1, enlaces: 2 }), items: [], actualizadoEn: hace(1) },
+    'pausadas_dev_mudo':   { tipo: 'pausadas', usuario: 'Eva Prueba', auth: auth(true), colas: vacias, items: [], actualizadoEn: hace(24 * 5) },
     'pausadas_dev_olvido': { tipo: 'pausadas', usuario: 'Fito Prueba', items: [], actualizadoEn: hace(24 * 40) },
+    // El caso de Codex: reporte principal de hace 10 dias, reporte de correos de hoy.
+    'pausadas_dev_codex':  { tipo: 'pausadas', usuario: 'Gabi Prueba', auth: auth(true), colas: vacias, items: [], actualizadoEn: hace(24 * 10) },
+    'correos_dev_codex':   { tipo: 'correos', usuario: 'Gabi Prueba', pendientes: 0, actualizadoEn: hace(1) },
+    // Reporte principal en 0, pero el de correos (reciente) dice que hay 3 sin salir.
+    'pausadas_dev_correo': { tipo: 'pausadas', usuario: 'Hugo Prueba', auth: auth(true), colas: vacias, items: [], actualizadoEn: hace(1) },
+    'correos_dev_correo':  { tipo: 'correos', usuario: 'Hugo Prueba', pendientes: 3, actualizadoEn: hace(1) },
+    // Una cola que el telefono no pudo contar (null): no se sabe, no es "vacia".
+    'pausadas_dev_nose':   { tipo: 'pausadas', usuario: 'Ines Prueba', auth: auth(true), colas: Object.assign({}, vacias, { bajas: null }), items: [], actualizadoEn: hace(1) },
     'descartes_pausadas':  { items: [] }   // otro documento de alertas: no es un telefono
   };
   for (const [id, d] of Object.entries(reportes)) await db.doc('alertas/' + id).set(d);
   const foto = async () => JSON.stringify((await db.collection('alertas').get()).docs.map(d => [d.id, d.data()]).sort());
   const antes = await foto();
 
-  // 1 y 2. Un telefono de cada estado
   const r = correr();
-  const esperado = { 'Ana Prueba': 'LISTO', 'Beto Prueba': 'VERSION VIEJA', 'Ciro Prueba': 'SIN SESION',
-    'Dora Prueba': 'CON COLA', 'Eva Prueba': 'SIN NOTICIAS', 'Fito Prueba': 'OLVIDADO' };
+  const esperado = { 'Ana Prueba': 'LISTO', 'Beto Prueba': 'VERSION VIEJA', 'Ciro Prueba': 'SIN SESION', 'Dora Prueba': 'CON COLA',
+    'Eva Prueba': 'SIN NOTICIAS', 'Fito Prueba': 'OLVIDADO', 'Gabi Prueba': 'SIN NOTICIAS', 'Hugo Prueba': 'CON COLA', 'Ines Prueba': 'CON COLA' };
   const mal = Object.entries(esperado).filter(([u, e]) => !lineaDe(r.salida, u).startsWith(e));
   const dora = lineaDe(r.salida, 'Dora Prueba');
-  console.log('1) Estados      → ' + (mal.length ? mal.map(([u, e]) => u + ' deberia ser ' + e + ' ✗').join('; ') : '6 telefonos, cada uno con su estado ✓') +
-    (/1 OT/.test(dora) && /1 pausadas/.test(dora) && /2 correos/.test(dora) ? ', la cola dice que hay ✓' : ', LA COLA NO DICE QUE HAY ✗'));
+  console.log('1) Estados      → ' + (mal.length ? mal.map(([u, e]) => u + ' deberia ser ' + e + ' (es: ' + lineaDe(r.salida, u).slice(0, 14) + ') ✗').join('; ') : '9 telefonos, cada uno con su estado ✓') +
+    (/1 OT/.test(dora) && /2 enlaces/.test(dora) ? ', la cola dice que hay ✓' : ', LA COLA NO DICE QUE HAY ✗'));
   chequear(mal.length === 0, 'estados mal asignados: ' + mal.map(m => m[0]).join(', '));
-  chequear(/1 OT/.test(dora) && /1 pausadas/.test(dora) && /2 correos/.test(dora), 'el telefono con cola no detalla que tiene sin subir');
-  console.log('2) Veredicto    → ' + (r.status === 2 && /Todavia NO/.test(r.salida) ? '"todavia NO", exit 2 ✓' : 'exit ' + r.status + ' ✗'));
+  chequear(/1 OT/.test(dora) && /2 enlaces/.test(dora), 'el telefono con cola no detalla que tiene sin subir');
+  console.log('2) Caso Codex   → reporte de hace 10 dias + correos de hoy: ' + (lineaDe(r.salida, 'Gabi Prueba').startsWith('SIN NOTICIAS') ? 'SIN NOTICIAS ✓' : 'LO DA POR LISTO ✗'));
+  chequear(lineaDe(r.salida, 'Gabi Prueba').startsWith('SIN NOTICIAS'), 'un reporte de correos reciente hizo pasar por fresco un reporte viejo (Codex P2-7)');
+  console.log('3) Correos      → el reporte de correos reciente con pendientes: ' + (lineaDe(r.salida, 'Hugo Prueba').startsWith('CON COLA') ? 'suma cola ✓' : 'NO ✗'));
+  console.log('4) Veredicto    → ' + (r.status === 2 && /Todavia NO/.test(r.salida) ? '"todavia NO", exit 2 ✓' : 'exit ' + r.status + ' ✗'));
   chequear(r.status === 2 && /Todavia NO/.test(r.salida), 'con telefonos no listos no dice "todavia NO" o no sale con 2');
   chequear(!/descartes/.test(r.salida), 'trato descartes_pausadas como si fuera un telefono');
 
-  // 4. No escribe
   const despues = await foto();
-  console.log('4) Solo lectura → ' + (antes === despues ? 'alertas queda igual ✓' : 'CAMBIO ALGO ✗'));
+  console.log('5) Solo lectura → ' + (antes === despues ? 'alertas queda igual ✓' : 'CAMBIO ALGO ✗'));
   chequear(antes === despues, 'la herramienta escribio en alertas');
 
-  // 3. Todos los activos listos
-  for (const id of ['pausadas_dev_viejo', 'pausadas_dev_sinses', 'pausadas_dev_cola', 'correos_dev_cola', 'pausadas_dev_mudo']) await db.doc('alertas/' + id).delete();
+  for (const id of Object.keys(reportes).filter(k => k !== 'pausadas_dev_listo' && k !== 'pausadas_dev_olvido' && k !== 'descartes_pausadas')) await db.doc('alertas/' + id).delete();
   const r2 = correr();
-  console.log('3) Todos listos → ' + (r2.status === 0 && /se pueden publicar/.test(r2.salida) ? '"se pueden publicar", exit 0 ✓' : 'exit ' + r2.status + ' ✗') +
+  console.log('4b) Todos listos→ ' + (r2.status === 0 && /se pueden publicar/.test(r2.salida) ? '"se pueden publicar", exit 0 ✓' : 'exit ' + r2.status + ' ✗') +
     (/Fito Prueba/.test(r2.salida) ? ' (el olvidado se lista aparte ✓)' : ''));
   chequear(r2.status === 0 && /se pueden publicar/.test(r2.salida), 'con todos los activos listos no da luz verde');
 
   console.log('');
   if (fallos.length) { console.log('FALLA (' + fallos.length + '):'); fallos.forEach(f => console.log(f)); process.exit(1); }
-  console.log('OK — la herramienta dice telefono por telefono si se pueden publicar las reglas, y no escribe nada.');
+  console.log('OK — la herramienta dice telefono por telefono si se pueden publicar las reglas, con la fecha de su propio reporte, y no escribe nada.');
   process.exit(0);
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && (e.code || e.message)); process.exit(1); });

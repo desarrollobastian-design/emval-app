@@ -147,7 +147,8 @@ function claveQuemada() {
         signInWithEmailAndPassword(correo, clave) {
           intentos.push(correo);
           const ok = (correo === api.correo('u_ana') && clave === api.clavePin(PIN_ANA)) || (correo === api.correo('u_pedro') && clave === CLAVE_PEDRO);
-          return ok ? Promise.resolve({ user: { uid: correo } }) : Promise.reject(Object.assign(new Error('x'), { code: 'auth/invalid-credential' }));
+          // El UID de la cuenta es el de la ficha (la app lo comprueba: Codex P1-2).
+          return ok ? Promise.resolve({ user: { uid: correo.split('@')[0] } }) : Promise.reject(Object.assign(new Error('x'), { code: 'auth/invalid-credential' }));
         } };
       const mem = {};
       api = new Function('window', 'localStorage', 'toast', '_pedirTexto', 'estado', 'document', 'loginExitoso', 'go', 'setTimeout',

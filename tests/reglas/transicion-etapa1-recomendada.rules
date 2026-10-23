@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// Igual que transicion-etapa1.rules MAS el cambio (2), RECOMENDADO (lo decide Bastian):
+// (2) sacar `tecnicos` de las colecciones que se crean, modifican y borran sin sesion. Hoy cualquiera
+//     puede agregar a `tecnicos` un "Administrador" con su propio hash antes de que se corra
+//     tools/cuentas-auth.js (Codex P1-5: fuente no confiable). Con D1-B nadie escribe `tecnicos` desde
+//     la app: el costo es que en un telefono con la version vieja (v72 o menos) Pedro ya no puede
+//     agregar ni editar tecnicos desde el panel (le sale un error). La lectura sigue abierta: los
+//     telefonos viejos la necesitan para entrar.
+// En la consola es CAMBIAR la regla de hoy: quitar 'tecnicos' de las listas de create/update/delete,
+// no agregar un bloque (las reglas de Firestore suman permisos: un `allow write: if false` aparte no
+// quita el que ya da la regla general). Reconstruccion, solo para probarlo: no se pega tal cual.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{col}/{id} {
+      allow read: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow create, update: if col in ['ordenes', 'cotizaciones', 'cadenas', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow delete: if col in ['ordenes', 'cotizaciones', 'cadenas'];
+    }
+    match /directorio/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

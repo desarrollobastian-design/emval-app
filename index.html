@@ -2264,9 +2264,9 @@ async function _reportarPausadasDelTelefono(forzar) {
     // Para pasar a la etapa 2 de Auth (reglas que piden sesion) hay que saber que CADA telefono ya
     // tiene la version nueva, una sesion de Firebase y la cola vacia: tools/estado-telefonos.js.
     const auth = { etapa: AUTH_ETAPA, sesion: !!_uidSesionFirebase(), uid: _uidSesionFirebase() };
-    let otsPendientes = null;
-    try { otsPendientes = (await _obtenerOTsPendientes()).length; } catch (e) {}
-    const firma = JSON.stringify([items, auth, otsPendientes]);
+    const colas = await _contarColas();
+    const otsPendientes = colas.ots;
+    const firma = JSON.stringify([items, auth, colas]);
     // Sin cambios basta con refrescar el "visto hace" cada 6 h.
     if (!forzar && firma === _ultimoReportePausadas.firma && Date.now() - _ultimoReportePausadas.en < 21600000) return;
     await _conTimeout(window.firebase.firestore().collection('alertas').doc('pausadas_' + _deviceIdCorreos()).set({
@@ -2275,6 +2275,7 @@ async function _reportarPausadasDelTelefono(forzar) {
       usuario: _tecnicoActual() || '',
       auth: auth,
       otsPendientes: otsPendientes,
+      colas: colas,
       items: items,
       total: items.length,
       actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
@@ -2333,6 +2334,7 @@ function _claveFirebaseDePin(pin) { return 'emval-pin-' + String(pin); }
 function _correoDeCuenta(uid) { return String(uid).toLowerCase() + '@' + DOMINIO_CORREO_CUENTA; }
 const ACCESO_DESACTIVADO = 'Tu acceso no está activado. Pídele a CorexOn que lo active.';
 const PRIMERA_VEZ_CON_SENAL = 'Sin señal: la primera vez en este teléfono tienes que entrar con señal.';
+const SIN_SENAL_PRIVILEGIADO = 'Sin señal no se puede entrar como administrador o supervisor. Entra con señal.';
 const AUTH_MS_INICIO = 15000;
 const _FICHAS = {};          // nombre -> { uid, correo, cargo } (del directorio)
 let pinActual = '';
@@ -2352,11 +2354,39 @@ function _uidSesionFirebase() {
   const a = _authFirebase();
   return (a && a.currentUser && a.currentUser.uid) || '';
 }
+// Administrador y Supervisor tienen permisos de panel: no dejan verificador en el telefono y su
+// sesion de Firebase se cierra al salir (revision de Codex del PR #64, 23-10-2026).
+function _esPrivilegiado(cargo) { return cargo === 'Administrador' || cargo === 'Supervisor'; }
+
+// Si el SDK de Auth no cargo en el arranque (en frio y sin señal: el service worker no guarda
+// gstatic), se vuelve a pedir cuando haya señal. Sin esto la pestaña quedaba sin sesion de Firebase
+// hasta recargarla, y con las reglas de la etapa 2 su cola no subiria (Codex P2-6).
+const SDK_AUTH_URL = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+let _sdkAuthCargando = null;
+function _cargarSdkAuth() {
+  if (_authFirebase()) return Promise.resolve(true);
+  if (!window.firebase || navigator.onLine === false || typeof document === 'undefined') return Promise.resolve(false);
+  if (_sdkAuthCargando) return _sdkAuthCargando;
+  _sdkAuthCargando = new Promise(function(resolve) {
+    const s = document.createElement('script');
+    s.src = SDK_AUTH_URL;
+    const listo = function(ok){ _sdkAuthCargando = null; resolve(ok && !!_authFirebase()); };
+    s.onload = function(){ listo(true); };
+    s.onerror = function(){ listo(false); };
+    setTimeout(function(){ listo(false); }, 15000);
+    (document.head || document.body).appendChild(s);
+  });
+  return _sdkAuthCargando;
+}
 
 // Verificador local: PBKDF2-SHA256 con sal aleatoria. Es lo unico del secreto que vive en el
-// telefono, y solo de quien entro con señal en ESE telefono.
+// telefono, y solo de un tecnico que entro con señal en ESE telefono. Como el PIN son 4 digitos,
+// quien copie este registro puede probar las 10.000 combinaciones fuera de linea (Codex P1-1): por
+// eso el verificador dura poco y se pierde con los fallos, y Administrador/Supervisor no tienen.
 const VERIF_KEY = 'emval_verificadores';
 const VERIF_ITER = 150000;
+const VERIF_MAX_DIAS = 14;      // sin entrar con señal en 14 dias, sin señal ya no se entra
+const VERIF_MAX_FALLOS = 5;     // 5 PIN equivocados sin señal borran el verificador
 function _hex(buf) { return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2, '0'); }).join(''); }
 async function _pbkdf2(secreto, salHex, iter) {
   const clave = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(secreto)), 'PBKDF2', false, ['deriveBits']);
@@ -2366,28 +2396,72 @@ async function _pbkdf2(secreto, salHex, iter) {
 function _leerVerificadores() {
   try { return JSON.parse(localStorage.getItem(VERIF_KEY) || '{}') || {}; } catch (e) { return {}; }
 }
+function _escribirVerificadores(todos) {
+  try { localStorage.setItem(VERIF_KEY, JSON.stringify(todos)); } catch (e) {}
+}
+function _borrarVerificador(uid) {
+  const todos = _leerVerificadores();
+  if (todos[uid]) { delete todos[uid]; _escribirVerificadores(todos); }
+}
 async function _guardarVerificador(uid, secreto) {
   try {
     const sal = _hex(crypto.getRandomValues(new Uint8Array(16)));
     const todos = _leerVerificadores();
-    todos[uid] = { sal: sal, it: VERIF_ITER, h: await _pbkdf2(secreto, sal, VERIF_ITER), en: Date.now() };
-    localStorage.setItem(VERIF_KEY, JSON.stringify(todos));
+    todos[uid] = { sal: sal, it: VERIF_ITER, h: await _pbkdf2(secreto, sal, VERIF_ITER), en: Date.now(), fallos: 0 };
+    _escribirVerificadores(todos);
   } catch (e) { console.warn('No se pudo guardar el verificador local:', e && e.message); }
 }
-// true / false, o null si este telefono nunca vio entrar con señal a esa persona.
+// true / false, o null si no hay verificador vigente (nunca entro con señal aqui, vencio o se borro).
 async function _verificarLocal(uid, secreto) {
-  const v = _leerVerificadores()[uid];
+  const todos = _leerVerificadores();
+  const v = todos[uid];
   if (!v || !v.sal || !v.h) return null;
-  try { return (await _pbkdf2(secreto, v.sal, v.it || VERIF_ITER)) === v.h; } catch (e) { return null; }
+  if (!v.en || Date.now() - v.en > VERIF_MAX_DIAS * 86400000) { _borrarVerificador(uid); return null; }
+  let ok;
+  try { ok = (await _pbkdf2(secreto, v.sal, v.it || VERIF_ITER)) === v.h; } catch (e) { return null; }
+  if (!ok) {
+    v.fallos = (v.fallos || 0) + 1;
+    if (v.fallos >= VERIF_MAX_FALLOS) delete todos[uid]; else todos[uid] = v;
+    _escribirVerificadores(todos);
+  }
+  return ok;
 }
 
-// Inicio de sesion en Firebase. 'ok' | 'rechazada' | 'bloqueada' | 'desactivada' | 'sin-red'.
-// Un timeout es 'sin-red': no saber no es un rechazo (regla 3 de AGENTS.md).
-async function _iniciarSesionFirebase(correo, clave) {
-  const a = _authFirebase();
-  if (!a) return 'sin-red';   // sin señal en frio el SDK de Auth puede no haber cargado
+// Limite de intentos por persona EN ESTE TELEFONO (persistente: sobrevive a recargar). Tras 5
+// fallos seguidos hay que esperar 1 min, y la espera se duplica con cada fallo (tope 30 min).
+// Firebase tiene su propio limite en el servidor; este frena antes, tambien sin señal.
+const INTENTOS_KEY = 'emval_intentos';
+const INTENTOS_LIBRES = 5;
+function _leerIntentos() { try { return JSON.parse(localStorage.getItem(INTENTOS_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function _esperaIntentos(uid) { const x = _leerIntentos()[uid]; return x && x.hasta ? Math.max(0, x.hasta - Date.now()) : 0; }
+function _registrarFallo(uid) {
+  const todos = _leerIntentos();
+  const x = todos[uid] || { fallos: 0 };
+  x.fallos++;
+  if (x.fallos >= INTENTOS_LIBRES) x.hasta = Date.now() + Math.min(30, Math.pow(2, x.fallos - INTENTOS_LIBRES)) * 60000;
+  todos[uid] = x;
+  try { localStorage.setItem(INTENTOS_KEY, JSON.stringify(todos)); } catch (e) {}
+}
+function _limpiarFallos(uid) {
+  const todos = _leerIntentos();
+  if (todos[uid]) { delete todos[uid]; try { localStorage.setItem(INTENTOS_KEY, JSON.stringify(todos)); } catch (e) {} }
+}
+
+// Inicio de sesion en Firebase. 'ok' | 'rechazada' | 'bloqueada' | 'desactivada' | 'otra-cuenta' |
+// 'sin-red'. Un timeout es 'sin-red': no saber no es un rechazo (regla 3 de AGENTS.md).
+// 'otra-cuenta': Firebase entro, pero con un UID que no es el de la ficha (Codex P1-2): se sale.
+async function _iniciarSesionFirebase(correo, clave, uidEsperado) {
+  let a = _authFirebase();
+  if (!a && await _cargarSdkAuth()) a = _authFirebase();
+  if (!a) return 'sin-red';
   try {
-    await _conTimeout(a.signInWithEmailAndPassword(correo, clave), AUTH_MS_INICIO, 'iniciar sesión');
+    const r = await _conTimeout(a.signInWithEmailAndPassword(correo, clave), AUTH_MS_INICIO, 'iniciar sesión');
+    const uid = (r && r.user && r.user.uid) || (a.currentUser && a.currentUser.uid) || '';
+    if (uidEsperado && uid !== uidEsperado) {
+      try { await a.signOut(); } catch (e) {}
+      return 'otra-cuenta';
+    }
+    _salidaDiferida = false;   // entro alguien con señal: la sesion del telefono es la suya
     return 'ok';
   } catch (e) {
     const c = (e && e.code) || '';
@@ -2399,23 +2473,47 @@ async function _iniciarSesionFirebase(correo, clave) {
   }
 }
 
+function _textoEspera(ms) {
+  const min = Math.max(1, Math.ceil(ms / 60000));
+  return 'Demasiados intentos. Espera ' + min + (min === 1 ? ' minuto' : ' minutos') + ' y vuelve a intentar.';
+}
+
 // Decide si `nombre` entra con `secreto` (PIN o clave). Devuelve { ok, sinSenal, msg }.
 async function _entrarConCuenta(nombre, secreto, esClave) {
   const f = _FICHAS[nombre];
   if (!f || !f.uid) return { ok: false, msg: ACCESO_DESACTIVADO };
+  const espera = _esperaIntentos(f.uid);
+  if (espera > 0) return { ok: false, msg: _textoEspera(espera) };
+  const privilegiado = _esPrivilegiado(f.cargo);
   const claveFb = esClave ? String(secreto) : _claveFirebaseDePin(secreto);
   const incorrecto = esClave ? 'Contraseña incorrecta, intenta de nuevo' : 'PIN incorrecto, intenta de nuevo';
-  const r = await _iniciarSesionFirebase(f.correo || _correoDeCuenta(f.uid), claveFb);
-  if (r === 'ok') { await _guardarVerificador(f.uid, claveFb); _credPendiente = null; return { ok: true }; }
-  if (r === 'rechazada') return { ok: false, msg: incorrecto };
+  const correo = f.correo || _correoDeCuenta(f.uid);
+  const r = await _iniciarSesionFirebase(correo, claveFb, f.uid);
+  if (r === 'ok') {
+    _limpiarFallos(f.uid);
+    if (privilegiado) _borrarVerificador(f.uid); else await _guardarVerificador(f.uid, claveFb);
+    _credPendiente = null;
+    return { ok: true };
+  }
+  if (r === 'rechazada') { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
   if (r === 'bloqueada') return { ok: false, msg: 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.' };
   if (r === 'desactivada') return { ok: false, msg: ACCESO_DESACTIVADO };
+  if (r === 'otra-cuenta') return { ok: false, msg: 'No se pudo comprobar tu cuenta. Avísale a CorexOn.' };
+  // Sin señal. Administrador y Supervisor no entran sin señal: no hay verificador suyo en el telefono.
+  if (privilegiado) return { ok: false, msg: SIN_SENAL_PRIVILEGIADO };
   const v = await _verificarLocal(f.uid, claveFb);
   if (v === true) {
-    _credPendiente = { uid: f.uid, correo: f.correo || _correoDeCuenta(f.uid), clave: claveFb };
+    _limpiarFallos(f.uid);
+    // La sesion de Firebase que hubiera en el telefono es de OTRA persona: se cierra (es local, no
+    // necesita señal) para que nada de este turno corra con sus permisos. Al volver la señal se
+    // abre la de quien entro (_reintentarSesionPendiente).
+    if (_uidSesionFirebase() && _uidSesionFirebase() !== f.uid) {
+      try { await _authFirebase().signOut(); } catch (e) {}
+    }
+    _credPendiente = { uid: f.uid, correo: correo, clave: claveFb };
     return { ok: true, sinSenal: true };
   }
-  if (v === false) return { ok: false, msg: incorrecto };
+  if (v === false) { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
   return { ok: false, msg: PRIMERA_VEZ_CON_SENAL };
 }
 
@@ -2423,9 +2521,49 @@ async function _entrarConCuenta(nombre, secreto, esClave) {
 // la vuelta a primer plano y el intervalo de 90 s). Nunca muestra nada: si falla, reintenta.
 async function _reintentarSesionPendiente() {
   const p = _credPendiente;
-  if (!p || _uidSesionFirebase() === p.uid) { if (p && _uidSesionFirebase() === p.uid) _credPendiente = null; return; }
-  const r = await _iniciarSesionFirebase(p.correo, p.clave);
-  if (r === 'ok' || r === 'rechazada' || r === 'desactivada') _credPendiente = null;
+  if (!p) return;
+  if (_uidSesionFirebase() === p.uid) { _credPendiente = null; return; }
+  const r = await _iniciarSesionFirebase(p.correo, p.clave, p.uid);
+  if (r === 'ok' || r === 'rechazada' || r === 'desactivada' || r === 'otra-cuenta') _credPendiente = null;
+}
+
+// SALIR (Codex P1-2): la sesion de Firebase se cierra al salir de la app. Administrador y Supervisor,
+// en el acto. Un tecnico con trabajo todavia sin subir la conserva hasta que su cola se vacie: si se
+// cerrara de inmediato, con las reglas de la etapa 2 su OT de la tarde quedaria trabada en el
+// telefono hasta que alguien vuelva a entrar con señal (regla 4: lo que no salio no se pierde).
+let _salidaDiferida = false;
+// Lo que el telefono tiene sin subir, cola por cola. null = no se pudo contar (ante la duda, hay).
+async function _contarColas() {
+  const c = { ots: null, pausadas: null, correos: null, enlaces: null, cierres: null, bajas: null };
+  try { c.ots = (await _obtenerOTsPendientes()).length; } catch (e) {}
+  try { c.pausadas = cargarOTsPausadas().filter(function(o){ return o && !o.autoDraft && o.pendienteSync; }).length; } catch (e) {}
+  try { c.correos = _cargarCorreosPendientes().length; } catch (e) {}
+  try { c.enlaces = _leerEnlacesPDFPendientes().length; } catch (e) {}
+  try { c.cierres = _leerCierresPausadaPendientes().length; } catch (e) {}
+  try { c.bajas = _leerBajasPendientes().length; } catch (e) {}
+  return c;
+}
+async function _hayTrabajoSinSubir() {
+  const c = await _contarColas();
+  return Object.keys(c).some(function(k){ return c[k] === null || c[k] > 0; });   // no saber no es "vacia"
+}
+async function _cerrarSesionFirebase(cargo) {
+  const a = _authFirebase();
+  if (!a || !a.currentUser) { _credPendiente = null; _salidaDiferida = false; return; }
+  if (!_esPrivilegiado(cargo) && await _hayTrabajoSinSubir()) { _salidaDiferida = true; return; }
+  _salidaDiferida = false;
+  _credPendiente = null;
+  try { await a.signOut(); } catch (e) {}
+}
+// La corren el intervalo de 90 s y la vuelta de la señal: si la salida quedo diferida y la cola ya
+// esta vacia (y nadie entro mientras tanto), se cierra la sesion.
+async function _completarSalidaDiferida() {
+  if (!_salidaDiferida || estado.usuario) return;
+  if (await _hayTrabajoSinSubir()) return;
+  _salidaDiferida = false;
+  _credPendiente = null;
+  const a = _authFirebase();
+  if (a && a.currentUser) { try { await a.signOut(); } catch (e) {} }
 }
 
 // Las sincronizaciones del arranque esperan (hasta `ms`) a que Firebase restaure la sesion del
@@ -2449,22 +2587,21 @@ async function verificarPasswordAdmin() {
   // en un local, delante de quien pasara. Ahora es un campo type="password" con boton de ojo.
   const f = _FICHAS[estado.usuario];
   if (!f || !f.uid) { toast(ACCESO_DESACTIVADO); return false; }
+  const espera = _esperaIntentos(f.uid);
+  if (espera > 0) { toast(_textoEspera(espera)); return false; }
   const pass = await _pedirTexto('Escribe tu contraseña para confirmar esta acción.', {
     titulo: 'Confirmar como administrador',
     password: true,
     okTexto: 'Confirmar',
   });
   if (pass === null) return false;   // cancelado; `null` no es lo mismo que ''
-  // Contra el verificador del telefono (existe: para estar aqui entro una vez con señal). Si no
-  // estuviera, se confirma con Firebase.
-  const v = await _verificarLocal(f.uid, pass);
-  if (v === true) return true;
-  if (v === null) {
-    const r = await _iniciarSesionFirebase(f.correo || _correoDeCuenta(f.uid), pass);
-    if (r === 'ok') { await _guardarVerificador(f.uid, pass); return true; }
-    if (r === 'sin-red') { toast('Sin señal no se puede confirmar. Intenta con señal.'); return false; }
-  }
-  toast('Contraseña incorrecta');
+  // Sin verificador en el telefono (es privilegiado): la confirma Firebase, con señal.
+  const r = await _iniciarSesionFirebase(f.correo || _correoDeCuenta(f.uid), pass, f.uid);
+  if (r === 'ok') { _limpiarFallos(f.uid); return true; }
+  if (r === 'sin-red') { toast('Sin señal no se puede confirmar. Intenta con señal.'); return false; }
+  if (r === 'bloqueada') { toast('Demasiados intentos seguidos. Espera unos minutos.'); return false; }
+  if (r === 'rechazada') _registrarFallo(f.uid);
+  toast(r === 'otra-cuenta' ? 'No se pudo comprobar tu cuenta. Avísale a CorexOn.' : 'Contraseña incorrecta');
   return false;
 }
 
@@ -2889,7 +3026,10 @@ async function validarPassword() {
 
 function cerrarSesion() {
   guardarBorradorOTActual();
+  const cargo = estado.cargo;
   estado.usuario = null;
+  // Tambien Firebase (Codex P1-2): si no, el navegador seguia con los permisos de quien salio.
+  _cerrarSesionFirebase(cargo);
   go('s-usuarios');
 }
 
@@ -16920,6 +17060,13 @@ async function sincronizarOTsPendientes() {
         ot.clientId);
     } catch(err) {
       console.error('Error sincronizando OT pendiente:', err);
+      // Rechazo de las reglas (etapa 2 de Auth): no es la señal, y reintentar en el acto no cambia
+      // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
+      // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.
+      if (err && err.code === 'permission-denied') {
+        _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+        continue;
+      }
       _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');
       break;
     }
@@ -16942,6 +17089,7 @@ window.addEventListener('online', function() {
   // Despues de subir la OT cerrada: recien ahi tiene sentido borrar su registro "En Pausa".
   setTimeout(sincronizarCierresPausadaPendientes, 4000);
   setTimeout(sincronizarBajasPendientes, 4400);
+  setTimeout(_completarSalidaDiferida, 9000);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -17048,6 +17196,7 @@ if (!_soloVisorPDF) {
     ].forEach(function(x) { setTimeout(x[0], Math.max(300, x[1] - pasado)); });
   });
   setInterval(_reintentarSesionPendiente, 90000);
+  setInterval(_completarSalidaDiferida, 90000);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);

@@ -1,8 +1,9 @@
 /* Conexion al Admin SDK de Firebase para las herramientas de tools/ (cuentas-auth, estado-telefonos).
 
    Tres modos, en este orden:
-   1. EMULADOR: si existen FIRESTORE_EMULATOR_HOST o FIREBASE_AUTH_EMULATOR_HOST (pruebas de
-      tests/reglas). No usa credenciales y nunca toca produccion.
+   1. EMULADOR: si existe FIRESTORE_EMULATOR_HOST o FIREBASE_AUTH_EMULATOR_HOST (pruebas de
+      tests/reglas). Exige LAS DOS, locales, y un proyecto demo-... (ver revisarEmulador). No usa
+      credenciales y nunca toca produccion.
    2. CUENTA DE SERVICIO: EMVAL_SA = ruta al .json descargado de la consola (paso 2 de Bastian). La
       clave se guarda en Bitwarden; la copia en disco se borra al terminar.
    3. CREDENCIALES DE BASTIAN (--adc o EMVAL_ADC=1), sin .json en disco: usa las "Application Default
@@ -17,11 +18,29 @@ const path = require('path');
 
 const PROYECTO = 'emval-app';
 
+// MODO EMULADOR, a prueba de mezclas (Codex P2-10, 23-10-2026). Basta UNA variable de emulador para
+// entrar en este modo, pero para correr se exigen LAS DOS (Firestore y Auth), las dos apuntando a
+// esta maquina, y un proyecto de pruebas (`demo-...`). Con una sola, el otro servicio iria al real.
+// Devuelve null si no es modo emulador; un texto con el problema si es un modo emulador incompleto.
+function revisarEmulador(env) {
+  env = env || process.env;
+  const fs = env.FIRESTORE_EMULATOR_HOST || '', au = env.FIREBASE_AUTH_EMULATOR_HOST || '';
+  if (!fs && !au) return null;
+  const local = h => /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(h);
+  if (!fs || !au) return 'modo emulador incompleto: faltan ' + (!fs ? 'FIRESTORE_EMULATOR_HOST' : 'FIREBASE_AUTH_EMULATOR_HOST') + ' (el otro servicio iria a produccion)';
+  if (!local(fs) || !local(au)) return 'modo emulador con un host que no es de esta maquina (' + (!local(fs) ? fs : au) + ')';
+  const proyecto = env.GCLOUD_PROJECT || 'demo-emval';
+  if (!/^demo-/.test(proyecto)) return 'modo emulador con un proyecto que no es de pruebas (' + proyecto + '): tiene que empezar con demo-';
+  return '';
+}
+
 function iniciarAdmin(args) {
   const { initializeApp, cert, applicationDefault } = require('firebase-admin/app');
   const { getFirestore } = require('firebase-admin/firestore');
   const { getAuth } = require('firebase-admin/auth');
-  const emulador = !!(process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST);
+  const problema = revisarEmulador();
+  if (problema) { console.error('Se detiene antes de conectarse: ' + problema + '. Ver tools/admin-sdk.js.'); process.exit(1); }
+  const emulador = problema === '';
   const adc = (args || []).includes('--adc') || process.env.EMVAL_ADC === '1';
   let modo;
   if (emulador) {
@@ -41,4 +60,4 @@ function iniciarAdmin(args) {
   return { db: getFirestore(), auth: getAuth(), modo, emulador, PROYECTO };
 }
 
-module.exports = { iniciarAdmin, PROYECTO };
+module.exports = { iniciarAdmin, revisarEmulador, PROYECTO };

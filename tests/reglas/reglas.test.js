@@ -42,6 +42,9 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     await setDoc(doc(db, 'ordenes/o_firmada'), { numero: 2, pausa: false, estado: 'Terminada', firmada: true, tecnico: 'Tomas Prueba' });
     await setDoc(doc(db, 'ordenes/o_pausa_firmada'), { numero: 3, pausa: true, estado: 'En Pausa', firmada: true });
     await setDoc(doc(db, 'cotizaciones/c1'), { numeroCotizacion: '1102601' });
+    await setDoc(doc(db, 'ordenes/o_firmada2'), { numero: 4, pausa: false, estado: 'Terminada', firmada: true, tecnico: 'Tomas Prueba', descripcionTrabajo: 'cambio de rueda' });
+    await setDoc(doc(db, 'ordenes/o_pausa2'), { numero: 5, pausa: true, estado: 'En Pausa', firmada: false, tecnico: 'Tomas Prueba' });
+    await setDoc(doc(db, 'cotizaciones/c2'), { numeroCotizacion: '1102602', total: 100000, estadoCot: 'Pendiente', items: [{ d: 'x', v: 100000 }] });
     await setDoc(doc(db, 'cadenas/k1'), { nombre: 'CADENA PRUEBA' });
     await setDoc(doc(db, 'pdfs/p_aleatorio'), { otNumero: 2 });
     await setDoc(doc(db, 'contadores/cot_011026'), { n: 1 });
@@ -109,9 +112,24 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     ['supervisor NO lee tecnicos', () => getDoc(doc(sup, 'tecnicos/u_tec')), false],
     ['supervisor NO escribe cadenas', () => updateDoc(doc(sup, 'cadenas/k1'), { nombre: 'Z' }), false],
     ['supervisor NO escribe el directorio', () => updateDoc(doc(sup, 'directorio/u_tec'), { activo: false }), false],
+    // ── ataques de la revision de Codex del PR #64 ──
+    ['tecnico NO desfirma una hoja firmada (para despues borrarla)', () => updateDoc(doc(tec, 'ordenes/o_firmada2'), { firmada: false, pausa: true }), false],
+    ['tecnico NO cambia el texto de una hoja firmada', () => updateDoc(doc(tec, 'ordenes/o_firmada2'), { descripcionTrabajo: 'otro trabajo' }), false],
+    ['tecnico NO cambia el tecnico de una hoja', () => updateDoc(doc(tec, 'ordenes/o_pausa2'), { tecnico: 'Otro Prueba' }), false],
+    ['tecnico reenvia su hoja firmada desde la cola (mismos datos, creadoEn nuevo)', () => setDoc(doc(tec, 'ordenes/o_firmada2'), { numero: 4, pausa: false, estado: 'Terminada', firmada: true, tecnico: 'Tomas Prueba', descripcionTrabajo: 'cambio de rueda', creadoEn: new Date() }, { merge: true }), true],
+    ['tecnico edita su pausada (sin firmar)', () => updateDoc(doc(tec, 'ordenes/o_pausa2'), { descripcionTrabajo: 'avance', fotosAntes: ['a'] }), true],
+    ['tecnico cierra (firma) una pausada', () => updateDoc(doc(tec, 'ordenes/o_pausa2'), { firmada: true, pausa: false, estado: 'Terminada' }), true],
+    ['supervisor NO desfirma una hoja', () => updateDoc(doc(sup, 'ordenes/o_firmada2'), { firmada: false }), false],
+    ['admin NO desfirma una hoja', () => updateDoc(doc(adm, 'ordenes/o_firmada2'), { firmada: false }), false],
+    ['supervisor reasigna el tecnico (panel)', () => updateDoc(doc(sup, 'ordenes/o_firmada2'), { tecnico: 'Otro Prueba' }), true],
+    ['tecnico NO cambia el total de una cotizacion', () => updateDoc(doc(tec, 'cotizaciones/c2'), { total: 1 }), false],
+    ['tecnico NO la marca Realizada y le cambia los items', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', items: [] }), false],
+    ['tecnico NO le cambia el estado a otro que Realizada', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Aceptada' }), false],
+    ['tecnico la marca Realizada con lo que manda la app', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', otCompletadaNumero: '4', tecnicoRealizo: 'Tomas Prueba', pdfUrl: '', contenidoActualizadoEn: 1 }), true],
     // ── administrador ──
     ['admin lee tecnicos', () => getDoc(doc(adm, 'tecnicos/u_tec')), true],
-    ['admin escribe el directorio (alta)', () => setDoc(doc(adm, 'directorio/u_otro'), { nombre: 'Otro', cargo: 'Tecnico en terreno', activo: true }), true],
+    ['admin NO escribe tecnicos desde la app (D1-B: lo hace el Admin SDK)', () => updateDoc(doc(adm, 'tecnicos/u_tec'), { pin: '0000' }), false],
+    ['admin NO escribe el directorio desde la app (solo el Admin SDK)', () => setDoc(doc(adm, 'directorio/u_otro'), { nombre: 'Otro', cargo: 'Tecnico en terreno', activo: true }), false],
     ['admin escribe cadenas', () => updateDoc(doc(adm, 'cadenas/k1'), { nombre: 'CADENA 2' }), true],
     ['admin borra una hoja firmada', () => deleteDoc(doc(adm, 'ordenes/o_firmada')), true],
     ['admin NO borra un PDF', () => deleteDoc(doc(adm, 'pdfs/p_aleatorio')), false]

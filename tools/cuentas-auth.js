@@ -24,8 +24,14 @@
      $env:EMVAL_SA = "C:\Users\corex\Secretos\emval-admin-sdk.json"
      node tools/cuentas-auth.js                               # simula
      node tools/cuentas-auth.js --ejecutar                    # escribe (pide confirmacion)
-     node tools/cuentas-auth.js --ejecutar --clave-admin      # solo si la autoprueba fallo: el
+     node tools/cuentas-auth.js --ejecutar --autorizar <uid>  # Administrador/Supervisor: solo los
+                                                              # uid que Bastian autoriza (ver simulacion)
+     node tools/cuentas-auth.js --ejecutar --autorizar <uid> --clave-admin
+                                                              # solo si la autoprueba fallo: el
                                                               # administrador escribe SU MISMA clave
+     node tools/cuentas-auth.js --deshacer <respaldo.json>    # revierte esa corrida
+   Una cuenta que YA existe no se toca (ni clave, ni datos, ni si esta deshabilitada). Sale con 2 si
+   alguien quedo sin cuenta; con 0 solo si todos quedaron.
    Sin .json en disco (⬜ no probado en produccion): --adc con la sesion de gcloud de Bastian, ver
    tools/admin-sdk.js. Contra el emulador (pruebas): FIRESTORE_EMULATOR_HOST y
    FIREBASE_AUTH_EMULATOR_HOST, sin credencial.
@@ -47,7 +53,8 @@ const COMMIT_CON_CLAVE_QUEMADA = 'bdeea89';
 const args = process.argv.slice(2);
 const EJECUTAR = args.includes('--ejecutar');
 const CLAVE_ADMIN = args.includes('--clave-admin');
-const EMULADOR = !!(process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST);
+// Modo emulador solo si es completo (los dos hosts locales y un proyecto demo-): tools/admin-sdk.js.
+const EMULADOR = require('./admin-sdk').revisarEmulador() === '';
 
 // ── Las mismas reglas que la app (index.html). tests/la-clave-de-firebase-sale-del-pin.js vigila
 //    que sigan siendo identicas: si difieren, nadie entra. ─────────────────────────────────────
@@ -92,9 +99,38 @@ function preguntar(texto, oculto) {
   });
 }
 
+// Banderas de la revision de Codex del PR #64 (23-10-2026).
+//  --autorizar <uid[,uid]>  Administrador y Supervisor SOLO se crean si Bastian los autoriza por uid:
+//                           `tecnicos` se pudo escribir sin sesion hasta las reglas nuevas, asi que un
+//                           "Administrador" que aparezca ahi no es de fiar por si solo (Codex P1-5).
+//  --deshacer <respaldo>    borra las cuentas y fichas que creo esa corrida y deja el directorio como
+//                           estaba (solo sus campos permitidos).
+function listaArg(nombre) {
+  const out = [];
+  args.forEach(function(a, i) { if (a === nombre && args[i + 1]) out.push.apply(out, args[i + 1].split(',')); });
+  return out.map(function(s) { return s.trim(); }).filter(Boolean);
+}
+const AUTORIZADOS = listaArg('--autorizar');
+const DESHACER = (function() { const i = args.indexOf('--deshacer'); return i >= 0 ? args[i + 1] : null; })();
+const CAMPOS_FICHA = ['nombre', 'cargo', 'letra', 'correo', 'activo', 'actualizadoEn'];
+function fichaPermitida(x) {
+  const f = {};
+  CAMPOS_FICHA.forEach(function(k) { if (x && x[k] !== undefined) f[k] = x[k]; });
+  return f;
+}
+function esPrivilegiado(cargo) { return cargo === 'Administrador' || cargo === 'Supervisor'; }
+// Cuenta de Firebase para el respaldo: todo lo que sirve para reconocerla y restaurarla, menos el
+// hash y la sal de su clave (que no van a ningun archivo).
+function cuentaParaRespaldo(u) {
+  const j = typeof u.toJSON === 'function' ? u.toJSON() : Object.assign({}, u);
+  delete j.passwordHash; delete j.passwordSalt;
+  return j;
+}
+
 async function principal() {
   // Credencial: emulador, EMVAL_SA (cuenta de servicio) o --adc (gcloud de Bastian): tools/admin-sdk.js.
   const { db, auth, modo } = require('./admin-sdk').iniciarAdmin(args);
+  if (DESHACER) return deshacer(db, auth, modo);
 
   console.log('cuentas-auth · ' + modo + ' · ' + (EJECUTAR ? 'EJECUTAR' : 'SIMULACION (no escribe)'));
 
@@ -107,44 +143,68 @@ async function principal() {
     const t = d.data() || {};
     const uid = d.id, cargo = t.cargo || 'Tecnico en terreno', nombre = t.nombre || '';
     const p = { uid, nombre, cargo, letra: t.letra || (nombre.charAt(0) || '?').toUpperCase(), correo: _correoDeCuenta(uid) };
-    let existe = false;
-    try { await auth.getUser(uid); existe = true; } catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
-    p.existe = existe;
+    let usuario = null;
+    try { usuario = await auth.getUser(uid); } catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
+    p.existe = !!usuario;
+    p.deshabilitada = !!(usuario && usuario.disabled);
     if (!nombre) { p.accion = 'omitir'; p.motivo = 'sin nombre'; }
+    else if (usuario) {
+      // Codex P1-4: una cuenta que ya existe NO se reimporta ni se actualiza ni se reactiva.
+      p.accion = 'existe';
+      p.motivo = 'la cuenta ya existe: no se toca' + (p.deshabilitada ? ' (deshabilitada: sigue deshabilitada)' : '');
+    }
+    // La clave quemada se avisa SIEMPRE, este o no autorizado ese Administrador.
+    else if (cargo === 'Administrador' && quemado && String(t.passwordHash || '').toLowerCase() === quemado) {
+      p.accion = 'omitir'; p.motivo = '⚠ TIENE LA CLAVE QUEMADA: no se importa; hay que cambiarle la clave'; p.quemada = true;
+    }
+    else if (esPrivilegiado(cargo) && AUTORIZADOS.indexOf(uid) < 0) {
+      p.accion = 'omitir'; p.motivo = cargo + ': falta autorizarlo con --autorizar ' + uid;
+    }
     else if (cargo === 'Administrador') {
       const h = String(t.passwordHash || '').toLowerCase();
       if (!/^[0-9a-f]{64}$/.test(h)) { p.accion = 'omitir'; p.motivo = 'Administrador sin clave en tecnicos: que CorexOn le active el acceso'; }
       else if (!quemado) { p.accion = 'omitir'; p.motivo = 'no se pudo comprobar la clave quemada'; }
-      else if (h === quemado) { p.accion = 'omitir'; p.motivo = '⚠ TIENE LA CLAVE QUEMADA: no se importa; hay que cambiarle la clave'; p.quemada = true; }
       else { p.accion = 'importar-hash'; p.hash = h; }
     } else {
       const pin = String(t.pin == null ? '' : t.pin);
       if (!PIN_VALIDO.test(pin)) { p.accion = 'omitir'; p.motivo = 'sin PIN valido de 4 digitos'; }
-      else { p.accion = existe ? 'actualizar' : 'crear'; p.pin = pin; }
+      else { p.accion = 'crear'; p.pin = pin; }
     }
     plan.push(p);
   }
 
   console.log('');
   plan.forEach(p => console.log('  ' + (p.accion === 'omitir' ? '·' : '→') + ' ' + p.nombre.padEnd(22) + ' ' + p.cargo.padEnd(19) +
-    ' cuenta ' + (p.existe ? 'existe ' : 'nueva  ') + ' ' + p.accion + (p.motivo ? ' (' + p.motivo + ')' : '')));
-  const conCuenta = plan.filter(p => p.accion !== 'omitir');
-  console.log('\n' + plan.length + ' personas en tecnicos · ' + conCuenta.length + ' con cuenta · directorio: ' + conCuenta.length + ' fichas');
+    ' ' + p.uid.padEnd(22) + ' ' + p.accion + (p.motivo ? ' (' + p.motivo + ')' : '')));
+  const omitidos = plan.filter(p => p.accion === 'omitir');
+  console.log('\n' + plan.length + ' personas en tecnicos · ' + plan.filter(p => p.accion === 'crear' || p.accion === 'importar-hash').length +
+    ' cuentas nuevas · ' + plan.filter(p => p.accion === 'existe').length + ' ya existen · ' + omitidos.length + ' sin cuenta');
   if (plan.some(p => p.quemada)) console.log('⚠ Hay un Administrador con la clave quemada en tecnicos: avisar a Bastian antes de seguir.');
 
-  if (!EJECUTAR) { console.log('\nSimulacion: no se escribio nada. Para escribir: --ejecutar'); process.exit(0); }
-
-  // ── Respaldo de lo que se va a tocar (sin secretos) ────────────────────────────────────────
-  const antes = { creado: new Date().toISOString(), proyecto: EMULADOR ? 'emulador' : PROYECTO, cuentas: [], directorio: [] };
-  for (const p of plan) {
-    try { const u = await auth.getUser(p.uid); antes.cuentas.push({ uid: u.uid, email: u.email, disabled: u.disabled, displayName: u.displayName || '' }); } catch (e) {}
+  // Codex P2-9: el codigo de salida dice si quedo alguien sin cuenta (2) o si todo quedo (0).
+  if (!EJECUTAR) {
+    console.log('\nSimulacion: no se escribio nada. Para escribir: --ejecutar' + (omitidos.length ? ' · ⚠ ' + omitidos.length + ' quedarian sin cuenta (exit 2)' : ''));
+    process.exit(omitidos.length ? 2 : 0);
   }
-  (await db.collection('directorio').get()).docs.forEach(d => antes.directorio.push({ id: d.id, ...d.data() }));
+
+  // ── Respaldo de lo que se va a tocar (sin secretos), y diario de lo que se crea ─────────────
+  const antes = { creado: new Date().toISOString(), proyecto: EMULADOR ? 'emulador' : PROYECTO,
+    cuentas: [], directorio: [], creadas: [], fichasCreadas: [] };
+  for (const p of plan) {
+    try { antes.cuentas.push(cuentaParaRespaldo(await auth.getUser(p.uid))); } catch (e) {}
+  }
+  (await db.collection('directorio').get()).docs.forEach(function(d) {
+    const x = d.data() || {};
+    const quitados = Object.keys(x).filter(k => CAMPOS_FICHA.indexOf(k) < 0);
+    antes.directorio.push(Object.assign({ id: d.id }, fichaPermitida(x), quitados.length ? { camposQuitados: quitados } : {}));
+  });
   const dirResp = path.join(__dirname, 'respaldos');
   fs.mkdirSync(dirResp, { recursive: true });
   const archivo = path.join(dirResp, 'cuentas-auth-antes-' + antes.creado.replace(/[:.]/g, '-') + '.json');
-  fs.writeFileSync(archivo, JSON.stringify(antes, null, 2));
-  console.log('\nRespaldo: ' + archivo + ' (' + antes.cuentas.length + ' cuentas, ' + antes.directorio.length + ' fichas)');
+  const anotar = () => fs.writeFileSync(archivo, JSON.stringify(antes, null, 2));
+  anotar();
+  console.log('\nRespaldo: ' + archivo + ' (' + antes.cuentas.length + ' cuentas, ' + antes.directorio.length + ' fichas).' +
+    ' Para deshacer esta corrida: node tools/cuentas-auth.js --deshacer "' + archivo + '"');
 
   const confirmar = process.env.EMVAL_CONFIRMAR_CUENTAS || await preguntar('Escribe CREAR CUENTAS para seguir: ');
   if (confirmar.trim() !== 'CREAR CUENTAS') { console.log('Cancelado: no se escribio nada.'); process.exit(1); }
@@ -164,43 +224,69 @@ async function principal() {
   }
 
   const hechos = [];
-  let pendientes = 0;
+  let sinCuenta = omitidos.length;
   for (const p of plan) {
     if (p.accion === 'omitir') continue;
-    if (p.accion === 'importar-hash') {
-      if (importOk) {
-        const r = await auth.importUsers([{ uid: p.uid, email: p.correo, displayName: p.nombre,
-          passwordHash: Buffer.from(p.hash, 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
-        if (r.failureCount) { console.log('  ✗ ' + p.nombre + ': Firebase rechazo la importacion'); continue; }
-      } else if (CLAVE_ADMIN) {
-        // La escribe el propio administrador; se comprueba contra SU hash y no se guarda en ningun lado.
-        // Solo contra el EMULADOR la prueba puede pasarla por variable; en produccion se teclea siempre.
-        const clave = (EMULADOR && process.env.EMVAL_CLAVE_ADMIN_PRUEBA) || await preguntar('Clave de ' + p.nombre + ' (la misma de siempre, no se muestra): ', true);
-        if (sha256hex(clave) !== p.hash) { console.log('  ✗ ' + p.nombre + ': esa no es su clave. No se toco su cuenta.'); pendientes++; continue; }
-        if (p.existe) await auth.updateUser(p.uid, { email: p.correo, password: clave, displayName: p.nombre, disabled: false });
-        else await auth.createUser({ uid: p.uid, email: p.correo, password: clave, displayName: p.nombre });
-      } else {
-        console.log('  ⛔ ' + p.nombre + ': no se pudo conservar su clave importando el hash. NO se toco su cuenta.' +
-          ' Alternativa: --clave-admin (la escribe el mismo administrador) o parar y preguntar.');
-        pendientes++;
-        continue;
+    try {
+      if (p.accion === 'importar-hash') {
+        if (importOk) {
+          const r = await auth.importUsers([{ uid: p.uid, email: p.correo, displayName: p.nombre,
+            passwordHash: Buffer.from(p.hash, 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
+          if (r.failureCount) { console.log('  ✗ ' + p.nombre + ': Firebase rechazo la importacion'); sinCuenta++; continue; }
+        } else if (CLAVE_ADMIN) {
+          // La escribe el propio administrador; se comprueba contra SU hash y no se guarda en ningun lado.
+          // Solo contra el EMULADOR la prueba puede pasarla por variable; en produccion se teclea siempre.
+          const clave = (EMULADOR && process.env.EMVAL_CLAVE_ADMIN_PRUEBA) || await preguntar('Clave de ' + p.nombre + ' (la misma de siempre, no se muestra): ', true);
+          if (sha256hex(clave) !== p.hash) { console.log('  ✗ ' + p.nombre + ': esa no es su clave. No se creo su cuenta.'); sinCuenta++; continue; }
+          await auth.createUser({ uid: p.uid, email: p.correo, password: clave, displayName: p.nombre });
+        } else {
+          console.log('  ⛔ ' + p.nombre + ': no se pudo conservar su clave importando el hash. NO se creo su cuenta.' +
+            ' Alternativa: --clave-admin (la escribe el mismo administrador) o parar y preguntar.');
+          sinCuenta++;
+          continue;
+        }
+        antes.creadas.push(p.uid); anotar();
+      } else if (p.accion === 'crear') {
+        await auth.createUser({ uid: p.uid, email: p.correo, password: _claveFirebaseDePin(p.pin), displayName: p.nombre });
+        antes.creadas.push(p.uid); anotar();
       }
-    } else if (p.accion === 'crear') {
-      await auth.createUser({ uid: p.uid, email: p.correo, password: _claveFirebaseDePin(p.pin), displayName: p.nombre });
-    } else {
-      await auth.updateUser(p.uid, { email: p.correo, password: _claveFirebaseDePin(p.pin), displayName: p.nombre, disabled: false });
+      // Ficha con SOLO los campos permitidos (sin merge: lo que sobre en una ficha vieja se va; Codex
+      // P2-8). `activo` se respeta si ya estaba; si no, sale de la cuenta (deshabilitada = inactiva).
+      const ref = db.collection('directorio').doc(p.uid);
+      const previo = await ref.get();
+      const activoPrevio = previo.exists && typeof (previo.data() || {}).activo === 'boolean' ? previo.data().activo : null;
+      await ref.set({ nombre: p.nombre, cargo: p.cargo, letra: p.letra, correo: p.correo,
+        activo: activoPrevio !== null ? activoPrevio : !p.deshabilitada, actualizadoEn: new Date().toISOString() });
+      if (!previo.exists) { antes.fichasCreadas.push(p.uid); anotar(); }
+      hechos.push(p.nombre);
+      console.log('  ✓ ' + p.nombre + ' (' + p.cargo + ')' + (p.accion === 'existe' ? ' — cuenta existente, sin tocar' : ''));
+    } catch (e) {
+      sinCuenta++;
+      console.log('  ✗ ' + p.nombre + ': fallo (' + (e && (e.code || e.message)) + ')');
     }
-    const ref = db.collection('directorio').doc(p.uid);
-    const previo = await ref.get();
-    await ref.set(Object.assign({ nombre: p.nombre, cargo: p.cargo, letra: p.letra, correo: p.correo,
-      actualizadoEn: new Date().toISOString() }, previo.exists ? {} : { activo: true }), { merge: true });
-    hechos.push(p.nombre);
-    console.log('  ✓ ' + p.nombre + ' (' + p.cargo + ')');
   }
-  console.log('\nListo: ' + hechos.length + ' cuentas y fichas.' + (pendientes ? ' ⚠ ' + pendientes + ' administrador(es) SIN cuenta: ver arriba.' : '') +
+  console.log('\nListo: ' + hechos.length + ' con cuenta y ficha.' + (sinCuenta ? ' ⚠ ' + sinCuenta + ' SIN cuenta: ver arriba (exit 2).' : '') +
     ' Siguiente: probar la entrada en la app antes de fusionar el PR.');
-  process.exit(pendientes ? 2 : 0);   // 2 = termino, pero dejo a alguien sin cuenta
+  process.exit(sinCuenta ? 2 : 0);   // 2 = termino, pero alguien quedo sin cuenta
 }
 
-module.exports = { _claveFirebaseDePin, _correoDeCuenta, hashDeLaClaveQuemada, DOMINIO_CORREO };
+// Deshace una corrida con su respaldo: borra lo que ESA corrida creo y deja el directorio como estaba.
+async function deshacer(db, auth, modo) {
+  const r = JSON.parse(fs.readFileSync(path.resolve(DESHACER), 'utf8'));
+  console.log('cuentas-auth · ' + modo + ' · DESHACER ' + DESHACER);
+  console.log('  cuentas a borrar (las creo esa corrida): ' + (r.creadas || []).length +
+    ' · fichas a restaurar: ' + (r.directorio || []).length + ' · fichas a borrar: ' + (r.fichasCreadas || []).length);
+  const confirmar = process.env.EMVAL_CONFIRMAR_CUENTAS || await preguntar('Escribe DESHACER para seguir: ');
+  if (confirmar.trim() !== 'DESHACER') { console.log('Cancelado: no se cambio nada.'); process.exit(1); }
+  let fallas = 0;
+  for (const uid of r.creadas || []) { try { await auth.deleteUser(uid); } catch (e) { if (e.code !== 'auth/user-not-found') fallas++; } }
+  for (const f of r.directorio || []) {
+    try { await db.collection('directorio').doc(f.id).set(fichaPermitida(f)); } catch (e) { fallas++; }
+  }
+  for (const uid of r.fichasCreadas || []) { try { await db.collection('directorio').doc(uid).delete(); } catch (e) { fallas++; } }
+  console.log(fallas ? '⚠ ' + fallas + ' pasos fallaron (exit 2).' : 'Listo: la corrida quedo deshecha.');
+  process.exit(fallas ? 2 : 0);
+}
+
+module.exports = { _claveFirebaseDePin, _correoDeCuenta, hashDeLaClaveQuemada, DOMINIO_CORREO, fichaPermitida, CAMPOS_FICHA };
 if (require.main === module) principal().catch(e => { console.error('FALLA: ' + (e && (e.code || e.message))); process.exit(1); });
