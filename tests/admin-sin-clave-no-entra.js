@@ -13,6 +13,8 @@
       y dice por que. Con hash, entra con su clave y no con otra.
    4. verificarPasswordAdmin (confirmar acciones): sin hash dice por que y ni siquiera pide clave.
    5. seleccionarUsuario avisa al entrar a la pantalla, antes de que escriba.
+   6. La carrera de los 200 ms (Codex, 23-10-2026): elegir a un Administrador mientras se valida el
+      PIN de otra persona no lo hace entrar, y un Administrador nunca entra con un PIN.
 
    Uso:  node tests/admin-sin-clave-no-entra.js index.html
    Sale 0 si no hay clave por defecto; 1 si un administrador sin hash puede entrar o se escribe algo. */
@@ -157,7 +159,7 @@ const CLAVE_PEDRO = 'clave-solo-de-prueba';
     const pantalla = (nombre) => {
       const doc = docFalso();
       new Function('document', 'estado', 'ADMIN_HASHES', 'localStorage', '_colorPorNombre', 'actualizarDots', 'go',
-        'setTimeout', 'ADMIN_SIN_ACCESO', fSel + '; return seleccionarUsuario;')(
+        'setTimeout', 'ADMIN_SIN_ACCESO', 'var pinActual = "", _pinTimer = null;\n' + fSel + '; return seleccionarUsuario;')(
         doc, {}, ADMIN_HASHES, { setItem() {} }, () => '#000', () => {}, () => {}, () => {}, AVISO)(nombre, 'Administrador', 'A');
       const e = doc.getElementById('admin-pass-error');
       return { visible: e.style.display === 'block', texto: e.textContent };
@@ -167,6 +169,58 @@ const CLAVE_PEDRO = 'clave-solo-de-prueba';
     console.log('5) Pantalla    → sin hash ' + (avisa ? 'avisa al entrar ✓' : 'NO AVISA ✗') + '; Pedro ' + (con.visible ? 'VE UN ERROR ✗' : 'sin aviso ✓'));
     chequear(avisa, 'la pantalla de contrasena no le avisa al administrador sin acceso antes de que escriba');
     chequear(!con.visible, 'a Pedro, que tiene su clave, le aparece un error al entrar');
+  }
+
+  // ── 6. La carrera de los 200 ms (Codex, 23-10-2026) ──────────────────────────────────────────
+  // pinInput validaba 200 ms despues del cuarto digito, con el usuario de ESE momento: eligiendo a
+  // un Administrador en ese intervalo se entraba como el con un PIN, sin su contraseña. Se corre el
+  // flujo real (lista → elegir → teclear → cambiar de persona → vencer el temporizador).
+  const fPin = extraerFuncion('pinInput'), fValPin = extraerFuncion('validarPin'), fDots = extraerFuncion('actualizarDots');
+  if (fRender && fSel && fPin && fValPin && fDots) {
+    const PIN_ANA = '4821', PIN_PEDRO = '5555';   // valores SOLO de prueba
+    const correr = (pasos) => {
+      const doc = docFalso();
+      const clases = {};
+      const conClases = id => { const e = doc.getElementById(id); e.classList = e.classList || {
+        add: c => { (clases[id] = clases[id] || {})[c] = true; }, remove: c => { if (clases[id]) delete clases[id][c]; },
+        contains: c => !!(clases[id] && clases[id][c]), toggle: () => {} }; return e; };
+      ['s-pin', 's-usuarios', 'dot0', 'dot1', 'dot2', 'dot3'].forEach(conClases);
+      const go = id => { ['s-pin', 's-usuarios'].forEach(s => conClases(s).classList.remove('active')); conClases(id).classList.add('active'); };
+      const cola = [];
+      const setT = (fn, ms) => { cola.push(fn); return cola.length; };
+      const entradas = [];
+      const estado = { usuario: null, cargo: null };
+      const api = new Function('document', 'window', 'estado', 'ADMIN_HASHES', 'PINS', 'sha256', '_ocultoTecnico', '_colorPorNombre',
+        '_crearUsuarioItem', 'localStorage', 'go', 'setTimeout', 'clearTimeout', 'toast', 'loginExitoso', 'ADMIN_SIN_ACCESO',
+        'var pinActual = "", _pinTimer = null;\n' + fRender + '\n' + fSel + '\n' + fPin + '\n' + fValPin + '\n' + fDots +
+        '\nreturn { render: _renderListaUsuarios, elegir: seleccionarUsuario, tecla: pinInput };')(
+        doc, { firebase: { firestore() { return { collection() { return { doc() { return { update() { return Promise.resolve(); } }; } }; } }; } } },
+        estado, {}, {}, async t => sha(t), () => false, () => '#000', () => el(), { setItem() {} }, go, setT,
+        id => { if (id) cola[id - 1] = null; }, () => {}, () => entradas.push(estado.usuario + '|' + estado.cargo), AVISO);
+      api.render([
+        { _id: 'u_ana', nombre: 'Ana Prueba', cargo: 'Tecnico en terreno', letra: 'A', pin: PIN_ANA },
+        { _id: 'u_pedro', nombre: PEDRO, cargo: 'Administrador', letra: 'P', pin: PIN_PEDRO, passwordHash: sha(CLAVE_PEDRO) }
+      ]);
+      go('s-usuarios');
+      pasos(api, go);
+      cola.splice(0).forEach(f => { if (f) f(); });   // vence todo lo agendado
+      return entradas;
+    };
+    // El ataque: se elige a Ana, se teclea el PIN de Pedro y, antes de los 200 ms, se elige a Pedro.
+    const ataque = correr((api) => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_PEDRO.split('').forEach(api.tecla); api.elegir(PEDRO, 'Administrador', 'P'); });
+    // Igual, con el PIN de la propia Ana (no puede entrar como Pedro ni quedar adentro como Ana).
+    const ataque2 = correr((api) => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_ANA.split('').forEach(api.tecla); api.elegir(PEDRO, 'Administrador', 'P'); });
+    // El PIN de Pedro tecleado con Pedro elegido (el teclado esta oculto, pero la funcion existe).
+    const porPin = correr((api) => { api.elegir(PEDRO, 'Administrador', 'P'); PIN_PEDRO.split('').forEach(api.tecla); });
+    // Linea de control: Ana con su PIN entra (si esto falla, la prueba no mide nada).
+    const control = correr((api) => { api.elegir('Ana Prueba', 'Tecnico en terreno', 'A'); PIN_ANA.split('').forEach(api.tecla); });
+    const comoAdmin = l => l.some(x => /\|Administrador$/.test(x));
+    console.log('6) Carrera     → cambiar a Pedro en los 200 ms: ' + (comoAdmin(ataque) || comoAdmin(ataque2) || ataque2.length ? 'ENTRA ✗' : 'no entra ✓') +
+      '; Pedro por PIN: ' + (comoAdmin(porPin) ? 'ENTRA ✗' : 'no ✓') + '; control (Ana con su PIN): ' + (control.join() === 'Ana Prueba|Tecnico en terreno' ? 'entra ✓' : 'NO ENTRA ✗'));
+    chequear(!comoAdmin(ataque), 'eligiendo a un Administrador en los 200 ms se entra como el con un PIN, sin su contraseña');
+    chequear(!comoAdmin(ataque2) && ataque2.length === 0, 'al cambiar de persona en los 200 ms se entra igual (como uno u otro)');
+    chequear(!comoAdmin(porPin), 'un Administrador entra con un PIN en vez de su contraseña');
+    chequear(control.join() === 'Ana Prueba|Tecnico en terreno', 'LINEA DE CONTROL: un tecnico con su PIN no entra: la prueba no mide nada');
   }
 
   console.log('');
