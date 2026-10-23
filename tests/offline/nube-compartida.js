@@ -114,6 +114,8 @@ const STUB_NUBE = `(function(){
   };
   fs.Timestamp = { now: function(){ return ts(Date.now()); }, fromDate: function(d){ return ts(d.getTime()); } };
   window.firebase.firestore = fs;
+  // Etapa 1 de Auth: directorio sale de tecnicos si la semilla no trae uno (stub-auth.js).
+  if (window.__envolverDirectorio) window.firebase.firestore = window.__envolverDirectorio(fs);
 })()`;
 
 // ─── Lado de Node: la base de datos compartida ────────────────────────────────────────────────

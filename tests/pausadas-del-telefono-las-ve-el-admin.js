@@ -159,6 +159,8 @@ function motor(op) {
     'function _conTimeout(p) { return p; }\n' +
     'function _encolarCierrePausada(n, t) { esp.encolados.push(String(n) + "|" + t); }\n' +
     'function _deviceIdCorreos() { return "dev_prueba"; }\n' +
+    // Etapa 1 de Auth: el reporte del telefono dice su etapa, si tiene sesion y su cola de OT.
+    'var AUTH_ETAPA = 1;\nfunction _uidSesionFirebase() { return ""; }\nasync function _obtenerOTsPendientes() { return []; }\n' +
     'function _tecnicoActual() { return estado.usuario; }\n' +
     'function _renderPausadasEnCadena() { esp.renders++; }\n' +
     'function _sincronizarPausadaFirebase(ot) { esp.subidas.push(String(ot.numero)); }\n' +

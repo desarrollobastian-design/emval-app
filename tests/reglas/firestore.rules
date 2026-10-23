@@ -1,0 +1,86 @@
+rules_version = '2';
+
+// REGLAS DE FIRESTORE — ETAPA 2 DE FIREBASE AUTH (EMVAL). NO PUBLICADAS.
+//
+// Se publican recien cuando conste que TODOS los telefonos tienen la version con Firebase Auth y
+// vaciaron su cola (reporte del telefono en `alertas`, ver tools/estado-telefonos.js). Si se publican
+// antes, un telefono con la version vieja queda con sus OT encoladas sin poder subirlas.
+// Publicarlas: consola de Firebase -> Firestore Database -> Reglas -> pegar este archivo -> Publicar.
+// Lo hace Bastian. Prueba: tests/reglas/reglas.test.js contra el emulador (README de esta carpeta).
+//
+// Quien es quien: `directorio/{uid}` (lo escribe solo un Administrador). Una cuenta de Firebase sin
+// ficha en el directorio, o con `activo: false`, NO es usuario de la app aunque haya iniciado sesion:
+// el alta de cuentas de Firebase Auth no se puede cerrar sin Identity Platform, asi que cualquiera
+// puede crear una; lo que no puede es darse una ficha.
+//
+// La matriz y el porque de cada fila: progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md, D.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function ficha() {
+      return get(/databases/$(database)/documents/directorio/$(request.auth.uid));
+    }
+    function esUsuario() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/directorio/$(request.auth.uid))
+        && ficha().data.get('activo', true) != false;
+    }
+    function esAdmin() { return esUsuario() && ficha().data.cargo == 'Administrador'; }
+    function esPanel() { return esUsuario() && ficha().data.cargo in ['Administrador', 'Supervisor']; }
+
+    // La pantalla de entrada lista a la gente ANTES de iniciar sesion: el directorio no tiene
+    // secretos (nombre, cargo, letra, correo de la cuenta, activo).
+    match /directorio/{uid} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+
+    // Todavia guarda PIN y hash (hasta la etapa 3): solo el Administrador.
+    match /tecnicos/{id} {
+      allow read, write: if esAdmin();
+    }
+
+    // El tecnico borra sus pausadas al cerrar (_cerrarPausadaEnLaNube) y los duplicados al pausar
+    // (_sincronizarPausadaFirebase). Una hoja firmada solo la borra el Administrador.
+    // Sus consultas (numero==, pausa==true) no filtran por tecnico: no hay regla de "solo lo suyo".
+    match /ordenes/{id} {
+      allow read, create, update: if esUsuario();
+      allow delete: if esAdmin()
+        || (esUsuario()
+            && (resource.data.get('pausa', false) == true || resource.data.get('estado', '') == 'En Pausa')
+            && resource.data.get('firmada', false) != true);
+    }
+
+    // El tecnico actualiza la cotizacion al cerrar una OT en espera (_vincularCotizacionRealizada).
+    match /cotizaciones/{id} {
+      allow read, update: if esUsuario();
+      allow create, delete: if esPanel();
+    }
+
+    match /cadenas/{id} {
+      allow read: if esUsuario();
+      allow write: if esAdmin();
+    }
+
+    // Visor publico ?pdf=<id>: quien tiene el enlace abre ESE documento (id aleatorio); nadie lista.
+    match /pdfs/{id} {
+      allow get: if true;
+      allow list, create: if esUsuario();
+    }
+
+    match /alertas/{id} {
+      allow read, create, update: if esUsuario();
+    }
+    match /bajas/{id} {
+      allow read, create, update: if esUsuario();
+    }
+    match /contadores/{id} {
+      allow read, create, update: if esUsuario();
+    }
+    match /correos_purgados/{id} {
+      allow read: if esPanel();
+      allow create: if esUsuario();
+    }
+  }
+}

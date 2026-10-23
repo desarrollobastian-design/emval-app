@@ -147,6 +147,8 @@ function motor(op) {
     'function _ocultoTecnico(t) { return t === "Bastian Baeza"; }\n' +
     'function _conTimeout(p) { return p; }\n' +
     'function _deviceIdCorreos() { return "dev_prueba"; }\n' +
+    // Etapa 1 de Auth: el reporte del telefono dice su etapa, si tiene sesion y su cola de OT.
+    'var AUTH_ETAPA = 1;\nfunction _uidSesionFirebase() { return ""; }\nasync function _obtenerOTsPendientes() { return []; }\n' +
     'function inicializarFotos() { estado.fotosAntes = []; estado.fotosDespues = []; }\n' +
     'function limpiarFirma() {}\n' +
     'function _setVozBtn() {}\n' +

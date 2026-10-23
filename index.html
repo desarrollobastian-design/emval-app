@@ -1290,7 +1290,7 @@
     <div id="panel-personal">
       <!-- Secundario: es la puerta de entrada al formulario, no el compromiso. Cuando el
            formulario esta abierto, el primario es "Guardar" y los dos se ven a la vez. -->
-      <button class="btn btn-secondary btn-sm" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
+      <div id="aviso-gestion-usuarios" class="card" style="margin-bottom:12px;font-size:13px;color:var(--texto2);line-height:1.5;">Las altas, las bajas y los cambios de PIN o contraseña los hace CorexOn. Escríbenos si necesitas uno.</div>
       <input type="text" id="personal-buscar" aria-label="Buscar personal" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
         <div style="font-size:15px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
@@ -1537,6 +1537,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
+<!-- Firebase Authentication (etapa 1, 23-10-2026). Sin señal en frio puede no cargar: entrar sin
+     señal no lo necesita (verificador local, ver _entrarConCuenta). -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
 firebase.initializeApp({
   apiKey: "AIzaSyAlIQW1wl8rRx4MlbOBz3Zgq9pS01Ys7B4",
@@ -2258,13 +2261,20 @@ async function _reportarPausadasDelTelefono(forzar) {
         conContenido: _hojaTieneContenido(ot)
       };
     });
-    const firma = JSON.stringify(items);
+    // Para pasar a la etapa 2 de Auth (reglas que piden sesion) hay que saber que CADA telefono ya
+    // tiene la version nueva, una sesion de Firebase y la cola vacia: tools/estado-telefonos.js.
+    const auth = { etapa: AUTH_ETAPA, sesion: !!_uidSesionFirebase(), uid: _uidSesionFirebase() };
+    let otsPendientes = null;
+    try { otsPendientes = (await _obtenerOTsPendientes()).length; } catch (e) {}
+    const firma = JSON.stringify([items, auth, otsPendientes]);
     // Sin cambios basta con refrescar el "visto hace" cada 6 h.
     if (!forzar && firma === _ultimoReportePausadas.firma && Date.now() - _ultimoReportePausadas.en < 21600000) return;
     await _conTimeout(window.firebase.firestore().collection('alertas').doc('pausadas_' + _deviceIdCorreos()).set({
       tipo: 'pausadas',            // sin `activa`: cargarAlertaCorreos no lo confunde con correos
       dispositivo: _deviceIdCorreos(),
       usuario: _tecnicoActual() || '',
+      auth: auth,
+      otsPendientes: otsPendientes,
       items: items,
       total: items.length,
       actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
@@ -2301,31 +2311,159 @@ let estado = {
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
-const PINS = {}; // Cargado dinamicamente desde Firebase
-const ADMIN_HASHES = {}; // { nombre: sha256Hash } solo para Administradores
-// Un Administrador sin passwordHash no entra con NINGUNA clave: no hay clave por defecto. Se dice
-// por que y a quien pedirlo, para que no se quede probando contrasenas que nunca van a servir.
-const ADMIN_SIN_ACCESO = 'Tu acceso de administrador no está activado. Pídele a CorexOn que lo active.';
+/* =========== ENTRAR: FIREBASE AUTHENTICATION (etapa 1, 23-10-2026) ===========
+   Antes la app validaba el PIN y la clave EN EL NAVEGADOR, contra `tecnicos.pin` (texto plano) y
+   `tecnicos.passwordHash` (SHA-256 sin sal): para eso la coleccion entera tenia que leerse sin
+   sesion, y quedaba copiada en cada telefono (emval_users_cache). Ahora:
+   - La lista de la pantalla de entrada sale de `directorio`, que no tiene secretos.
+   - CON SEÑAL se entra con Firebase Auth: la clave la verifica Firebase en su servidor y limita
+     los intentos. Al tecnico se le pide SU PIN DE SIEMPRE (_claveFirebaseDePin lo alarga a lo que
+     Firebase exige; no es un secreto). El Administrador, su clave de siempre.
+   - SIN SEÑAL se compara contra un verificador que el telefono guardo la ultima vez que esa
+     persona entro con señal (PBKDF2, sal propia). La primera vez en un telefono hay que tener señal.
+   - Cerrar sesion en la app NO cierra la sesion de Firebase: las colas de la noche suben con la
+     ultima cuenta valida del telefono (con las reglas de la etapa 2 eso es lo que las deja subir).
+   - No hay clave por defecto en ningun lado (PR #63): tests/admin-sin-clave-no-entra.js.
+   Las cuentas las crea tools/cuentas-auth.js. Diseño: progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md */
+const AUTH_ETAPA = 1;
+const DOMINIO_CORREO_CUENTA = 'emval-app.firebaseapp.com';
+// Las dos tienen que ser IDENTICAS a las de tools/cuentas-auth.js (lo vigila
+// tests/la-clave-de-firebase-sale-del-pin.js): si difieren, nadie entra.
+function _claveFirebaseDePin(pin) { return 'emval-pin-' + String(pin); }
+function _correoDeCuenta(uid) { return String(uid).toLowerCase() + '@' + DOMINIO_CORREO_CUENTA; }
+const ACCESO_DESACTIVADO = 'Tu acceso no está activado. Pídele a CorexOn que lo active.';
+const PRIMERA_VEZ_CON_SENAL = 'Sin señal: la primera vez en este teléfono tienes que entrar con señal.';
+const AUTH_MS_INICIO = 15000;
+const _FICHAS = {};          // nombre -> { uid, correo, cargo } (del directorio)
 let pinActual = '';
 let _pinTimer = null;   // la validacion del PIN agendada al cuarto digito (ver validarPin)
+let _credPendiente = null;   // entro SIN señal: { uid, correo, clave } solo en memoria, para Firebase
 
 async function sha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 }
 
+function _authFirebase() {
+  try { return (window.firebase && typeof window.firebase.auth === 'function') ? window.firebase.auth() : null; }
+  catch (e) { return null; }
+}
+function _uidSesionFirebase() {
+  const a = _authFirebase();
+  return (a && a.currentUser && a.currentUser.uid) || '';
+}
+
+// Verificador local: PBKDF2-SHA256 con sal aleatoria. Es lo unico del secreto que vive en el
+// telefono, y solo de quien entro con señal en ESE telefono.
+const VERIF_KEY = 'emval_verificadores';
+const VERIF_ITER = 150000;
+function _hex(buf) { return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2, '0'); }).join(''); }
+async function _pbkdf2(secreto, salHex, iter) {
+  const clave = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(secreto)), 'PBKDF2', false, ['deriveBits']);
+  const sal = new Uint8Array(salHex.match(/../g).map(function(h){ return parseInt(h, 16); }));
+  return _hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: sal, iterations: iter, hash: 'SHA-256' }, clave, 256));
+}
+function _leerVerificadores() {
+  try { return JSON.parse(localStorage.getItem(VERIF_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+async function _guardarVerificador(uid, secreto) {
+  try {
+    const sal = _hex(crypto.getRandomValues(new Uint8Array(16)));
+    const todos = _leerVerificadores();
+    todos[uid] = { sal: sal, it: VERIF_ITER, h: await _pbkdf2(secreto, sal, VERIF_ITER), en: Date.now() };
+    localStorage.setItem(VERIF_KEY, JSON.stringify(todos));
+  } catch (e) { console.warn('No se pudo guardar el verificador local:', e && e.message); }
+}
+// true / false, o null si este telefono nunca vio entrar con señal a esa persona.
+async function _verificarLocal(uid, secreto) {
+  const v = _leerVerificadores()[uid];
+  if (!v || !v.sal || !v.h) return null;
+  try { return (await _pbkdf2(secreto, v.sal, v.it || VERIF_ITER)) === v.h; } catch (e) { return null; }
+}
+
+// Inicio de sesion en Firebase. 'ok' | 'rechazada' | 'bloqueada' | 'desactivada' | 'sin-red'.
+// Un timeout es 'sin-red': no saber no es un rechazo (regla 3 de AGENTS.md).
+async function _iniciarSesionFirebase(correo, clave) {
+  const a = _authFirebase();
+  if (!a) return 'sin-red';   // sin señal en frio el SDK de Auth puede no haber cargado
+  try {
+    await _conTimeout(a.signInWithEmailAndPassword(correo, clave), AUTH_MS_INICIO, 'iniciar sesión');
+    return 'ok';
+  } catch (e) {
+    const c = (e && e.code) || '';
+    if (c === 'auth/wrong-password' || c === 'auth/invalid-credential' || c === 'auth/invalid-login-credentials' ||
+        c === 'auth/user-not-found' || c === 'auth/invalid-email') return 'rechazada';
+    if (c === 'auth/too-many-requests') return 'bloqueada';
+    if (c === 'auth/user-disabled') return 'desactivada';
+    return 'sin-red';
+  }
+}
+
+// Decide si `nombre` entra con `secreto` (PIN o clave). Devuelve { ok, sinSenal, msg }.
+async function _entrarConCuenta(nombre, secreto, esClave) {
+  const f = _FICHAS[nombre];
+  if (!f || !f.uid) return { ok: false, msg: ACCESO_DESACTIVADO };
+  const claveFb = esClave ? String(secreto) : _claveFirebaseDePin(secreto);
+  const incorrecto = esClave ? 'Contraseña incorrecta, intenta de nuevo' : 'PIN incorrecto, intenta de nuevo';
+  const r = await _iniciarSesionFirebase(f.correo || _correoDeCuenta(f.uid), claveFb);
+  if (r === 'ok') { await _guardarVerificador(f.uid, claveFb); _credPendiente = null; return { ok: true }; }
+  if (r === 'rechazada') return { ok: false, msg: incorrecto };
+  if (r === 'bloqueada') return { ok: false, msg: 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.' };
+  if (r === 'desactivada') return { ok: false, msg: ACCESO_DESACTIVADO };
+  const v = await _verificarLocal(f.uid, claveFb);
+  if (v === true) {
+    _credPendiente = { uid: f.uid, correo: f.correo || _correoDeCuenta(f.uid), clave: claveFb };
+    return { ok: true, sinSenal: true };
+  }
+  if (v === false) return { ok: false, msg: incorrecto };
+  return { ok: false, msg: PRIMERA_VEZ_CON_SENAL };
+}
+
+// Quien entro SIN señal inicia sesion en Firebase apenas vuelve la señal (lo llaman 'online',
+// la vuelta a primer plano y el intervalo de 90 s). Nunca muestra nada: si falla, reintenta.
+async function _reintentarSesionPendiente() {
+  const p = _credPendiente;
+  if (!p || _uidSesionFirebase() === p.uid) { if (p && _uidSesionFirebase() === p.uid) _credPendiente = null; return; }
+  const r = await _iniciarSesionFirebase(p.correo, p.clave);
+  if (r === 'ok' || r === 'rechazada' || r === 'desactivada') _credPendiente = null;
+}
+
+// Las sincronizaciones del arranque esperan (hasta `ms`) a que Firebase restaure la sesion del
+// telefono, para que la cola suba con ella. Despues siguen igual, haya sesion o no.
+let _authRestaurada = null;
+function _esperarSesionFirebase(ms) {
+  if (!_authRestaurada) {
+    _authRestaurada = new Promise(function(resolve) {
+      const a = _authFirebase();
+      if (!a || typeof a.onAuthStateChanged !== 'function') return resolve(false);
+      let listo = false;
+      try { a.onAuthStateChanged(function(u){ if (!listo) { listo = true; resolve(!!u); } }); }
+      catch (e) { resolve(false); }
+    });
+  }
+  return Promise.race([_authRestaurada, new Promise(function(r){ setTimeout(function(){ r(false); }, ms || 5000); })]);
+}
+
 async function verificarPasswordAdmin() {
-  if (!ADMIN_HASHES[estado.usuario]) { toast(ADMIN_SIN_ACCESO); return false; }
   // Antes esto era un prompt() nativo: la contrasena del administrador se veia en pantalla,
   // en un local, delante de quien pasara. Ahora es un campo type="password" con boton de ojo.
+  const f = _FICHAS[estado.usuario];
+  if (!f || !f.uid) { toast(ACCESO_DESACTIVADO); return false; }
   const pass = await _pedirTexto('Escribe tu contraseña para confirmar esta acción.', {
     titulo: 'Confirmar como administrador',
     password: true,
     okTexto: 'Confirmar',
   });
   if (pass === null) return false;   // cancelado; `null` no es lo mismo que ''
-  const hash = await sha256(pass);
-  if (hash === ADMIN_HASHES[estado.usuario]) return true;
+  // Contra el verificador del telefono (existe: para estar aqui entro una vez con señal). Si no
+  // estuviera, se confirma con Firebase.
+  const v = await _verificarLocal(f.uid, pass);
+  if (v === true) return true;
+  if (v === null) {
+    const r = await _iniciarSesionFirebase(f.correo || _correoDeCuenta(f.uid), pass);
+    if (r === 'ok') { await _guardarVerificador(f.uid, pass); return true; }
+    if (r === 'sin-red') { toast('Sin señal no se puede confirmar. Intenta con señal.'); return false; }
+  }
   toast('Contraseña incorrecta');
   return false;
 }
@@ -2616,12 +2754,6 @@ function seleccionarUsuario(nombre, cargo, letra) {
   document.getElementById('admin-pass-section').style.display = esAdmin ? 'block' : 'none';
   document.getElementById('pin-subtitulo').textContent = esAdmin ? 'Ingresa tu contraseña' : 'Ingresa tu PIN de 4 números';
   document.getElementById('admin-pass-error').style.display = 'none';
-  if (esAdmin && !ADMIN_HASHES[nombre]) {
-    // Se avisa al entrar, antes de que escriba nada (ver ADMIN_SIN_ACCESO).
-    const errSin = document.getElementById('admin-pass-error');
-    errSin.textContent = ADMIN_SIN_ACCESO;
-    errSin.style.display = 'block';
-  }
   if (esAdmin) {
     document.getElementById('admin-pass-input').value = '';
     setTimeout(function(){ document.getElementById('admin-pass-input').focus(); }, 350);
@@ -2699,54 +2831,57 @@ function loginExitoso() {
 /* LA CARRERA DE LOS 200 MS (Codex, revision del PR #63, 23-10-2026). pinInput agendaba
    validarPin 200 ms despues del cuarto digito y validarPin leia `estado.usuario` AL CORRER: si en
    ese intervalo se elegia a un Administrador (seleccionarUsuario no borraba el PIN tecleado), se
-   comparaba el PIN escrito con el del Administrador y se entraba como el SIN su contraseña. Los PIN
-   se pueden leer en Firestore, asi que eso abria la cuenta de Pedro. Ahora: el PIN viaja con quien
-   lo tecleo (`quien`), elegir a otra persona lo borra y cancela la validacion, un Administrador no
-   entra nunca por PIN, y la pantalla del PIN tiene que seguir abierta. */
-function validarPin(quien) {
+   comparaba el PIN escrito con el del Administrador y se entraba como el SIN su contraseña. Ahora: el
+   PIN viaja con quien lo tecleo (`quien`), elegir a otra persona lo borra y cancela la validacion,
+   un Administrador no entra nunca por PIN, y la pantalla del PIN tiene que seguir abierta. Con Firebase
+   Auth la cuenta del Administrador ademas no acepta una clave derivada de un PIN. */
+let _entrando = false;   // un toque de mas mientras Firebase responde no lanza un segundo intento
+
+async function validarPin(quien) {
+  if (_entrando) return;
   const enPantallaPin = (function(){ const s = document.getElementById('s-pin'); return !!(s && s.classList.contains('active')); })();
   if (quien !== estado.usuario || estado.cargo === 'Administrador' || !enPantallaPin) {
     pinActual = '';
     actualizarDots();
     return;
   }
-  const esperado = PINS[estado.usuario];
-  // Sin PIN valido no se entra, pero se dice POR QUE. "PIN incorrecto" mandaria al tecnico
-  // a probar combinaciones para siempre por un problema que solo el administrador resuelve.
-  if (!esperado) {
-    toast('Este usuario no tiene PIN. Pídele al administrador que lo configure.');
-    pinActual = '';
-    actualizarDots();
-    return;
-  }
-  if (pinActual === esperado) {
+  // Instantanea ANTES del primer await (regla 2): con mala señal la respuesta puede llegar cuando
+  // ya se eligio a otra persona, y no puede hacer entrar a esa otra.
+  const nombre = estado.usuario, pin = pinActual;
+  if (!nombre || pin.length !== 4) return;
+  _entrando = true;
+  let r;
+  try { r = await _entrarConCuenta(nombre, pin, false); }
+  finally { _entrando = false; }
+  if (estado.usuario !== nombre) return;
+  if (r.ok) {
     loginExitoso();
+    if (r.sinSenal) toast('Entraste sin señal. Tu trabajo sube solo cuando vuelva la señal.');
   } else {
-    toast('PIN incorrecto, intenta de nuevo');
+    toast(r.msg);
     pinActual = '';
     actualizarDots();
   }
 }
 
 async function validarPassword() {
+  if (_entrando) return;
   const inp = document.getElementById('admin-pass-input');
   const errDiv = document.getElementById('admin-pass-error');
-  const pass = inp.value;
-  if (!ADMIN_HASHES[estado.usuario]) {
-    // Sin hash no se compara nada: ninguna clave abre esta cuenta, ni siquiera una vacia.
-    inp.value = '';
-    errDiv.textContent = ADMIN_SIN_ACCESO;
-    errDiv.style.display = 'block';
-    return;
-  }
-  if (!pass) return;
-  const hash = await sha256(pass);
-  if (hash === ADMIN_HASHES[estado.usuario]) {
+  const nombre = estado.usuario, pass = inp.value;
+  if (!nombre || !pass) return;   // ninguna clave, ni vacia, se prueba sin una cuenta detras
+  _entrando = true;
+  let r;
+  try { r = await _entrarConCuenta(nombre, pass, true); }
+  finally { _entrando = false; }
+  if (estado.usuario !== nombre) return;
+  if (r.ok) {
     errDiv.style.display = 'none';
     loginExitoso();
+    if (r.sinSenal) toast('Entraste sin señal. Lo que hagas sube solo cuando vuelva la señal.');
   } else {
     inp.value = '';
-    errDiv.textContent = 'Contraseña incorrecta, intenta de nuevo';
+    errDiv.textContent = r.msg;
     errDiv.style.display = 'block';
     inp.focus();
   }
@@ -7655,28 +7790,8 @@ async function cargarTecnicosAdmin() {
       detalle.innerHTML = _cargoLabel(d.cargo || 'Tecnico en terreno') + (esAdminCargo ? ' | Contraseña: <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> protegida' : ' | PIN: ' + (d.pin || '----'));
       info.appendChild(nombre);
       info.appendChild(detalle);
-      const btns = document.createElement('div');
-      btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
-      if (esAdminCargo) {
-        const btnPass = document.createElement('button');
-        btnPass.textContent = 'Cambiar contraseña';
-        btnPass.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
-        btnPass.onclick = (function(id, nombre){ return function(){ cambiarPasswordAdmin(id, nombre); }; })(doc.id, d.nombre);
-        btns.appendChild(btnPass);
-      } else {
-        const btnEdit = document.createElement('button');
-        btnEdit.textContent = 'Editar';
-        btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
-        btnEdit.onclick = (function(id, data){ return function(){ editarTecnico(id, data); }; })(doc.id, d);
-        btns.appendChild(btnEdit);
-      }
-      const btnDel = document.createElement('button');
-      btnDel.textContent = 'Eliminar';
-      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
-      btnDel.onclick = (function(id){ return function(){ eliminarTecnico(id); }; })(doc.id);
-      btns.appendChild(btnDel);
+      // Sin botones desde la etapa 1 de Auth (D1-B): ver GESTION_POR_COREXON.
       div.appendChild(info);
-      div.appendChild(btns);
       lista.appendChild(div);
     });
   } catch(e) {
@@ -7687,95 +7802,18 @@ async function cargarTecnicosAdmin() {
   }
 }
 
-async function cambiarPasswordAdmin(docId, nombre) {
-  const nueva = await _pedirTexto('Mínimo 6 caracteres.', {
-    titulo: 'Nueva contraseña para ' + nombre,
-    password: true,
-    okTexto: 'Continuar',
-  });
-  if (nueva === null) return;   // cancelado: no molestar con un toast
-  if (nueva.trim().length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
-  const confirmar = await _pedirTexto('Escríbela otra vez para confirmar.', {
-    titulo: 'Confirma la nueva contraseña',
-    password: true,
-    okTexto: 'Guardar',
-  });
-  if (confirmar === null) return;
-  if (nueva !== confirmar) { toast('Las contraseñas no coinciden'); return; }
-  try {
-    const h = await sha256(nueva.trim());
-    await window.firebase.firestore().collection('tecnicos').doc(docId).update({ passwordHash: h });
-    ADMIN_HASHES[nombre] = h;
-    toast('Contraseña actualizada correctamente');
-  } catch(e) { _error('actualizar la contraseña', e); }
-}
-
-
-function mostrarFormTecnico() {
-  editandoTecnicoId = null;
-  document.getElementById('tec-nombre').value = '';
-  document.getElementById('tec-cargo').value = 'Tecnico en terreno';
-  document.getElementById('tec-pin').value = '';
-  document.getElementById('form-tecnico-titulo').textContent = 'Nuevo técnico';
-  document.getElementById('form-tecnico').style.display = 'block';
-}
+/* GESTION DE USUARIOS: desde la etapa 1 de Firebase Auth (23-10-2026) la hace CorexOn con
+   tools/cuentas-auth.js (decision de Bastian, D1-B). Sin servidor, el navegador no puede cambiarle
+   la clave de Firebase a otra persona: un PIN cambiado solo en `tecnicos` dejaria a ese tecnico
+   sin poder entrar, y un alta hecha solo aqui no tendria cuenta ni ficha en el directorio. */
+const GESTION_POR_COREXON = 'Las altas, las bajas y los cambios de PIN o contraseña los hace CorexOn. Escríbenos si necesitas uno.';
+function cambiarPasswordAdmin() { toast(GESTION_POR_COREXON); }
+function mostrarFormTecnico() { toast(GESTION_POR_COREXON); }
 function cancelarFormTecnico() { document.getElementById('form-tecnico').style.display = 'none'; editandoTecnicoId = null; }
 
-function editarTecnico(id, d) {
-  editandoTecnicoId = id;
-  document.getElementById('tec-nombre').value = d.nombre || '';
-  document.getElementById('tec-cargo').value = d.cargo || 'Tecnico en terreno';
-  document.getElementById('tec-pin').value = d.pin || '';
-  document.getElementById('form-tecnico-titulo').textContent = 'Editar técnico';
-  document.getElementById('form-tecnico').style.display = 'block';
-}
-
-async function guardarTecnico() {
-  const nombre = document.getElementById('tec-nombre').value.trim();
-  const cargo = document.getElementById('tec-cargo').value.trim();
-  const pin = document.getElementById('tec-pin').value.trim();
-  if (!nombre) { toast('Ingresa el nombre'); return; }
-  // EXACTAMENTE 4 digitos: el teclado del login (pinInput) topea en 4 y valida ahi.
-  // Un PIN mas largo se guardaria sin queja y el tecnico no podria entrar NUNCA,
-  // sin ningun mensaje que se lo explique. Antes esto decia `pin.length < 4` (solo minimo)
-  // y el input era type="number", que ignora maxlength por spec HTML.
-  if (!/^\d{4}$/.test(pin)) { toast('El PIN debe ser exactamente 4 números'); return; }
-  // El formulario seguia vivo durante el await: un doble toque creaba DOS tecnicos.
-  const soltar = _bloquear(document.getElementById('btn-guardar-tecnico'));
-  try {
-    const db = window.firebase.firestore();
-    const data = { nombre, cargo, pin, letra: nombre.charAt(0).toUpperCase() };
-    // _conTimeout: offline, el add()/update() de Firestore no resuelve ni rechaza. Sin esto
-    // el `finally` de abajo no corre y el boton "Guardar" se apaga para siempre.
-    if (editandoTecnicoId) {
-      await _conTimeout(db.collection('tecnicos').doc(editandoTecnicoId).update(data), 25000, 'update tecnico');
-      toast('Técnico actualizado');
-    } else {
-      await _conTimeout(db.collection('tecnicos').add(data), 25000, 'add tecnico');
-      toast('Técnico agregado');
-    }
-    cancelarFormTecnico();
-    await cargarTecnicosAdmin();
-    await cargarUsuariosApp();
-  } catch(e) {
-    console.error(e);
-    if (_esTimeout(e)) toast('Sin respuesta del servidor. Revisa la lista antes de volver a guardar: el técnico puede haberse creado igual.');
-    else toast('No se pudo guardar el técnico. Intenta de nuevo.');
-  }
-  finally { soltar(); }
-}
-
-async function eliminarTecnico(id) {
-  if (!await _confirmar('El técnico dejará de aparecer en la pantalla de inicio y no podrá entrar a la app.', { titulo: 'Eliminar técnico', okTexto: 'Eliminar', peligro: true })) return;
-  const ok = await verificarPasswordAdmin();
-  if (!ok) return;
-  try {
-    await window.firebase.firestore().collection('tecnicos').doc(id).delete();
-    toast('Técnico eliminado');
-    await cargarTecnicosAdmin();
-    await cargarUsuariosApp();
-  } catch(e) { _error('eliminar el técnico', e); }
-}
+function editarTecnico() { toast(GESTION_POR_COREXON); }
+async function guardarTecnico() { toast(GESTION_POR_COREXON); }
+async function eliminarTecnico() { toast(GESTION_POR_COREXON); }
 
 
 
@@ -7867,6 +7905,8 @@ function _renderListaUsuarios(docs) {
   const lista = document.getElementById('lista-usuarios');
   if (!lista) return;
   lista.innerHTML = '';
+  // Quien salio del directorio deja de poder entrar desde este render (no queda una ficha vieja).
+  Object.keys(_FICHAS).forEach(function(k){ delete _FICHAS[k]; });
   /* LITERAL-FIRMADO: paleta de avatares (misma razon). Color estable por cargo. */
   const colorFijoPorCargo = {
     'Administrador':       '#2D5AA0',
@@ -7880,20 +7920,11 @@ function _renderListaUsuarios(docs) {
   sorted.forEach(function(d) {
     if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
     if (_ocultoTecnico(d.nombre)) return;  // cuentas ocultas (dev/pruebas)
-    // Falla CERRADO. Antes era `d.pin || '1234'`: un tecnico sin PIN en Firestore recibia
-    // 1234 en silencio, y la pantalla de login lista a todos por nombre en un sitio publico.
-    // Un PIN ausente o mal formado ahora niega el acceso y lo dice (ver validarPin).
+    if (d.activo === false) return;        // dado de baja en el directorio
+    // Solo lo que hace falta para iniciar sesion: el secreto lo verifica Firebase (ver
+    // _entrarConCuenta). Sin clave por defecto en ningun caso (PR #63).
     const cargo = d.cargo || 'Tecnico en terreno';
-    // Un Administrador entra SOLO con su contraseña: su PIN (si lo tiene en Firestore) no se carga.
-    PINS[d.nombre] = (cargo !== 'Administrador' && /^\d{4}$/.test(String(d.pin || ''))) ? String(d.pin) : null;
-    if (cargo === 'Administrador') {
-      // Sin passwordHash no hay acceso: NINGUNA clave por defecto. Hasta el 22-10-2026 aca se
-      // calculaba el hash de una clave temporal escrita en este archivo (el repo es publico) y se
-      // guardaba en Firestore, asi que todo Administrador nuevo quedaba con esa clave. Ahora la
-      // asigna otro administrador (cambiarPasswordAdmin) o CorexOn; validarPassword avisa.
-      if (d.passwordHash) ADMIN_HASHES[d.nombre] = d.passwordHash;
-      else delete ADMIN_HASHES[d.nombre];
-    }
+    _FICHAS[d.nombre] = { uid: d._id, correo: d.correo || (d._id ? _correoDeCuenta(d._id) : ''), cargo: cargo };
     const color = colorFijoPorCargo[cargo] || _colorPorNombre(d.nombre);
     lista.appendChild(_crearUsuarioItem(d.nombre, cargo, d.letra || d.nombre.charAt(0).toUpperCase(), color));
   });
@@ -7917,10 +7948,14 @@ async function cargarUsuariosApp(_intento) {
   }
   try {
     const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    // `directorio`, no `tecnicos`: se lee sin sesion y no trae PIN ni hash (etapa 1 de Auth).
+    const snap = await db.collection('directorio').get();
     if (snap.empty) { if (!hayCache) _renderListaUsuarios([]); return; }
-    const docs = snap.docs.map(function(d){ return Object.assign({ _id: d.id }, d.data()); });
-    _cacheUsuarios(docs); // Guardar en cache para offline
+    const docs = snap.docs.map(function(d){
+      const x = d.data() || {};
+      return { _id: d.id, nombre: x.nombre || '', cargo: x.cargo || '', letra: x.letra || '', correo: x.correo || '', activo: x.activo };
+    }).sort(function(a, b){ return String(a.nombre).localeCompare(String(b.nombre)); });
+    _cacheUsuarios(docs); // Guardar en cache para offline (sin secretos)
     _renderListaUsuarios(docs);
   } catch(e) {
     // Sin señal real: nos quedamos con lo que ya pintamos del cache.
@@ -13326,15 +13361,19 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
   _cargando(lista, 3);
   try {
     const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    // `directorio` y no `tecnicos`: con las reglas de la etapa 2, `tecnicos` (PIN y hash) solo lo
+    // lee el Administrador, y aqui tambien entra el Supervisor.
+    const snap = await db.collection('directorio').get();
     _cargado(lista);
     lista.innerHTML = '';
     const tecnicos = snap.docs
-      .map(function(doc){ return doc.data(); })
+      .map(function(doc){ return doc.data() || {}; })
       .filter(function(t){
         const c = (t.cargo || '').toLowerCase();
-        return c.indexOf('supervisor') === -1 && c.indexOf('administrador') === -1;
-      });
+        return t.activo !== false && !_ocultoTecnico(t.nombre) &&
+          c.indexOf('supervisor') === -1 && c.indexOf('administrador') === -1;
+      })
+      .sort(function(a, b){ return String(a.nombre || '').localeCompare(String(b.nombre || '')); });
 
     if (tecnicos.length === 0) {
       lista.innerHTML = _vacio('Aún no hay técnicos', 'Agrégalos en Administración → Personal.');
@@ -16889,6 +16928,11 @@ async function sincronizarOTsPendientes() {
 }
 
 window.addEventListener('online', function() {
+  // Modo visor (?pdf=): esa pestaña solo muestra un PDF. Antes este listener no tenia la guardia
+  // y al volver la señal el visor corria todas las sincronizaciones (inventario del 23-10-2026).
+  if (_soloVisorPDF) return;
+  // Primero la sesion de quien entro sin señal: la cola sube con ella.
+  _reintentarSesionPendiente();
   actualizarIndicadorPendientes();
   setTimeout(sincronizarOTsPendientes, 2000);
   setTimeout(sincronizarPausadasPendientes, 2500);
@@ -16929,6 +16973,7 @@ document.addEventListener('visibilitychange', function() {
     // salen al instante si no hay pendientes, así que es seguro llamarlas cada vez.
     // En modo visor (?pdf=) no: esa pestaña solo muestra un PDF, no tiene nada que subir.
     if (_soloVisorPDF) return;
+    _reintentarSesionPendiente();
     actualizarIndicadorPendientes();
     setTimeout(sincronizarOTsPendientes, 800);
     setTimeout(sincronizarPausadasPendientes, 1200);
@@ -16947,12 +16992,20 @@ function _cacheCadenas(cadenas) {
 function _getCadenasCached() {
   try { var v = localStorage.getItem('emval_cadenas_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
 }
+// La lista de entrada en cache: SOLO lo del directorio (nombre, cargo, letra, correo, activo).
+// La clave vieja `emval_users_cache` guardaba `tecnicos` entero, PIN y hash incluidos: se borra.
+var _CAMPOS_FICHA = ['_id', 'nombre', 'cargo', 'letra', 'correo', 'activo'];
 function _cacheUsuarios(docs) {
-  try { localStorage.setItem('emval_users_cache', JSON.stringify(docs)); } catch(e) {}
+  try {
+    localStorage.setItem('emval_directorio_cache', JSON.stringify((docs || []).map(function(d) {
+      var f = {}; _CAMPOS_FICHA.forEach(function(k){ if (d[k] !== undefined) f[k] = d[k]; }); return f;
+    })));
+  } catch(e) {}
 }
 function _getUsuariosCached() {
-  try { var v = localStorage.getItem('emval_users_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+  try { var v = localStorage.getItem('emval_directorio_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
 }
+try { localStorage.removeItem('emval_users_cache'); } catch(e) {}
 
 // Iniciar carga. Los loaders son CACHE-FIRST: pintan de inmediato desde localStorage
 // (así la app abre aunque no haya señal) y se auto-reintentan para refrescar cuando
@@ -16985,12 +17038,16 @@ actualizarIndicadorPendientes();
 // En modo visor (?pdf=) NO corren: esa pestaña no es el teléfono de un técnico, no tiene
 // trabajo pendiente que subir, y sus peticiones competían con la carga del PDF.
 if (!_soloVisorPDF) {
-  setTimeout(sincronizarOTsPendientes, 3500);
-  setTimeout(sincronizarPausadasPendientes, 3000);
-  setTimeout(sincronizarCorreosPendientes, 4000);
-  setTimeout(sincronizarEnlacesPDFPendientes, 4500);
-  setTimeout(sincronizarCierresPausadaPendientes, 5000);
-  setTimeout(sincronizarBajasPendientes, 5400);
+  // Etapa 1 de Auth: el primer intento espera (hasta 5 s) a que Firebase restaure la sesion del
+  // telefono, para que la cola suba con ella; los tiempos de siempre se cuentan desde que abrio la app.
+  var _t0Arranque = Date.now();
+  _esperarSesionFirebase(5000).then(function() {
+    var pasado = Date.now() - _t0Arranque;
+    [[sincronizarPausadasPendientes, 3000], [sincronizarOTsPendientes, 3500], [sincronizarCorreosPendientes, 4000],
+     [sincronizarEnlacesPDFPendientes, 4500], [sincronizarCierresPausadaPendientes, 5000], [sincronizarBajasPendientes, 5400]
+    ].forEach(function(x) { setTimeout(x[0], Math.max(300, x[1] - pasado)); });
+  });
+  setInterval(_reintentarSesionPendiente, 90000);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);
