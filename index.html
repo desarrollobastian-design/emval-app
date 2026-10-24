@@ -16835,6 +16835,7 @@ async function sincronizarEnlacesPDFPendientes() {
           }
           await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
             _urlHSRescatada, '', _a.clientId);
+          if (yo._turno !== turno) return;   // ronda 7
           if (_a.emailLocal) {
             await _enviarCorreo({
               email_admin: _a.emailLocal,
@@ -16902,8 +16903,10 @@ async function _obtenerOTsPendientes() {
   });
 }
 
-async function _eliminarOTPendiente(id) {
+// `sigue` (opcional): se pregunta despues de abrir la base; si dice que no, no se borra y devuelve false.
+async function _eliminarOTPendiente(id, sigue) {
   var db = await _abrirDBOffline();
+  if (sigue && !sigue()) return false;
   return new Promise(function(resolve, reject) {
     var tx = db.transaction('ots_pendientes', 'readwrite');
     tx.objectStore('ots_pendientes').delete(id);
@@ -17141,18 +17144,22 @@ async function sincronizarOTsPendientes() {
         } else {
           for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
             if (!ot.fotosAntes[i]) continue;
+            if (yo._turno !== turno) return;   // ronda 7: antes de cada subida (cada una puede tardar)
             var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
             if (u) urlsAntes.push(u);
           }
           for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
             if (!ot.fotosDespues[i]) continue;
+            if (yo._turno !== turno) return;   // ronda 7
             var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
             if (u) urlsDespues.push(u);
           }
+          if (yo._turno !== turno) return;   // ronda 7
           if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
 
           for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
             var a = ot.audiosBase64[i];
+            if (yo._turno !== turno) return;   // ronda 7
             var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
             if (u) urlsAudio.push(u);
           }
@@ -17241,7 +17248,9 @@ async function sincronizarOTsPendientes() {
         }
 
         if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
-        await _eliminarOTPendiente(ot.id);
+        // Ronda 7: abrir IndexedDB tambien es una espera; si en ella dejo de ser la vigente, la OT se queda
+        // en la cola (ya esta arriba: la vigente o la vuelta siguiente la sacan y mandan el aviso).
+        if ((await _eliminarOTPendiente(ot.id, function() { return yo._turno === turno; })) === false) return;
         toast('OT #' + ot.numero + ' sincronizada ✓');
         _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
           (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
