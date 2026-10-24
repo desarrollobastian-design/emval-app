@@ -16785,6 +16785,9 @@ async function sincronizarEnlacesPDFPendientes() {
     if (!navigator.onLine || !window._firebaseReady) return;
     var lista = _leerEnlacesPDFPendientes();
     if (!lista.length) return;
+    // Lo que esta vuelta leyo, tal cual (antes de que el rescate de abajo le agregue una URL): al terminar,
+    // lo que no sea exactamente esto se encolo mientras corria y se conserva.
+    var _leidos = lista.map(function(it){ return JSON.stringify(it); });
     var db = window.firebase.firestore();
     var quedan = [];
     for (var i = 0; i < lista.length; i++) {
@@ -16852,7 +16855,14 @@ async function sincronizarEnlacesPDFPendientes() {
         quedan.push(it);
       }
     }
-    _escribirEnlacesPDFPendientes(quedan);
+    /* LO QUE SE ENCOLO MIENTRAS CORRIA no esta en `lista` (24-10-2026). Escribir solo `quedan` lo borraba:
+       otra OT que cerraba con mala señal en ese rato perdia su enlace (regla 4 de AGENTS.md), aun con una
+       sola corrida. Se relee la lista y se conserva todo lo que no es exactamente lo que esta vuelta leyo.
+       Se compara el CONTENIDO y no solo la OT: la lista guarda uno por OT, y si una OT volvio a encolar un
+       enlace nuevo en ese rato, el nuevo manda sobre el viejo que quedo pendiente aca. */
+    var _nuevos = _leerEnlacesPDFPendientes().filter(function(it){ return _leidos.indexOf(JSON.stringify(it)) < 0; });
+    var _otsNuevas = _nuevos.map(function(it){ return it.otDocId; });
+    _escribirEnlacesPDFPendientes(quedan.filter(function(it){ return _otsNuevas.indexOf(it.otDocId) < 0; }).concat(_nuevos));
   })();
   } finally {
     // Si el guardian ya la dio por colgada y corre otra, esta no le suelta el candado a la otra.
