@@ -16819,6 +16819,7 @@ async function sincronizarEnlacesPDFPendientes() {
         await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
           25000, 'reintento enlace pdf');
         console.log('Enlace de PDF aplicado a la OT', it.otDocId);
+        if (yo._turno !== turno) return;   // ronda 7: el aviso lo manda la vigente, que reaplica el enlace
         /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
            quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
            orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
@@ -16837,6 +16838,7 @@ async function sincronizarEnlacesPDFPendientes() {
           }
           await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
             _urlHSRescatada, '', _a.clientId);
+          if (yo._turno !== turno) return;   // ronda 7
           if (_a.emailLocal) {
             await _enviarCorreo({
               email_admin: _a.emailLocal,
@@ -16911,8 +16913,10 @@ async function _obtenerOTsPendientes() {
   });
 }
 
-async function _eliminarOTPendiente(id) {
+// `sigue` (opcional): se pregunta despues de abrir la base; si dice que no, no se borra y devuelve false.
+async function _eliminarOTPendiente(id, sigue) {
   var db = await _abrirDBOffline();
+  if (sigue && !sigue()) return false;
   return new Promise(function(resolve, reject) {
     var tx = db.transaction('ots_pendientes', 'readwrite');
     tx.objectStore('ots_pendientes').delete(id);
@@ -17150,18 +17154,22 @@ async function sincronizarOTsPendientes() {
         } else {
           for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
             if (!ot.fotosAntes[i]) continue;
+            if (yo._turno !== turno) return;   // ronda 7: antes de cada subida (cada una puede tardar)
             var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
             if (u) urlsAntes.push(u);
           }
           for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
             if (!ot.fotosDespues[i]) continue;
+            if (yo._turno !== turno) return;   // ronda 7
             var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
             if (u) urlsDespues.push(u);
           }
+          if (yo._turno !== turno) return;   // ronda 7
           if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
 
           for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
             var a = ot.audiosBase64[i];
+            if (yo._turno !== turno) return;   // ronda 7
             var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
             if (u) urlsAudio.push(u);
           }
@@ -17206,6 +17214,7 @@ async function sincronizarOTsPendientes() {
           pdfUrlSync = yaFirmada.pdfUrlCloudinary;
         } else if (ot.pdfBase64) {
           pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
+          if (yo._turno !== turno) return;   // ronda 7: la subida del PDF puede tardar 30 s
           if (pdfUrlSync && ot.clientId) {
             // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
             // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
@@ -17213,6 +17222,7 @@ async function sincronizarOTsPendientes() {
             try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
             catch(e) {
               console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
+              if (yo._turno !== turno) return;   // ronda 7: la OT sigue en la cola, la vigente la resuelve
               _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
             }
           }
@@ -17248,7 +17258,9 @@ async function sincronizarOTsPendientes() {
         }
 
         if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
-        await _eliminarOTPendiente(ot.id);
+        // Ronda 7: abrir IndexedDB tambien es una espera; si en ella dejo de ser la vigente, la OT se queda
+        // en la cola (ya esta arriba: la vigente o la vuelta siguiente la sacan y mandan el aviso).
+        if ((await _eliminarOTPendiente(ot.id, function() { return yo._turno === turno; })) === false) return;
         toast('OT #' + ot.numero + ' sincronizada ✓');
         _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
           (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')

@@ -27,6 +27,11 @@
       trabada: la corrida nueva corre. Uno recien tomado si la frena.
    9. (Ronda 6) La corrida VIEJA que el guardian dejo atras y despierta tarde no escribe: no pisa la OT
       que ya subio la nueva ni una correccion posterior (reloj simulado, sin reglas, como la etapa 1).
+  10. (Ronda 7) Lo mismo con la vieja dormida en la subida del PDF (hasta 30 s): al despertar no escribe el
+      enlace ni lo encola; el enlace corregido despues queda intacto. En el tramo 9, ademas, la vieja no
+      sigue subiendo fotos: solo termina la que tenia en vuelo.
+  11. (Ronda 7) Sacar la OT de la cola espera a IndexedDB: la funcion REAL `_eliminarOTPendiente` no borra
+      si al abrir la base la corrida ya no es la vigente, y la cola le pasa esa pregunta.
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -92,7 +97,7 @@ function crearNube(docs, opciones) {
 async function correr(docs, ot, opciones) {
   opciones = opciones || {};
   const nube = crearNube(docs, opciones);
-  const r = { subidas: 0, pdfs: 0, eliminadas: [], errores: [], avisos: [], vinculos: 0 };
+  const r = { subidas: 0, pdfs: 0, eliminadas: [], errores: [], avisos: [], vinculos: 0, encolados: 0 };
   const window = { firebase: nube.firebase, _firebaseReady: true };
   const deps = {
     navigator: { onLine: true }, window, document: { getElementById: () => null },
@@ -102,13 +107,16 @@ async function correr(docs, ot, opciones) {
       if (opciones.compuerta) { const g = opciones.compuerta; opciones.compuerta = null; await g; }   // la primera subida se queda dormida
       r.subidas++; return 'https://res.cloudinary.com/x/nueva_' + nombre;
     },
-    _subirPDFaCloudinary: async () => { r.pdfs++; return 'https://res.cloudinary.com/x/hoja_nueva.pdf'; },
+    _subirPDFaCloudinary: async () => {
+      if (opciones.compuertaPDF) { const g = opciones.compuertaPDF; opciones.compuertaPDF = null; await g; }   // la primera subida del PDF se queda dormida
+      r.pdfs++; return 'https://res.cloudinary.com/x/hoja_nueva.pdf';
+    },
     _vincularCotizacionRealizada: async () => { r.vinculos++; },
     _enviarCorreo: async p => { r.avisos.push(p.pdf_url); },
     _eliminarOTPendiente: async id => { r.eliminadas.push(id); },
     _notificarOTCompletada: async () => {},
     _error: (que, e, msg) => { r.errores.push(String(msg || que)); },
-    _encolarEnlacePDF: () => {},
+    _encolarEnlacePDF: () => { r.encolados++; },
     _normTipo: t => t, _tecnicoActual: () => 'Tomas Prueba', _conTimeout: p => p,
     _numOTCorreo: n => String(n), _urlPDFVista: u => u, _nombrePDFHoja: () => 'HS',
     _uidSesionFirebase: () => (opciones.sinSesion ? '' : 'u_tec'),
@@ -232,14 +240,59 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
   await k.silencio(k.fn);                                           // la nueva entra, sube y escribe la OT
   const nuevaEscribio = !!(k.docs.cli_1 && k.docs.cli_1.firmada === true);
   k.docs.cli_1.descripcionTrabajo = 'corregido por el administrador';  // correccion posterior
-  const escriturasAntes = k.escrituras.length;
+  const escriturasAntes = k.escrituras.length, subidasAntes = k.subidas;
   soltar(); await vieja;                                            // la vieja despierta
   const escribioLaVieja = k.escrituras.length - escriturasAntes;
+  const subioLaVieja = k.subidas - subidasAntes;                    // 1 = solo la que tenia en vuelo
   const correccionIntacta = k.docs.cli_1.descripcionTrabajo === 'corregido por el administrador';
   console.log('9) Corrida vieja tarde  → la nueva: ' + (nuevaEscribio ? 'subio la OT ✓' : 'NO ✗') + ' · la vieja al despertar: ' +
-    (escribioLaVieja === 0 ? 'no escribe ✓' : escribioLaVieja + ' escrituras ✗') + ' · la correccion: ' + (correccionIntacta ? 'intacta ✓' : 'PISADA ✗'));
+    (escribioLaVieja === 0 ? 'no escribe ✓' : escribioLaVieja + ' escrituras ✗') + ' · la correccion: ' + (correccionIntacta ? 'intacta ✓' : 'PISADA ✗') +
+    ' · fotos que siguio subiendo: ' + (subioLaVieja <= 1 ? 'ninguna mas ✓' : (subioLaVieja - 1) + ' ✗'));
   chequear(nuevaEscribio, 'la corrida nueva (por el guardian) no subio la OT');
   chequear(escribioLaVieja === 0 && correccionIntacta, 'la corrida vieja que el guardian dejo atras escribio al despertar y piso una correccion posterior (Codex, ronda 6)');
+  chequear(subioLaVieja <= 1, 'la corrida vieja que el guardian dejo atras siguio subiendo fotos a Cloudinary al despertar (Codex, ronda 7)');
+
+  // 10. La corrida vieja despierta tarde en la subida del PDF
+  let soltar10; const o10 = { sinReglas: true, manual: true, compuertaPDF: new Promise(res => { soltar10 = res; }) };
+  const q = await correr({}, otCola(), o10);
+  const vieja10 = q.silencio(q.fn);                                 // sube fotos, escribe la OT y se duerme en el PDF
+  await new Promise(res => setTimeout(res, 20));
+  const laViejaLlegoAlPDF = !!(q.docs.cli_1 && q.docs.cli_1.firmada === true) && !q.docs.cli_1.pdfUrlCloudinary;
+  q.fn._desde = Date.now() - 16 * 60000;                            // reloj del guardian: pasaron 16 min
+  await q.silencio(q.fn);                                           // la nueva la ve arriba y completa el enlace
+  const nuevaEnlazo = !!(q.docs.cli_1 && q.docs.cli_1.pdfUrlCloudinary);
+  q.docs.cli_1.pdfUrlCloudinary = 'https://res.cloudinary.com/x/hoja_v2.pdf';   // el administrador corrige la hoja
+  const escrituras10 = q.escrituras.length, encolados10 = q.encolados;
+  soltar10(); await vieja10;                                        // la vieja despierta con su PDF
+  const escribio10 = q.escrituras.length - escrituras10, encolo10 = q.encolados - encolados10;
+  const enlaceIntacto = q.docs.cli_1.pdfUrlCloudinary === 'https://res.cloudinary.com/x/hoja_v2.pdf';
+  console.log('10) Vieja en el PDF     → llego al PDF: ' + (laViejaLlegoAlPDF ? 'si (control) ✓' : 'NO ✗') + ' · la nueva: ' + (nuevaEnlazo ? 'enlazo ✓' : 'NO ✗') +
+    ' · la vieja al despertar: ' + (escribio10 + encolo10 === 0 ? 'no escribe ni encola ✓' : escribio10 + ' escrituras y ' + encolo10 + ' encolados ✗') +
+    ' · el enlace corregido: ' + (enlaceIntacto ? 'intacto ✓' : 'PISADO ✗'));
+  chequear(laViejaLlegoAlPDF && nuevaEnlazo, 'el tramo 10 no llego a la ventana que mide (la vieja no se durmio en el PDF o la nueva no enlazo)');
+  chequear(escribio10 + encolo10 === 0 && enlaceIntacto, 'la corrida vieja dormida en la subida del PDF escribio el enlace al despertar y piso el corregido (Codex, ronda 7)');
+
+  // 11. Sacar la OT de la cola despues de esperar a IndexedDB
+  const i11 = src.indexOf('async function _eliminarOTPendiente(');
+  const j11 = i11 >= 0 ? src.indexOf('\n}\n', i11) : -1;
+  chequear(i11 >= 0 && j11 > i11, 'no se encontro _eliminarOTPendiente (¿se renombro?)');
+  if (i11 >= 0 && j11 > i11) {
+    const borrados = [];
+    const dbFalsa = { transaction: () => { const tx = { objectStore: () => ({ delete: id => { borrados.push(id); setTimeout(() => tx.oncomplete && tx.oncomplete(), 0); } }) }; return tx; } };
+    const eliminar = new Function('_abrirDBOffline', src.slice(i11, j11 + 2) + '\nreturn _eliminarOTPendiente;')(async () => dbFalsa);
+    let vigente = true;
+    const r11a = await eliminar(41, () => vigente);                 // sigue siendo la vigente: borra
+    vigente = false;
+    const r11b = await eliminar(42, () => vigente);                 // dejo de serlo mientras abria la base
+    await eliminar(43);                                             // sin pregunta (el otro llamador): borra
+    const pasaLaPregunta = /_eliminarOTPendiente\(ot\.id,\s*function\s*\(\)\s*\{\s*return yo\._turno === turno;\s*\}\)\)\s*===\s*false\)\s*return;/.test(src.slice(i, j));
+    const ok11 = borrados.join(',') === '41,43' && r11b === false && r11a !== false;
+    console.log('11) Borrar tras IndexedDB → vigente: ' + (borrados.indexOf(41) >= 0 ? 'borra ✓' : 'NO ✗') + ' · ya no vigente: ' +
+      (borrados.indexOf(42) < 0 && r11b === false ? 'no borra, la OT se queda ✓' : 'BORRA ✗') + ' · sin pregunta: ' + (borrados.indexOf(43) >= 0 ? 'borra ✓' : 'NO ✗') +
+      ' · la cola le pasa el turno: ' + (pasaLaPregunta ? 'si ✓' : 'NO ✗'));
+    chequear(ok11, 'la corrida vieja saca la OT de la cola aunque deje de ser la vigente mientras espera a IndexedDB (Codex, ronda 7)');
+    chequear(pasaLaPregunta, 'sincronizarOTsPendientes no le pasa el control de turno a _eliminarOTPendiente o no sale si no se borro');
+  }
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });
