@@ -29,8 +29,9 @@
        sesion y recien despues se cierra.
    16. (nuevo 7) Seis intentos equivocados A LA VEZ sin señal (seis pestañas) borran el verificador:
        los fallos no se pisan entre si.
-   17. (Codex, ronda 3) Guardar el verificador de una persona mientras otra pestaña borra el de OTRA no
-       lo resucita: su lapida sigue.
+   17. (Codex, rondas 3 y 4) Guardar el verificador de una persona mientras otra pestaña borra el de OTRA
+       no lo resucita, aunque la otra pestaña escriba justo entre la lectura y la escritura: su lapida
+       sigue (cada verificador vive en su propia clave).
    18. (Revisor, ronda 3, obs. 1) Al abrirse la sesion de quien entro sin señal, la cola vuelve a correr
        (no espera la vuelta de 90 s).
 
@@ -62,7 +63,9 @@ const DIA = 86400000;
 function montar(op) {
   op = op || {};
   const mem = op.mem || {};
-  const localStorage = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
+  const ganchos = op.ganchos || {};
+  const localStorage = { getItem: k => { const v = (k in mem ? mem[k] : null); if (ganchos.alLeer) ganchos.alLeer(k, mem); return v; },
+    setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
   const cuentas = {};
   const modo = { red: true, codigo: null, cuelga: false, tarda: 0, uidTarde: null, uidForzado: null, intentos: [], salidas: 0 };
   let actual = op.actual || null;
@@ -96,7 +99,8 @@ function montar(op) {
   const colaCorrida = { ots: 0, enlaces: 0 };
   const codigo = mTimeout[0] + '\n' + bloque.replace('const AUTH_MS_INICIO = 15000;', 'const AUTH_MS_INICIO = 300;') + '\n' + mSalir[0] +
     '\nreturn { _entrarConCuenta, _reintentarSesionPendiente, verificarPasswordAdmin, _correoDeCuenta, _claveFirebaseDePin,' +
-    ' cerrarSesion, FICHAS: _FICHAS, pendiente: () => _credPendiente, PRIMERA_VEZ_CON_SENAL, ACCESO_DESACTIVADO, VERIF_KEY,' +
+    ' cerrarSesion, FICHAS: _FICHAS, pendiente: () => _credPendiente, PRIMERA_VEZ_CON_SENAL, ACCESO_DESACTIVADO,' +
+    ' VERIF_KEY: typeof VERIF_KEY !== "undefined" ? VERIF_KEY : null, VERIF_PREFIJO: typeof VERIF_PREFIJO !== "undefined" ? VERIF_PREFIJO : null,' +
     // Con el codigo anterior a la revision no existen: la prueba falla en su tramo, no se cae.
     ' _completarSalidaDiferida: typeof _completarSalidaDiferida === "function" ? _completarSalidaDiferida : async function(){},' +
     ' diferida: function(){ return typeof _salidaDiferida !== "undefined" && _salidaDiferida; },' +
@@ -124,7 +128,16 @@ function fichas(t) {
   t.cuentas[t.api._correoDeCuenta('u_beto')] = t.api._claveFirebaseDePin('7305');
   t.cuentas[t.api._correoDeCuenta('u_pedro')] = CLAVE_PEDRO;
 }
-const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || '{}')[uid]; } catch (e) { return undefined; } };
+// Sirven para los dos formatos: una clave por persona (desde la ronda 4) o todos en una (antes).
+const verifDe = (t, uid) => { try {
+  return t.api.VERIF_PREFIJO ? (JSON.parse(t.mem[t.api.VERIF_PREFIJO + uid] || 'null') || undefined) : JSON.parse(t.mem[t.api.VERIF_KEY] || '{}')[uid];
+} catch (e) { return undefined; } };
+const ponerVerif = (t, uid, v) => {
+  if (t.api.VERIF_PREFIJO) { t.mem[t.api.VERIF_PREFIJO + uid] = JSON.stringify(v); return; }
+  const todos = JSON.parse(t.mem[t.api.VERIF_KEY] || '{}'); todos[uid] = v; t.mem[t.api.VERIF_KEY] = JSON.stringify(todos);
+};
+const clavesVerif = t => Object.keys(t.mem).filter(k => t.api.VERIF_PREFIJO ? k.indexOf(t.api.VERIF_PREFIJO) === 0 : k === t.api.VERIF_KEY);
+const memVerif = t => { const o = {}; clavesVerif(t).forEach(k => { o[k] = t.mem[k]; }); return o; };
 
 (async () => {
   console.log('Entrar con Firebase Auth: con señal, sin señal, la primera vez y los bloqueos\n');
@@ -133,7 +146,7 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
 
   // 1. Con señal
   const r1 = await api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
-  const verif = t.mem[api.VERIF_KEY] || '';
+  const verif = clavesVerif(t).map(k => t.mem[k]).join('');
   const sinSecreto = verif && !verif.includes(PIN_ANA) && !verif.includes(api._claveFirebaseDePin(PIN_ANA));
   console.log('1) Con señal     → ' + (r1.ok && !r1.sinSenal ? 'entra ✓' : 'NO ENTRA ✗') + ', verificador ' + (verifDe(t, 'u_ana') ? 'guardado' : 'NO GUARDADO') + (sinSecreto ? ' sin el PIN ✓' : ' ✗'));
   chequear(r1.ok && !r1.sinSenal, 'con señal y su PIN, Ana no entra');
@@ -177,7 +190,7 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
   chequear(!r9.ok && r9.msg === api.PRIMERA_VEZ_CON_SENAL && ms < 5000, 'un timeout no se trata como "sin señal" (o se cuelga)');
 
   // 6. Sin el SDK de Auth: sin señal el verificador; con señal se recarga
-  const memAna = { [api.VERIF_KEY]: t.mem[api.VERIF_KEY] };
+  const memAna = memVerif(t);
   const s1 = montar({ sinSdk: true, mem: Object.assign({}, memAna) }); fichas(s1);
   s1.modo.red = false;
   const r10 = await s1.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
@@ -217,7 +230,7 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
   delete v.mem['emval_intentos'];                                    // paso la espera de los 5 fallos
   const r15f = await v.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
   const v2 = montar({ mem: Object.assign({}, memAna) }); fichas(v2);
-  const viejo = JSON.parse(v2.mem[v2.api.VERIF_KEY]); viejo['u_ana'].en = Date.now() - 15 * DIA; v2.mem[v2.api.VERIF_KEY] = JSON.stringify(viejo);
+  const viejo = verifDe(v2, 'u_ana'); viejo.en = Date.now() - 15 * DIA; ponerVerif(v2, 'u_ana', viejo);
   v2.modo.red = false;
   const r15 = await v2.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
   const r15b = await v2.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);   // y la vez siguiente
@@ -367,12 +380,13 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
   chequear(borrado6, 'seis intentos simultaneos dejaron el verificador: los fallos se pisaron entre si (Codex, nuevo 7)');
 
   // 17. Guardar y borrar cruzados (dos pestañas)
-  const g = montar(); fichas(g);
+  // La otra pestaña escribe JUSTO DESPUES de la lectura que hace el guardado (entre leer y escribir).
+  const ganchos = {};
+  const g = montar({ ganchos }); fichas(g);
   await g.api._guardarVerificador('u_beto', g.api._claveFirebaseDePin('7305'));
-  const guardando = g.api._guardarVerificador('u_ana', g.api._claveFirebaseDePin(PIN_ANA));   // pestaña 1, en curso
-  const otraPestana = JSON.parse(g.mem[g.api.VERIF_KEY]); otraPestana['u_beto'] = { fin: 'fallos', en: Date.now() };
-  g.mem[g.api.VERIF_KEY] = JSON.stringify(otraPestana);                                      // pestaña 2 lo borra
-  await guardando;
+  ganchos.alLeer = function() { ganchos.alLeer = null; ponerVerif(g, 'u_beto', { fin: 'fallos', en: Date.now() }); };   // pestaña 2 lo borra
+  await g.api._guardarVerificador('u_ana', g.api._claveFirebaseDePin(PIN_ANA));                                        // pestaña 1 guarda
+  if (ganchos.alLeer) { ganchos.alLeer = null; ponerVerif(g, 'u_beto', { fin: 'fallos', en: Date.now() }); }          // (si no leyo nada: la borra igual)
   const beto17 = verifDe(g, 'u_beto'), ana17 = verifDe(g, 'u_ana');
   const lapidaSigue = !!beto17 && beto17.fin === 'fallos' && !beto17.sal && !beto17.h;
   console.log('17) Cruzados    → guardar el de Ana mientras otra pestaña borra el de Beto: ' + (lapidaSigue ? 'la lapida de Beto sigue ✓' : 'BETO REVIVE ✗') +

@@ -27,6 +27,8 @@
      4. El reintento NO pisa con '' un enlace que ya estaba bueno.
      5. Un enlace que no se logra aplicar NO se borra de la cola (mismo invariante que la cola
         de correos: o se escribe, o sigue pendiente).
+     6. (Revision de Codex, ronda 4 del PR #64) Dos corridas a la vez de la cola no aplican el mismo
+        enlace dos veces: corre una, y la otra despues.
 
    Uso:  node tests/enlace-pdf-no-se-pierde-sin-senal.js index.html
    Sale 0 si los cinco invariantes se sostienen; 1 si alguno se rompio. */
@@ -108,11 +110,12 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
       setItem: function (k, v) { almacen[k] = String(v); },
     };
     const escrituras = [];
-    let fallarEscritura = false;
+    let fallarEscritura = false, demora = 0;
     const docFalso = {
       update: function (campos) {
         escrituras.push({ tipo: 'update', campos: campos });
-        return fallarEscritura ? Promise.reject(new Error('unavailable')) : Promise.resolve();
+        if (fallarEscritura) return Promise.reject(new Error('unavailable'));
+        return demora ? new Promise(function (r) { setTimeout(r, demora); }) : Promise.resolve();
       },
       set: function (campos, opts) {
         escrituras.push({ tipo: 'set', campos: campos, opts: opts });
@@ -174,9 +177,21 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
       chequear(quedan.length === 1 && quedan[0].otDocId === 'ot-3',
         'un enlace que no se pudo aplicar se borro de la cola: se pierde igual que antes');
 
+      // e) Dos corridas a la vez (la sesion recien abierta y el 'online', por ejemplo).
+      fallarEscritura = false; demora = 40;
+      almacen[Object.keys(almacen)[0]] = JSON.stringify([{ otDocId: 'ot-4', pdfUrl: '', pdfUrlCloudinary: 'https://cloud/una-vez.pdf' }]);
+      escrituras.length = 0;
+      await Promise.all([api.sincronizar(), api.sincronizar()]);
+      await new Promise(function (r) { setTimeout(r, 150); });   // la segunda corre despues
+      const aplicadas = escrituras.filter(function (e) { return e.campos.pdfUrlCloudinary === 'https://cloud/una-vez.pdf'; }).length;
+      chequear(aplicadas === 1, 'dos corridas a la vez de la cola de enlaces aplicaron el mismo enlace ' + aplicadas + ' veces (Codex, ronda 4)');
+      chequear(api.leer().length === 0, 'tras dos corridas a la vez el enlace aplicado no salio de la cola');
+      demora = 0;
+
       console.log('3) Reintento con update(), nunca set({merge}): ' + (escrituras[0] && escrituras[0].tipo === 'update' ? 'ok ✓' : 'roto ✗'));
       console.log('4) No pisa un enlace bueno con vacio: ' + (escrituras[0] && !('pdfUrl' in escrituras[0].campos) ? 'ok ✓' : 'roto ✗'));
       console.log('5) Lo que no se aplica sigue pendiente: ' + (quedan.length === 1 ? 'ok ✓' : 'roto ✗'));
+      console.log('6) Dos corridas a la vez, un solo update: ' + (aplicadas === 1 ? 'ok ✓' : aplicadas + ' updates ✗'));
 
       cerrar();
     })();

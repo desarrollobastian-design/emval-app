@@ -18,6 +18,10 @@
       servidor (`source: 'server'`) y la OT se vuelve a subir; no sale de la cola por la cache.
    6. Rechazo sin sesion de Firebase: si la sesion viene en camino (quien entro sin señal), no se avisa
       nada; si no, el aviso dice que hay que entrar con señal (no "avisale a CorexOn"). La OT se queda.
+      (Ronda 4) Mientras no haya sesion, NO se vuelve a intentar (no se suben fotos para nada); y ese aviso
+      no tapa un rechazo distinto que llegue despues, con sesion.
+   7. (Ronda 4) Dos corridas a la vez de la misma cola: una sola sube y escribe; la otra corre despues y
+      ve la hoja ya firmada.
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -44,7 +48,7 @@ function crearNube(docs, opciones) {
   let ts = 0;
   const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   function revisar(id, nuevo) {
-    if (opciones.sinSesion) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    if (opciones.sinSesion || opciones.rechazarTodo) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
     const prev = docs[id] && !docs[id].__soloCache ? docs[id] : null;   // lo que solo esta en la cache no existe para el servidor
     if (!prev || prev.firmada !== true) return;
     const cambian = Object.keys(nuevo).filter(k => !igual(nuevo[k], prev[k]));
@@ -104,8 +108,12 @@ async function correr(docs, ot, opciones) {
   const nombres = Object.keys(deps);
   const fn = new Function(...nombres, src.slice(i, j) + '\nreturn sincronizarOTsPendientes;')(...nombres.map(k => deps[k]));
   const _log = console.error, _warn = console.warn; console.error = () => {}; console.warn = () => {};
-  try { await fn(); } finally { console.error = _log; console.warn = _warn; }
-  return Object.assign(r, { escrituras: nube.escrituras, lecturas: nube.lecturas, docs: nube.docs });
+  const silencio = async (p) => { const a = console.error, b = console.warn, c = console.log; console.error = () => {}; console.warn = () => {}; console.log = () => {};
+    try { return await p(); } finally { console.error = a; console.warn = b; console.log = c; } };
+  console.error = _log; console.warn = _warn;
+  if (opciones.concurrentes) await silencio(async () => { await Promise.all([fn(), fn()]); await new Promise(res => setTimeout(res, 150)); });
+  else await silencio(fn);
+  return Object.assign(r, { escrituras: nube.escrituras, lecturas: nube.lecturas, docs: nube.docs, otra: () => silencio(fn) });
 }
 
 const otCola = (extra) => Object.assign({ id: 41, clientId: 'cli_1', numero: 425996, local: 'Local Prueba', tipo: 'correctivo',
@@ -165,14 +173,33 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
   chequear(subioDeNuevo, 'una copia firmada vieja en la cache saco la OT de la cola aunque el servidor no la tenia (Codex, ronda 3)');
 
   // 6. Rechazo sin sesion de Firebase
-  const f6a = await correr({}, otCola(), { sinSesion: true, credPendiente: { uid: 'u_tec' } });
-  const f6b = await correr({}, otCola(), { sinSesion: true });
+  const o6a = { sinSesion: true, credPendiente: { uid: 'u_tec' } };
+  const f6a = await correr({}, otCola(), o6a);
+  const subidas6a = f6a.subidas; await f6a.otra();                        // otra vuelta, todavia sin sesion
   const enCamino = f6a.errores.length === 0 && f6a.eliminadas.length === 0;
+  const suspende6a = f6a.subidas === subidas6a;
+  const o6b = { sinSesion: true };
+  const f6b = await correr({}, otCola(), o6b);
   const diceSenal = f6b.errores.length === 1 && /entrar con señal/.test(f6b.errores[0]) && !/CorexOn/.test(f6b.errores[0]) && f6b.eliminadas.length === 0;
-  console.log('6) Sin sesion           → con la sesion en camino: ' + (enCamino ? 'no avisa, se queda ✓' : 'AVISA ✗') +
-    ' · sin forma de abrirla: ' + (diceSenal ? 'dice que entre con señal, se queda ✓' : (f6b.errores[0] || 'sin aviso') + ' ✗'));
+  const subidas6b = f6b.subidas; await f6b.otra();
+  const suspende6b = f6b.subidas === subidas6b && f6b.errores.length === 1;
+  o6b.sinSesion = false; o6b.rechazarTodo = true; await f6b.otra();       // ya con sesion, un rechazo DISTINTO
+  const distintoVisible = f6b.errores.length === 2 && /CorexOn/.test(f6b.errores[1]);
+  console.log('6) Sin sesion           → con la sesion en camino: ' + (enCamino ? 'no avisa, se queda' : 'AVISA') + (suspende6a ? ', no reintenta ✓' : ', REINTENTA (sube fotos) ✗') +
+    ' · sin forma de abrirla: ' + (diceSenal ? 'dice que entre con señal, se queda' : (f6b.errores[0] || 'sin aviso')) + (suspende6b ? ', no reintenta ✓' : ', REINTENTA ✗') +
+    ' · rechazo distinto despues: ' + (distintoVisible ? 'se ve ✓' : 'TAPADO ✗'));
   chequear(enCamino, 'con la sesion de quien entro sin señal en camino, el rechazo avisa al tecnico de un problema que se arregla solo (revisor, obs. 1)');
   chequear(diceSenal, 'sin sesion el aviso no dice que hay que entrar con señal (dice avisar a CorexOn), o la OT salio de la cola');
+  chequear(suspende6a && suspende6b, 'sin sesion se sigue reintentando (y subiendo fotos) en cada vuelta (Codex, ronda 4)');
+  chequear(distintoVisible, 'el aviso de "falta entrar con señal" tapo un rechazo distinto que llego despues, con sesion (Codex, ronda 4)');
+
+  // 7. Dos corridas a la vez
+  const g7 = await correr({}, otCola(), { concurrentes: true });
+  const sets7 = g7.escrituras.filter(w => w.id === 'cli_1' && !w.rechazada && w.campos.indexOf('firmada') >= 0).length;
+  console.log('7) Dos a la vez         → fotos subidas: ' + g7.subidas + (g7.subidas === 3 ? ' ✓' : ' ✗') + ' · hojas escritas: ' + sets7 + (sets7 === 1 ? ' ✓' : ' ✗') +
+    ' · la segunda: ' + (g7.eliminadas.length >= 1 ? 'corre despues y la ve arriba ✓' : 'NO CORRIO ✗'));
+  chequear(g7.subidas === 3 && sets7 === 1, 'dos corridas a la vez de la cola subieron y escribieron la misma OT dos veces (Codex, ronda 4)');
+  chequear(g7.eliminadas.length >= 1, 'con dos corridas a la vez, la OT no salio de la cola');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });

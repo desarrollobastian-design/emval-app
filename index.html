@@ -2390,7 +2390,10 @@ function _cargarSdkAuth() {
 // telefono, y solo de un tecnico que entro con señal en ESE telefono. Como el PIN son 4 digitos,
 // quien copie este registro puede probar las 10.000 combinaciones fuera de linea (Codex P1-1): por
 // eso el verificador dura poco y se pierde con los fallos, y Administrador/Supervisor no tienen.
-const VERIF_KEY = 'emval_verificadores';
+// Una clave de localStorage POR PERSONA (revision de Codex, ronda 4): con todos en una sola clave, leer y
+// reescribirla entera no es atomico entre pestañas, y guardar el de una persona podia resucitar el que
+// otra pestaña acababa de borrar. Asi, cada operacion toca solo la clave de quien corresponde.
+const VERIF_PREFIJO = 'emval_verif_';
 const VERIF_ITER = 150000;
 const VERIF_MAX_DIAS = 14;      // sin entrar con señal en 14 dias, sin señal ya no se entra
 const VERIF_MAX_FALLOS = 5;     // 5 PIN equivocados sin señal borran el verificador
@@ -2400,38 +2403,31 @@ async function _pbkdf2(secreto, salHex, iter) {
   const sal = new Uint8Array(salHex.match(/../g).map(function(h){ return parseInt(h, 16); }));
   return _hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: sal, iterations: iter, hash: 'SHA-256' }, clave, 256));
 }
-function _leerVerificadores() {
-  try { return JSON.parse(localStorage.getItem(VERIF_KEY) || '{}') || {}; } catch (e) { return {}; }
+function _leerVerificador(uid) {
+  try { return JSON.parse(localStorage.getItem(VERIF_PREFIJO + uid) || 'null'); } catch (e) { return null; }
 }
-function _escribirVerificadores(todos) {
-  try { localStorage.setItem(VERIF_KEY, JSON.stringify(todos)); } catch (e) {}
+function _escribirVerificador(uid, v) {
+  try { localStorage.setItem(VERIF_PREFIJO + uid, JSON.stringify(v)); } catch (e) {}
 }
 function _borrarVerificador(uid) {
-  const todos = _leerVerificadores();
-  if (todos[uid]) { delete todos[uid]; _escribirVerificadores(todos); }
+  try { localStorage.removeItem(VERIF_PREFIJO + uid); } catch (e) {}
 }
 async function _guardarVerificador(uid, secreto) {
   try {
     const sal = _hex(crypto.getRandomValues(new Uint8Array(16)));
     const h = await _pbkdf2(secreto, sal, VERIF_ITER);
-    // Se lee DESPUES del `await` y se escribe sin otro de por medio (revision de Codex, ronda 3): leer
-    // antes devolvia, al escribir, una copia vieja que resucitaba el verificador que otra pestaña acababa
-    // de borrar por fallos (o le quitaba su lapida). Solo cambia el de `uid`, que acaba de entrar con señal.
-    const todos = _leerVerificadores();
-    todos[uid] = { sal: sal, it: VERIF_ITER, h: h, en: Date.now(), fallos: 0 };
-    _escribirVerificadores(todos);
+    // Solo la clave de `uid`, que acaba de entrar con señal: no toca la de nadie mas (ronda 4).
+    _escribirVerificador(uid, { sal: sal, it: VERIF_ITER, h: h, en: Date.now(), fallos: 0 });
   } catch (e) { console.warn('No se pudo guardar el verificador local:', e && e.message); }
 }
 // true / false; null si nunca entro con señal aqui; 'vencido' o 'fallos' si ya no sirve. Lo que queda
 // en su lugar es una lapida { fin, en } SIN sal ni hash: solo dice por que, para el mensaje.
 async function _verificarLocal(uid, secreto) {
-  const todos = _leerVerificadores();
-  const v = todos[uid];
+  const v = _leerVerificador(uid);
   if (v && (v.fin === 'vencido' || v.fin === 'fallos')) return v.fin;
   if (!v || !v.sal || !v.h) return null;
   if (!v.en || Date.now() - v.en > VERIF_MAX_DIAS * 86400000) {
-    todos[uid] = { fin: 'vencido', en: Date.now() };
-    _escribirVerificadores(todos);
+    _escribirVerificador(uid, { fin: 'vencido', en: Date.now() });
     return 'vencido';
   }
   let ok;
@@ -2440,8 +2436,7 @@ async function _verificarLocal(uid, secreto) {
   // pudo anotar sus propios fallos. Escribir la copia leida arriba los borraba: seis intentos a la
   // vez dejaban UN fallo y el verificador seguia ahi. Se vuelve a leer AHORA y se escribe sin otro
   // `await` de por medio, asi lectura y escritura quedan juntas.
-  const ahora = _leerVerificadores();
-  const w = ahora[uid];
+  const w = _leerVerificador(uid);
   if (!w || w.sal !== v.sal || w.h !== v.h) {
     // Lo cambio otra pestaña mientras tanto: si dejo una lapida, manda la lapida.
     if (w && (w.fin === 'vencido' || w.fin === 'fallos')) return w.fin;
@@ -2449,8 +2444,7 @@ async function _verificarLocal(uid, secreto) {
   }
   if (!ok) {
     w.fallos = (w.fallos || 0) + 1;
-    ahora[uid] = w.fallos >= VERIF_MAX_FALLOS ? { fin: 'fallos', en: Date.now() } : w;
-    _escribirVerificadores(ahora);
+    _escribirVerificador(uid, w.fallos >= VERIF_MAX_FALLOS ? { fin: 'fallos', en: Date.now() } : w);
   }
   return ok;
 }
@@ -16764,77 +16758,91 @@ function _encolarEnlacePDF(otDocId, pdfUrl, pdfUrlCloudinary, rescate) {
 }
 
 async function sincronizarEnlacesPDFPendientes() {
-  if (!navigator.onLine || !window._firebaseReady) return;
-  var lista = _leerEnlacesPDFPendientes();
-  if (!lista.length) return;
-  var db = window.firebase.firestore();
-  var quedan = [];
-  for (var i = 0; i < lista.length; i++) {
-    var it = lista[i];
-    try {
-      /* Rescate: el enlace se encolo SIN URL porque la respuesta de Cloudinary nunca volvio.
-         Se pregunta si el archivo aparecio. Si todavia no esta, sigue pendiente — nunca se
-         descarta, que es el invariante de las cuatro colas: el codigo no borra lo que no
-         logro aplicar. Un HEAD no gasta cuota de EmailJS ni de nada. */
-      if (!it.pdfUrl && !it.pdfUrlCloudinary && it.publicId) {
-        var _rescatada = await _urlPDFSiYaEsta(it.publicId);
-        if (!_rescatada) { quedan.push(it); continue; }
-        it.pdfUrlCloudinary = _rescatada;
-        console.log('PDF rescatado desde la cola de enlaces:', _rescatada);
-      }
-      /* update(), NUNCA set({merge}) como en el camino directo: aca la OT puede no existir
-         todavia en Firestore (sigue en la cola del dispositivo). Un set con merge la CREARIA
-         con dos campos y nada mas — una orden fantasma, sin numero ni tipo, colandose en las
-         listas. update() falla con not-found y el enlace se queda esperando a que la OT suba. */
-      /* SOLO los campos que traen valor. Un enlace encolado puede tener una sola de las dos
-         URLs (Cloudinary subio y el registro de 'pdfs' no, o al reves). Escribir la otra como
-         '' pisaria con vacio un enlace que ya estaba bueno en el documento — el reintento
-         dejaria la OT peor que antes de reintentar. */
-      var _campos = {};
-      if (it.pdfUrl) _campos.pdfUrl = it.pdfUrl;
-      if (it.pdfUrlCloudinary) _campos.pdfUrlCloudinary = it.pdfUrlCloudinary;
-      if (!Object.keys(_campos).length) continue;   // nada que escribir: se descarta
-      await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
-        25000, 'reintento enlace pdf');
-      console.log('Enlace de PDF aplicado a la OT', it.otDocId);
-      /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
-         quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
-         orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
-         (ver _SELLO_SIN_PDF); sin el, el libro de despachos lo tiraria en silencio. */
-      if (it.aviso && it.pdfUrlCloudinary) {
-        var _a = it.aviso;
-        var _urlHSRescatada = it.pdfUrlCloudinary;
-        // A la VISTA, como el cierre (ver _urlPDFVista). La URL rescatada viene sin segmento de
-        // version (_urlPDFSiYaEsta) y /files/ la sirve igual: medido 24-09-2026.
-        if (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function') {
-          var _nombreHSRescatada = _nombrePDFHoja({
-            otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco, local: _a.local, fecha: _a.fecha,
-            cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
-          });
-          _urlHSRescatada = _urlPDFVista(it.pdfUrlCloudinary, _nombreHSRescatada);
+  /* UNA SOLA CORRIDA A LA VEZ (revision de Codex, ronda 4). Lee la lista al empezar y la reescribe
+     entera al terminar: dos corridas a la vez aplicaban dos veces y la segunda podia borrar de la
+     lista un enlace encolado mientras tanto.
+     Si piden otra mientras corre, se hace UNA mas al terminar, para no perder la que la pidio. */
+  var yo = sincronizarEnlacesPDFPendientes;
+  if (yo._corriendo) { yo._otraVez = true; return; }
+  yo._corriendo = true;
+  try {
+  await (async function() {
+    if (!navigator.onLine || !window._firebaseReady) return;
+    var lista = _leerEnlacesPDFPendientes();
+    if (!lista.length) return;
+    var db = window.firebase.firestore();
+    var quedan = [];
+    for (var i = 0; i < lista.length; i++) {
+      var it = lista[i];
+      try {
+        /* Rescate: el enlace se encolo SIN URL porque la respuesta de Cloudinary nunca volvio.
+           Se pregunta si el archivo aparecio. Si todavia no esta, sigue pendiente — nunca se
+           descarta, que es el invariante de las cuatro colas: el codigo no borra lo que no
+           logro aplicar. Un HEAD no gasta cuota de EmailJS ni de nada. */
+        if (!it.pdfUrl && !it.pdfUrlCloudinary && it.publicId) {
+          var _rescatada = await _urlPDFSiYaEsta(it.publicId);
+          if (!_rescatada) { quedan.push(it); continue; }
+          it.pdfUrlCloudinary = _rescatada;
+          console.log('PDF rescatado desde la cola de enlaces:', _rescatada);
         }
-        await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
-          _urlHSRescatada, '', _a.clientId);
-        if (_a.emailLocal) {
-          await _enviarCorreo({
-            email_admin: _a.emailLocal,
-            ot_numero: _numOTCorreo(_a.numero),
-            local: String(_a.local || ''),
-            fecha: String(_a.fecha || ''),
-            tecnico: String(_a.tecnico || ''),
-            tipo: _a.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-            trabajo: String(_a.trabajo || ''),
-            pdf_url: _urlHSRescatada
-          }, _a.clientId ? { sello: 'ot_' + _a.clientId + '__local' } : undefined);
+        /* update(), NUNCA set({merge}) como en el camino directo: aca la OT puede no existir
+           todavia en Firestore (sigue en la cola del dispositivo). Un set con merge la CREARIA
+           con dos campos y nada mas — una orden fantasma, sin numero ni tipo, colandose en las
+           listas. update() falla con not-found y el enlace se queda esperando a que la OT suba. */
+        /* SOLO los campos que traen valor. Un enlace encolado puede tener una sola de las dos
+           URLs (Cloudinary subio y el registro de 'pdfs' no, o al reves). Escribir la otra como
+           '' pisaria con vacio un enlace que ya estaba bueno en el documento — el reintento
+           dejaria la OT peor que antes de reintentar. */
+        var _campos = {};
+        if (it.pdfUrl) _campos.pdfUrl = it.pdfUrl;
+        if (it.pdfUrlCloudinary) _campos.pdfUrlCloudinary = it.pdfUrlCloudinary;
+        if (!Object.keys(_campos).length) continue;   // nada que escribir: se descarta
+        await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
+          25000, 'reintento enlace pdf');
+        console.log('Enlace de PDF aplicado a la OT', it.otDocId);
+        /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
+           quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
+           orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
+           (ver _SELLO_SIN_PDF); sin el, el libro de despachos lo tiraria en silencio. */
+        if (it.aviso && it.pdfUrlCloudinary) {
+          var _a = it.aviso;
+          var _urlHSRescatada = it.pdfUrlCloudinary;
+          // A la VISTA, como el cierre (ver _urlPDFVista). La URL rescatada viene sin segmento de
+          // version (_urlPDFSiYaEsta) y /files/ la sirve igual: medido 24-09-2026.
+          if (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function') {
+            var _nombreHSRescatada = _nombrePDFHoja({
+              otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco, local: _a.local, fecha: _a.fecha,
+              cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
+            });
+            _urlHSRescatada = _urlPDFVista(it.pdfUrlCloudinary, _nombreHSRescatada);
+          }
+          await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
+            _urlHSRescatada, '', _a.clientId);
+          if (_a.emailLocal) {
+            await _enviarCorreo({
+              email_admin: _a.emailLocal,
+              ot_numero: _numOTCorreo(_a.numero),
+              local: String(_a.local || ''),
+              fecha: String(_a.fecha || ''),
+              tecnico: String(_a.tecnico || ''),
+              tipo: _a.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+              trabajo: String(_a.trabajo || ''),
+              pdf_url: _urlHSRescatada
+            }, _a.clientId ? { sello: 'ot_' + _a.clientId + '__local' } : undefined);
+          }
         }
+      } catch(e) {
+        // No se aplico: sigue pendiente. Se reintenta en el proximo ciclo.
+        console.warn('Enlace de PDF sigue pendiente (' + it.otDocId + '):', e && e.message);
+        quedan.push(it);
       }
-    } catch(e) {
-      // No se aplico: sigue pendiente. Se reintenta en el proximo ciclo.
-      console.warn('Enlace de PDF sigue pendiente (' + it.otDocId + '):', e && e.message);
-      quedan.push(it);
     }
+    _escribirEnlacesPDFPendientes(quedan);
+  })();
+  } finally {
+    yo._corriendo = false;
+    if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
   }
-  _escribirEnlacesPDFPendientes(quedan);
 }
 
 function _abrirDBOffline() {
@@ -17028,184 +17036,210 @@ function cerrarModalCorreos(ev) {
 }
 
 async function sincronizarOTsPendientes() {
-  if (!navigator.onLine || !window._firebaseReady) return;
-  // ot.id -> ya se le aviso al tecnico que el servidor no la acepto (vive mientras la app este abierta)
-  var _otsRechazadasAvisadas = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
-  var pendientes;
-  try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
-  if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
+  /* UNA SOLA CORRIDA A LA VEZ (revision de Codex, ronda 4). La llaman el `online` (2 s), la sesion
+     recien abierta (_reintentarSesionPendiente), el arranque y el intervalo de 90 s: dos corridas
+     a la vez leian lo mismo y escribian dos veces (la segunda pisaba una correccion posterior).
+     Si piden otra mientras corre, se hace UNA mas al terminar, para no perder la que la pidio. */
+  var yo = sincronizarOTsPendientes;
+  if (yo._corriendo) { yo._otraVez = true; return; }
+  yo._corriendo = true;
+  try {
+  await (async function() {
+    // Un servidor que ya pidio sesion (etapa 2) y no hay sesion: no se intenta. Cada intento sube las
+    // fotos a Cloudinary para que lo rechacen. Se espera la sesion: al abrirse, la cola vuelve a correr.
+    if (yo._servidorPideSesion && typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase()) return;
+    if (!navigator.onLine || !window._firebaseReady) return;
+    // ot.id -> ya se le aviso al tecnico que el servidor no la acepto (vive mientras la app este abierta)
+    var _otsRechazadasAvisadas = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
+    var pendientes;
+    try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
+    if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
 
-  // OJO: no usar pendingBar.textContent — borraria el icono y el <span id="pending-count">,
-  // dejando la barra rota (sin contador) hasta recargar. Solo se cambia la etiqueta.
-  var pendingLabel = document.getElementById('pending-label');
-  if (pendingLabel) pendingLabel.textContent = 'OT(s) sincronizando...';
+    // OJO: no usar pendingBar.textContent — borraria el icono y el <span id="pending-count">,
+    // dejando la barra rota (sin contador) hasta recargar. Solo se cambia la etiqueta.
+    var pendingLabel = document.getElementById('pending-label');
+    if (pendingLabel) pendingLabel.textContent = 'OT(s) sincronizando...';
 
-  for (var pi = 0; pi < pendientes.length; pi++) {
-    var ot = pendientes[pi];
-    try {
-      toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
+    for (var pi = 0; pi < pendientes.length; pi++) {
+      var ot = pendientes[pi];
+      try {
+        toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
 
-      var db = window.firebase.firestore();
-      /* ¿YA ESTA ARRIBA, FIRMADA? (revision final de Codex del PR #64, P1 nuevo 2). Con mala señal el
-         primer intento puede haberse guardado sin que el telefono alcanzara a saberlo, y la OT sigue
-         en la cola. Reintentar volvia a subir las fotos (Cloudinary entrega URLs nuevas) y a reescribir
-         el contenido de una hoja firmada: las reglas de la etapa 2 no se lo dejan a un tecnico, asi que
-         quedaba trabada para siempre, y sin reglas pisaba una correccion del Administrador. Se pregunta
-         primero: si ya esta firmada, no se sube ni se reescribe nada de su contenido; solo se completa
-         lo que falte (el enlace del PDF) y sale de la cola como subida. */
-      var yaFirmada = null;
-      if (ot.clientId) {
-        /* AL SERVIDOR, no a la cache (revision de Codex, ronda 3): una copia firmada vieja en la cache
-           sacaba la OT de la cola aunque el servidor ya no la tuviera (p. ej., la borro el panel). Sin
-           señal, esta lectura falla y la OT se queda para la vuelta siguiente, como cualquier corte. */
-        var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get({ source: 'server' }), 25000, 'sync leer OT');
-        /* OJO con la compensacion local, que se aplica TAMBIEN a la lectura del servidor: si el `set` del
-           cierre original sigue PENDIENTE en el SDK (el cierre sin señal de siempre), esta lectura ya la
-           muestra "firmada" aunque el servidor todavia no la tenga. Darla por subida con eso borraria de
-           la cola algo que no salio (regla 4). Se deja para la vuelta siguiente, sin subir ni reescribir
-           nada: el SDK la envia solo. Y una lectura que diga venir de la cache tampoco se acepta. */
-        if (_arriba.metadata && (_arriba.metadata.hasPendingWrites || _arriba.metadata.fromCache)) {
-          console.log('OT #' + ot.numero + ': su escritura anterior sigue en camino; se confirma en la proxima vuelta.');
-          continue;
-        }
-        if (_arriba.exists && (_arriba.data() || {}).firmada === true) yaFirmada = _arriba.data() || {};
-      }
-
-      var urlsAntes = [], urlsDespues = [], urlTimbre = null, urlsAudio = [];
-      if (yaFirmada) {
-        urlsAntes = yaFirmada.fotosAntes || [];
-        urlsDespues = yaFirmada.fotosDespues || [];
-        urlTimbre = yaFirmada.fotoTimbre || null;
-      } else {
-        for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
-          if (!ot.fotosAntes[i]) continue;
-          var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
-          if (u) urlsAntes.push(u);
-        }
-        for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
-          if (!ot.fotosDespues[i]) continue;
-          var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
-          if (u) urlsDespues.push(u);
-        }
-        if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
-
-        for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
-          var a = ot.audiosBase64[i];
-          var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
-          if (u) urlsAudio.push(u);
-        }
-
-        var otDoc = {
-          numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
-          tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
-          descripcionProblema: ot.descripcionProblema || '',
-          ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
-          pendientesMateriales: ot.pendientesMateriales || '',
-          numEquipos: ot.numEquipos || '',
-          serviciosPreventivo: ot.serviciosPreventivo || [],
-          fotosAntes: urlsAntes, fotosDespues: urlsDespues,
-          fotoTimbre: urlTimbre, audios: urlsAudio,
-          firmada: true, firmaImagen: ot.firmaBase64,
-          // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
-          pausa: false, enEspera: false, estado: 'Terminada',
-          creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-        };
-        // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
-        // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
-        if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
-        if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
-        // Quien la sube (ver guardarEnFirebase): la sesion que escribe, leida al escribir.
-        var _subidoPorSync = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
-        if (_subidoPorSync) otDoc.subidoPor = _subidoPorSync;
+        var db = window.firebase.firestore();
+        /* ¿YA ESTA ARRIBA, FIRMADA? (revision final de Codex del PR #64, P1 nuevo 2). Con mala señal el
+           primer intento puede haberse guardado sin que el telefono alcanzara a saberlo, y la OT sigue
+           en la cola. Reintentar volvia a subir las fotos (Cloudinary entrega URLs nuevas) y a reescribir
+           el contenido de una hoja firmada: las reglas de la etapa 2 no se lo dejan a un tecnico, asi que
+           quedaba trabada para siempre, y sin reglas pisaba una correccion del Administrador. Se pregunta
+           primero: si ya esta firmada, no se sube ni se reescribe nada de su contenido; solo se completa
+           lo que falte (el enlace del PDF) y sale de la cola como subida. */
+        var yaFirmada = null;
         if (ot.clientId) {
-          // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
-          await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
-        } else {
-          // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
-          await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
+          /* AL SERVIDOR, no a la cache (revision de Codex, ronda 3): una copia firmada vieja en la cache
+             sacaba la OT de la cola aunque el servidor ya no la tuviera (p. ej., la borro el panel). Sin
+             señal, esta lectura falla y la OT se queda para la vuelta siguiente, como cualquier corte. */
+          var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get({ source: 'server' }), 25000, 'sync leer OT');
+          /* OJO con la compensacion local, que se aplica TAMBIEN a la lectura del servidor: si el `set` del
+             cierre original sigue PENDIENTE en el SDK (el cierre sin señal de siempre), esta lectura ya la
+             muestra "firmada" aunque el servidor todavia no la tenga. Darla por subida con eso borraria de
+             la cola algo que no salio (regla 4). Se deja para la vuelta siguiente, sin subir ni reescribir
+             nada: el SDK la envia solo. Y una lectura que diga venir de la cache tampoco se acepta. */
+          if (_arriba.metadata && (_arriba.metadata.hasPendingWrites || _arriba.metadata.fromCache)) {
+            console.log('OT #' + ot.numero + ': su escritura anterior sigue en camino; se confirma en la proxima vuelta.');
+            continue;
+          }
+          if (_arriba.exists && (_arriba.data() || {}).firmada === true) yaFirmada = _arriba.data() || {};
         }
-      }
 
-      // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link. Si la hoja
-      // ya estaba arriba CON su enlace, no se vuelve a subir: se usa el que tiene.
-      var pdfUrlSync = '';
-      if (yaFirmada && yaFirmada.pdfUrlCloudinary) {
-        pdfUrlSync = yaFirmada.pdfUrlCloudinary;
-      } else if (ot.pdfBase64) {
-        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
-        if (pdfUrlSync && ot.clientId) {
-          // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
-          // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
-          // se encola en vez de perderse — misma razon que en guardarYEnviarPDF.
-          try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
-          catch(e) {
-            console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
-            _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
+        var urlsAntes = [], urlsDespues = [], urlTimbre = null, urlsAudio = [];
+        if (yaFirmada) {
+          urlsAntes = yaFirmada.fotosAntes || [];
+          urlsDespues = yaFirmada.fotosDespues || [];
+          urlTimbre = yaFirmada.fotoTimbre || null;
+        } else {
+          for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
+            if (!ot.fotosAntes[i]) continue;
+            var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
+            if (u) urlsAntes.push(u);
+          }
+          for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
+            if (!ot.fotosDespues[i]) continue;
+            var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
+            if (u) urlsDespues.push(u);
+          }
+          if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
+
+          for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
+            var a = ot.audiosBase64[i];
+            var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
+            if (u) urlsAudio.push(u);
+          }
+
+          var otDoc = {
+            numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
+            tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
+            descripcionProblema: ot.descripcionProblema || '',
+            ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
+            pendientesMateriales: ot.pendientesMateriales || '',
+            numEquipos: ot.numEquipos || '',
+            serviciosPreventivo: ot.serviciosPreventivo || [],
+            fotosAntes: urlsAntes, fotosDespues: urlsDespues,
+            fotoTimbre: urlTimbre, audios: urlsAudio,
+            firmada: true, firmaImagen: ot.firmaBase64,
+            // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
+            pausa: false, enEspera: false, estado: 'Terminada',
+            creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+          };
+          // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
+          // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
+          if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
+          if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
+          // Quien la sube (ver guardarEnFirebase): la sesion que escribe, leida al escribir.
+          var _subidoPorSync = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
+          if (_subidoPorSync) otDoc.subidoPor = _subidoPorSync;
+          if (ot.clientId) {
+            // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
+            await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
+          } else {
+            // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
+            await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
           }
         }
-      }
 
-      // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
-      if (ot.cotizacionId) {
-        await _vincularCotizacionRealizada(ot.cotizacionId, {
-          otDocId: ot.clientId,
-          numero: ot.numero, fecha: ot.fecha,
-          urlsAntes: urlsAntes, urlsDespues: urlsDespues,
-          urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,
-          tecnico: ot.tecnico || _tecnicoActual()
-        });
-      }
-
-      // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
-      // Si falla, _enviarCorreo lo encola y se reintenta solo.
-      if (ot.emailLocal && pdfUrlSync) {
-        // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
-        // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
-        await _enviarCorreo({
-          email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
-          fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
-          tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-          trabajo: String(ot.descripcionTrabajo || ''),
-          // A la VISTA con el nombre de SMU, igual que el cierre online (ver _urlPDFVista).
-          pdf_url: (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
-            ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
-        }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
-      }
-
-      await _eliminarOTPendiente(ot.id);
-      toast('OT #' + ot.numero + ' sincronizada ✓');
-      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
-        (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
-          ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
-        ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
-        ot.clientId);
-    } catch(err) {
-      console.error('Error sincronizando OT pendiente:', err);
-      // Rechazo de las reglas (etapa 2 de Auth): no es la señal, y reintentar en el acto no cambia
-      // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
-      // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.
-      if (err && err.code === 'permission-denied') {
-        // Sin sesion de Firebase, el rechazo es por eso (revision de Codex, ronda 3, y revisor, obs. 1):
-        // - si la sesion de quien entro sin señal ya viene en camino, no se avisa nada: al abrirse
-        //   vuelve a correr la cola (_reintentarSesionPendiente);
-        // - si no hay como abrirla (recargo despues de salir, por ejemplo), se dice que hay que entrar
-        //   con señal: no es un caso para CorexOn.
-        var _sinSesion = typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase();
-        if (_sinSesion && typeof _credPendiente !== 'undefined' && _credPendiente) continue;
-        // Una vez por OT y por sesion de la app, no en cada vuelta de 90 s (revisor del PR #64, punto 11).
-        if (!_otsRechazadasAvisadas[ot.id]) {
-          _otsRechazadasAvisadas[ot.id] = true;
-          _error('subir la OT #' + ot.numero, null, _sinSesion
-            ? 'Falta entrar con señal en este teléfono para subir lo pendiente. Queda guardada.'
-            : 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+        // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link. Si la hoja
+        // ya estaba arriba CON su enlace, no se vuelve a subir: se usa el que tiene.
+        var pdfUrlSync = '';
+        if (yaFirmada && yaFirmada.pdfUrlCloudinary) {
+          pdfUrlSync = yaFirmada.pdfUrlCloudinary;
+        } else if (ot.pdfBase64) {
+          pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
+          if (pdfUrlSync && ot.clientId) {
+            // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
+            // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
+            // se encola en vez de perderse — misma razon que en guardarYEnviarPDF.
+            try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
+            catch(e) {
+              console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
+              _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
+            }
+          }
         }
-        continue;
+
+        // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
+        if (ot.cotizacionId) {
+          await _vincularCotizacionRealizada(ot.cotizacionId, {
+            otDocId: ot.clientId,
+            numero: ot.numero, fecha: ot.fecha,
+            urlsAntes: urlsAntes, urlsDespues: urlsDespues,
+            urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,
+            tecnico: ot.tecnico || _tecnicoActual()
+          });
+        }
+
+        // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
+        // Si falla, _enviarCorreo lo encola y se reintenta solo.
+        if (ot.emailLocal && pdfUrlSync) {
+          // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
+          // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
+          await _enviarCorreo({
+            email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
+            fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
+            tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+            trabajo: String(ot.descripcionTrabajo || ''),
+            // A la VISTA con el nombre de SMU, igual que el cierre online (ver _urlPDFVista).
+            pdf_url: (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+              ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
+          }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
+        }
+
+        await _eliminarOTPendiente(ot.id);
+        toast('OT #' + ot.numero + ' sincronizada ✓');
+        _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
+          (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+            ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
+          ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
+          ot.clientId);
+      } catch(err) {
+        console.error('Error sincronizando OT pendiente:', err);
+        // Rechazo de las reglas (etapa 2 de Auth): no es la señal, y reintentar en el acto no cambia
+        // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
+        // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.
+        if (err && err.code === 'permission-denied') {
+          // Sin sesion de Firebase, el rechazo es por eso (revision de Codex, ronda 3, y revisor, obs. 1):
+          // - si la sesion de quien entro sin señal ya viene en camino, no se avisa nada: al abrirse
+          //   vuelve a correr la cola (_reintentarSesionPendiente);
+          // - si no hay como abrirla (recargo despues de salir, por ejemplo), se dice que hay que entrar
+          //   con señal: no es un caso para CorexOn.
+          // Ronda 4 de Codex: sin sesion el servidor rechazaria TODAS, asi que se corta la corrida y no se
+          // vuelve a intentar hasta que haya sesion (ver arriba). Su aviso tiene su propia marca: no tapa
+          // un rechazo distinto de la misma OT que llegue despues, con sesion.
+          var _sinSesion = typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase();
+          if (_sinSesion) {
+            yo._servidorPideSesion = true;
+            var _enCamino = typeof _credPendiente !== 'undefined' && _credPendiente;
+            if (!_enCamino && !_otsRechazadasAvisadas['sin-sesion']) {
+              _otsRechazadasAvisadas['sin-sesion'] = true;
+              _error('subir lo pendiente', null, 'Falta entrar con señal en este teléfono para subir lo pendiente. Queda guardada.');
+            }
+            break;
+          }
+          // Una vez por OT y por sesion de la app, no en cada vuelta de 90 s (revisor del PR #64, punto 11).
+          if (!_otsRechazadasAvisadas[ot.id]) {
+            _otsRechazadasAvisadas[ot.id] = true;
+            _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+          }
+          continue;
+        }
+        _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');
+        break;
       }
-      _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');
-      break;
     }
+    actualizarIndicadorPendientes();
+  })();
+  } finally {
+    yo._corriendo = false;
+    if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
   }
-  actualizarIndicadorPendientes();
 }
 
 window.addEventListener('online', function() {

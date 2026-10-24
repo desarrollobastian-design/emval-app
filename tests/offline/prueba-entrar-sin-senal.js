@@ -124,7 +124,7 @@ async function entrarConPin(page, nombre, pin) {
   const conSecreto = [PIN_ANA, PIN_BETO, HASH_PEDRO, CLAVE_PRUEBA, claveAna].filter(s => todo.includes(s));
   const cacheViejo = 'emval_users_cache' in ls;
   P('6) Telefono     → cache viejo con PIN: ' + (cacheViejo ? 'EXISTE ✗' : 'no existe ✓') + ', secretos en localStorage: ' + (conSecreto.length ? conSecreto.length + ' ✗' : 'ninguno ✓') +
-    ', verificadores: ' + (ls.emval_verificadores ? Object.keys(JSON.parse(ls.emval_verificadores)).join(', ') : 'NINGUNO'));
+    ', verificadores: ' + (Object.keys(ls).filter(k => k.indexOf('emval_verif_') === 0).map(k => k.slice(12)).join(', ') || 'NINGUNO'));
   chequear(!cacheViejo, 'el telefono sigue guardando emval_users_cache (la coleccion tecnicos entera, PIN y hash)');
   chequear(conSecreto.length === 0, 'el telefono guarda un PIN, una clave o un hash en localStorage (' + conSecreto.length + ')');
 

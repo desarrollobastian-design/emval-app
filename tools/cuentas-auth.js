@@ -366,8 +366,8 @@ async function principal() {
 //  - solo un respaldo con diario (formato 2) y del MISMO proyecto al que esta conectada;
 //  - revierte cada cambio del diario solo si sigue como lo dejo esa corrida; si cambio despues, NO lo
 //    pisa: lo informa y sale con 2;
-//  - una cuenta se borra solo si es la que creo esa corrida (mismo creationTime y correo), sigue como la
-//    dejo (deshabilitada, nombre, marcas) y su ficha no quedo conservada por un conflicto;
+//  - por persona, ficha y cuenta se deciden JUNTAS: si cualquiera cambio despues (la cuenta se volvio a
+//    crear, se deshabilito, cambio de nombre o marcas), no se toca ninguna de las dos;
 //  - correrlo otra vez no vuelve a aplicar nada: lo ya deshecho se reconoce y se deja.
 async function deshacer(db, auth, modo, proyecto) {
   const r = JSON.parse(fs.readFileSync(path.resolve(DESHACER), 'utf8'));
@@ -386,45 +386,39 @@ async function deshacer(db, auth, modo, proyecto) {
   if (confirmar.trim() !== 'DESHACER') { console.log('Cancelado: no se cambio nada.'); process.exit(1); }
   let deshechos = 0, yaEstaban = 0, fallas = 0;
   const conflictos = [];
-  // Primero las fichas y despues las cuentas: la cuenta de una persona cuya ficha cambio despues (y se
-  // conserva) tampoco se borra (revision de Codex, ronda 3). Ficha y cuenta se protegen juntas.
-  const fichaConservada = new Set();
-  const enOrden = r.diario.slice().reverse();
-  for (const e of enOrden.filter(x => x.tipo === 'ficha')) {
+  // Por PERSONA: su ficha y su cuenta se miran juntas ANTES de tocar nada, y se decide para las dos
+  // (revision de Codex, ronda 4): si cualquiera cambio despues, no se toca ninguna. Antes la ficha se
+  // borraba y recien despues se veia que la cuenta habia cambiado: quedaba una cuenta sin ficha, y esa
+  // persona sin entrada en la app.
+  const porId = {};
+  r.diario.forEach(function(e) {
+    const id = e.tipo === 'ficha' ? e.id : e.uid;
+    (porId[id] = porId[id] || {})[e.tipo] = e;
+  });
+  for (const id of Object.keys(porId)) {
+    const ef = porId[id].ficha, ec = porId[id].cuenta;
     try {
-      const ref = db.collection('directorio').doc(e.id);
-      const s = await ref.get();
-      const actual = s.exists ? (s.data() || {}) : null;
-      if (canon(actual, true) === canon(e.antes, true) && !camposDeMas(actual).length) { yaEstaban++; continue; }
-      if (canon(actual, true) !== canon(e.despues, true) || camposDeMas(actual).length) {
-        conflictos.push('ficha ' + e.id + ': cambio despues de esa corrida, no se pisa');
-        fichaConservada.add(e.id);
-        continue;
+      let revertirFicha = false, borrarCuenta = false, conflicto = '';
+      const ref = db.collection('directorio').doc(id);
+      if (ef) {
+        const s = await ref.get();
+        const actual = s.exists ? (s.data() || {}) : null;
+        if (canon(actual, true) === canon(ef.antes, true) && !camposDeMas(actual).length) yaEstaban++;
+        else if (canon(actual, true) !== canon(ef.despues, true) || camposDeMas(actual).length) conflicto = 'su ficha cambio despues de esa corrida';
+        else revertirFicha = true;
       }
-      if (e.antes) await ref.set(fichaPermitida(e.antes)); else await ref.delete();
-      deshechos++;
-    } catch (x) { fallas++; fichaConservada.add(e.id); console.log('  ✗ ficha ' + e.id + ': fallo (' + (x && (x.code || x.message)) + ')'); }
-  }
-  for (const e of enOrden.filter(x => x.tipo === 'cuenta')) {
-    try {
-      let u = null;
-      try { u = await auth.getUser(e.uid); } catch (x) { if (x.code !== 'auth/user-not-found') throw x; }
-      if (!u) { yaEstaban++; continue; }
-      if (fichaConservada.has(e.uid)) {
-        conflictos.push('cuenta ' + e.uid + ': su ficha se conserva (cambio despues), asi que la cuenta tampoco se borra');
-        continue;
+      if (ec) {
+        let u = null;
+        try { u = await auth.getUser(ec.uid); } catch (x) { if (x.code !== 'auth/user-not-found') throw x; }
+        if (!u) yaEstaban++;
+        else if (!ec.creada || u.metadata.creationTime !== ec.creada || String(u.email || '').toLowerCase() !== ec.email) conflicto = conflicto || 'su cuenta no es la que creo esa corrida (se volvio a crear)';
+        else if (!ec.estado || estadoCuenta(u) !== ec.estado) conflicto = conflicto || 'su cuenta cambio despues de esa corrida (p. ej., se deshabilito o cambio el nombre)';
+        else borrarCuenta = true;
       }
-      if (!e.creada || u.metadata.creationTime !== e.creada || String(u.email || '').toLowerCase() !== e.email) {
-        conflictos.push('cuenta ' + e.uid + ': no es la que creo esa corrida (se volvio a crear), no se borra');
-        continue;
-      }
-      if (!e.estado || estadoCuenta(u) !== e.estado) {
-        conflictos.push('cuenta ' + e.uid + ': cambio despues de esa corrida (p. ej., se deshabilito), no se borra');
-        continue;
-      }
-      await auth.deleteUser(e.uid);
-      deshechos++;
-    } catch (x) { fallas++; console.log('  ✗ cuenta ' + e.uid + ': fallo (' + (x && (x.code || x.message)) + ')'); }
+      if (conflicto) { conflictos.push(id + ': ' + conflicto + ': no se toca ni la ficha ni la cuenta'); continue; }
+      if (revertirFicha) { if (ef.antes) await ref.set(fichaPermitida(ef.antes)); else await ref.delete(); deshechos++; }
+      if (borrarCuenta) { await auth.deleteUser(ec.uid); deshechos++; }
+    } catch (x) { fallas++; console.log('  ✗ ' + id + ': fallo (' + (x && (x.code || x.message)) + ')'); }
   }
   conflictos.forEach(c => console.log('  ⚠ ' + c));
   console.log('Deshechos: ' + deshechos + ' · ya estaban deshechos: ' + yaEstaban + ' · cambiaron despues (no se tocan): ' + conflictos.length +

@@ -26,7 +26,8 @@
       corrida 2 revierte SOLO lo que esa corrida cambio y no pisa lo que cambio despues (la ficha de
       Beto); repetido despues de que la herramienta vuelve a crear la cuenta de Ana, no la borra ni le
       pisa la ficha. (Ronda 3 de Codex) Si la ficha de alguien que creo esa corrida cambio despues (Tito),
-      su cuenta tampoco se borra; ni una cuenta que cambio despues (Uma, deshabilitada).
+      su cuenta tampoco se borra; ni una cuenta que cambio despues (Uma, deshabilitada). (Ronda 4) Ficha y
+      cuenta se deciden juntas: si la cuenta cambio (Uma; Vera, solo el nombre), su ficha tampoco se borra.
    7. Modo emulador incompleto (un solo host, o un proyecto que no es demo-): se detiene antes de
       conectarse (Codex P2-10).
    8. Ni la salida ni los respaldos muestran un PIN, una clave o un hash.
@@ -55,17 +56,17 @@ function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); retur
 const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 
 // Valores SOLO de prueba (no son de nadie).
-const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141', PIN_T = '2718', PIN_U = '1618';
+const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141', PIN_T = '2718', PIN_U = '1618', PIN_V = '1414';
 const CLAVE_ADMIN = 'clave-solo-de-prueba-admin', CLAVE_VIEJA_B = 'clave-vieja-de-beto', CLAVE_RITA = 'clave-solo-de-prueba-rita';
 const CLAVE_E = 'clave-solo-de-prueba-esteban', CLAVE_M = 'clave-solo-de-prueba-marta';
 const CORREO_REAL_M = 'marta.otra@ejemplo.test';
-const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, PIN_T, PIN_U, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
+const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, PIN_T, PIN_U, PIN_V, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
   sha(CLAVE_ADMIN), sha(CLAVE_RITA), sha(CLAVE_E), 'nota-secreta-de-prueba'];
 // El correo real de una cuenta no es un secreto (el respaldo local lo guarda para reconocerla), pero la
 // herramienta no lo imprime: se revisa aparte, solo en las salidas.
 const UID = { a: 'tecA0000000000000001', b: 'tecB0000000000000002', c: 'tecC0000000000000003',
   p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006', r: 'admR0000000000000007',
-  e: 'admE0000000000000008', m: 'tecM0000000000000009', t: 'tecT0000000000000011', u: 'tecU0000000000000012' };
+  e: 'admE0000000000000008', m: 'tecM0000000000000009', t: 'tecT0000000000000011', u: 'tecU0000000000000012', v: 'tecV0000000000000013' };
 const HUERFANA = 'huerH000000000000010';
 const DIR_RESP = path.join(RAIZ, 'tools', 'respaldos');
 
@@ -126,6 +127,7 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   // Tito y Uma: tecnicos nuevos que crea la corrida 2 (para --deshacer, ronda 3 de Codex).
   await db.doc('tecnicos/' + UID.t).set({ nombre: 'Tito Prueba', cargo: 'Tecnico en terreno', pin: PIN_T, letra: 'T' });
   await db.doc('tecnicos/' + UID.u).set({ nombre: 'Uma Prueba', cargo: 'Tecnico en terreno', pin: PIN_U, letra: 'U' });
+  await db.doc('tecnicos/' + UID.v).set({ nombre: 'Vera Prueba', cargo: 'Tecnico en terreno', pin: PIN_V, letra: 'V' });
   // Marta YA tiene cuenta, pero con OTRO correo que el que usa la app (nuevo 6).
   await db.doc('tecnicos/' + UID.m).set({ nombre: 'Marta Prueba', cargo: 'Tecnico en terreno', pin: PIN_M, letra: 'M' });
   await auth.createUser({ uid: UID.m, email: CORREO_REAL_M, password: CLAVE_M, displayName: 'Marta Prueba' });
@@ -272,6 +274,9 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   const titoCreado = !!(await cuenta(UID.t)), umaCreada = !!(await cuenta(UID.u));
   await db.doc('directorio/' + UID.t).set(Object.assign({}, (await db.doc('directorio/' + UID.t).get()).data() || {}, { letra: 'Q' }));
   if (umaCreada) await auth.updateUser(UID.u, { disabled: true });
+  // Ronda 4: a la cuenta de Vera (creada por la corrida 2) solo le cambian el nombre despues.
+  const veraCreada = !!(await cuenta(UID.v));
+  if (veraCreada) await auth.updateUser(UID.v, { displayName: 'Vera (nombre cambiado)' });
   const des = correr(['--deshacer', archivoResp2], { confirmar: 'DESHACER' });
   const anaBorrada = !(await cuenta(UID.a));
   const fichaAnaRest = (await db.doc('directorio/' + UID.a).get()).data() || {};
@@ -289,10 +294,14 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   chequear(otrosIntactos, '--deshacer de la corrida 2 toco cuentas o fichas de otras corridas');
   const titoSigue = !!(await cuenta(UID.t)), fichaTito = (await db.doc('directorio/' + UID.t).get()).data() || {};
   const umaSigue = !!(await cuenta(UID.u));
+  const fichaUma = (await db.doc('directorio/' + UID.u).get()).exists;
+  const veraSigue = !!(await cuenta(UID.v)), fichaVera = (await db.doc('directorio/' + UID.v).get()).exists;
   console.log('6b) Ficha+cuenta → Tito (ficha cambio despues): cuenta ' + (titoCreado && titoSigue && fichaTito.letra === 'Q' ? 'y ficha se conservan ✓' : 'BORRADA o ficha pisada ✗') +
-    ' · Uma (cuenta deshabilitada despues): ' + (umaCreada && umaSigue ? 'no se borra ✓' : 'BORRADA ✗'));
+    ' · Uma (cuenta deshabilitada despues): ' + (umaCreada && umaSigue ? 'no se borra' : 'BORRADA') + (fichaUma ? ', su ficha tampoco ✓' : ', PERO SU FICHA SI ✗') +
+    ' · Vera (solo cambio el nombre): ' + (veraCreada && veraSigue && fichaVera ? 'cuenta y ficha se conservan ✓' : (veraSigue ? 'cuenta sin ficha ✗' : 'BORRADA ✗')));
   chequear(titoCreado && titoSigue && fichaTito.letra === 'Q', '--deshacer conservo la ficha que cambio despues pero borro su cuenta (Codex, ronda 3)');
   chequear(umaCreada && umaSigue, '--deshacer borro una cuenta que cambio despues de esa corrida (deshabilitada) (Codex, ronda 3)');
+  chequear(fichaUma && veraCreada && veraSigue && fichaVera, '--deshacer conservo una cuenta que cambio despues pero le borro la ficha: queda sin entrada en la app (Codex, ronda 4)');
   // 6c. La herramienta vuelve a crear la cuenta de Ana; repetir el deshacer NO la borra ni le pisa la ficha.
   correr(['--ejecutar']);
   const anaNueva = await cuenta(UID.a);
