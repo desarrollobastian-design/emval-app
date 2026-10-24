@@ -16816,6 +16816,7 @@ async function sincronizarEnlacesPDFPendientes() {
         await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
           25000, 'reintento enlace pdf');
         console.log('Enlace de PDF aplicado a la OT', it.otDocId);
+        if (yo._turno !== turno) return;   // ronda 7: el aviso lo manda la vigente, que reaplica el enlace
         /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
            quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
            orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
@@ -17196,6 +17197,7 @@ async function sincronizarOTsPendientes() {
           pdfUrlSync = yaFirmada.pdfUrlCloudinary;
         } else if (ot.pdfBase64) {
           pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
+          if (yo._turno !== turno) return;   // ronda 7: la subida del PDF puede tardar 30 s
           if (pdfUrlSync && ot.clientId) {
             // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
             // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
@@ -17203,6 +17205,7 @@ async function sincronizarOTsPendientes() {
             try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
             catch(e) {
               console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
+              if (yo._turno !== turno) return;   // ronda 7: la OT sigue en la cola, la vigente la resuelve
               _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
             }
           }

@@ -110,11 +110,12 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
       setItem: function (k, v) { almacen[k] = String(v); },
     };
     const escrituras = [];
-    let fallarEscritura = false, demora = 0;
+    let fallarEscritura = false, demora = 0, compuerta = null, avisos = 0;
     const docFalso = {
       update: function (campos) {
         escrituras.push({ tipo: 'update', campos: campos });
         if (fallarEscritura) return Promise.reject(new Error('unavailable'));
+        if (compuerta) { const g = compuerta; compuerta = null; return g; }   // el primer update se queda dormido
         return demora ? new Promise(function (r) { setTimeout(r, demora); }) : Promise.resolve();
       },
       set: function (campos, opts) {
@@ -128,13 +129,15 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
     };
 
     const fabricar = new Function(
-      'localStorage', 'window', 'navigator', 'console', '_conTimeout',
+      'localStorage', 'window', 'navigator', 'console', '_conTimeout', '_notificarOTCompletada', '_numOTCorreo',
       bloque + '\n return { encolar: _encolarEnlacePDF, leer: _leerEnlacesPDFPendientes, sincronizar: sincronizarEnlacesPDFPendientes };'
     );
     const api = fabricar(
       localStorageFalso, windowFalso, { onLine: true },
       { log: function () {}, warn: function () {} },
-      function (p) { return p; }          // _conTimeout transparente: aca no se prueba el timeout
+      function (p) { return p; },         // _conTimeout transparente: aca no se prueba el timeout
+      async function () { avisos++; },    // el aviso a administracion, contado
+      function (n) { return String(n); }
     );
 
     (async function () {
@@ -188,10 +191,27 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
       chequear(api.leer().length === 0, 'tras dos corridas a la vez el enlace aplicado no salio de la cola');
       demora = 0;
 
+      // h) (Codex, ronda 7) La corrida vieja que el guardian dejo atras despierta despues de su update:
+      //    no manda el aviso del enlace rescatado; lo manda la vigente, que reaplica el mismo enlace.
+      let soltarH; compuerta = new Promise(function (r) { soltarH = r; });
+      almacen[Object.keys(almacen)[0]] = JSON.stringify([{ otDocId: 'ot-8', pdfUrl: '', pdfUrlCloudinary: 'https://cloud/rescatado.pdf',
+        aviso: { numero: 8, local: 'Local Prueba', tecnico: 'Tomas Prueba', tipo: 'correctivo', fecha: '24-10-2026', clientId: 'c8' } }]);
+      avisos = 0;
+      const viejaH = api.sincronizar();                                 // se duerme en su update
+      await new Promise(function (r) { setTimeout(r, 20); });
+      api.sincronizar._desde = Date.now() - 16 * 60000;                 // reloj del guardian: pasaron 16 min
+      await api.sincronizar();                                          // la nueva aplica el enlace y avisa
+      const avisosNueva = avisos;
+      soltarH(); await viejaH;                                          // la vieja despierta
+      const avisosVieja = avisos - avisosNueva;
+      chequear(avisosNueva === 1, 'el tramo h no llego a la ventana que mide: la corrida nueva no mando el aviso del enlace rescatado');
+      chequear(avisosVieja === 0, 'la corrida vieja de la cola de enlaces mando el aviso al despertar, ademas de la vigente (Codex, ronda 7)');
+
       console.log('3) Reintento con update(), nunca set({merge}): ' + (escrituras[0] && escrituras[0].tipo === 'update' ? 'ok ✓' : 'roto ✗'));
       console.log('4) No pisa un enlace bueno con vacio: ' + (escrituras[0] && !('pdfUrl' in escrituras[0].campos) ? 'ok ✓' : 'roto ✗'));
       console.log('5) Lo que no se aplica sigue pendiente: ' + (quedan.length === 1 ? 'ok ✓' : 'roto ✗'));
       console.log('6) Dos corridas a la vez, un solo update: ' + (aplicadas === 1 ? 'ok ✓' : aplicadas + ' updates ✗'));
+      console.log('7) La corrida vieja no repite el aviso: ' + (avisosNueva === 1 && avisosVieja === 0 ? 'ok ✓' : 'la nueva ' + avisosNueva + ', la vieja ' + avisosVieja + ' ✗'));
 
       cerrar();
     })();
