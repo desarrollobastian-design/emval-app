@@ -94,7 +94,9 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
   - `--deshacer` (**6a a 6c**):
     - se niega con un respaldo de otro proyecto o de formato viejo;
     - revierte SOLO lo que esa corrida cambió (su diario) y no pisa lo que cambió después;
-    - repetido después de que la herramienta vuelve a crear la cuenta, no la borra ni le pisa la ficha.
+    - repetido después de que la herramienta vuelve a crear la cuenta, no la borra ni le pisa la ficha;
+    - (ronda 3 de Codex) si la ficha de alguien que creó esa corrida cambió después, su cuenta tampoco se
+      borra (Tito), ni una cuenta que cambió después, por ejemplo deshabilitada (Uma).
   - Con un modo emulador a medias, la herramienta se detiene.
   - 🔬 El emulador de Auth **no verifica hashes SHA-256 importados**. Por eso aquí se prueba
     `--clave-admin`; en producción decide la autoprueba.

@@ -29,6 +29,10 @@
        sesion y recien despues se cierra.
    16. (nuevo 7) Seis intentos equivocados A LA VEZ sin señal (seis pestañas) borran el verificador:
        los fallos no se pisan entre si.
+   17. (Codex, ronda 3) Guardar el verificador de una persona mientras otra pestaña borra el de OTRA no
+       lo resucita: su lapida sigue.
+   18. (Revisor, ronda 3, obs. 1) Al abrirse la sesion de quien entro sin señal, la cola vuelve a correr
+       (no espera la vuelta de 90 s).
 
    Uso:  node tests/entrar-con-firebase-auth.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -89,12 +93,14 @@ function montar(op) {
   const colas = op.colas || { ots: [] };
   let respuestaPedir = null;
   const nav = [];
+  const colaCorrida = { ots: 0, enlaces: 0 };
   const codigo = mTimeout[0] + '\n' + bloque.replace('const AUTH_MS_INICIO = 15000;', 'const AUTH_MS_INICIO = 300;') + '\n' + mSalir[0] +
     '\nreturn { _entrarConCuenta, _reintentarSesionPendiente, verificarPasswordAdmin, _correoDeCuenta, _claveFirebaseDePin,' +
     ' cerrarSesion, FICHAS: _FICHAS, pendiente: () => _credPendiente, PRIMERA_VEZ_CON_SENAL, ACCESO_DESACTIVADO, VERIF_KEY,' +
     // Con el codigo anterior a la revision no existen: la prueba falla en su tramo, no se cae.
     ' _completarSalidaDiferida: typeof _completarSalidaDiferida === "function" ? _completarSalidaDiferida : async function(){},' +
     ' diferida: function(){ return typeof _salidaDiferida !== "undefined" && _salidaDiferida; },' +
+    ' _guardarVerificador: typeof _guardarVerificador === "function" ? _guardarVerificador : null,' +
     ' enLaApp: function(){ return typeof _uidEnLaApp !== "undefined" ? _uidEnLaApp : "(no existe)"; },' +
     ' SIN_SENAL_VENCIDO: typeof SIN_SENAL_VENCIDO !== "undefined" ? SIN_SENAL_VENCIDO : "(no existe)",' +
     ' SIN_SENAL_TRAS_FALLOS: typeof SIN_SENAL_TRAS_FALLOS !== "undefined" ? SIN_SENAL_TRAS_FALLOS : "(no existe)",' +
@@ -102,10 +108,12 @@ function montar(op) {
     ' SIN_SENAL_PRIVILEGIADO: typeof SIN_SENAL_PRIVILEGIADO !== "undefined" ? SIN_SENAL_PRIVILEGIADO : "(no existe)" };';
   const api = new Function('window', 'localStorage', 'toast', '_pedirTexto', 'estado', 'document', 'navigator',
     '_obtenerOTsPendientes', 'cargarOTsPausadas', '_cargarCorreosPendientes', '_leerEnlacesPDFPendientes',
-    '_leerCierresPausadaPendientes', '_leerBajasPendientes', 'guardarBorradorOTActual', 'go', codigo)(
+    '_leerCierresPausadaPendientes', '_leerBajasPendientes', 'guardarBorradorOTActual', 'go',
+    'sincronizarOTsPendientes', 'sincronizarEnlacesPDFPendientes', codigo)(
     window, localStorage, m => toasts.push(m), async () => respuestaPedir, estado, document, navigator,
-    async () => colas.ots, () => [], () => [], () => [], () => [], () => [], () => {}, id => nav.push(id));
-  return { api, mem, cuentas, modo, toasts, estado, auth, scripts, colas, window,
+    async () => colas.ots, () => [], () => [], () => [], () => [], () => [], () => {}, id => nav.push(id),
+    () => { colaCorrida.ots++; }, () => { colaCorrida.enlaces++; });
+  return { api, mem, cuentas, modo, toasts, estado, auth, scripts, colas, window, colaCorrida,
     setPedir: v => { respuestaPedir = v; }, setActual: u => { actual = u; } };
 }
 function fichas(t) {
@@ -357,6 +365,30 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
   const borrado6 = !v6 || (!v6.sal && !v6.h);
   console.log('16) A la vez    → seis PIN equivocados juntos sin señal: verificador ' + (borrado6 ? 'borrado ✓' : 'SIGUE (' + (v6.fallos || 0) + ' fallos guardados) ✗'));
   chequear(borrado6, 'seis intentos simultaneos dejaron el verificador: los fallos se pisaron entre si (Codex, nuevo 7)');
+
+  // 17. Guardar y borrar cruzados (dos pestañas)
+  const g = montar(); fichas(g);
+  await g.api._guardarVerificador('u_beto', g.api._claveFirebaseDePin('7305'));
+  const guardando = g.api._guardarVerificador('u_ana', g.api._claveFirebaseDePin(PIN_ANA));   // pestaña 1, en curso
+  const otraPestana = JSON.parse(g.mem[g.api.VERIF_KEY]); otraPestana['u_beto'] = { fin: 'fallos', en: Date.now() };
+  g.mem[g.api.VERIF_KEY] = JSON.stringify(otraPestana);                                      // pestaña 2 lo borra
+  await guardando;
+  const beto17 = verifDe(g, 'u_beto'), ana17 = verifDe(g, 'u_ana');
+  const lapidaSigue = !!beto17 && beto17.fin === 'fallos' && !beto17.sal && !beto17.h;
+  console.log('17) Cruzados    → guardar el de Ana mientras otra pestaña borra el de Beto: ' + (lapidaSigue ? 'la lapida de Beto sigue ✓' : 'BETO REVIVE ✗') +
+    (ana17 && ana17.sal ? ', el de Ana queda ✓' : ', EL DE ANA NO QUEDO ✗'));
+  chequear(lapidaSigue, 'guardar un verificador resucito el que otra pestaña acababa de borrar (Codex, ronda 3)');
+  chequear(!!(ana17 && ana17.sal), 'el verificador que se guardaba no quedo');
+
+  // 18. La sesion pendiente se abre y la cola vuelve a correr
+  const q = montar({ mem: Object.assign({}, memAna) }); fichas(q);
+  q.modo.red = false;
+  await q.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
+  q.modo.red = true;
+  await q.api._reintentarSesionPendiente();
+  await espera(1800);
+  console.log('18) Sesion y cola → al abrirse la sesion pendiente: ' + (q.colaCorrida.ots >= 1 && q.colaCorrida.enlaces >= 1 ? 'la cola vuelve a correr ✓' : 'LA COLA ESPERA 90 s ✗'));
+  chequear(q.colaCorrida.ots >= 1 && q.colaCorrida.enlaces >= 1, 'al abrirse la sesion de quien entro sin señal, la cola no vuelve a correr (revisor, ronda 3, obs. 1)');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });

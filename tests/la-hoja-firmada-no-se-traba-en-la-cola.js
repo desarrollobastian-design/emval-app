@@ -14,6 +14,10 @@
    4. La escritura del cierre SIGUE PENDIENTE en el SDK (la lectura la ve firmada solo por la
       compensacion local): la OT NO sale de la cola (regla 4) y no se sube ni se escribe nada; se
       confirma en la vuelta siguiente.
+   5. (Codex, ronda 3) La CACHE tiene una copia firmada vieja que el servidor ya no tiene: la lectura va al
+      servidor (`source: 'server'`) y la OT se vuelve a subir; no sale de la cola por la cache.
+   6. Rechazo sin sesion de Firebase: si la sesion viene en camino (quien entro sin señal), no se avisa
+      nada; si no, el aviso dice que hay que entrar con señal (no "avisale a CorexOn"). La OT se queda.
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -34,12 +38,14 @@ chequear(!!m, 'no se encontro en firestore.rules la lista de campos que un tecni
 const PERMITIDOS = m ? m[1].split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean) : [];
 
 // Firestore falso: aplica a un TECNICO la regla de `ordenes` de la etapa 2 en una hoja ya firmada.
-function crearNube(docs) {
-  const escrituras = [];
+function crearNube(docs, opciones) {
+  opciones = opciones || {};
+  const escrituras = [], lecturas = [];
   let ts = 0;
   const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   function revisar(id, nuevo) {
-    const prev = docs[id];
+    if (opciones.sinSesion) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    const prev = docs[id] && !docs[id].__soloCache ? docs[id] : null;   // lo que solo esta en la cache no existe para el servidor
     if (!prev || prev.firmada !== true) return;
     const cambian = Object.keys(nuevo).filter(k => !igual(nuevo[k], prev[k]));
     const fuera = cambian.filter(k => PERMITIDOS.indexOf(k) < 0);
@@ -51,12 +57,17 @@ function crearNube(docs) {
   }
   const ref = (col, id) => ({
     id,
-    get: async () => {
-      const d = docs[id] ? JSON.parse(JSON.stringify(docs[id])) : undefined;
-      const pendiente = !!(d && d.__pendiente); if (d) delete d.__pendiente;
-      return { exists: !!d, data: () => d, metadata: { hasPendingWrites: pendiente } };
+    get: async (op) => {
+      const alServidor = !!(op && op.source === 'server');
+      lecturas.push(alServidor ? 'servidor' : 'cache-o-servidor');
+      let d = docs[id] ? JSON.parse(JSON.stringify(docs[id])) : undefined;
+      // __soloCache: la copia vive en la cache del telefono, el servidor ya no la tiene.
+      if (d && d.__soloCache && alServidor) d = undefined;
+      const desdeCache = !!(d && d.__soloCache);
+      const pendiente = !!(d && d.__pendiente); if (d) { delete d.__pendiente; delete d.__soloCache; }
+      return { exists: !!d, data: () => d, metadata: { hasPendingWrites: pendiente, fromCache: desdeCache } };
     },
-    set: async (d, op) => { revisar(id, d); escrituras.push({ id, campos: Object.keys(d) }); docs[id] = Object.assign(op && op.merge ? (docs[id] || {}) : {}, d); },
+    set: async (d, op) => { revisar(id, d); escrituras.push({ id, campos: Object.keys(d) }); const base = docs[id] && !docs[id].__soloCache ? docs[id] : {}; docs[id] = Object.assign(op && op.merge ? base : {}, d); },
     update: async d => {
       if (!docs[id]) throw Object.assign(new Error('no existe'), { code: 'not-found' });
       revisar(id, d); escrituras.push({ id, campos: Object.keys(d) }); Object.assign(docs[id], d);
@@ -65,11 +76,12 @@ function crearNube(docs) {
   const fs_ = { collection: col => ({ doc: id => ref(col, id), add: async d => { const id = 'auto' + (++ts); docs[id] = d; return { id }; } }) };
   const firestore = () => fs_;
   firestore.FieldValue = { serverTimestamp: () => ({ ts: ++ts }) };
-  return { firebase: { firestore }, escrituras, docs };
+  return { firebase: { firestore }, escrituras, lecturas, docs };
 }
 
-async function correr(docs, ot) {
-  const nube = crearNube(docs);
+async function correr(docs, ot, opciones) {
+  opciones = opciones || {};
+  const nube = crearNube(docs, opciones);
   const r = { subidas: 0, pdfs: 0, eliminadas: [], errores: [], avisos: [], vinculos: 0 };
   const window = { firebase: nube.firebase, _firebaseReady: true };
   const deps = {
@@ -86,13 +98,14 @@ async function correr(docs, ot) {
     _encolarEnlacePDF: () => {},
     _normTipo: t => t, _tecnicoActual: () => 'Tomas Prueba', _conTimeout: p => p,
     _numOTCorreo: n => String(n), _urlPDFVista: u => u, _nombrePDFHoja: () => 'HS',
-    _uidSesionFirebase: () => 'u_tec'
+    _uidSesionFirebase: () => (opciones.sinSesion ? '' : 'u_tec'),
+    _credPendiente: opciones.credPendiente || null
   };
   const nombres = Object.keys(deps);
   const fn = new Function(...nombres, src.slice(i, j) + '\nreturn sincronizarOTsPendientes;')(...nombres.map(k => deps[k]));
   const _log = console.error, _warn = console.warn; console.error = () => {}; console.warn = () => {};
   try { await fn(); } finally { console.error = _log; console.warn = _warn; }
-  return Object.assign(r, { escrituras: nube.escrituras, docs: nube.docs });
+  return Object.assign(r, { escrituras: nube.escrituras, lecturas: nube.lecturas, docs: nube.docs });
 }
 
 const otCola = (extra) => Object.assign({ id: 41, clientId: 'cli_1', numero: 425996, local: 'Local Prueba', tipo: 'correctivo',
@@ -142,6 +155,24 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
     ' · subidas: ' + (d.subidas === 0 && d.pdfs === 0 ? 'ninguna ✓' : (d.subidas + d.pdfs) + ' ✗') + ' · escrituras: ' + (escribio === 0 ? 'ninguna ✓' : escribio + ' ✗'));
   chequear(d.eliminadas.length === 0, 'con la escritura del cierre todavia pendiente en el SDK, la OT se saco de la cola sin que el servidor la tuviera (regla 4)');
   chequear(d.subidas === 0 && d.pdfs === 0 && escribio === 0, 'con la escritura pendiente se volvio a subir o a escribir');
+
+  // 5. La cache tiene una copia firmada vieja; el servidor ya no la tiene
+  const e5 = await correr({ cli_1: arriba({ __soloCache: true, pdfUrlCloudinary: 'https://res.cloudinary.com/x/hoja_vieja.pdf' }) }, otCola());
+  const subioDeNuevo = e5.subidas === 3 && e5.escrituras.some(w => w.id === 'cli_1' && !w.rechazada && w.campos.indexOf('firmada') >= 0);
+  console.log('5) Copia vieja en cache → lectura: ' + (e5.lecturas.every(l => l === 'servidor') ? 'al servidor ✓' : 'PUEDE SER DE LA CACHE ✗') +
+    ' · OT: ' + (subioDeNuevo ? 'se vuelve a subir ✓' : 'SALE DE LA COLA SIN ESTAR ARRIBA ✗'));
+  chequear(e5.lecturas.length > 0 && e5.lecturas.every(l => l === 'servidor'), 'la lectura previa de la cola no se le pide al servidor (puede venir de la cache) (Codex, ronda 3)');
+  chequear(subioDeNuevo, 'una copia firmada vieja en la cache saco la OT de la cola aunque el servidor no la tenia (Codex, ronda 3)');
+
+  // 6. Rechazo sin sesion de Firebase
+  const f6a = await correr({}, otCola(), { sinSesion: true, credPendiente: { uid: 'u_tec' } });
+  const f6b = await correr({}, otCola(), { sinSesion: true });
+  const enCamino = f6a.errores.length === 0 && f6a.eliminadas.length === 0;
+  const diceSenal = f6b.errores.length === 1 && /entrar con señal/.test(f6b.errores[0]) && !/CorexOn/.test(f6b.errores[0]) && f6b.eliminadas.length === 0;
+  console.log('6) Sin sesion           → con la sesion en camino: ' + (enCamino ? 'no avisa, se queda ✓' : 'AVISA ✗') +
+    ' · sin forma de abrirla: ' + (diceSenal ? 'dice que entre con señal, se queda ✓' : (f6b.errores[0] || 'sin aviso') + ' ✗'));
+  chequear(enCamino, 'con la sesion de quien entro sin señal en camino, el rechazo avisa al tecnico de un problema que se arregla solo (revisor, obs. 1)');
+  chequear(diceSenal, 'sin sesion el aviso no dice que hay que entrar con señal (dice avisar a CorexOn), o la OT salio de la cola');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });

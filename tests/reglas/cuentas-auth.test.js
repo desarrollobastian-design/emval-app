@@ -25,7 +25,8 @@
    6. --deshacer (P1 nuevo 3): se niega con un respaldo de otro proyecto o de formato viejo; con el de la
       corrida 2 revierte SOLO lo que esa corrida cambio y no pisa lo que cambio despues (la ficha de
       Beto); repetido despues de que la herramienta vuelve a crear la cuenta de Ana, no la borra ni le
-      pisa la ficha.
+      pisa la ficha. (Ronda 3 de Codex) Si la ficha de alguien que creo esa corrida cambio despues (Tito),
+      su cuenta tampoco se borra; ni una cuenta que cambio despues (Uma, deshabilitada).
    7. Modo emulador incompleto (un solo host, o un proyecto que no es demo-): se detiene antes de
       conectarse (Codex P2-10).
    8. Ni la salida ni los respaldos muestran un PIN, una clave o un hash.
@@ -54,17 +55,17 @@ function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); retur
 const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 
 // Valores SOLO de prueba (no son de nadie).
-const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141';
+const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141', PIN_T = '2718', PIN_U = '1618';
 const CLAVE_ADMIN = 'clave-solo-de-prueba-admin', CLAVE_VIEJA_B = 'clave-vieja-de-beto', CLAVE_RITA = 'clave-solo-de-prueba-rita';
 const CLAVE_E = 'clave-solo-de-prueba-esteban', CLAVE_M = 'clave-solo-de-prueba-marta';
 const CORREO_REAL_M = 'marta.otra@ejemplo.test';
-const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
+const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, PIN_T, PIN_U, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
   sha(CLAVE_ADMIN), sha(CLAVE_RITA), sha(CLAVE_E), 'nota-secreta-de-prueba'];
 // El correo real de una cuenta no es un secreto (el respaldo local lo guarda para reconocerla), pero la
 // herramienta no lo imprime: se revisa aparte, solo en las salidas.
 const UID = { a: 'tecA0000000000000001', b: 'tecB0000000000000002', c: 'tecC0000000000000003',
   p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006', r: 'admR0000000000000007',
-  e: 'admE0000000000000008', m: 'tecM0000000000000009' };
+  e: 'admE0000000000000008', m: 'tecM0000000000000009', t: 'tecT0000000000000011', u: 'tecU0000000000000012' };
 const HUERFANA = 'huerH000000000000010';
 const DIR_RESP = path.join(RAIZ, 'tools', 'respaldos');
 
@@ -122,6 +123,9 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   await auth.createUser({ uid: UID.e, email: _correoDeCuenta(UID.e), password: CLAVE_E, displayName: 'Esteban Prueba' });
   await db.doc('directorio/' + UID.e).set({ nombre: 'Esteban Prueba', cargo: 'Tecnico en terreno', letra: 'E', correo: _correoDeCuenta(UID.e), activo: true });
   const estebanAntes = (await cuenta(UID.e)).toJSON();
+  // Tito y Uma: tecnicos nuevos que crea la corrida 2 (para --deshacer, ronda 3 de Codex).
+  await db.doc('tecnicos/' + UID.t).set({ nombre: 'Tito Prueba', cargo: 'Tecnico en terreno', pin: PIN_T, letra: 'T' });
+  await db.doc('tecnicos/' + UID.u).set({ nombre: 'Uma Prueba', cargo: 'Tecnico en terreno', pin: PIN_U, letra: 'U' });
   // Marta YA tiene cuenta, pero con OTRO correo que el que usa la app (nuevo 6).
   await db.doc('tecnicos/' + UID.m).set({ nombre: 'Marta Prueba', cargo: 'Tecnico en terreno', pin: PIN_M, letra: 'M' });
   await auth.createUser({ uid: UID.m, email: CORREO_REAL_M, password: CLAVE_M, displayName: 'Marta Prueba' });
@@ -263,6 +267,11 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   // 6b. Algo cambia DESPUES de la corrida 2 (la ficha de Beto) y se deshace la corrida 2.
   // (set y no update: con una herramienta que ya la borro en 6a, la prueba falla en su tramo, no se cae)
   await db.doc('directorio/' + UID.b).set(Object.assign({}, (await db.doc('directorio/' + UID.b).get()).data() || {}, { letra: 'Z' }));
+  // Ronda 3 de Codex: la ficha de Tito (cuenta creada por la corrida 2) cambia despues, y la cuenta de Uma
+  // (tambien creada por la corrida 2) se deshabilita despues.
+  const titoCreado = !!(await cuenta(UID.t)), umaCreada = !!(await cuenta(UID.u));
+  await db.doc('directorio/' + UID.t).set(Object.assign({}, (await db.doc('directorio/' + UID.t).get()).data() || {}, { letra: 'Q' }));
+  if (umaCreada) await auth.updateUser(UID.u, { disabled: true });
   const des = correr(['--deshacer', archivoResp2], { confirmar: 'DESHACER' });
   const anaBorrada = !(await cuenta(UID.a));
   const fichaAnaRest = (await db.doc('directorio/' + UID.a).get()).data() || {};
@@ -278,6 +287,12 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   chequear(fichaAnaRest.nombre === 'Ana Vieja' && !('pin' in fichaAnaRest), '--deshacer no dejo la ficha de Ana como estaba');
   chequear(fichaBeto6 && fichaBeto6.letra === 'Z' && des.status === 2 && /cambio despues/.test(des.salida), '--deshacer piso una ficha que cambio despues de esa corrida, o no lo informo con exit 2 (Codex P1 nuevo 3)');
   chequear(otrosIntactos, '--deshacer de la corrida 2 toco cuentas o fichas de otras corridas');
+  const titoSigue = !!(await cuenta(UID.t)), fichaTito = (await db.doc('directorio/' + UID.t).get()).data() || {};
+  const umaSigue = !!(await cuenta(UID.u));
+  console.log('6b) Ficha+cuenta → Tito (ficha cambio despues): cuenta ' + (titoCreado && titoSigue && fichaTito.letra === 'Q' ? 'y ficha se conservan ✓' : 'BORRADA o ficha pisada ✗') +
+    ' · Uma (cuenta deshabilitada despues): ' + (umaCreada && umaSigue ? 'no se borra ✓' : 'BORRADA ✗'));
+  chequear(titoCreado && titoSigue && fichaTito.letra === 'Q', '--deshacer conservo la ficha que cambio despues pero borro su cuenta (Codex, ronda 3)');
+  chequear(umaCreada && umaSigue, '--deshacer borro una cuenta que cambio despues de esa corrida (deshabilitada) (Codex, ronda 3)');
   // 6c. La herramienta vuelve a crear la cuenta de Ana; repetir el deshacer NO la borra ni le pisa la ficha.
   correr(['--ejecutar']);
   const anaNueva = await cuenta(UID.a);

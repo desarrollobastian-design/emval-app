@@ -2413,8 +2413,12 @@ function _borrarVerificador(uid) {
 async function _guardarVerificador(uid, secreto) {
   try {
     const sal = _hex(crypto.getRandomValues(new Uint8Array(16)));
+    const h = await _pbkdf2(secreto, sal, VERIF_ITER);
+    // Se lee DESPUES del `await` y se escribe sin otro de por medio (revision de Codex, ronda 3): leer
+    // antes devolvia, al escribir, una copia vieja que resucitaba el verificador que otra pestaña acababa
+    // de borrar por fallos (o le quitaba su lapida). Solo cambia el de `uid`, que acaba de entrar con señal.
     const todos = _leerVerificadores();
-    todos[uid] = { sal: sal, it: VERIF_ITER, h: await _pbkdf2(secreto, sal, VERIF_ITER), en: Date.now(), fallos: 0 };
+    todos[uid] = { sal: sal, it: VERIF_ITER, h: h, en: Date.now(), fallos: 0 };
     _escribirVerificadores(todos);
   } catch (e) { console.warn('No se pudo guardar el verificador local:', e && e.message); }
 }
@@ -2576,6 +2580,12 @@ async function _reintentarSesionPendiente() {
   const r = await _iniciarSesionFirebase(p.correo, p.clave, p.uid);
   // 'sin-red' y 'no-activada' la conservan: la señal vuelve, y la entrada la reactiva CorexOn.
   if (r === 'ok' || r === 'rechazada' || r === 'desactivada' || r === 'otra-cuenta') _credPendiente = null;
+  // Con la sesion recien abierta, la cola se vuelve a correr (revisor, obs. 1): el `online` la lanza a
+  // los 2 s y con mala señal la sesion puede llegar despues; sin esto esperaria la vuelta de 90 s.
+  if (r === 'ok') {
+    if (typeof sincronizarOTsPendientes === 'function') setTimeout(sincronizarOTsPendientes, 500);
+    if (typeof sincronizarEnlacesPDFPendientes === 'function') setTimeout(sincronizarEnlacesPDFPendientes, 1500);
+  }
 }
 
 // SALIR (Codex P1-2): la sesion de Firebase se cierra al salir de la app. Administrador y Supervisor,
@@ -17045,12 +17055,16 @@ async function sincronizarOTsPendientes() {
          lo que falte (el enlace del PDF) y sale de la cola como subida. */
       var yaFirmada = null;
       if (ot.clientId) {
-        var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get(), 25000, 'sync leer OT');
-        /* OJO con la compensacion local: si el `set` del cierre original sigue PENDIENTE en el SDK (el
-           cierre sin señal de siempre), esta lectura ya la muestra "firmada" aunque el servidor todavia
-           no la tenga. Darla por subida con eso borraria de la cola algo que no salio (regla 4). Se
-           deja para la vuelta siguiente, sin subir ni reescribir nada: el SDK la envia solo. */
-        if (_arriba.metadata && _arriba.metadata.hasPendingWrites) {
+        /* AL SERVIDOR, no a la cache (revision de Codex, ronda 3): una copia firmada vieja en la cache
+           sacaba la OT de la cola aunque el servidor ya no la tuviera (p. ej., la borro el panel). Sin
+           señal, esta lectura falla y la OT se queda para la vuelta siguiente, como cualquier corte. */
+        var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get({ source: 'server' }), 25000, 'sync leer OT');
+        /* OJO con la compensacion local, que se aplica TAMBIEN a la lectura del servidor: si el `set` del
+           cierre original sigue PENDIENTE en el SDK (el cierre sin señal de siempre), esta lectura ya la
+           muestra "firmada" aunque el servidor todavia no la tenga. Darla por subida con eso borraria de
+           la cola algo que no salio (regla 4). Se deja para la vuelta siguiente, sin subir ni reescribir
+           nada: el SDK la envia solo. Y una lectura que diga venir de la cache tampoco se acepta. */
+        if (_arriba.metadata && (_arriba.metadata.hasPendingWrites || _arriba.metadata.fromCache)) {
           console.log('OT #' + ot.numero + ': su escritura anterior sigue en camino; se confirma en la proxima vuelta.');
           continue;
         }
@@ -17171,10 +17185,19 @@ async function sincronizarOTsPendientes() {
       // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
       // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.
       if (err && err.code === 'permission-denied') {
+        // Sin sesion de Firebase, el rechazo es por eso (revision de Codex, ronda 3, y revisor, obs. 1):
+        // - si la sesion de quien entro sin señal ya viene en camino, no se avisa nada: al abrirse
+        //   vuelve a correr la cola (_reintentarSesionPendiente);
+        // - si no hay como abrirla (recargo despues de salir, por ejemplo), se dice que hay que entrar
+        //   con señal: no es un caso para CorexOn.
+        var _sinSesion = typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase();
+        if (_sinSesion && typeof _credPendiente !== 'undefined' && _credPendiente) continue;
         // Una vez por OT y por sesion de la app, no en cada vuelta de 90 s (revisor del PR #64, punto 11).
         if (!_otsRechazadasAvisadas[ot.id]) {
           _otsRechazadasAvisadas[ot.id] = true;
-          _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+          _error('subir la OT #' + ot.numero, null, _sinSesion
+            ? 'Falta entrar con señal en este teléfono para subir lo pendiente. Queda guardada.'
+            : 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
         }
         continue;
       }
@@ -17303,7 +17326,9 @@ if (!_soloVisorPDF) {
   _esperarSesionFirebase(5000).then(function() {
     var pasado = Date.now() - _t0Arranque;
     [[sincronizarPausadasPendientes, 3000], [sincronizarOTsPendientes, 3500], [sincronizarCorreosPendientes, 4000],
-     [sincronizarEnlacesPDFPendientes, 4500], [sincronizarCierresPausadaPendientes, 5000], [sincronizarBajasPendientes, 5400]
+     [sincronizarEnlacesPDFPendientes, 4500], [sincronizarCierresPausadaPendientes, 5000], [sincronizarBajasPendientes, 5400],
+     // Ultimo: si la salida quedo diferida antes de recargar y la cola ya se vacio, se cierra la sesion.
+     [_completarSalidaDiferida, 9000]
     ].forEach(function(x) { setTimeout(x[0], Math.max(300, x[1] - pasado)); });
   });
   setInterval(_reintentarSesionPendiente, 90000);
