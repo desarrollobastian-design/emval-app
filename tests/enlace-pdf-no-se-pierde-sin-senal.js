@@ -29,6 +29,8 @@
         de correos: o se escribe, o sigue pendiente).
      6. (Revision de Codex, ronda 4 del PR #64) Dos corridas a la vez de la cola no aplican el mismo
         enlace dos veces: corre una, y la otra despues.
+     7. (24-10-2026) Lo que se encola MIENTRAS la cola corre no se pierde: otra OT que cierra con mala señal
+        en ese rato conserva su enlace; y si la MISMA OT encola uno nuevo, queda el nuevo (no los dos).
 
    Uso:  node tests/enlace-pdf-no-se-pierde-sin-senal.js index.html
    Sale 0 si los cinco invariantes se sostienen; 1 si alguno se rompio. */
@@ -195,6 +197,31 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
       chequear(api.leer().length === 0, 'tras dos corridas a la vez el enlace aplicado no salio de la cola');
       demora = 0;
 
+      // f) Mientras la vuelta corre (su update tarda), otra OT encola su enlace.
+      demora = 40;
+      almacen[Object.keys(almacen)[0]] = JSON.stringify([{ otDocId: 'ot-5', pdfUrl: '', pdfUrlCloudinary: 'https://cloud/ot5.pdf' }]);
+      const vuelta = api.sincronizar();
+      await new Promise(function (r) { setTimeout(r, 10); });            // ya esta esperando el update de ot-5
+      api.encolar('ot-6', '', 'https://cloud/ot6-encolado-mientras.pdf');
+      await vuelta;
+      demora = 0;
+      const trasF = api.leer();
+      const sigueOt6 = trasF.some(function (it) { return it.otDocId === 'ot-6' && it.pdfUrlCloudinary === 'https://cloud/ot6-encolado-mientras.pdf'; });
+      chequear(sigueOt6 && !trasF.some(function (it) { return it.otDocId === 'ot-5'; }),
+        'un enlace encolado mientras la cola corria se perdio (o el ya aplicado sigue en la cola) (regla 4)');
+
+      // g) La MISMA OT encola un enlace nuevo mientras su update viejo falla: queda el nuevo, no los dos.
+      almacen[Object.keys(almacen)[0]] = JSON.stringify([{ otDocId: 'ot-7', pdfUrl: '', pdfUrlCloudinary: 'https://cloud/ot7-viejo.pdf' }]);
+      fallarEscritura = true; demora = 0;
+      const vueltaG = api.sincronizar();
+      api.encolar('ot-7', '', 'https://cloud/ot7-nuevo.pdf');
+      await vueltaG;
+      fallarEscritura = false;
+      const deOt7 = api.leer().filter(function (it) { return it.otDocId === 'ot-7'; });
+      chequear(deOt7.length === 1 && deOt7[0].pdfUrlCloudinary === 'https://cloud/ot7-nuevo.pdf',
+        'la misma OT quedo con ' + deOt7.length + ' enlaces en la cola, o con el viejo en vez del nuevo');
+      almacen[Object.keys(almacen)[0]] = '[]';
+
       // h) (Codex, ronda 7) La corrida vieja que el guardian dejo atras despierta despues de su update:
       //    no manda el aviso del enlace rescatado; lo manda la vigente, que reaplica el mismo enlace.
       let soltarH; compuerta = new Promise(function (r) { soltarH = r; });
@@ -231,7 +258,8 @@ console.log('Cerrar sin señal no cuelga la app ni pierde el enlace del PDF\n');
       console.log('4) No pisa un enlace bueno con vacio: ' + (escrituras[0] && !('pdfUrl' in escrituras[0].campos) ? 'ok ✓' : 'roto ✗'));
       console.log('5) Lo que no se aplica sigue pendiente: ' + (quedan.length === 1 ? 'ok ✓' : 'roto ✗'));
       console.log('6) Dos corridas a la vez, un solo update: ' + (aplicadas === 1 ? 'ok ✓' : aplicadas + ' updates ✗'));
-      console.log('7) La corrida vieja no repite el aviso: ' + (avisosNueva === 1 && avisosVieja === 0 ? 'ok ✓' : 'la nueva ' + avisosNueva + ', la vieja ' + avisosVieja + ' ✗') +
+      console.log('7) Lo encolado mientras corre no se pierde: ' + (sigueOt6 ? 'ok ✓' : 'SE PIERDE ✗') + ' · la misma OT queda con el nuevo: ' + (deOt7.length === 1 && deOt7[0].pdfUrlCloudinary === 'https://cloud/ot7-nuevo.pdf' ? 'ok ✓' : deOt7.length + ' ✗'));
+      console.log('8) La corrida vieja no repite el aviso: ' + (avisosNueva === 1 && avisosVieja === 0 ? 'ok ✓' : 'la nueva ' + avisosNueva + ', la vieja ' + avisosVieja + ' ✗') +
         ' · ni el correo al local: ' + (correosNueva === 1 && correosVieja === 0 ? 'ok ✓' : 'la nueva ' + correosNueva + ', la vieja ' + correosVieja + ' ✗'));
 
       cerrar();
