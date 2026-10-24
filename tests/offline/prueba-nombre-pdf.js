@@ -67,7 +67,8 @@
 const { chromium, devices } = require('playwright');
 
 const ARCHIVO = process.argv[2] || 'index.html';
-const HASH_PEDRO123 = 'cefdf4148cc0bdd9b6b4e6f125a65088e5340d9cf15d58000015b254bcf5168d';
+const CLAVE_PRUEBA = 'clave-solo-de-prueba';   // no es la de nadie: el arnes siembra su hash
+const HASH_PEDRO = require('crypto').createHash('sha256').update(CLAVE_PRUEBA).digest('hex');
 
 // PDF reales de la cuenta de EMVAL (verificados con HEAD el 15-09-2026).
 const CT_15092601 = 'https://res.cloudinary.com/dcrf29tna/raw/upload/v1789474108/emval/cotizaciones/COT_15092601_ceco_SIN_CECO_Destape_piletas_y_camara_107503.pdf';
@@ -252,7 +253,7 @@ function medirVista(etq, url, nombre) {
       get() { return real; },
       set(v) { real = Object.assign(v || {}, window.__EXTRA); }
     });
-  }, { hash: HASH_PEDRO123, ct1: CT_15092601, ct2: CT_01082617, previa: PDF_PREVIA, hs: HS_796863, hsPrev: HS_247863, desc: DESC_796863, formato: FORMATO });
+  }, { hash: HASH_PEDRO, ct1: CT_15092601, ct2: CT_01082617, previa: PDF_PREVIA, hs: HS_796863, hsPrev: HS_247863, desc: DESC_796863, formato: FORMATO });
 
   const descargas = [];
   const escuchar = p => p.on('download', d => descargas.push(d.suggestedFilename()));
@@ -284,7 +285,7 @@ function medirVista(etq, url, nombre) {
   await page.waitForTimeout(600);
   const campoPass = page.locator('#admin-pass-input');
   chequear(await campoPass.isVisible(), 'no apareció el campo de contraseña del administrador');
-  await campoPass.fill('Pedro123');
+  await campoPass.fill(CLAVE_PRUEBA);
   await page.locator('button', { hasText: 'Ingresar' }).first().click();
   await page.waitForTimeout(1500);
   const pantalla = await page.evaluate(() => { const s = document.querySelector('.screen.active'); return s ? s.id : '(ninguna)'; });
