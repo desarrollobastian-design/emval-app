@@ -17259,6 +17259,9 @@ async function sincronizarOTsPendientes() {
           ot.clientId);
       } catch(err) {
         console.error('Error sincronizando OT pendiente:', err);
+        // Ronda 8: el error de una corrida que ya no es la vigente no le toca las marcas ni le avisa nada al
+        // tecnico; la OT sigue en la cola y la vigente dice lo que pase.
+        if (yo._turno !== turno) return;
         // Rechazo de las reglas (etapa 2 de Auth): no es la señal, y reintentar en el acto no cambia
         // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
         // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.

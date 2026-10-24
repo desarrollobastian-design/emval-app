@@ -32,6 +32,11 @@
       sigue subiendo fotos: solo termina la que tenia en vuelo.
   11. (Ronda 7) Sacar la OT de la cola espera a IndexedDB: la funcion REAL `_eliminarOTPendiente` no borra
       si al abrir la base la corrida ya no es la vigente, y la cola le pasa esa pregunta.
+  12. (Ronda 8) El error de una corrida vieja (despierta con un rechazo despues de que la nueva ya subio la
+      OT) no le avisa nada al tecnico ni deja marcas de rechazo.
+  13. (Ronda 8, lo que NO se cambio) El aviso a administracion sale UNA vez, se adelante la nueva antes o
+      despues de que la vieja empiece a borrar. Con una cola como la de IndexedDB (lo que la vieja ya borro,
+      la nueva no lo lee): si la vieja callara el aviso tras borrar, nadie lo mandaria.
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -97,11 +102,12 @@ function crearNube(docs, opciones) {
 async function correr(docs, ot, opciones) {
   opciones = opciones || {};
   const nube = crearNube(docs, opciones);
-  const r = { subidas: 0, pdfs: 0, eliminadas: [], errores: [], avisos: [], vinculos: 0, encolados: 0 };
+  const r = { subidas: 0, pdfs: 0, eliminadas: [], errores: [], avisos: [], vinculos: 0, encolados: 0, notificadas: 0 };
   const window = { firebase: nube.firebase, _firebaseReady: true };
   const deps = {
     navigator: { onLine: true }, window, document: { getElementById: () => null },
-    _obtenerOTsPendientes: async () => [ot],
+    // opciones.cola: una cola como la de IndexedDB (lo borrado ya no se lee); si no, la OT siempre esta.
+    _obtenerOTsPendientes: async () => (opciones.cola ? opciones.cola.slice() : [ot]),
     toast: () => {}, actualizarIndicadorPendientes: () => {},
     subirCloudinary: async (b, n, nombre) => {
       if (opciones.compuerta) { const g = opciones.compuerta; opciones.compuerta = null; await g; }   // la primera subida se queda dormida
@@ -113,8 +119,16 @@ async function correr(docs, ot, opciones) {
     },
     _vincularCotizacionRealizada: async () => { r.vinculos++; },
     _enviarCorreo: async p => { r.avisos.push(p.pdf_url); },
-    _eliminarOTPendiente: async id => { r.eliminadas.push(id); },
-    _notificarOTCompletada: async () => {},
+    _eliminarOTPendiente: async (id, sigue) => {
+      if (!opciones.cola) { r.eliminadas.push(id); return; }
+      if (opciones.alAbrirBase) { const f = opciones.alAbrirBase; opciones.alAbrirBase = null; await f(); }   // la espera de abrir la base
+      if (sigue && !sigue()) return false;                           // igual que la funcion real (tramo 11)
+      const k = opciones.cola.findIndex(o => o.id === id);
+      if (k >= 0) opciones.cola.splice(k, 1);                        // la transaccion ya esta creada: lo que lea otra, no la ve
+      r.eliminadas.push(id);
+      if (opciones.compuertaBorrado) { const g = opciones.compuertaBorrado; opciones.compuertaBorrado = null; await g; }   // espera el oncomplete
+    },
+    _notificarOTCompletada: async () => { r.notificadas++; },
     _error: (que, e, msg) => { r.errores.push(String(msg || que)); },
     _encolarEnlacePDF: () => { r.encolados++; },
     _normTipo: t => t, _tecnicoActual: () => 'Tomas Prueba', _conTimeout: p => p,
@@ -129,7 +143,7 @@ async function correr(docs, ot, opciones) {
     try { return await p(); } finally { console.error = a; console.warn = b; console.log = c; } };
   console.error = _log; console.warn = _warn;
   if (opciones.antes) opciones.antes(fn);
-  if (opciones.manual) return Object.assign(r, { fn, silencio, escrituras: nube.escrituras, docs: nube.docs });
+  if (opciones.manual) return Object.assign(r, { fn, silencio, escrituras: nube.escrituras, docs: nube.docs, window });
   if (opciones.concurrentes) await silencio(async () => { await Promise.all([fn(), fn()]); await new Promise(res => setTimeout(res, 150)); });
   else await silencio(fn);
   return Object.assign(r, { escrituras: nube.escrituras, lecturas: nube.lecturas, docs: nube.docs, otra: () => silencio(fn) });
@@ -293,6 +307,48 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
     chequear(ok11, 'la corrida vieja saca la OT de la cola aunque deje de ser la vigente mientras espera a IndexedDB (Codex, ronda 7)');
     chequear(pasaLaPregunta, 'sincronizarOTsPendientes no le pasa el control de turno a _eliminarOTPendiente o no sale si no se borro');
   }
+
+  // 12. El error de una corrida vieja no le avisa nada al tecnico
+  let fallar12; const o12 = { sinReglas: true, manual: true, compuerta: new Promise((res, rej) => { fallar12 = rej; }) };
+  const e12 = await correr({}, otCola(), o12);
+  const vieja12 = e12.silencio(e12.fn);                             // se duerme en su primera subida
+  await new Promise(res => setTimeout(res, 20));
+  e12.fn._desde = Date.now() - 16 * 60000;                          // reloj del guardian: pasaron 16 min
+  await e12.silencio(e12.fn);                                       // la nueva sube la OT y la saca de la cola
+  const subio12 = !!(e12.docs.cli_1 && e12.docs.cli_1.firmada === true) && e12.eliminadas.length === 1;
+  const errores12 = e12.errores.length;
+  fallar12(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+  await vieja12;                                                    // la vieja despierta con un rechazo
+  const avisoVieja12 = e12.errores.length - errores12;
+  const marca12 = !!(e12.window._otsRechazadasAvisadas || {})[41];
+  console.log('12) Error de la vieja   → la nueva: ' + (subio12 ? 'subio la OT ✓' : 'NO ✗') + ' · la vieja: ' +
+    (avisoVieja12 === 0 && !marca12 ? 'no avisa ni marca ✓' : avisoVieja12 + ' avisos' + (marca12 ? ', marca la OT como rechazada' : '') + ' ✗'));
+  chequear(subio12, 'el tramo 12 no llego a la ventana que mide: la corrida nueva no subio la OT');
+  chequear(avisoVieja12 === 0 && !marca12, 'la corrida vieja le aviso un rechazo al tecnico (o marco la OT) despues de que la nueva ya la habia subido (Codex, ronda 8)');
+
+  // 13. El aviso a administracion sale una vez (lo que NO se cambio en la ronda 8)
+  //   a) la nueva entra mientras la vieja espera el oncomplete del borrado: la nueva ya no ve la OT
+  let soltar13; const cola13 = [otCola()];
+  const o13 = { sinReglas: true, manual: true, cola: cola13, compuertaBorrado: new Promise(res => { soltar13 = res; }) };
+  const v13 = await correr({}, cola13[0], o13);
+  const vieja13 = v13.silencio(v13.fn);
+  await new Promise(res => setTimeout(res, 20));
+  const borro13 = cola13.length === 0;                              // control: la vieja ya la borro
+  v13.fn._desde = Date.now() - 16 * 60000;
+  await v13.silencio(v13.fn);                                       // la nueva lee la cola: ya no esta
+  soltar13(); await vieja13;
+  //   b) la nueva entra mientras la vieja abre la base, antes de borrar: la vieja no borra y la nueva la saca
+  const cola13b = [otCola()];
+  const o13b = { sinReglas: true, manual: true, cola: cola13b };
+  const w13 = await correr({}, cola13b[0], o13b);
+  o13b.alAbrirBase = async () => { w13.fn._desde = Date.now() - 16 * 60000; await w13.silencio(w13.fn); };
+  await w13.silencio(w13.fn);
+  const salio13b = cola13b.length === 0;
+  console.log('13) Aviso a administracion → la nueva entra mientras se borra: ' + (borro13 && v13.notificadas === 1 ? '1 aviso ✓' : (borro13 ? v13.notificadas + ' avisos ✗' : 'NO BORRO (control) ✗')) +
+    ' · antes de borrar: ' + (salio13b && w13.notificadas === 1 ? '1 aviso, sale de la cola ✓' : w13.notificadas + ' avisos' + (salio13b ? '' : ', SIGUE EN LA COLA') + ' ✗'));
+  chequear(borro13, 'el tramo 13a no llego a la ventana que mide: la vieja no habia borrado la OT');
+  chequear(v13.notificadas === 1, 'con la nueva adelantada mientras la vieja borraba, el aviso a administracion salio ' + v13.notificadas + ' veces (0 = se pierde: nadie mas lo manda)');
+  chequear(salio13b && w13.notificadas === 1, 'con la nueva adelantada antes del borrado, el aviso salio ' + w13.notificadas + ' veces o la OT no salio de la cola');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });
