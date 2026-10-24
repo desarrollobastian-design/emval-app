@@ -16812,6 +16812,7 @@ async function sincronizarEnlacesPDFPendientes() {
         if (it.pdfUrl) _campos.pdfUrl = it.pdfUrl;
         if (it.pdfUrlCloudinary) _campos.pdfUrlCloudinary = it.pdfUrlCloudinary;
         if (!Object.keys(_campos).length) continue;   // nada que escribir: se descarta
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
         await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
           25000, 'reintento enlace pdf');
         console.log('Enlace de PDF aplicado a la OT', it.otDocId);
@@ -16852,6 +16853,7 @@ async function sincronizarEnlacesPDFPendientes() {
         quedan.push(it);
       }
     }
+    if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
     _escribirEnlacesPDFPendientes(quedan);
   })();
   } finally {
@@ -17065,6 +17067,10 @@ async function sincronizarOTsPendientes() {
   yo._corriendo = true;
   yo._desde = Date.now();
   var turno = yo._turno = (yo._turno || 0) + 1;   // solo esta corrida libera su candado
+  /* Ronda 6 de Codex: el guardian deja entrar una corrida nueva, pero la vieja seguia viva y, si despertaba
+     tarde, escribia igual (pisaba una correccion posterior). Ahora cada escritura de la corrida vieja se
+     corta: antes de escribir, comprueba que su turno siga siendo el vigente; si no, sale sin escribir y sin
+     soltar el candado de la otra (ver `finally`). */
   try {
   await (async function() {
     // Un servidor que ya pidio sesion (etapa 2) y no hay sesion: no se intenta. Cada intento sube las
@@ -17096,6 +17102,7 @@ async function sincronizarOTsPendientes() {
     for (var pi = 0; pi < pendientes.length; pi++) {
       var ot = pendientes[pi];
       try {
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
         toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
 
         var db = window.firebase.firestore();
@@ -17171,6 +17178,7 @@ async function sincronizarOTsPendientes() {
           // Quien la sube (ver guardarEnFirebase): la sesion que escribe, leida al escribir.
           var _subidoPorSync = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
           if (_subidoPorSync) otDoc.subidoPor = _subidoPorSync;
+          if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
           if (ot.clientId) {
             // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
             await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
@@ -17182,6 +17190,7 @@ async function sincronizarOTsPendientes() {
 
         // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link. Si la hoja
         // ya estaba arriba CON su enlace, no se vuelve a subir: se usa el que tiene.
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
         var pdfUrlSync = '';
         if (yaFirmada && yaFirmada.pdfUrlCloudinary) {
           pdfUrlSync = yaFirmada.pdfUrlCloudinary;
@@ -17200,6 +17209,7 @@ async function sincronizarOTsPendientes() {
         }
 
         // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
         if (ot.cotizacionId) {
           await _vincularCotizacionRealizada(ot.cotizacionId, {
             otDocId: ot.clientId,
@@ -17212,6 +17222,7 @@ async function sincronizarOTsPendientes() {
 
         // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
         // Si falla, _enviarCorreo lo encola y se reintenta solo.
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
         if (ot.emailLocal && pdfUrlSync) {
           // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
           // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
@@ -17226,6 +17237,7 @@ async function sincronizarOTsPendientes() {
           }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
         }
 
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
         await _eliminarOTPendiente(ot.id);
         toast('OT #' + ot.numero + ' sincronizada ✓');
         _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,

@@ -25,6 +25,8 @@
       ve la hoja ya firmada.
    8. (Ronda 5) Guardian: un candado tomado hace mas de 15 min (una corrida colgada) no deja la cola
       trabada: la corrida nueva corre. Uno recien tomado si la frena.
+   9. (Ronda 6) La corrida VIEJA que el guardian dejo atras y despierta tarde no escribe: no pisa la OT
+      que ya subio la nueva ni una correccion posterior (reloj simulado, sin reglas, como la etapa 1).
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -51,6 +53,7 @@ function crearNube(docs, opciones) {
   let ts = 0;
   const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   function revisar(id, nuevo) {
+    if (opciones.sinReglas) return;
     if (opciones.sinSesion || opciones.rechazarTodo) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
     const prev = docs[id] && !docs[id].__soloCache ? docs[id] : null;   // lo que solo esta en la cache no existe para el servidor
     if (!prev || prev.firmada !== true) return;
@@ -95,7 +98,10 @@ async function correr(docs, ot, opciones) {
     navigator: { onLine: true }, window, document: { getElementById: () => null },
     _obtenerOTsPendientes: async () => [ot],
     toast: () => {}, actualizarIndicadorPendientes: () => {},
-    subirCloudinary: async (b, n, nombre) => { r.subidas++; return 'https://res.cloudinary.com/x/nueva_' + nombre; },
+    subirCloudinary: async (b, n, nombre) => {
+      if (opciones.compuerta) { const g = opciones.compuerta; opciones.compuerta = null; await g; }   // la primera subida se queda dormida
+      r.subidas++; return 'https://res.cloudinary.com/x/nueva_' + nombre;
+    },
     _subirPDFaCloudinary: async () => { r.pdfs++; return 'https://res.cloudinary.com/x/hoja_nueva.pdf'; },
     _vincularCotizacionRealizada: async () => { r.vinculos++; },
     _enviarCorreo: async p => { r.avisos.push(p.pdf_url); },
@@ -115,6 +121,7 @@ async function correr(docs, ot, opciones) {
     try { return await p(); } finally { console.error = a; console.warn = b; console.log = c; } };
   console.error = _log; console.warn = _warn;
   if (opciones.antes) opciones.antes(fn);
+  if (opciones.manual) return Object.assign(r, { fn, silencio, escrituras: nube.escrituras, docs: nube.docs });
   if (opciones.concurrentes) await silencio(async () => { await Promise.all([fn(), fn()]); await new Promise(res => setTimeout(res, 150)); });
   else await silencio(fn);
   return Object.assign(r, { escrituras: nube.escrituras, lecturas: nube.lecturas, docs: nube.docs, otra: () => silencio(fn) });
@@ -215,6 +222,24 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
     ' · candado recien tomado: ' + (h8b.subidas === 0 ? 'sigue frenando ✓' : 'NO FRENA ✗'));
   chequear(h8.subidas === 3 && h8.eliminadas.length === 1, 'una corrida colgada deja la cola trabada para siempre (sin guardian) (Codex, ronda 5)');
   chequear(h8b.subidas === 0, 'el guardian libera un candado recien tomado: dos corridas a la vez otra vez');
+
+  // 9. La corrida vieja despierta tarde
+  let soltar; const o9 = { sinReglas: true, manual: true, compuerta: new Promise(res => { soltar = res; }) };
+  const k = await correr({}, otCola(), o9);
+  const vieja = k.silencio(k.fn);                                   // se duerme en su primera subida
+  await new Promise(res => setTimeout(res, 20));
+  k.fn._desde = Date.now() - 16 * 60000;                            // reloj del guardian: pasaron 16 min
+  await k.silencio(k.fn);                                           // la nueva entra, sube y escribe la OT
+  const nuevaEscribio = !!(k.docs.cli_1 && k.docs.cli_1.firmada === true);
+  k.docs.cli_1.descripcionTrabajo = 'corregido por el administrador';  // correccion posterior
+  const escriturasAntes = k.escrituras.length;
+  soltar(); await vieja;                                            // la vieja despierta
+  const escribioLaVieja = k.escrituras.length - escriturasAntes;
+  const correccionIntacta = k.docs.cli_1.descripcionTrabajo === 'corregido por el administrador';
+  console.log('9) Corrida vieja tarde  → la nueva: ' + (nuevaEscribio ? 'subio la OT ✓' : 'NO ✗') + ' · la vieja al despertar: ' +
+    (escribioLaVieja === 0 ? 'no escribe ✓' : escribioLaVieja + ' escrituras ✗') + ' · la correccion: ' + (correccionIntacta ? 'intacta ✓' : 'PISADA ✗'));
+  chequear(nuevaEscribio, 'la corrida nueva (por el guardian) no subio la OT');
+  chequear(escribioLaVieja === 0 && correccionIntacta, 'la corrida vieja que el guardian dejo atras escribio al despertar y piso una correccion posterior (Codex, ronda 6)');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });
