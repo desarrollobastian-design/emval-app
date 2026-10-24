@@ -42,9 +42,10 @@ function iniciarAdmin(args) {
   if (problema) { console.error('Se detiene antes de conectarse: ' + problema + '. Ver tools/admin-sdk.js.'); process.exit(1); }
   const emulador = problema === '';
   const adc = (args || []).includes('--adc') || process.env.EMVAL_ADC === '1';
-  let modo;
+  let modo, proyecto = PROYECTO;
   if (emulador) {
-    initializeApp({ projectId: process.env.GCLOUD_PROJECT || 'demo-emval' });
+    proyecto = process.env.GCLOUD_PROJECT || 'demo-emval';
+    initializeApp({ projectId: proyecto });
     modo = 'EMULADOR';
   } else if (process.env.EMVAL_SA) {
     initializeApp({ credential: cert(require(path.resolve(process.env.EMVAL_SA))), projectId: PROYECTO });
@@ -57,7 +58,9 @@ function iniciarAdmin(args) {
       '(sesion de gcloud de Bastian). Ver la cabecera de tools/admin-sdk.js.');
     process.exit(1);
   }
-  return { db: getFirestore(), auth: getAuth(), modo, emulador, PROYECTO };
+  // `proyecto`: el proyecto al que de verdad se conecto (lo usa --deshacer para no aplicar un respaldo
+  // de otro proyecto; Codex, revision final del PR #64).
+  return { db: getFirestore(), auth: getAuth(), modo, emulador, PROYECTO, proyecto };
 }
 
 module.exports = { iniciarAdmin, revisarEmulador, PROYECTO };

@@ -6,8 +6,17 @@
      - Administrador: importa su `passwordHash` (SHA-256 de su clave) para que siga entrando con LA
        MISMA clave. Antes hace una autoprueba con una cuenta desechable: si Firebase no acepta el
        formato, NO toca la cuenta del administrador y lo dice (ver mas abajo).
-     - Escribe `directorio/{uid}` = { nombre, cargo, letra, correo, activo }: sin PIN ni hash.
+     - Escribe `directorio/{uid}` = { nombre, cargo, letra, correo, activo }: sin PIN ni hash. Solo
+       la reescribe si cambia algo.
    El uid de cada cuenta es el id de su documento en `tecnicos`. No toca `tecnicos` ni nada mas.
+
+   LO QUE NO HACE SOLA (revision final de Codex del PR #64, 24-10-2026):
+     - No publica un cargo de Administrador o Supervisor tomado de `tecnicos` sin --autorizar <uid>,
+       tampoco si la cuenta ya existe. Solo lo deja si la ficha ya tenia ese mismo cargo.
+     - No toca una cuenta existente cuyo correo no es el que usa la app, ni le publica la ficha: lo
+       informa y sale con 2.
+     - Limpia de campos de mas TODAS las fichas de `directorio`, tambien las de personas omitidas y las
+       huerfanas (sin documento en `tecnicos`). Las huerfanas se informan (exit 2).
 
    NUNCA imprime un PIN, una clave ni un hash. Tampoco los escribe en el respaldo.
 
@@ -29,9 +38,11 @@
      node tools/cuentas-auth.js --ejecutar --autorizar <uid> --clave-admin
                                                               # solo si la autoprueba fallo: el
                                                               # administrador escribe SU MISMA clave
-     node tools/cuentas-auth.js --deshacer <respaldo.json>    # revierte esa corrida
+     node tools/cuentas-auth.js --deshacer <respaldo.json>    # revierte esa corrida: solo lo que ESA
+                                                              # corrida cambio, en el mismo proyecto, y
+                                                              # nada que haya cambiado despues
    Una cuenta que YA existe no se toca (ni clave, ni datos, ni si esta deshabilitada). Sale con 2 si
-   alguien quedo sin cuenta; con 0 solo si todos quedaron.
+   alguien quedo pendiente (sin cuenta o sin ficha) o hay una ficha huerfana; con 0 solo si todo quedo.
    Sin .json en disco (⬜ no probado en produccion): --adc con la sesion de gcloud de Bastian, ver
    tools/admin-sdk.js. Contra el emulador (pruebas): FIRESTORE_EMULATOR_HOST y
    FIREBASE_AUTH_EMULATOR_HOST, sin credencial.
@@ -103,8 +114,8 @@ function preguntar(texto, oculto) {
 //  --autorizar <uid[,uid]>  Administrador y Supervisor SOLO se crean si Bastian los autoriza por uid:
 //                           `tecnicos` se pudo escribir sin sesion hasta las reglas nuevas, asi que un
 //                           "Administrador" que aparezca ahi no es de fiar por si solo (Codex P1-5).
-//  --deshacer <respaldo>    borra las cuentas y fichas que creo esa corrida y deja el directorio como
-//                           estaba (solo sus campos permitidos).
+//  --deshacer <respaldo>    revierte lo que ESA corrida cambio (su diario), en el mismo proyecto y sin
+//                           pisar lo que cambio despues (ver deshacer()).
 function listaArg(nombre) {
   const out = [];
   args.forEach(function(a, i) { if (a === nombre && args[i + 1]) out.push.apply(out, args[i + 1].split(',')); });
@@ -127,14 +138,26 @@ function cuentaParaRespaldo(u) {
   return j;
 }
 
+// Dos fichas son "la misma" si tienen los mismos campos permitidos con los mismos valores. `conFecha`
+// compara tambien `actualizadoEn` (para saber si alguien la escribio despues de una corrida).
+function canon(x, conFecha) {
+  if (!x) return 'null';
+  const f = fichaPermitida(x);
+  if (!conFecha) delete f.actualizadoEn;
+  return JSON.stringify(Object.keys(f).sort().map(function(k) { return [k, f[k]]; }));
+}
+const camposDeMas = x => Object.keys(x || {}).filter(k => CAMPOS_FICHA.indexOf(k) < 0);
+
 async function principal() {
   // Credencial: emulador, EMVAL_SA (cuenta de servicio) o --adc (gcloud de Bastian): tools/admin-sdk.js.
-  const { db, auth, modo } = require('./admin-sdk').iniciarAdmin(args);
-  if (DESHACER) return deshacer(db, auth, modo);
+  const { db, auth, modo, proyecto } = require('./admin-sdk').iniciarAdmin(args);
+  if (DESHACER) return deshacer(db, auth, modo, proyecto);
 
   console.log('cuentas-auth · ' + modo + ' · ' + (EJECUTAR ? 'EJECUTAR' : 'SIMULACION (no escribe)'));
 
   const snap = await db.collection('tecnicos').get();
+  const fichas = {};
+  (await db.collection('directorio').get()).docs.forEach(function(d) { fichas[d.id] = d.data() || {}; });
   const quemado = hashDeLaClaveQuemada();
   if (!quemado) console.log('⚠ No se pudo sacar la clave quemada del historial (' + COMMIT_CON_CLAVE_QUEMADA + '): no se importara ningun Administrador.');
 
@@ -143,21 +166,33 @@ async function principal() {
     const t = d.data() || {};
     const uid = d.id, cargo = t.cargo || 'Tecnico en terreno', nombre = t.nombre || '';
     const p = { uid, nombre, cargo, letra: t.letra || (nombre.charAt(0) || '?').toUpperCase(), correo: _correoDeCuenta(uid) };
+    const ficha = fichas[uid] || null;
     let usuario = null;
     try { usuario = await auth.getUser(uid); } catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
     p.existe = !!usuario;
     p.deshabilitada = !!(usuario && usuario.disabled);
+    const autorizado = AUTORIZADOS.indexOf(uid) >= 0;
     if (!nombre) { p.accion = 'omitir'; p.motivo = 'sin nombre'; }
     else if (usuario) {
       // Codex P1-4: una cuenta que ya existe NO se reimporta ni se actualiza ni se reactiva.
-      p.accion = 'existe';
-      p.motivo = 'la cuenta ya existe: no se toca' + (p.deshabilitada ? ' (deshabilitada: sigue deshabilitada)' : '');
+      if (String(usuario.email || '').toLowerCase() !== p.correo) {
+        // Codex, revision final (nuevo 6): con otro correo, la app no podria entrar con esa ficha. La
+        // cuenta no se cambia en silencio y la ficha no se publica. El correo real no se imprime.
+        p.accion = 'omitir'; p.motivo = '⚠ la cuenta ya existe con OTRO correo: no se toca ni se publica su ficha; revisarla a mano';
+      } else if (esPrivilegiado(cargo) && !autorizado && !(ficha && ficha.cargo === cargo)) {
+        // Codex, revision final (P1 nuevo 1): conceder el cargo es lo que se autoriza, exista o no la
+        // cuenta. Sin --autorizar, solo se deja un cargo privilegiado que la ficha YA tenia.
+        p.accion = 'omitir'; p.motivo = cargo + ' en tecnicos: la cuenta existe, pero ese cargo no se publica sin --autorizar ' + uid;
+      } else {
+        p.accion = 'existe';
+        p.motivo = 'la cuenta ya existe: no se toca' + (p.deshabilitada ? ' (deshabilitada: sigue deshabilitada)' : '');
+      }
     }
     // La clave quemada se avisa SIEMPRE, este o no autorizado ese Administrador.
     else if (cargo === 'Administrador' && quemado && String(t.passwordHash || '').toLowerCase() === quemado) {
       p.accion = 'omitir'; p.motivo = '⚠ TIENE LA CLAVE QUEMADA: no se importa; hay que cambiarle la clave'; p.quemada = true;
     }
-    else if (esPrivilegiado(cargo) && AUTORIZADOS.indexOf(uid) < 0) {
+    else if (esPrivilegiado(cargo) && !autorizado) {
       p.accion = 'omitir'; p.motivo = cargo + ': falta autorizarlo con --autorizar ' + uid;
     }
     else if (cargo === 'Administrador') {
@@ -172,38 +207,45 @@ async function principal() {
     }
     plan.push(p);
   }
+  const enTecnicos = new Set(plan.map(p => p.uid));
+  const huerfanas = Object.keys(fichas).filter(id => !enTecnicos.has(id));
 
   console.log('');
   plan.forEach(p => console.log('  ' + (p.accion === 'omitir' ? '·' : '→') + ' ' + p.nombre.padEnd(22) + ' ' + p.cargo.padEnd(19) +
     ' ' + p.uid.padEnd(22) + ' ' + p.accion + (p.motivo ? ' (' + p.motivo + ')' : '')));
+  huerfanas.forEach(id => console.log('  · ' + '(sin documento en tecnicos)'.padEnd(42) + ' ' + id.padEnd(22) + ' ficha HUERFANA en directorio: se limpia de campos de mas; revisar si se da de baja'));
   const omitidos = plan.filter(p => p.accion === 'omitir');
+  const conCamposDeMas = Object.keys(fichas).filter(id => camposDeMas(fichas[id]).length);
   console.log('\n' + plan.length + ' personas en tecnicos · ' + plan.filter(p => p.accion === 'crear' || p.accion === 'importar-hash').length +
-    ' cuentas nuevas · ' + plan.filter(p => p.accion === 'existe').length + ' ya existen · ' + omitidos.length + ' sin cuenta');
+    ' cuentas nuevas · ' + plan.filter(p => p.accion === 'existe').length + ' ya existen · ' + omitidos.length + ' pendientes (sin cuenta o sin ficha)' +
+    (huerfanas.length ? ' · ' + huerfanas.length + ' fichas huerfanas' : '') +
+    (conCamposDeMas.length ? ' · ' + conCamposDeMas.length + ' fichas con campos de mas (se limpian)' : ''));
   if (plan.some(p => p.quemada)) console.log('⚠ Hay un Administrador con la clave quemada en tecnicos: avisar a Bastian antes de seguir.');
 
-  // Codex P2-9: el codigo de salida dice si quedo alguien sin cuenta (2) o si todo quedo (0).
+  // Codex P2-9: el codigo de salida dice si quedo algo pendiente (2) o si todo quedo (0).
   if (!EJECUTAR) {
-    console.log('\nSimulacion: no se escribio nada. Para escribir: --ejecutar' + (omitidos.length ? ' · ⚠ ' + omitidos.length + ' quedarian sin cuenta (exit 2)' : ''));
-    process.exit(omitidos.length ? 2 : 0);
+    const pend = omitidos.length + huerfanas.length;
+    console.log('\nSimulacion: no se escribio nada. Para escribir: --ejecutar' + (pend ? ' · ⚠ ' + pend + ' pendientes (exit 2)' : ''));
+    process.exit(pend ? 2 : 0);
   }
 
-  // ── Respaldo de lo que se va a tocar (sin secretos), y diario de lo que se crea ─────────────
-  const antes = { creado: new Date().toISOString(), proyecto: EMULADOR ? 'emulador' : PROYECTO,
-    cuentas: [], directorio: [], creadas: [], fichasCreadas: [] };
+  // ── Respaldo (sin secretos) y DIARIO de cada cambio de esta corrida, con su antes y su despues ──
+  // --deshacer usa SOLO el diario: revierte lo que esta corrida cambio y nada mas (Codex, revision final).
+  const resp = { formato: 2, creado: new Date().toISOString(), proyecto: proyecto, modo: modo,
+    cuentas: [], directorio: [], diario: [] };
   for (const p of plan) {
-    try { antes.cuentas.push(cuentaParaRespaldo(await auth.getUser(p.uid))); } catch (e) {}
+    try { resp.cuentas.push(cuentaParaRespaldo(await auth.getUser(p.uid))); } catch (e) {}
   }
-  (await db.collection('directorio').get()).docs.forEach(function(d) {
-    const x = d.data() || {};
-    const quitados = Object.keys(x).filter(k => CAMPOS_FICHA.indexOf(k) < 0);
-    antes.directorio.push(Object.assign({ id: d.id }, fichaPermitida(x), quitados.length ? { camposQuitados: quitados } : {}));
+  Object.keys(fichas).forEach(function(id) {
+    const quitados = camposDeMas(fichas[id]);
+    resp.directorio.push(Object.assign({ id: id }, fichaPermitida(fichas[id]), quitados.length ? { camposQuitados: quitados } : {}));
   });
   const dirResp = path.join(__dirname, 'respaldos');
   fs.mkdirSync(dirResp, { recursive: true });
-  const archivo = path.join(dirResp, 'cuentas-auth-antes-' + antes.creado.replace(/[:.]/g, '-') + '.json');
-  const anotar = () => fs.writeFileSync(archivo, JSON.stringify(antes, null, 2));
+  const archivo = path.join(dirResp, 'cuentas-auth-antes-' + resp.creado.replace(/[:.]/g, '-') + '.json');
+  const anotar = () => fs.writeFileSync(archivo, JSON.stringify(resp, null, 2));
   anotar();
-  console.log('\nRespaldo: ' + archivo + ' (' + antes.cuentas.length + ' cuentas, ' + antes.directorio.length + ' fichas).' +
+  console.log('\nRespaldo: ' + archivo + ' (' + resp.cuentas.length + ' cuentas, ' + resp.directorio.length + ' fichas).' +
     ' Para deshacer esta corrida: node tools/cuentas-auth.js --deshacer "' + archivo + '"');
 
   const confirmar = process.env.EMVAL_CONFIRMAR_CUENTAS || await preguntar('Escribe CREAR CUENTAS para seguir: ');
@@ -232,8 +274,30 @@ async function principal() {
       (PRUEBA_IMPORT ? ' (forzada por la prueba, emulador)' : ''));
   }
 
+  // Anota en el diario la cuenta que esta corrida acaba de crear: --deshacer la borra solo si sigue
+  // siendo ESA (mismo creationTime y correo), no una que se haya vuelto a crear despues.
+  async function anotarCuentaCreada(p) {
+    let creada = null;
+    try { creada = (await auth.getUser(p.uid)).metadata.creationTime; } catch (e) {}
+    resp.diario.push({ tipo: 'cuenta', uid: p.uid, email: p.correo, creada: creada }); anotar();
+  }
+  // Escribe una ficha solo si cambia, y deja en el diario su antes (campos permitidos) y su despues.
+  const escritas = new Set();
+  async function escribirFicha(id, nueva) {
+    const actual = fichas[id] || null;
+    escritas.add(id);
+    if (actual && canon(actual) === canon(nueva) && !camposDeMas(actual).length) return false;
+    const despues = Object.assign({}, nueva, { actualizadoEn: new Date().toISOString() });
+    await db.collection('directorio').doc(id).set(despues);
+    const quitados = camposDeMas(actual);
+    resp.diario.push(Object.assign({ tipo: 'ficha', id: id, antes: actual ? fichaPermitida(actual) : null, despues: despues },
+      quitados.length ? { camposQuitados: quitados } : {}));
+    anotar();
+    return true;
+  }
+
   const hechos = [];
-  let sinCuenta = omitidos.length;
+  let pendientes = omitidos.length;
   for (const p of plan) {
     if (p.accion === 'omitir') continue;
     try {
@@ -243,60 +307,109 @@ async function principal() {
             : await auth.importUsers([{ uid: p.uid, email: p.correo, displayName: p.nombre,
               passwordHash: Buffer.from(p.hash, 'hex') }], { hash: { algorithm: 'SHA256', rounds: 1 } });
           // Revisor del PR #64 (punto 1): un rechazo deja a esa persona SIN cuenta y se cuenta (exit 2).
-          if (r.failureCount) { console.log('  ✗ ' + p.nombre + ': Firebase rechazo la importacion. NO tiene cuenta.'); sinCuenta++; continue; }
+          if (r.failureCount) { console.log('  ✗ ' + p.nombre + ': Firebase rechazo la importacion. NO tiene cuenta.'); pendientes++; continue; }
         } else if (CLAVE_ADMIN) {
           // La escribe el propio administrador; se comprueba contra SU hash y no se guarda en ningun lado.
           // Solo contra el EMULADOR la prueba puede pasarla por variable; en produccion se teclea siempre.
           const clave = (EMULADOR && process.env.EMVAL_CLAVE_ADMIN_PRUEBA) || await preguntar('Clave de ' + p.nombre + ' (la misma de siempre, no se muestra): ', true);
-          if (sha256hex(clave) !== p.hash) { console.log('  ✗ ' + p.nombre + ': esa no es su clave. No se creo su cuenta.'); sinCuenta++; continue; }
+          if (sha256hex(clave) !== p.hash) { console.log('  ✗ ' + p.nombre + ': esa no es su clave. No se creo su cuenta.'); pendientes++; continue; }
           await auth.createUser({ uid: p.uid, email: p.correo, password: clave, displayName: p.nombre });
         } else {
           console.log('  ⛔ ' + p.nombre + ': no se pudo conservar su clave importando el hash. NO se creo su cuenta.' +
             ' Alternativa: --clave-admin (la escribe el mismo administrador) o parar y preguntar.');
-          sinCuenta++;
+          pendientes++;
           continue;
         }
-        antes.creadas.push(p.uid); anotar();
+        await anotarCuentaCreada(p);
       } else if (p.accion === 'crear') {
         await auth.createUser({ uid: p.uid, email: p.correo, password: _claveFirebaseDePin(p.pin), displayName: p.nombre });
-        antes.creadas.push(p.uid); anotar();
+        await anotarCuentaCreada(p);
       }
       // Ficha con SOLO los campos permitidos (sin merge: lo que sobre en una ficha vieja se va; Codex
       // P2-8). `activo` se respeta si ya estaba; si no, sale de la cuenta (deshabilitada = inactiva).
-      const ref = db.collection('directorio').doc(p.uid);
-      const previo = await ref.get();
-      const activoPrevio = previo.exists && typeof (previo.data() || {}).activo === 'boolean' ? previo.data().activo : null;
-      await ref.set({ nombre: p.nombre, cargo: p.cargo, letra: p.letra, correo: p.correo,
-        activo: activoPrevio !== null ? activoPrevio : !p.deshabilitada, actualizadoEn: new Date().toISOString() });
-      if (!previo.exists) { antes.fichasCreadas.push(p.uid); anotar(); }
+      const previo = fichas[p.uid];
+      const activoPrevio = previo && typeof previo.activo === 'boolean' ? previo.activo : null;
+      const cambio = await escribirFicha(p.uid, { nombre: p.nombre, cargo: p.cargo, letra: p.letra, correo: p.correo,
+        activo: activoPrevio !== null ? activoPrevio : !p.deshabilitada });
       hechos.push(p.nombre);
-      console.log('  ✓ ' + p.nombre + ' (' + p.cargo + ')' + (p.accion === 'existe' ? ' — cuenta existente, sin tocar' : ''));
+      console.log('  ✓ ' + p.nombre + ' (' + p.cargo + ')' + (p.accion === 'existe' ? ' — cuenta existente, sin tocar' : '') +
+        (cambio ? '' : ' — ficha al dia'));
     } catch (e) {
-      sinCuenta++;
+      pendientes++;
       console.log('  ✗ ' + p.nombre + ': fallo (' + (e && (e.code || e.message)) + ')');
     }
   }
-  console.log('\nListo: ' + hechos.length + ' con cuenta y ficha.' + (sinCuenta ? ' ⚠ ' + sinCuenta + ' SIN cuenta: ver arriba (exit 2).' : '') +
+  // Codex P2-8 (revision final): las fichas que esta corrida no escribio —de personas omitidas o
+  // huerfanas— tambien quedan SOLO con los campos permitidos. Sus demas valores no cambian.
+  let limpiadas = 0;
+  for (const id of Object.keys(fichas)) {
+    if (escritas.has(id) || !camposDeMas(fichas[id]).length) continue;
+    try {
+      await escribirFicha(id, fichaPermitida(fichas[id]));
+      limpiadas++;
+    } catch (e) { pendientes++; console.log('  ✗ ficha ' + id + ': no se pudo limpiar (' + (e && (e.code || e.message)) + ')'); }
+  }
+  if (limpiadas) console.log('  ✓ ' + limpiadas + ' fichas de personas omitidas o huerfanas: limpiadas de campos de mas');
+  pendientes += huerfanas.length;
+  console.log('\nListo: ' + hechos.length + ' con cuenta y ficha.' + (pendientes ? ' ⚠ ' + pendientes + ' PENDIENTES (sin cuenta, sin ficha o huerfanas): ver arriba (exit 2).' : '') +
     ' Siguiente: probar la entrada en la app antes de fusionar el PR.');
-  process.exit(sinCuenta ? 2 : 0);   // 2 = termino, pero alguien quedo sin cuenta
+  process.exit(pendientes ? 2 : 0);   // 2 = termino, pero algo quedo pendiente
 }
 
-// Deshace una corrida con su respaldo: borra lo que ESA corrida creo y deja el directorio como estaba.
-async function deshacer(db, auth, modo) {
+// Deshace una corrida con su respaldo (Codex, revision final del PR #64):
+//  - solo un respaldo con diario (formato 2) y del MISMO proyecto al que esta conectada;
+//  - revierte cada cambio del diario solo si sigue como lo dejo esa corrida; si cambio despues, NO lo
+//    pisa: lo informa y sale con 2;
+//  - una cuenta se borra solo si es la que creo esa corrida (mismo creationTime y correo);
+//  - correrlo otra vez no vuelve a aplicar nada: lo ya deshecho se reconoce y se deja.
+async function deshacer(db, auth, modo, proyecto) {
   const r = JSON.parse(fs.readFileSync(path.resolve(DESHACER), 'utf8'));
   console.log('cuentas-auth · ' + modo + ' · DESHACER ' + DESHACER);
-  console.log('  cuentas a borrar (las creo esa corrida): ' + (r.creadas || []).length +
-    ' · fichas a restaurar: ' + (r.directorio || []).length + ' · fichas a borrar: ' + (r.fichasCreadas || []).length);
+  if (r.formato !== 2 || !Array.isArray(r.diario)) {
+    console.log('⛔ Respaldo sin diario (formato viejo): no se deshace solo. Revisarlo a mano. No se cambio nada.');
+    process.exit(2);
+  }
+  if (r.proyecto !== proyecto) {
+    console.log('⛔ El respaldo es del proyecto «' + r.proyecto + '» y esta conexion es a «' + proyecto + '». No se cambio nada.');
+    process.exit(2);
+  }
+  console.log('  cambios en el diario de esa corrida: ' + r.diario.length + ' (' +
+    r.diario.filter(e => e.tipo === 'cuenta').length + ' cuentas creadas, ' + r.diario.filter(e => e.tipo === 'ficha').length + ' fichas escritas)');
   const confirmar = process.env.EMVAL_CONFIRMAR_CUENTAS || await preguntar('Escribe DESHACER para seguir: ');
   if (confirmar.trim() !== 'DESHACER') { console.log('Cancelado: no se cambio nada.'); process.exit(1); }
-  let fallas = 0;
-  for (const uid of r.creadas || []) { try { await auth.deleteUser(uid); } catch (e) { if (e.code !== 'auth/user-not-found') fallas++; } }
-  for (const f of r.directorio || []) {
-    try { await db.collection('directorio').doc(f.id).set(fichaPermitida(f)); } catch (e) { fallas++; }
+  let deshechos = 0, yaEstaban = 0, fallas = 0;
+  const conflictos = [];
+  for (const e of r.diario.slice().reverse()) {
+    try {
+      if (e.tipo === 'ficha') {
+        const ref = db.collection('directorio').doc(e.id);
+        const s = await ref.get();
+        const actual = s.exists ? (s.data() || {}) : null;
+        if (canon(actual, true) === canon(e.antes, true) && !camposDeMas(actual).length) { yaEstaban++; continue; }
+        if (canon(actual, true) !== canon(e.despues, true) || camposDeMas(actual).length) {
+          conflictos.push('ficha ' + e.id + ': cambio despues de esa corrida, no se pisa');
+          continue;
+        }
+        if (e.antes) await ref.set(fichaPermitida(e.antes)); else await ref.delete();
+        deshechos++;
+      } else if (e.tipo === 'cuenta') {
+        let u = null;
+        try { u = await auth.getUser(e.uid); } catch (x) { if (x.code !== 'auth/user-not-found') throw x; }
+        if (!u) { yaEstaban++; continue; }
+        if (!e.creada || u.metadata.creationTime !== e.creada || String(u.email || '').toLowerCase() !== e.email) {
+          conflictos.push('cuenta ' + e.uid + ': no es la que creo esa corrida (se volvio a crear o cambio), no se borra');
+          continue;
+        }
+        await auth.deleteUser(e.uid);
+        deshechos++;
+      }
+    } catch (x) { fallas++; console.log('  ✗ ' + (e.tipo || '?') + ' ' + (e.id || e.uid || '?') + ': fallo (' + (x && (x.code || x.message)) + ')'); }
   }
-  for (const uid of r.fichasCreadas || []) { try { await db.collection('directorio').doc(uid).delete(); } catch (e) { fallas++; } }
-  console.log(fallas ? '⚠ ' + fallas + ' pasos fallaron (exit 2).' : 'Listo: la corrida quedo deshecha.');
-  process.exit(fallas ? 2 : 0);
+  conflictos.forEach(c => console.log('  ⚠ ' + c));
+  console.log('Deshechos: ' + deshechos + ' · ya estaban deshechos: ' + yaEstaban + ' · cambiaron despues (no se tocan): ' + conflictos.length +
+    (fallas ? ' · fallaron: ' + fallas : ''));
+  console.log(conflictos.length || fallas ? '⚠ Quedo algo sin deshacer: ver arriba (exit 2).' : 'Listo: la corrida quedo deshecha.');
+  process.exit(conflictos.length || fallas ? 2 : 0);
 }
 
 module.exports = { _claveFirebaseDePin, _correoDeCuenta, hashDeLaClaveQuemada, DOMINIO_CORREO, fichaPermitida, CAMPOS_FICHA };

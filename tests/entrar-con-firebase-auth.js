@@ -22,6 +22,13 @@
    13. La entrada no esta habilitada en Firebase (proveedor apagado, apiKey o dominio no autorizados):
        dice eso y que se avise a CorexOn, no "sin señal"; no entra con el verificador, no cuenta como
        fallo y la sesion pendiente se conserva (revisor del PR #64, punto 2).
+   14. (Revision final de Codex, P1-2) Una respuesta de Firebase que llega DESPUES del timeout no deja
+       abierta otra cuenta (ni la de alguien que no esta en la app); la de quien entro, si.
+   15. (P1-2) La salida diferida: sobrevive a recargar; elegir a alguien sin entrar no la frena; y quien
+       entro sin señal y salio con cola conserva su credencial: al volver la señal la cola sube con su
+       sesion y recien despues se cierra.
+   16. (nuevo 7) Seis intentos equivocados A LA VEZ sin señal (seis pestañas) borran el verificador:
+       los fallos no se pisan entre si.
 
    Uso:  node tests/entrar-con-firebase-auth.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -53,7 +60,7 @@ function montar(op) {
   const mem = op.mem || {};
   const localStorage = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
   const cuentas = {};
-  const modo = { red: true, codigo: null, cuelga: false, uidForzado: null, intentos: [], salidas: 0 };
+  const modo = { red: true, codigo: null, cuelga: false, tarda: 0, uidTarde: null, uidForzado: null, intentos: [], salidas: 0 };
   let actual = op.actual || null;
   const auth = {
     get currentUser() { return actual; },
@@ -61,6 +68,7 @@ function montar(op) {
     signOut() { modo.salidas++; actual = null; return Promise.resolve(); },
     signInWithEmailAndPassword(correo, clave) {
       modo.intentos.push(correo);
+      if (modo.tarda) return new Promise(res => setTimeout(() => { actual = { uid: modo.uidTarde || correo.split('@')[0] }; res({ user: actual }); }, modo.tarda));
       if (modo.cuelga) return new Promise(() => {});
       if (!modo.red) return Promise.reject(Object.assign(new Error('red'), { code: 'auth/network-request-failed' }));
       if (modo.codigo) return Promise.reject(Object.assign(new Error('x'), { code: modo.codigo }));
@@ -87,6 +95,7 @@ function montar(op) {
     // Con el codigo anterior a la revision no existen: la prueba falla en su tramo, no se cae.
     ' _completarSalidaDiferida: typeof _completarSalidaDiferida === "function" ? _completarSalidaDiferida : async function(){},' +
     ' diferida: function(){ return typeof _salidaDiferida !== "undefined" && _salidaDiferida; },' +
+    ' enLaApp: function(){ return typeof _uidEnLaApp !== "undefined" ? _uidEnLaApp : "(no existe)"; },' +
     ' SIN_SENAL_VENCIDO: typeof SIN_SENAL_VENCIDO !== "undefined" ? SIN_SENAL_VENCIDO : "(no existe)",' +
     ' SIN_SENAL_TRAS_FALLOS: typeof SIN_SENAL_TRAS_FALLOS !== "undefined" ? SIN_SENAL_TRAS_FALLOS : "(no existe)",' +
     ' ENTRADA_NO_ACTIVADA: typeof ENTRADA_NO_ACTIVADA !== "undefined" ? ENTRADA_NO_ACTIVADA : "(no existe)",' +
@@ -281,6 +290,73 @@ const verifDe = (t, uid) => { try { return JSON.parse(t.mem[t.api.VERIF_KEY] || 
   const todo = k => res13.every(r => r[k]) ? '✓' : '✗';
   console.log('13) No activada  → ' + CODIGOS.length + ' codigos: lo dice (tecnico con y sin verificador, Pedro) ' + todo('avisa') + ', al confirmar ' + todo('conf') +
     ', no cuenta como fallo ' + todo('sinFallo') + ', conserva la pendiente ' + todo('pendiente'));
+
+  // 14. Respuesta de Firebase despues del timeout
+  const espera = ms => new Promise(r => setTimeout(r, ms));
+  const t1 = montar(); fichas(t1);
+  t1.modo.tarda = 500; t1.modo.uidTarde = 'u_otro';
+  const r19 = await t1.api._entrarConCuenta('Beto Prueba', '7305', false);   // sin verificador: no entra
+  await espera(700);
+  const otraCerrada = !t1.auth.currentUser;
+  const t2 = montar(); fichas(t2);
+  t2.modo.tarda = 500;                                                       // la cuenta correcta, pero nadie entro
+  await t2.api._entrarConCuenta('Beto Prueba', '7305', false);
+  await espera(700);
+  const nadieCerrada = !t2.auth.currentUser;
+  const t3 = montar({ mem: Object.assign({}, memAna) }); fichas(t3);
+  t3.modo.tarda = 500;                                                       // Ana entra sin señal (verificador) y la respuesta llega
+  const r20 = await t3.api._entrarConCuenta('Ana Prueba', PIN_ANA, false);
+  await espera(700);
+  const anaQueda = !!t3.auth.currentUser && t3.auth.currentUser.uid === 'u_ana' && !t3.api.pendiente();
+  console.log('14) Tardia      → otra cuenta: ' + (otraCerrada ? 'se cierra ✓' : 'QUEDA ABIERTA ✗') + ' · la correcta sin nadie en la app: ' +
+    (nadieCerrada ? 'se cierra ✓' : 'QUEDA ABIERTA ✗') + ' · la de quien entro: ' + (r20.ok && anaQueda ? 'se queda ✓' : 'NO ✗'));
+  chequear(!r19.ok && otraCerrada, 'una respuesta tardia de Firebase dejo autenticada otra cuenta (Codex P1-2)');
+  chequear(nadieCerrada, 'una respuesta tardia dejo una sesion abierta sin nadie en la app');
+  chequear(r20.ok && anaQueda, 'la respuesta tardia de quien si entro no le dejo su sesion');
+
+  // 15. Salida diferida
+  // a) recargar
+  const d1 = montar({ colas: { ots: [{ id: 1 }] } }); fichas(d1);
+  await d1.api._entrarConCuenta('Ana Prueba', PIN_ANA, false); d1.estado.usuario = 'Ana Prueba'; d1.estado.cargo = 'Tecnico en terreno';
+  d1.api.cerrarSesion(); await espera(30);
+  const d1b = montar({ mem: d1.mem, actual: d1.auth.currentUser, colas: { ots: [] } }); fichas(d1b);   // "recarga"; la sesion de Firebase persiste
+  await d1b.api._completarSalidaDiferida();
+  const trasRecargar = !d1b.auth.currentUser;
+  // b) elegir a otra persona en la lista, sin entrar
+  const d2 = montar({ colas: { ots: [{ id: 1 }] } }); fichas(d2);
+  await d2.api._entrarConCuenta('Ana Prueba', PIN_ANA, false); d2.estado.usuario = 'Ana Prueba'; d2.estado.cargo = 'Tecnico en terreno';
+  d2.api.cerrarSesion(); await espera(30);
+  d2.estado.usuario = 'Beto Prueba';                                          // la eligieron en la lista; no puso su PIN
+  d2.colas.ots = [];
+  await d2.api._completarSalidaDiferida();
+  const trasElegir = !d2.auth.currentUser;
+  // c) entrar sin señal (sin sesion), salir con cola y volver la señal
+  const d3 = montar({ mem: Object.assign({}, memAna), colas: { ots: [{ id: 1 }] } }); fichas(d3);
+  d3.modo.red = false;
+  await d3.api._entrarConCuenta('Ana Prueba', PIN_ANA, false); d3.estado.usuario = 'Ana Prueba'; d3.estado.cargo = 'Tecnico en terreno';
+  d3.api.cerrarSesion(); await espera(30);
+  const credGuardada = !!d3.api.pendiente();
+  d3.modo.red = true;
+  await d3.api._reintentarSesionPendiente();
+  const subeConSesion = !!d3.auth.currentUser && d3.auth.currentUser.uid === 'u_ana';
+  d3.colas.ots = [];
+  await d3.api._completarSalidaDiferida();
+  const cerradaDespues = !d3.auth.currentUser;
+  console.log('15) Diferida    → tras recargar: ' + (trasRecargar ? 'se cierra al vaciarse ✓' : 'QUEDA ABIERTA ✗') + ' · eligiendo a otro sin entrar: ' +
+    (trasElegir ? 'se cierra ✓' : 'QUEDA ABIERTA ✗') + ' · sin señal y con cola: ' + (credGuardada && subeConSesion ? 'la cola sube con su sesion' : 'SIN SESION PARA SUBIR') +
+    (cerradaDespues ? ' y despues se cierra ✓' : ' ✗'));
+  chequear(trasRecargar, 'al recargar se pierde la salida diferida y la sesion queda abierta para siempre (Codex P1-2)');
+  chequear(trasElegir, 'elegir a alguien en la lista sin entrar frena el cierre de la salida diferida (Codex P1-2)');
+  chequear(credGuardada && subeConSesion && cerradaDespues, 'quien entro sin señal y salio con cola no sube su cola con su sesion al volver la señal, o la sesion no se cierra despues (Codex P1-2)');
+
+  // 16. Seis intentos equivocados a la vez, sin señal
+  const c6 = montar({ mem: Object.assign({}, memAna) }); fichas(c6);
+  c6.modo.red = false;
+  await Promise.all([0, 1, 2, 3, 4, 5].map(k => c6.api._entrarConCuenta('Ana Prueba', '000' + k, false)));
+  const v6 = verifDe(c6, 'u_ana');
+  const borrado6 = !v6 || (!v6.sal && !v6.h);
+  console.log('16) A la vez    → seis PIN equivocados juntos sin señal: verificador ' + (borrado6 ? 'borrado ✓' : 'SIGUE (' + (v6.fallos || 0) + ' fallos guardados) ✗'));
+  chequear(borrado6, 'seis intentos simultaneos dejaron el verificador: los fallos se pisaron entre si (Codex, nuevo 7)');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });

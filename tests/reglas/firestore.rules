@@ -57,17 +57,37 @@ service cloud.firestore {
     //   la cola de un telefono compartido sube las OT de quien las cerro con la sesion de quien entro
     //   despues (riesgo aceptado: crear a nombre de otro, no cambiar lo ajeno).
     // Sus consultas (numero==, pausa==true) no filtran por tecnico: no hay regla de "solo lo suyo".
+    // Revision final de Codex (24-10-2026, P1-3): en una hoja firmada el tecnico RELLENA el enlace del
+    // PDF (vacio -> valor), no lo reemplaza; y solo si la subio su propia sesion (`subidoPor`, que
+    // escribe la app al cerrar o al subir desde la cola). Una hoja sin `subidoPor` es anterior a ese
+    // campo: se acepta el relleno, no el reemplazo. Reemplazar (regenerar `_v2`) es del panel.
     function firmadaAntes() { return resource.data.get('firmada', false) == true; }
     function noDesfirma() { return !firmadaAntes() || request.resource.data.get('firmada', false) == true; }
     function mismoTecnico() { return request.resource.data.get('tecnico', null) == resource.data.get('tecnico', null); }
     function cambia() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function rellena(k) {
+      return resource.data.get(k, '') == '' || request.resource.data.get(k, '') == resource.data.get(k, '');
+    }
+    function primeraGeneracion() {
+      return request.resource.data.get('pdfHojaGen', null) == resource.data.get('pdfHojaGen', null)
+        || (resource.data.get('pdfHojaGen', null) == null && request.resource.data.get('pdfHojaGen', 0) == 1);
+    }
+    function laSubioEsta() {
+      return resource.data.get('subidoPor', '') == '' || resource.data.get('subidoPor', '') == request.auth.uid;
+    }
+    // `subidoPor` solo puede ser la sesion que escribe (si cambia).
+    function subidoPorEsQuienEscribe() {
+      return !('subidoPor' in request.resource.data) || request.resource.data.subidoPor == request.auth.uid;
+    }
     match /ordenes/{id} {
       allow read: if esUsuario();
-      allow create: if esUsuario() && request.resource.data.get('tecnico', '') is string;
+      allow create: if esUsuario() && request.resource.data.get('tecnico', '') is string && subidoPorEsQuienEscribe();
       allow update: if esUsuario() && noDesfirma() && (
         esPanel() ||
-        (mismoTecnico() && (!firmadaAntes() ||
-          cambia().hasOnly(['pdfUrl', 'pdfUrlCloudinary', 'pdfHojaGen', 'creadoEn', 'actualizadoEn']))));
+        (mismoTecnico() && (
+          (!firmadaAntes() && (!('subidoPor' in cambia()) || subidoPorEsQuienEscribe())) ||
+          (cambia().hasOnly(['pdfUrl', 'pdfUrlCloudinary', 'pdfHojaGen', 'creadoEn', 'actualizadoEn'])
+            && rellena('pdfUrl') && rellena('pdfUrlCloudinary') && primeraGeneracion() && laSubioEsta()))));
       allow delete: if esAdmin()
         || (esUsuario() && !firmadaAntes()
             && (resource.data.get('pausa', false) == true || resource.data.get('estado', '') == 'En Pausa'));
@@ -76,14 +96,30 @@ service cloud.firestore {
     // COTIZACIONES: las crea, edita y borra el panel. Un tecnico SOLO la marca "Realizada" al cerrar
     // la OT en espera (_vincularCotizacionRealizada): esos campos y ninguno mas (no importes, no
     // items, no destinatarios). Revision de Codex del PR #64.
+    // Revision final (24-10-2026, P1-3), por transicion y autoria:
+    // - una sola vez: de cualquier estado a "Realizada", nunca una que ya lo estaba;
+    // - el vinculo (`otId`) se pone si no habia, y no se cambia si ya habia;
+    // - `otId` es una hoja FIRMADA que declara ESTA cotizacion y que subio la sesion que escribe (o
+    //   cuyo tecnico es quien escribe): no se le pegan firma ni fotos a una cotizacion ajena.
+    function otQueLaDeclara(cotId) {
+      let otId = request.resource.data.get('otId', '');
+      let ruta = /databases/$(database)/documents/ordenes/$(otId);
+      return otId is string && otId != '' && exists(ruta)
+        && get(ruta).data.get('cotizacionId', '') == cotId
+        && get(ruta).data.get('firmada', false) == true
+        && (get(ruta).data.get('subidoPor', '') == request.auth.uid || get(ruta).data.get('tecnico', '') == ficha().data.nombre);
+    }
     match /cotizaciones/{id} {
       allow read: if esUsuario();
       allow create, delete: if esPanel();
       allow update: if esPanel() || (esUsuario()
+        && resource.data.get('estadoCot', '') != 'Realizada'
         && request.resource.data.get('estadoCot', '') == 'Realizada'
         && cambia().hasOnly(['estadoCot', 'otCompletadaNumero', 'fotosAntes', 'fotosDespues', 'fotoTimbre',
                              'firmaImagen', 'fechaRealizada', 'tecnicoRealizo', 'otId', 'otNumero',
-                             'pdfUrl', 'contenidoActualizadoEn']));
+                             'pdfUrl', 'contenidoActualizadoEn'])
+        && (resource.data.get('otId', '') == '' || request.resource.data.get('otId', '') == resource.data.get('otId', ''))
+        && otQueLaDeclara(id));
     }
 
     match /cadenas/{id} {

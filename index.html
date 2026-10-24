@@ -2432,10 +2432,21 @@ async function _verificarLocal(uid, secreto) {
   }
   let ok;
   try { ok = (await _pbkdf2(secreto, v.sal, v.it || VERIF_ITER)) === v.h; } catch (e) { return null; }
+  // Revision final de Codex (nuevo 7): la derivacion tarda (un `await`) y en ese rato otra pestaña
+  // pudo anotar sus propios fallos. Escribir la copia leida arriba los borraba: seis intentos a la
+  // vez dejaban UN fallo y el verificador seguia ahi. Se vuelve a leer AHORA y se escribe sin otro
+  // `await` de por medio, asi lectura y escritura quedan juntas.
+  const ahora = _leerVerificadores();
+  const w = ahora[uid];
+  if (!w || w.sal !== v.sal || w.h !== v.h) {
+    // Lo cambio otra pestaña mientras tanto: si dejo una lapida, manda la lapida.
+    if (w && (w.fin === 'vencido' || w.fin === 'fallos')) return w.fin;
+    return null;
+  }
   if (!ok) {
-    v.fallos = (v.fallos || 0) + 1;
-    todos[uid] = v.fallos >= VERIF_MAX_FALLOS ? { fin: 'fallos', en: Date.now() } : v;
-    _escribirVerificadores(todos);
+    w.fallos = (w.fallos || 0) + 1;
+    ahora[uid] = w.fallos >= VERIF_MAX_FALLOS ? { fin: 'fallos', en: Date.now() } : w;
+    _escribirVerificadores(ahora);
   }
   return ok;
 }
@@ -2468,14 +2479,14 @@ async function _iniciarSesionFirebase(correo, clave, uidEsperado) {
   let a = _authFirebase();
   if (!a && await _cargarSdkAuth()) a = _authFirebase();
   if (!a) return 'sin-red';
+  const intento = a.signInWithEmailAndPassword(correo, clave);
   try {
-    const r = await _conTimeout(a.signInWithEmailAndPassword(correo, clave), AUTH_MS_INICIO, 'iniciar sesión');
+    const r = await _conTimeout(intento, AUTH_MS_INICIO, 'iniciar sesión');
     const uid = (r && r.user && r.user.uid) || (a.currentUser && a.currentUser.uid) || '';
     if (uidEsperado && uid !== uidEsperado) {
       try { await a.signOut(); } catch (e) {}
       return 'otra-cuenta';
     }
-    _salidaDiferida = false;   // entro alguien con señal: la sesion del telefono es la suya
     return 'ok';
   } catch (e) {
     const c = (e && e.code) || '';
@@ -2484,8 +2495,25 @@ async function _iniciarSesionFirebase(correo, clave, uidEsperado) {
     if (c === 'auth/too-many-requests') return 'bloqueada';
     if (c === 'auth/user-disabled') return 'desactivada';
     if (_AUTH_SIN_CONFIGURAR.indexOf(c) >= 0) return 'no-activada';
+    // Revision final de Codex (P1-2): tras un timeout, la respuesta de Firebase puede llegar DESPUES
+    // y dejar abierta una sesion que nadie reviso. Si llega, se revisa ahi (_sesionTardia).
+    intento.then(function(r){ _sesionTardia(r, uidEsperado); }, function(){});
     return 'sin-red';
   }
+}
+// Una respuesta de inicio de sesion que llego despues de darla por perdida. Se queda solo si es de
+// quien esta en la app (o de la salida diferida, que la necesita para subir su cola). Si no, se cierra:
+// ningun permiso queda abierto por una respuesta que llego tarde.
+function _sesionTardia(r, uidEsperado) {
+  const a = _authFirebase();
+  const uid = (r && r.user && r.user.uid) || '';
+  if (!a || !uid) return;
+  const duenio = _uidEnLaApp || (_salidaDiferida && _credPendiente ? _credPendiente.uid : '');
+  if (uid === uidEsperado && uid === duenio) {
+    if (_credPendiente && _credPendiente.uid === uid) _credPendiente = null;
+    return;
+  }
+  if (a.currentUser && a.currentUser.uid === uid) { try { a.signOut(); } catch (e) {} }
 }
 
 function _textoEspera(ms) {
@@ -2508,6 +2536,8 @@ async function _entrarConCuenta(nombre, secreto, esClave) {
     _limpiarFallos(f.uid);
     if (privilegiado) _borrarVerificador(f.uid); else await _guardarVerificador(f.uid, claveFb);
     _credPendiente = null;
+    _uidEnLaApp = f.uid;
+    _marcarSalidaDiferida(false);   // entro alguien con señal: la sesion del telefono es la suya
     return { ok: true };
   }
   if (r === 'rechazada') { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
@@ -2527,6 +2557,8 @@ async function _entrarConCuenta(nombre, secreto, esClave) {
       try { await _authFirebase().signOut(); } catch (e) {}
     }
     _credPendiente = { uid: f.uid, correo: correo, clave: claveFb };
+    _uidEnLaApp = f.uid;
+    _marcarSalidaDiferida(false);   // la salida de antes quedo atras: ahora el telefono es de quien entro
     return { ok: true, sinSenal: true };
   }
   if (v === false) { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
@@ -2550,7 +2582,19 @@ async function _reintentarSesionPendiente() {
 // en el acto. Un tecnico con trabajo todavia sin subir la conserva hasta que su cola se vacie: si se
 // cerrara de inmediato, con las reglas de la etapa 2 su OT de la tarde quedaria trabada en el
 // telefono hasta que alguien vuelva a entrar con señal (regla 4: lo que no salio no se pierde).
-let _salidaDiferida = false;
+// Revision final de Codex (P1-2), tres casos que la dejaban abierta para siempre o sin poder subir:
+// - recargar la pagina: la marca vive en el telefono (SALIDA_KEY), no solo en memoria;
+// - elegir a alguien en la lista sin entrar: lo que frena el cierre es quien ENTRO (_uidEnLaApp),
+//   no `estado.usuario`;
+// - entrar sin señal (sin sesion todavia) y salir con cola: se conserva la credencial en memoria
+//   para que, al volver la señal, la cola suba con su sesion y recien ahi se cierre.
+const SALIDA_KEY = 'emval_salida_diferida';
+let _uidEnLaApp = '';   // quien entro de verdad (PIN o clave comprobados); '' al salir
+let _salidaDiferida = (function(){ try { return localStorage.getItem(SALIDA_KEY) === '1'; } catch (e) { return false; } })();
+function _marcarSalidaDiferida(si) {
+  _salidaDiferida = !!si;
+  try { if (si) localStorage.setItem(SALIDA_KEY, '1'); else localStorage.removeItem(SALIDA_KEY); } catch (e) {}
+}
 // Lo que el telefono tiene sin subir, cola por cola. null = no se pudo contar (ante la duda, hay).
 async function _contarColas() {
   const c = { ots: null, pausadas: null, correos: null, enlaces: null, cierres: null, bajas: null };
@@ -2568,18 +2612,23 @@ async function _hayTrabajoSinSubir() {
 }
 async function _cerrarSesionFirebase(cargo) {
   const a = _authFirebase();
-  if (!a || !a.currentUser) { _credPendiente = null; _salidaDiferida = false; return; }
-  if (!_esPrivilegiado(cargo) && await _hayTrabajoSinSubir()) { _salidaDiferida = true; return; }
-  _salidaDiferida = false;
+  const conSesion = !!(a && a.currentUser);
+  _uidEnLaApp = '';
+  // Con sesion, o con la credencial de quien entro sin señal: si queda cola, se difiere.
+  if (!_esPrivilegiado(cargo) && (conSesion || _credPendiente) && await _hayTrabajoSinSubir()) {
+    _marcarSalidaDiferida(true);
+    return;
+  }
+  _marcarSalidaDiferida(false);
   _credPendiente = null;
-  try { await a.signOut(); } catch (e) {}
+  if (conSesion) { try { await a.signOut(); } catch (e) {} }
 }
-// La corren el intervalo de 90 s y la vuelta de la señal: si la salida quedo diferida y la cola ya
-// esta vacia (y nadie entro mientras tanto), se cierra la sesion.
+// La corren el intervalo de 90 s, la vuelta de la señal y el arranque: si la salida quedo diferida
+// y la cola ya esta vacia (y nadie ENTRO mientras tanto), se cierra la sesion.
 async function _completarSalidaDiferida() {
-  if (!_salidaDiferida || estado.usuario) return;
+  if (!_salidaDiferida || _uidEnLaApp) return;
   if (await _hayTrabajoSinSubir()) return;
-  _salidaDiferida = false;
+  _marcarSalidaDiferida(false);
   _credPendiente = null;
   const a = _authFirebase();
   if (a && a.currentUser) { try { await a.signOut(); } catch (e) {} }
@@ -5119,6 +5168,11 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       otData.pausa = false;
       otData.enEspera = false;
       otData.estado = 'Terminada';
+      // Quien la subio (la sesion de Firebase que escribe, no quien la cerro): con las reglas de la
+      // etapa 2, solo esa sesion completa despues el enlace del PDF (revision final de Codex, P1-3).
+      // Se lee al escribir, no en `snap`: lo que la regla compara es la sesion de ESTA escritura.
+      const _subidoPor = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
+      if (_subidoPor) otData.subidoPor = _subidoPor;
       await _conTimeout(db.collection('ordenes').doc(clientId).set(otData, { merge: true }), 25000, 'set OT');
     }
 
@@ -16979,59 +17033,81 @@ async function sincronizarOTsPendientes() {
     try {
       toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
 
-      var urlsAntes = [];
-      for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
-        if (!ot.fotosAntes[i]) continue;
-        var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
-        if (u) urlsAntes.push(u);
-      }
-      var urlsDespues = [];
-      for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
-        if (!ot.fotosDespues[i]) continue;
-        var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
-        if (u) urlsDespues.push(u);
-      }
-      var urlTimbre = null;
-      if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
-
-      var urlsAudio = [];
-      for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
-        var a = ot.audiosBase64[i];
-        var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
-        if (u) urlsAudio.push(u);
-      }
-
       var db = window.firebase.firestore();
-      var otDoc = {
-        numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
-        tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
-        descripcionProblema: ot.descripcionProblema || '',
-        ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
-        pendientesMateriales: ot.pendientesMateriales || '',
-        numEquipos: ot.numEquipos || '',
-        serviciosPreventivo: ot.serviciosPreventivo || [],
-        fotosAntes: urlsAntes, fotosDespues: urlsDespues,
-        fotoTimbre: urlTimbre, audios: urlsAudio,
-        firmada: true, firmaImagen: ot.firmaBase64,
-        // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
-        pausa: false, enEspera: false, estado: 'Terminada',
-        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-      };
-      // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
-      // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
-      if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
-      if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
+      /* ¿YA ESTA ARRIBA, FIRMADA? (revision final de Codex del PR #64, P1 nuevo 2). Con mala señal el
+         primer intento puede haberse guardado sin que el telefono alcanzara a saberlo, y la OT sigue
+         en la cola. Reintentar volvia a subir las fotos (Cloudinary entrega URLs nuevas) y a reescribir
+         el contenido de una hoja firmada: las reglas de la etapa 2 no se lo dejan a un tecnico, asi que
+         quedaba trabada para siempre, y sin reglas pisaba una correccion del Administrador. Se pregunta
+         primero: si ya esta firmada, no se sube ni se reescribe nada de su contenido; solo se completa
+         lo que falte (el enlace del PDF) y sale de la cola como subida. */
+      var yaFirmada = null;
       if (ot.clientId) {
-        // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
-        await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
-      } else {
-        // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
-        await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
+        var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get(), 25000, 'sync leer OT');
+        if (_arriba.exists && (_arriba.data() || {}).firmada === true) yaFirmada = _arriba.data() || {};
       }
 
-      // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link
+      var urlsAntes = [], urlsDespues = [], urlTimbre = null, urlsAudio = [];
+      if (yaFirmada) {
+        urlsAntes = yaFirmada.fotosAntes || [];
+        urlsDespues = yaFirmada.fotosDespues || [];
+        urlTimbre = yaFirmada.fotoTimbre || null;
+      } else {
+        for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
+          if (!ot.fotosAntes[i]) continue;
+          var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
+          if (u) urlsAntes.push(u);
+        }
+        for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
+          if (!ot.fotosDespues[i]) continue;
+          var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
+          if (u) urlsDespues.push(u);
+        }
+        if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
+
+        for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
+          var a = ot.audiosBase64[i];
+          var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
+          if (u) urlsAudio.push(u);
+        }
+
+        var otDoc = {
+          numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
+          tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
+          descripcionProblema: ot.descripcionProblema || '',
+          ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
+          pendientesMateriales: ot.pendientesMateriales || '',
+          numEquipos: ot.numEquipos || '',
+          serviciosPreventivo: ot.serviciosPreventivo || [],
+          fotosAntes: urlsAntes, fotosDespues: urlsDespues,
+          fotoTimbre: urlTimbre, audios: urlsAudio,
+          firmada: true, firmaImagen: ot.firmaBase64,
+          // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
+          pausa: false, enEspera: false, estado: 'Terminada',
+          creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+        };
+        // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
+        // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
+        if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
+        if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
+        // Quien la sube (ver guardarEnFirebase): la sesion que escribe, leida al escribir.
+        var _subidoPorSync = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
+        if (_subidoPorSync) otDoc.subidoPor = _subidoPorSync;
+        if (ot.clientId) {
+          // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
+          await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
+        } else {
+          // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
+          await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
+        }
+      }
+
+      // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link. Si la hoja
+      // ya estaba arriba CON su enlace, no se vuelve a subir: se usa el que tiene.
       var pdfUrlSync = '';
-      if (ot.pdfBase64) {
+      if (yaFirmada && yaFirmada.pdfUrlCloudinary) {
+        pdfUrlSync = yaFirmada.pdfUrlCloudinary;
+      } else if (ot.pdfBase64) {
         pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
         if (pdfUrlSync && ot.clientId) {
           // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)

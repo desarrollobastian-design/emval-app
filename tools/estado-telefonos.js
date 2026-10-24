@@ -8,13 +8,17 @@
    La decision sale de ESE reporte y de SU fecha (Codex P2-7). `alertas/correos_<dispositivo>` solo
    suma cola si es reciente; nunca hace pasar por fresco un reporte viejo.
    Telefono por telefono:
-     LISTO          version con Auth + sesion de Firebase + todas las colas en 0.
-     VERSION VIEJA  el reporte no trae `auth` ni `colas`: ese telefono no abrio la app nueva.
+     LISTO          version con Auth + sesion de Firebase + las SEIS colas en 0.
+     VERSION VIEJA  el reporte no trae `auth` ni `colas` (o es del formato de la primera version de la
+                    etapa 1, que solo traia `otsPendientes`): no dice todas sus colas.
+     REPORTE INCOMPLETO  trae `colas`, pero le falta alguna de las seis (o viene vacio): no se sabe.
      SIN SESION     version nueva, pero nadie entro con señal todavia en ese telefono.
      CON COLA       algo sin subir, o una cola que el telefono no pudo contar.
      SIN NOTICIAS   su reporte tiene mas de --dias (3 por defecto): no se sabe; hay que pedirle a ese
                     tecnico que abra la app con señal.
-   Un telefono que no reporta hace mas de --olvidar (30) dias se lista aparte: decide Bastian.
+   Un telefono SIN NINGUN reporte (ni el principal ni el de correos) en mas de --olvidar (30) dias se
+   lista aparte: decide Bastian. Con cualquier actividad reciente, sigue contando (revision final de
+   Codex del PR #64, 24-10-2026).
 
    NUNCA ESCRIBE. Sale 0 si TODOS los telefonos activos estan LISTOS; 2 si no; 1 si no pudo leer.
 
@@ -49,6 +53,7 @@ function fecha(t) { return t ? new Date(t).toISOString().slice(0, 16).replace('T
 // "refrescaba" una sesion y una cola de hace diez dias (Codex P2-7, 23-10-2026). El reporte de correos
 // solo puede AGREGAR cola (si es reciente y dice que hay pendientes); nunca da por fresco a un telefono.
 const NOMBRES_COLA = { ots: 'OT', pausadas: 'pausadas', correos: 'correos', enlaces: 'enlaces de PDF', cierres: 'cierres', bajas: 'bajas' };
+const SEIS_COLAS = Object.keys(NOMBRES_COLA);
 function evaluar(docs, ahora) {
   const tel = {};
   for (const d of docs) {
@@ -61,9 +66,9 @@ function evaluar(docs, ahora) {
       t.conReporte = true;
       t.ultimo = ms(x.actualizadoEn);
       t.auth = x.auth || null;
-      // `colas` desde esta version; un reporte de la primera version de la etapa 1 traia solo `otsPendientes`.
-      t.colas = x.colas && typeof x.colas === 'object' ? Object.assign({}, x.colas)
-        : (typeof x.otsPendientes === 'number' ? { ots: x.otsPendientes, pausadas: (x.items || []).filter(i => i && i.pendienteSync === true).length } : null);
+      // Solo `colas` cuenta. Un reporte de la primera version de la etapa 1 (solo `otsPendientes`) no
+      // dice sus seis colas: queda como VERSION VIEJA, nunca LISTO (revision final de Codex, nuevo 5).
+      t.colas = x.colas && typeof x.colas === 'object' && !Array.isArray(x.colas) ? Object.assign({}, x.colas) : null;
     } else {
       t.correosReporte = { pendientes: typeof x.pendientes === 'number' ? x.pendientes : 0, en: ms(x.actualizadoEn) };
     }
@@ -71,8 +76,12 @@ function evaluar(docs, ahora) {
   const activos = [], olvidados = [];
   for (const t of Object.values(tel)) {
     const edad = ahora - t.ultimo;
-    if (t.ultimo && edad > OLVIDAR * DIA) { t.estado = 'OLVIDADO'; olvidados.push(t); continue; }
+    // OLVIDADO solo si NINGUN reporte suyo es reciente: un telefono que hoy reporto correos sigue en
+    // uso aunque su reporte principal sea viejo (revision final de Codex, nuevo 5).
+    const ultimaSenal = Math.max(t.ultimo || 0, (t.correosReporte && t.correosReporte.en) || 0);
+    if (ultimaSenal && ahora - ultimaSenal > OLVIDAR * DIA) { t.estado = 'OLVIDADO'; olvidados.push(t); continue; }
     const colas = t.colas ? Object.assign({}, t.colas) : null;
+    const faltan = colas ? SEIS_COLAS.filter(k => !(k in colas)) : SEIS_COLAS;
     // Un reporte de correos RECIENTE con pendientes suma cola (es otra señal, no reemplaza a la principal).
     if (colas && t.correosReporte && t.correosReporte.pendientes > 0 && ahora - t.correosReporte.en <= DIAS * DIA) {
       colas.correos = Math.max(colas.correos || 0, t.correosReporte.pendientes);
@@ -83,6 +92,7 @@ function evaluar(docs, ahora) {
       .map(k => (colas[k] === null ? '¿?' : colas[k]) + ' ' + (NOMBRES_COLA[k] || k)).join(', ') : '';
     if (!t.conReporte || !t.ultimo || edad > DIAS * DIA) t.estado = 'SIN NOTICIAS';
     else if (!t.auth || !(t.auth.etapa >= 1) || !colas) t.estado = 'VERSION VIEJA';
+    else if (faltan.length) { t.estado = 'REPORTE INCOMPLETO'; t.detalleCola = 'faltan: ' + faltan.map(k => NOMBRES_COLA[k]).join(', '); }
     else if (!t.auth.sesion) t.estado = 'SIN SESION';
     else if (noSe || valores.some(v => v > 0)) t.estado = 'CON COLA';
     else t.estado = 'LISTO';

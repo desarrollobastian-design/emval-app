@@ -47,11 +47,11 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
 
 | Qué | Comando | Tiene que dar |
 |---|---|---|
-| Reglas de la etapa 2 (63 casos, con los ataques de la revisión de Codex) | `npm run reglas` | `OK`, exit 0 |
+| Reglas de la etapa 2 (76 casos, con los ataques de las dos revisiones de Codex) | `npm run reglas` | `OK`, exit 0 |
 | **Contraprueba**: las mismas pruebas con las reglas de hoy (`capa1-referencia.rules`, reconstrucción) | `npm run reglas-capa1` | `FALLA`, exit 1 |
 | Transición de la etapa 1, paso 1b (10 casos, con su contraprueba adentro) | `npm run transicion` | `OK`, exit 0 |
-| Herramienta de cuentas (8 tramos y el 4b) | `npm run cuentas` | `OK`, exit 0 |
-| Estado de los teléfonos (6 tramos) | `npm run estado` | `OK`, exit 0 |
+| Herramienta de cuentas (tramos 1 a 8, con 2b, 2c, 3b, 4b y 6a a 6c) | `npm run cuentas` | `OK`, exit 0 |
+| Estado de los teléfonos (13 teléfonos, 7 tramos) | `npm run estado` | `OK`, exit 0 |
 
 ## Qué mide cada una
 - **`reglas.test.js`**: cada rol puede justo lo que la app le pide y nada más.
@@ -60,6 +60,12 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
   - **Nadie desfirma una hoja.** Un técnico no cambia el técnico ni el contenido de una hoja firmada:
     solo el enlace de su PDF y la fecha de subida, que es lo que reescribe la cola.
   - Un técnico solo marca una cotización «Realizada», con los campos que manda la app.
+  - Revisión final de Codex (24-10-2026), por autoría y transición:
+    - en una hoja firmada, un técnico **rellena** el PDF vacío; no lo reemplaza, no sube la generación y
+      no toca la hoja que subió otra sesión (`subidoPor`);
+    - `subidoPor` solo puede ser la sesión que escribe;
+    - «Realizada» va una sola vez, sin cambiar el vínculo, y solo con una hoja firmada que declara esa
+      cotización y que subió la sesión que escribe (o cuyo técnico es quien escribe).
   - `directorio` y `tecnicos` no los escribe nadie desde la app: solo el Admin SDK.
 - **`transicion.test.js`** (paso 1b, 10 casos):
   - El directorio se lee sin sesión y nadie lo escribe.
@@ -74,8 +80,18 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
   - Administrador y Supervisor solo se crean con `--autorizar <uid>`. El de la clave quemada, nunca.
   - La ficha queda solo con los campos permitidos. El respaldo nombra los campos que se quitaron y no
     guarda sus valores.
-  - Código de salida 2 si alguien quedó sin cuenta.
-  - `--deshacer` revierte una corrida.
+  - Código de salida 2 si alguien quedó pendiente (sin cuenta o sin ficha) o hay una ficha huérfana.
+  - Revisión final de Codex (24-10-2026):
+    - **2b:** una cuenta que ya existe no recibe en `directorio` el cargo de Administrador o Supervisor
+      que dice `tecnicos` sin `--autorizar`; con `--autorizar`, sí;
+    - **2c:** una cuenta existente con otro correo no se toca, no se le publica ficha, se informa sin
+      imprimir su correo y sale con 2;
+    - **3b:** las fichas de personas omitidas y las huérfanas también quedan solo con los campos
+      permitidos; la huérfana se informa.
+  - `--deshacer` (**6a a 6c**):
+    - se niega con un respaldo de otro proyecto o de formato viejo;
+    - revierte SOLO lo que esa corrida cambió (su diario) y no pisa lo que cambió después;
+    - repetido después de que la herramienta vuelve a crear la cuenta, no la borra ni le pisa la ficha.
   - Con un modo emulador a medias, la herramienta se detiene.
   - 🔬 El emulador de Auth **no verifica hashes SHA-256 importados**. Por eso aquí se prueba
     `--clave-admin`; en producción decide la autoprueba.
@@ -91,6 +107,10 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
   - **Un reporte del teléfono de hace 10 días no se da por bueno aunque haya un reporte de correos de
     hoy** (el caso que reprodujo Codex).
   - Un reporte de correos reciente con pendientes suma cola.
+  - Revisión final de Codex (24-10-2026):
+    - un reporte de formato viejo (solo `otsPendientes`) es VERSIÓN VIEJA;
+    - `colas: {}`, o sin alguna de las seis, es REPORTE INCOMPLETO; ninguno da LISTO;
+    - un teléfono con correos de hoy no queda OLVIDADO por tener viejo el reporte principal.
   - Con uno no listo dice «todavía NO» (exit 2); con todos listos da luz verde (exit 0).
   - Nunca escribe.
 

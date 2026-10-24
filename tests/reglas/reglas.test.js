@@ -45,6 +45,19 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     await setDoc(doc(db, 'ordenes/o_firmada2'), { numero: 4, pausa: false, estado: 'Terminada', firmada: true, tecnico: 'Tomas Prueba', descripcionTrabajo: 'cambio de rueda' });
     await setDoc(doc(db, 'ordenes/o_pausa2'), { numero: 5, pausa: true, estado: 'En Pausa', firmada: false, tecnico: 'Tomas Prueba' });
     await setDoc(doc(db, 'cotizaciones/c2'), { numeroCotizacion: '1102602', total: 100000, estadoCot: 'Pendiente', items: [{ d: 'x', v: 100000 }] });
+    // Revision final de Codex (P1-3): autoria (`subidoPor`) y transiciones.
+    const T = { pausa: false, estado: 'Terminada', firmada: true };
+    await setDoc(doc(db, 'ordenes/o_cierre_c1'), Object.assign({ numero: 7, tecnico: 'Tomas Prueba', subidoPor: 'u_tec', cotizacionId: 'c1' }, T));
+    await setDoc(doc(db, 'ordenes/o_c2'), Object.assign({ numero: 8, tecnico: 'Tomas Prueba', subidoPor: 'u_tec', cotizacionId: 'c2' }, T));
+    await setDoc(doc(db, 'ordenes/o_con_pdf'), Object.assign({ numero: 11, tecnico: 'Tomas Prueba', subidoPor: 'u_tec', pdfUrlCloudinary: 'https://viejo', pdfHojaGen: 1 }, T));
+    await setDoc(doc(db, 'ordenes/o_ajena'), Object.assign({ numero: 12, tecnico: 'Tomas Prueba', subidoPor: 'u_otro' }, T));
+    // Telefono compartido: la hoja es de otro tecnico, pero la subio la sesion de Tomas desde la cola.
+    await setDoc(doc(db, 'ordenes/o_propia'), Object.assign({ numero: 13, tecnico: 'Otro Prueba', subidoPor: 'u_tec' }, T));
+    await setDoc(doc(db, 'cotizaciones/c3'), { numeroCotizacion: '1102603', estadoCot: 'Aceptada' });
+    await setDoc(doc(db, 'ordenes/o_c3_sinfirma'), { numero: 14, tecnico: 'Tomas Prueba', subidoPor: 'u_tec', cotizacionId: 'c3', firmada: false, pausa: true });
+    await setDoc(doc(db, 'ordenes/o_c3_ajena'), Object.assign({ numero: 15, tecnico: 'Otro Prueba', subidoPor: 'u_otro', cotizacionId: 'c3' }, T));
+    await setDoc(doc(db, 'cotizaciones/c4'), { numeroCotizacion: '1102604', estadoCot: 'Aceptada', otId: 'o_c4' });
+    await setDoc(doc(db, 'ordenes/o_c4b'), Object.assign({ numero: 16, tecnico: 'Tomas Prueba', subidoPor: 'u_tec', cotizacionId: 'c4' }, T));
     await setDoc(doc(db, 'cadenas/k1'), { nombre: 'CADENA PRUEBA' });
     await setDoc(doc(db, 'pdfs/p_aleatorio'), { otNumero: 2 });
     await setDoc(doc(db, 'contadores/cot_011026'), { n: 1 });
@@ -80,7 +93,7 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     // ── tecnico ──
     ['tecnico lee ordenes (consulta pausa==true, no filtra por tecnico)', () => getDocs(query(collection(tec, 'ordenes'), where('pausa', '==', true))), true],
     ['tecnico crea una orden', () => setDoc(doc(tec, 'ordenes/o_nueva'), { numero: 10, pausa: false, firmada: true }), true],
-    ['tecnico actualiza una orden (enlace del PDF)', () => updateDoc(doc(tec, 'ordenes/o_firmada'), { pdfUrlCloudinary: 'x' }), true],
+    ['tecnico rellena el enlace vacio del PDF (hoja anterior a subidoPor)', () => updateDoc(doc(tec, 'ordenes/o_firmada'), { pdfUrlCloudinary: 'x' }), true],
     ['tecnico borra una pausada', () => deleteDoc(doc(tec, 'ordenes/o_pausa')), true],
     ['tecnico NO borra una hoja firmada', () => deleteDoc(doc(tec, 'ordenes/o_firmada')), false],
     ['tecnico NO borra una pausada ya firmada', () => deleteDoc(doc(tec, 'ordenes/o_pausa_firmada')), false],
@@ -91,7 +104,7 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     ['tecnico sube el registro de un PDF', () => addDoc(collection(tec, 'pdfs'), { otNumero: 10 }), true],
     ['tecnico lista PDF', () => getDocs(query(collection(tec, 'pdfs'), where('otNumero', '==', 2))), true],
     ['tecnico NO modifica un PDF', () => updateDoc(doc(tec, 'pdfs/p_aleatorio'), { otNumero: 99 }), false],
-    ['tecnico actualiza una cotizacion (cierre de OT en espera)', () => updateDoc(doc(tec, 'cotizaciones/c1'), { estadoCot: 'Realizada' }), true],
+    ['tecnico marca Realizada la cotizacion de SU hoja firmada (cierre de OT en espera)', () => updateDoc(doc(tec, 'cotizaciones/c1'), { estadoCot: 'Realizada', otId: 'o_cierre_c1', otNumero: '7' }), true],
     ['tecnico NO crea cotizaciones', () => addDoc(collection(tec, 'cotizaciones'), { x: 1 }), false],
     ['tecnico NO borra cotizaciones', () => deleteDoc(doc(tec, 'cotizaciones/c1')), false],
     ['tecnico usa el correlativo de bajas (transaccion)', () => runTransaction(tec, async (t) => {
@@ -125,7 +138,21 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     ['tecnico NO cambia el total de una cotizacion', () => updateDoc(doc(tec, 'cotizaciones/c2'), { total: 1 }), false],
     ['tecnico NO la marca Realizada y le cambia los items', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', items: [] }), false],
     ['tecnico NO le cambia el estado a otro que Realizada', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Aceptada' }), false],
-    ['tecnico la marca Realizada con lo que manda la app', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', otCompletadaNumero: '4', tecnicoRealizo: 'Tomas Prueba', pdfUrl: '', contenidoActualizadoEn: 1 }), true],
+    ['tecnico la marca Realizada con lo que manda la app', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', otCompletadaNumero: '8', tecnicoRealizo: 'Tomas Prueba', otId: 'o_c2', otNumero: '8', fotosAntes: ['a'], firmaImagen: 'f', pdfUrl: '', contenidoActualizadoEn: 1 }), true],
+    // ── revision final de Codex del PR #64 (P1-3): autoria y transiciones ──
+    ['tecnico NO reemplaza el PDF de una hoja firmada', () => updateDoc(doc(tec, 'ordenes/o_con_pdf'), { pdfUrlCloudinary: 'https://otro' }), false],
+    ['tecnico reenvia el MISMO enlace (reintento de la cola)', () => updateDoc(doc(tec, 'ordenes/o_con_pdf'), { pdfUrlCloudinary: 'https://viejo' }), true],
+    ['tecnico NO sube la generacion del PDF (regenerar es del panel)', () => updateDoc(doc(tec, 'ordenes/o_con_pdf'), { pdfHojaGen: 2 }), false],
+    ['tecnico NO rellena el PDF de una hoja firmada que subio otra sesion', () => updateDoc(doc(tec, 'ordenes/o_ajena'), { pdfUrlCloudinary: 'x' }), false],
+    ['tecnico NO se pone de subidoPor en una hoja firmada ajena', () => updateDoc(doc(tec, 'ordenes/o_ajena'), { subidoPor: 'u_tec' }), false],
+    ['tecnico rellena el PDF de la hoja que subio su sesion (telefono compartido)', () => updateDoc(doc(tec, 'ordenes/o_propia'), { pdfUrl: 'p', pdfUrlCloudinary: 'c', pdfHojaGen: 1 }), true],
+    ['tecnico NO crea una orden con la sesion de otro en subidoPor', () => setDoc(doc(tec, 'ordenes/o_nueva_ajena'), { numero: 17, firmada: true, tecnico: 'Tomas Prueba', subidoPor: 'u_otro' }), false],
+    ['tecnico crea una orden con su sesion en subidoPor', () => setDoc(doc(tec, 'ordenes/o_nueva_propia'), { numero: 18, firmada: true, tecnico: 'Tomas Prueba', subidoPor: 'u_tec' }), true],
+    ['tecnico NO marca Realizada con una hoja que no declara esa cotizacion', () => updateDoc(doc(tec, 'cotizaciones/c3'), { estadoCot: 'Realizada', otId: 'o_cierre_c1' }), false],
+    ['tecnico NO marca Realizada con una hoja sin firmar', () => updateDoc(doc(tec, 'cotizaciones/c3'), { estadoCot: 'Realizada', otId: 'o_c3_sinfirma' }), false],
+    ['tecnico NO marca Realizada con la hoja de otro tecnico (le pega firma y fotos ajenas)', () => updateDoc(doc(tec, 'cotizaciones/c3'), { estadoCot: 'Realizada', otId: 'o_c3_ajena', firmaImagen: 'x', fotosAntes: ['y'] }), false],
+    ['tecnico NO le cambia el vinculo (otId) a una cotizacion', () => updateDoc(doc(tec, 'cotizaciones/c4'), { estadoCot: 'Realizada', otId: 'o_c4b' }), false],
+    ['tecnico NO vuelve a tocar una cotizacion ya Realizada (fotos, firma)', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', fotosAntes: ['otra'] }), false],
     // ── administrador ──
     ['admin lee tecnicos', () => getDoc(doc(adm, 'tecnicos/u_tec')), true],
     ['admin NO escribe tecnicos desde la app (D1-B: lo hace el Admin SDK)', () => updateDoc(doc(adm, 'tecnicos/u_tec'), { pin: '0000' }), false],

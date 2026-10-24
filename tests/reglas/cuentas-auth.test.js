@@ -14,9 +14,18 @@
    4b. El camino de la IMPORTACION del hash, forzado con EMVAL_PRUEBA_IMPORTACION (solo vale en el
       emulador): si Firebase la rechaza, sale con 2 y esa persona queda sin cuenta ni ficha (revisor del
       PR #64, punto 1); si la acepta, crea la cuenta; una segunda corrida NO la reimporta (punto 6).
+   2b. (Codex, revision final, P1 nuevo 1) Una cuenta que YA existe, con ficha de tecnico, y que en
+      `tecnicos` figura como Administrador: sin --autorizar NO se le publica ese cargo (queda pendiente,
+      exit 2); con --autorizar, si.
+   2c. (nuevo 6) Una cuenta existente con OTRO correo: no se toca, no se le publica ficha, se informa
+      (sin imprimir su correo) y sale con 2.
+   3b. (P2-8) Las fichas que la corrida no escribe —de una persona omitida y una huerfana— tambien
+      quedan solo con los campos permitidos; la huerfana se informa.
    5. Correrla otra vez no cambia ninguna cuenta.
-   6. --deshacer con el respaldo de la corrida 2 borra lo que esa corrida creo y deja el directorio
-      como estaba (sin los campos de mas).
+   6. --deshacer (P1 nuevo 3): se niega con un respaldo de otro proyecto o de formato viejo; con el de la
+      corrida 2 revierte SOLO lo que esa corrida cambio y no pisa lo que cambio despues (la ficha de
+      Beto); repetido despues de que la herramienta vuelve a crear la cuenta de Ana, no la borra ni le
+      pisa la ficha.
    7. Modo emulador incompleto (un solo host, o un proyecto que no es demo-): se detiene antes de
       conectarse (Codex P2-10).
    8. Ni la salida ni los respaldos muestran un PIN, una clave o un hash.
@@ -45,11 +54,18 @@ function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); retur
 const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 
 // Valores SOLO de prueba (no son de nadie).
-const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190';
+const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141';
 const CLAVE_ADMIN = 'clave-solo-de-prueba-admin', CLAVE_VIEJA_B = 'clave-vieja-de-beto', CLAVE_RITA = 'clave-solo-de-prueba-rita';
-const SECRETOS = [PIN_A, PIN_B, PIN_S, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, sha(CLAVE_ADMIN), sha(CLAVE_RITA), 'nota-secreta-de-prueba'];
+const CLAVE_E = 'clave-solo-de-prueba-esteban', CLAVE_M = 'clave-solo-de-prueba-marta';
+const CORREO_REAL_M = 'marta.otra@ejemplo.test';
+const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
+  sha(CLAVE_ADMIN), sha(CLAVE_RITA), sha(CLAVE_E), 'nota-secreta-de-prueba'];
+// El correo real de una cuenta no es un secreto (el respaldo local lo guarda para reconocerla), pero la
+// herramienta no lo imprime: se revisa aparte, solo en las salidas.
 const UID = { a: 'tecA0000000000000001', b: 'tecB0000000000000002', c: 'tecC0000000000000003',
-  p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006', r: 'admR0000000000000007' };
+  p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006', r: 'admR0000000000000007',
+  e: 'admE0000000000000008', m: 'tecM0000000000000009' };
+const HUERFANA = 'huerH000000000000010';
 const DIR_RESP = path.join(RAIZ, 'tools', 'respaldos');
 
 async function entra(uid, clave) {
@@ -97,14 +113,27 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   const betoAntes = (await cuenta(UID.b)).toJSON();
   // La ficha vieja de Ana trae campos que no van en un directorio publico.
   await db.doc('directorio/' + UID.a).set({ nombre: 'Ana Vieja', cargo: 'Tecnico en terreno', letra: 'A', activo: true, pin: PIN_A, notaInterna: 'nota-secreta-de-prueba' });
+  // Ciro queda omitido (sin PIN), pero tiene una ficha vieja con un PIN adentro (P2-8).
+  await db.doc('directorio/' + UID.c).set({ nombre: 'Ciro SinPin', cargo: 'Tecnico en terreno', letra: 'C', activo: true, pin: PIN_C_VIEJO });
+  // Una ficha HUERFANA: no hay nadie con ese id en tecnicos, y trae un PIN (P2-8).
+  await db.doc('directorio/' + HUERFANA).set({ nombre: 'Hugo Huerfano', cargo: 'Tecnico en terreno', letra: 'H', activo: true, pin: PIN_H });
+  // Esteban YA tiene cuenta y ficha de tecnico, pero en tecnicos figura como Administrador (P1 nuevo 1).
+  await db.doc('tecnicos/' + UID.e).set({ nombre: 'Esteban Prueba', cargo: 'Administrador', passwordHash: sha(CLAVE_E), letra: 'E' });
+  await auth.createUser({ uid: UID.e, email: _correoDeCuenta(UID.e), password: CLAVE_E, displayName: 'Esteban Prueba' });
+  await db.doc('directorio/' + UID.e).set({ nombre: 'Esteban Prueba', cargo: 'Tecnico en terreno', letra: 'E', correo: _correoDeCuenta(UID.e), activo: true });
+  const estebanAntes = (await cuenta(UID.e)).toJSON();
+  // Marta YA tiene cuenta, pero con OTRO correo que el que usa la app (nuevo 6).
+  await db.doc('tecnicos/' + UID.m).set({ nombre: 'Marta Prueba', cargo: 'Tecnico en terreno', pin: PIN_M, letra: 'M' });
+  await auth.createUser({ uid: UID.m, email: CORREO_REAL_M, password: CLAVE_M, displayName: 'Marta Prueba' });
+  const martaAntes = (await cuenta(UID.m)).toJSON();
 
   // 1. Simulacion
   const sim = correr([]);
   const fichas0 = (await db.collection('directorio').get()).size;
-  console.log('1) Simulacion   → exit ' + sim.status + (sim.status === 2 ? ' ✓' : ' ✗') + ', nadie creado: ' + (!(await cuenta(UID.a)) && fichas0 === 1 ? '✓' : '✗') +
+  console.log('1) Simulacion   → exit ' + sim.status + (sim.status === 2 ? ' ✓' : ' ✗') + ', nadie creado: ' + (!(await cuenta(UID.a)) && fichas0 === 4 ? '✓' : '✗') +
     ', clave quemada: ' + (/CLAVE QUEMADA/.test(sim.salida) ? 'avisa ✓' : 'NO AVISA ✗'));
   chequear(sim.status === 2, 'la simulacion con gente que quedaria sin cuenta no sale con 2 (sale ' + sim.status + ')');
-  chequear(!(await cuenta(UID.a)) && fichas0 === 1, 'la simulacion escribio');
+  chequear(!(await cuenta(UID.a)) && fichas0 === 4, 'la simulacion escribio');
   chequear(/CLAVE QUEMADA/.test(sim.salida), 'la simulacion no avisa del Administrador con la clave quemada');
 
   // 2. Ejecutar sin autorizar a nadie
@@ -122,6 +151,28 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   chequear(betoIntacto, 'una cuenta que ya existia fue modificada o reactivada (Codex P1-4)');
   chequear(sinPrivilegiados, 'se creo un Administrador o Supervisor sin --autorizar (Codex P1-5)');
 
+  // 2b. Cuenta existente + cargo privilegiado en tecnicos, sin --autorizar (Codex, revision final, P1 nuevo 1)
+  const fichaE2 = (await db.doc('directorio/' + UID.e).get()).data() || {};
+  const estebanIgual = JSON.stringify((await cuenta(UID.e)).toJSON()) === JSON.stringify(estebanAntes);
+  const lineaE = (ej.salida.split('\n').find(l => l.includes('Esteban Prueba')) || '');
+  console.log('2b) Cargo       → Esteban (cuenta existente, Administrador en tecnicos) sin --autorizar: ficha ' +
+    (fichaE2.cargo === 'Tecnico en terreno' ? 'sigue de tecnico ✓' : 'PUBLICADA COMO ' + fichaE2.cargo + ' ✗') +
+    ', ' + (/no se publica sin --autorizar/.test(lineaE) ? 'queda pendiente ✓' : 'NO LO DICE ✗') + ', cuenta ' + (estebanIgual ? 'intacta ✓' : 'TOCADA ✗'));
+  chequear(fichaE2.cargo === 'Tecnico en terreno', 'sin --autorizar, a una cuenta existente se le publico el cargo de Administrador tomado de tecnicos (Codex P1 nuevo 1)');
+  chequear(/no se publica sin --autorizar/.test(lineaE), 'el cargo privilegiado sin autorizar de una cuenta existente no queda como pendiente');
+  chequear(estebanIgual, 'la cuenta existente de Esteban fue modificada');
+
+  // 2c. Cuenta existente con OTRO correo (Codex, revision final, nuevo 6)
+  const martaDespues = (await cuenta(UID.m)).toJSON();
+  const fichaM = (await db.doc('directorio/' + UID.m).get()).exists;
+  const lineaM = (ej.salida.split('\n').find(l => l.includes('Marta Prueba')) || '');
+  console.log('2c) Otro correo → Marta: cuenta ' + (JSON.stringify(martaDespues) === JSON.stringify(martaAntes) ? 'intacta ✓' : 'CAMBIADA ✗') +
+    ', ficha ' + (!fichaM ? 'no publicada ✓' : 'PUBLICADA ✗') + ', ' + (/OTRO correo/.test(lineaM) ? 'lo informa ✓' : 'NO LO DICE ✗') +
+    (ej.salida.includes(CORREO_REAL_M) ? ', IMPRIME SU CORREO ✗' : ', sin imprimir su correo ✓'));
+  chequear(JSON.stringify(martaDespues) === JSON.stringify(martaAntes), 'la cuenta existente con otro correo se cambio (nuevo 6)');
+  chequear(!fichaM, 'a una cuenta con otro correo se le publico una ficha con el correo derivado: la app no podria entrar (nuevo 6)');
+  chequear(/OTRO correo/.test(lineaM) && !ej.salida.includes(CORREO_REAL_M), 'la cuenta con otro correo no se informa, o se imprime su correo');
+
   // 3. Ficha limpia y respaldo sin valores de mas
   const fichaAna = (await db.doc('directorio/' + UID.a).get()).data() || {};
   const fichaBeto = (await db.doc('directorio/' + UID.b).get()).data() || {};
@@ -135,8 +186,20 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   chequear(fichaBeto.activo === false, 'la ficha de una cuenta deshabilitada quedo activa');
   chequear(JSON.stringify(fichaRespAna.camposQuitados || []) === JSON.stringify(['pin', 'notaInterna']), 'el respaldo no dice que campos se quitaron de la ficha');
 
-  // 4. Autorizando al Administrador y a la Supervisora
-  const aut = correr(['--ejecutar', '--autorizar', UID.p + ',' + UID.s + ',' + UID.q, '--clave-admin'], { claveAdmin: CLAVE_ADMIN });
+  // 3b. Fichas que la corrida no escribe: la de Ciro (omitido) y una huerfana (Codex P2-8, revision final)
+  const fichaC = (await db.doc('directorio/' + UID.c).get()).data() || null;
+  const fichaH = (await db.doc('directorio/' + HUERFANA).get()).data() || null;
+  const limpia = f => !!f && Object.keys(f).every(k => CAMPOS_FICHA.includes(k));
+  console.log('3b) Sin escribir → ficha de Ciro (omitido): ' + (limpia(fichaC) && fichaC.nombre === 'Ciro SinPin' ? 'limpia, con sus datos ✓' : 'CON CAMPOS DE MAS ✗') +
+    ' · huerfana: ' + (limpia(fichaH) && fichaH.activo === true ? 'limpia' : 'CON CAMPOS DE MAS') + (/HUERFANA/.test(ej.salida) ? ' e informada ✓' : ', NO INFORMADA ✗'));
+  chequear(limpia(fichaC) && fichaC.nombre === 'Ciro SinPin', 'la ficha de una persona omitida conservo campos de mas, o perdio sus datos (Codex P2-8)');
+  chequear(limpia(fichaH) && fichaH.activo === true && /HUERFANA/.test(ej.salida), 'la ficha huerfana conservo campos de mas o no se informo (Codex P2-8)');
+
+  // 4. Autorizando al Administrador y a la Supervisora (y la concesion del cargo de Esteban)
+  const aut = correr(['--ejecutar', '--autorizar', UID.p + ',' + UID.s + ',' + UID.q + ',' + UID.e, '--clave-admin'], { claveAdmin: CLAVE_ADMIN });
+  const fichaE4 = (await db.doc('directorio/' + UID.e).get()).data() || {};
+  console.log('4) Concesion    → Esteban con --autorizar: ficha ' + (fichaE4.cargo === 'Administrador' ? 'de Administrador ✓' : fichaE4.cargo + ' ✗'));
+  chequear(fichaE4.cargo === 'Administrador', 'con --autorizar, a la cuenta existente no se le publico el cargo autorizado');
   const pOk = await entra(UID.p, CLAVE_ADMIN), pOtra = await entra(UID.p, 'otra-clave-cualquiera');
   const sOk = await entra(UID.s, _claveFirebaseDePin(PIN_S));
   const qCuenta = !!(await cuenta(UID.q));
@@ -150,10 +213,13 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   // 4b. El camino de la IMPORTACION (revisor del PR #64, puntos 1 y 6). El emulador no deja recorrerlo
   //     (no verifica hashes SHA-256): la herramienta acepta forzarlo SOLO con el emulador.
   const rech = correr(['--ejecutar', '--autorizar', UID.r], { env: { EMVAL_PRUEBA_IMPORTACION: 'rechazar' } });
-  // El exit 2 ya salia por Ciro y el quemado: lo que prueba el punto 1 es que el rechazo SUME uno a los
-  // «sin cuenta» del plan (Rita entra al plan como importar-hash, no como omitida).
-  const nPlan = +((rech.salida.match(/(\d+) sin cuenta\s*$/m) || [])[1]), nFinal = +((rech.salida.match(/(\d+) SIN cuenta/) || [])[1] || 0);
-  const rechazoCuenta = Number.isFinite(nPlan) && nFinal === nPlan + 1;
+  // El exit 2 ya salia por Ciro, el quemado y otros: lo que prueba el punto 1 es que el rechazo SUME uno
+  // a los pendientes del plan (Rita entra al plan como importar-hash, no como omitida). Las huerfanas se
+  // suman al final, aparte.
+  const nPlan = +((rech.salida.match(/(\d+) pendientes \(sin cuenta o sin ficha\)/) || [])[1]);
+  const nHuerf = +((rech.salida.match(/(\d+) fichas huerfanas/) || [])[1] || 0);
+  const nFinal = +((rech.salida.match(/(\d+) PENDIENTES/) || [])[1] || 0);
+  const rechazoCuenta = Number.isFinite(nPlan) && nFinal === nPlan + nHuerf + 1;
   const ritaTrasRechazo = !!(await cuenta(UID.r)), fichaRitaTrasRechazo = (await db.doc('directorio/' + UID.r).get()).exists;
   const imp = correr(['--ejecutar', '--autorizar', UID.r], { env: { EMVAL_PRUEBA_IMPORTACION: 'autoprueba-ok' } });
   const ritaImportada = await cuenta(UID.r);
@@ -178,17 +244,50 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   console.log('5) Otra vez     → cuentas: ' + (f1 === f2 ? 'iguales ✓' : 'CAMBIARON ✗') + ' (exit ' + otra.status + ')');
   chequear(f1 === f2, 'correrla otra vez cambio cuentas que ya existian');
 
-  // 6. Deshacer la corrida 2
-  const des = correr(['--deshacer', path.join(DIR_RESP, respaldo2 || 'x')], { confirmar: 'DESHACER' });
+  // 6. Deshacer la corrida 2 (Codex, revision final, P1 nuevo 3)
+  const archivoResp2 = path.join(DIR_RESP, respaldo2 || 'x');
+  const r2 = respaldo2 ? JSON.parse(fs.readFileSync(archivoResp2, 'utf8')) : {};
+  // 6a. Un respaldo de OTRO proyecto, y uno de formato viejo (sin diario): no se toca nada.
+  const otroProy = path.join(DIR_RESP, 'prueba-otro-proyecto.json');
+  fs.writeFileSync(otroProy, JSON.stringify(Object.assign({}, r2, { proyecto: 'otro-proyecto' })));
+  const viejo = path.join(DIR_RESP, 'prueba-formato-viejo.json');
+  fs.writeFileSync(viejo, JSON.stringify({ creado: r2.creado, proyecto: r2.proyecto, creadas: [UID.a], directorio: [] }));
+  const dOtro = correr(['--deshacer', otroProy], { confirmar: 'DESHACER' });
+  const dViejo = correr(['--deshacer', viejo], { confirmar: 'DESHACER' });
+  const anaTrasNegativas = !!(await cuenta(UID.a));
+  console.log('6a) Deshacer    → respaldo de otro proyecto: ' + (dOtro.status === 2 && /proyecto/.test(dOtro.salida) ? 'se niega ✓' : 'exit ' + dOtro.status + ' ✗') +
+    ' · de formato viejo: ' + (dViejo.status === 2 && /formato viejo/.test(dViejo.salida) ? 'se niega ✓' : 'exit ' + dViejo.status + ' ✗') +
+    ' · cuenta de Ana: ' + (anaTrasNegativas ? 'sigue ✓' : 'BORRADA ✗'));
+  chequear(dOtro.status === 2 && /proyecto/.test(dOtro.salida) && anaTrasNegativas, '--deshacer aplico un respaldo de otro proyecto (Codex P1 nuevo 3)');
+  chequear(dViejo.status === 2 && /formato viejo/.test(dViejo.salida) && anaTrasNegativas, '--deshacer aplico un respaldo sin diario');
+  // 6b. Algo cambia DESPUES de la corrida 2 (la ficha de Beto) y se deshace la corrida 2.
+  // (set y no update: con una herramienta que ya la borro en 6a, la prueba falla en su tramo, no se cae)
+  await db.doc('directorio/' + UID.b).set(Object.assign({}, (await db.doc('directorio/' + UID.b).get()).data() || {}, { letra: 'Z' }));
+  const des = correr(['--deshacer', archivoResp2], { confirmar: 'DESHACER' });
   const anaBorrada = !(await cuenta(UID.a));
   const fichaAnaRest = (await db.doc('directorio/' + UID.a).get()).data() || {};
   const betoSigue = !!(await cuenta(UID.b));
-  const fichaBetoBorrada = !(await db.doc('directorio/' + UID.b).get()).exists;
-  console.log('6) Deshacer     → exit ' + des.status + ' · cuenta de Ana (la creo esa corrida): ' + (anaBorrada ? 'borrada ✓' : 'SIGUE ✗') +
+  const fichaBeto6 = (await db.doc('directorio/' + UID.b).get()).data() || null;
+  const otrosIntactos = !!(await cuenta(UID.p)) && !!(await cuenta(UID.s)) && ((await db.doc('directorio/' + UID.e).get()).data() || {}).cargo === 'Administrador';
+  console.log('6b) Deshacer    → exit ' + des.status + ' · cuenta de Ana (la creo esa corrida): ' + (anaBorrada ? 'borrada ✓' : 'SIGUE ✗') +
     ' · ficha de Ana: ' + (fichaAnaRest.nombre === 'Ana Vieja' && !('pin' in fichaAnaRest) ? 'la de antes, sin campos de mas ✓' : 'NO ✗') +
-    ' · cuenta de Beto (no la creo): ' + (betoSigue ? 'sigue ✓' : 'BORRADA ✗') + ' · ficha de Beto (la creo): ' + (fichaBetoBorrada ? 'borrada ✓' : 'SIGUE ✗'));
-  chequear(des.status === 0 && anaBorrada && betoSigue, '--deshacer no borro lo que creo esa corrida, o borro algo que no creo');
-  chequear(fichaAnaRest.nombre === 'Ana Vieja' && !('pin' in fichaAnaRest) && fichaBetoBorrada, '--deshacer no dejo el directorio como estaba');
+    ' · cuenta de Beto (no la creo): ' + (betoSigue ? 'sigue ✓' : 'BORRADA ✗') +
+    ' · ficha de Beto (cambio despues): ' + (fichaBeto6 && fichaBeto6.letra === 'Z' ? 'no la pisa ✓' : 'LA PISO ✗') +
+    ' · lo de otras corridas: ' + (otrosIntactos ? 'intacto ✓' : 'TOCADO ✗'));
+  chequear(anaBorrada && betoSigue, '--deshacer no borro lo que creo esa corrida, o borro algo que no creo');
+  chequear(fichaAnaRest.nombre === 'Ana Vieja' && !('pin' in fichaAnaRest), '--deshacer no dejo la ficha de Ana como estaba');
+  chequear(fichaBeto6 && fichaBeto6.letra === 'Z' && des.status === 2 && /cambio despues/.test(des.salida), '--deshacer piso una ficha que cambio despues de esa corrida, o no lo informo con exit 2 (Codex P1 nuevo 3)');
+  chequear(otrosIntactos, '--deshacer de la corrida 2 toco cuentas o fichas de otras corridas');
+  // 6c. La herramienta vuelve a crear la cuenta de Ana; repetir el deshacer NO la borra ni le pisa la ficha.
+  correr(['--ejecutar']);
+  const anaNueva = await cuenta(UID.a);
+  const des2 = correr(['--deshacer', archivoResp2], { confirmar: 'DESHACER' });
+  const anaSigue = await cuenta(UID.a);
+  const fichaAna7 = (await db.doc('directorio/' + UID.a).get()).data() || {};
+  const mismaCuenta = !!anaNueva && !!anaSigue && anaNueva.metadata.creationTime === anaSigue.metadata.creationTime;
+  console.log('6c) Otra vez    → la cuenta nueva de Ana: ' + (mismaCuenta ? 'sigue ✓' : 'BORRADA ✗') + ' · su ficha: ' +
+    (fichaAna7.nombre === 'Ana Prueba' ? 'no se revierte ✓' : 'REVERTIDA ✗') + ' · exit ' + des2.status + (des2.status === 2 ? ' ✓' : ' ✗'));
+  chequear(mismaCuenta && fichaAna7.nombre === 'Ana Prueba' && des2.status === 2, 'repetir --deshacer despues de cambios posteriores volvio a aplicar el estado viejo (Codex P1 nuevo 3)');
 
   // 7. Modo emulador incompleto
   const g1 = correr([], { sacar: ['FIREBASE_AUTH_EMULATOR_HOST'] });
@@ -201,8 +300,11 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   // 8. Sin secretos
   const textoResp = respaldos().map(f => fs.readFileSync(path.join(DIR_RESP, f), 'utf8')).join('\n');
   const fuga = SECRETOS.concat([quemado || '¬']).filter(s => (salidas.join('\n') + textoResp).includes(s));
-  console.log('8) Sin secretos → salida y respaldos: ' + (fuga.length ? fuga.length + ' FUGAS ✗' : 'ninguno ✓'));
+  const correoImpreso = salidas.join('\n').includes(CORREO_REAL_M);
+  console.log('8) Sin secretos → salida y respaldos: ' + (fuga.length ? fuga.length + ' FUGAS ✗' : 'ninguno ✓') +
+    ' · correo real en la salida: ' + (correoImpreso ? 'IMPRESO ✗' : 'no ✓'));
   chequear(fuga.length === 0, 'la salida o un respaldo muestran un PIN, una clave o un hash (' + fuga.length + ')');
+  chequear(!correoImpreso, 'la herramienta imprimio el correo real de una cuenta');
 
   console.log('');
   if (fallos.length) { console.log('FALLA (' + fallos.length + '):'); fallos.forEach(f => console.log(f)); process.exit(1); }
