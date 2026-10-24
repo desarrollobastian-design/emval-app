@@ -4191,8 +4191,19 @@ function _esTimeout(e) {
 function _fetchConTimeout(url, opts, ms) {
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, ms || 30000);
-  return fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal }))
-    .finally(function(){ clearTimeout(to); });
+  return fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal })).then(function(resp) {
+    /* EL CUERPO TAMBIEN CORRE CONTRA EL MISMO PLAZO (revision de Codex, ronda 5). Antes el temporizador se
+       cortaba al llegar las cabeceras y `resp.json()` podia quedar colgado sin limite: con las colas de una
+       sola corrida, eso dejaba la cola trabada hasta recargar. Ahora el plazo se corta recien cuando el
+       cuerpo termino de leerse; si vence antes, la lectura falla (AbortError) como cualquier corte. Si
+       nadie lee el cuerpo (un HEAD), el plazo vence sobre una respuesta ya usada: no hace nada. */
+    ['json', 'text', 'blob', 'arrayBuffer'].forEach(function(m) {
+      if (typeof resp[m] !== 'function') return;
+      var leer = resp[m].bind(resp);
+      resp[m] = function() { return leer().finally(function(){ clearTimeout(to); }); };
+    });
+    return resp;
+  }, function(e) { clearTimeout(to); throw e; });
 }
 
 async function subirCloudinary(dataUrl, carpeta, nombre) {
@@ -16763,8 +16774,12 @@ async function sincronizarEnlacesPDFPendientes() {
      lista un enlace encolado mientras tanto.
      Si piden otra mientras corre, se hace UNA mas al terminar, para no perder la que la pidio. */
   var yo = sincronizarEnlacesPDFPendientes;
-  if (yo._corriendo) { yo._otraVez = true; return; }
+  // Guardian (revision de Codex, ronda 5): una corrida que lleva mas de 15 min se da por colgada y se libera,
+  // para que una promesa que nunca termina no deje la cola trabada hasta recargar.
+  if (yo._corriendo && Date.now() - (yo._desde || 0) < 15 * 60000) { yo._otraVez = true; return; }
   yo._corriendo = true;
+  yo._desde = Date.now();
+  var turno = yo._turno = (yo._turno || 0) + 1;   // solo esta corrida libera su candado
   try {
   await (async function() {
     if (!navigator.onLine || !window._firebaseReady) return;
@@ -16840,8 +16855,11 @@ async function sincronizarEnlacesPDFPendientes() {
     _escribirEnlacesPDFPendientes(quedan);
   })();
   } finally {
-    yo._corriendo = false;
-    if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
+    // Si el guardian ya la dio por colgada y corre otra, esta no le suelta el candado a la otra.
+    if (yo._turno === turno) {
+      yo._corriendo = false;
+      if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
+    }
   }
 }
 
@@ -17041,8 +17059,12 @@ async function sincronizarOTsPendientes() {
      a la vez leian lo mismo y escribian dos veces (la segunda pisaba una correccion posterior).
      Si piden otra mientras corre, se hace UNA mas al terminar, para no perder la que la pidio. */
   var yo = sincronizarOTsPendientes;
-  if (yo._corriendo) { yo._otraVez = true; return; }
+  // Guardian (revision de Codex, ronda 5): una corrida que lleva mas de 15 min se da por colgada y se libera,
+  // para que una promesa que nunca termina no deje la cola trabada hasta recargar.
+  if (yo._corriendo && Date.now() - (yo._desde || 0) < 15 * 60000) { yo._otraVez = true; return; }
   yo._corriendo = true;
+  yo._desde = Date.now();
+  var turno = yo._turno = (yo._turno || 0) + 1;   // solo esta corrida libera su candado
   try {
   await (async function() {
     // Un servidor que ya pidio sesion (etapa 2) y no hay sesion: no se intenta. Cada intento sube las
@@ -17249,8 +17271,11 @@ async function sincronizarOTsPendientes() {
     actualizarIndicadorPendientes();
   })();
   } finally {
-    yo._corriendo = false;
-    if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
+    // Si el guardian ya la dio por colgada y corre otra, esta no le suelta el candado a la otra.
+    if (yo._turno === turno) {
+      yo._corriendo = false;
+      if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
+    }
   }
 }
 

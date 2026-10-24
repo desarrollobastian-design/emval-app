@@ -23,6 +23,8 @@
       abre en 3 vueltas con señal, se avisa UNA vez (revisor, ronda 4).
    7. (Ronda 4) Dos corridas a la vez de la misma cola: una sola sube y escribe; la otra corre despues y
       ve la hoja ya firmada.
+   8. (Ronda 5) Guardian: un candado tomado hace mas de 15 min (una corrida colgada) no deja la cola
+      trabada: la corrida nueva corre. Uno recien tomado si la frena.
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -112,6 +114,7 @@ async function correr(docs, ot, opciones) {
   const silencio = async (p) => { const a = console.error, b = console.warn, c = console.log; console.error = () => {}; console.warn = () => {}; console.log = () => {};
     try { return await p(); } finally { console.error = a; console.warn = b; console.log = c; } };
   console.error = _log; console.warn = _warn;
+  if (opciones.antes) opciones.antes(fn);
   if (opciones.concurrentes) await silencio(async () => { await Promise.all([fn(), fn()]); await new Promise(res => setTimeout(res, 150)); });
   else await silencio(fn);
   return Object.assign(r, { escrituras: nube.escrituras, lecturas: nube.lecturas, docs: nube.docs, otra: () => silencio(fn) });
@@ -204,6 +207,14 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
     ' · la segunda: ' + (g7.eliminadas.length >= 1 ? 'corre despues y la ve arriba ✓' : 'NO CORRIO ✗'));
   chequear(g7.subidas === 3 && sets7 === 1, 'dos corridas a la vez de la cola subieron y escribieron la misma OT dos veces (Codex, ronda 4)');
   chequear(g7.eliminadas.length >= 1, 'con dos corridas a la vez, la OT no salio de la cola');
+
+  // 8. Guardian del candado
+  const h8 = await correr({}, otCola(), { antes: fn => { fn._corriendo = true; fn._desde = Date.now() - 16 * 60000; } });
+  const h8b = await correr({}, otCola(), { antes: fn => { fn._corriendo = true; fn._desde = Date.now(); } });
+  console.log('8) Guardian             → candado de hace 16 min: ' + (h8.subidas === 3 && h8.eliminadas.length === 1 ? 'se libera y la cola corre ✓' : 'LA COLA SIGUE TRABADA ✗') +
+    ' · candado recien tomado: ' + (h8b.subidas === 0 ? 'sigue frenando ✓' : 'NO FRENA ✗'));
+  chequear(h8.subidas === 3 && h8.eliminadas.length === 1, 'una corrida colgada deja la cola trabada para siempre (sin guardian) (Codex, ronda 5)');
+  chequear(h8b.subidas === 0, 'el guardian libera un candado recien tomado: dos corridas a la vez otra vez');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });
