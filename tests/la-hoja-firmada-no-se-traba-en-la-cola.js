@@ -27,6 +27,8 @@
       trabada: la corrida nueva corre. Uno recien tomado si la frena.
    9. (Ronda 6) La corrida VIEJA que el guardian dejo atras y despierta tarde no escribe: no pisa la OT
       que ya subio la nueva ni una correccion posterior (reloj simulado, sin reglas, como la etapa 1).
+  10. (24-10-2026) Una foto que no sube (Cloudinary devuelve null): esa OT NO se sube sin ella ni sale de la
+      cola; se avisa; y la OT que viene detras sube igual (no la traba).
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -96,10 +98,11 @@ async function correr(docs, ot, opciones) {
   const window = { firebase: nube.firebase, _firebaseReady: true };
   const deps = {
     navigator: { onLine: true }, window, document: { getElementById: () => null },
-    _obtenerOTsPendientes: async () => [ot],
+    _obtenerOTsPendientes: async () => opciones.ots || [ot],
     toast: () => {}, actualizarIndicadorPendientes: () => {},
     subirCloudinary: async (b, n, nombre) => {
       if (opciones.compuerta) { const g = opciones.compuerta; opciones.compuerta = null; await g; }   // la primera subida se queda dormida
+      if (opciones.fotoQueFalla && nombre === opciones.fotoQueFalla && n === opciones.otQueFalla) return null;   // Cloudinary no la acepto
       r.subidas++; return 'https://res.cloudinary.com/x/nueva_' + nombre;
     },
     _subirPDFaCloudinary: async () => { r.pdfs++; return 'https://res.cloudinary.com/x/hoja_nueva.pdf'; },
@@ -240,6 +243,18 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
     (escribioLaVieja === 0 ? 'no escribe ✓' : escribioLaVieja + ' escrituras ✗') + ' · la correccion: ' + (correccionIntacta ? 'intacta ✓' : 'PISADA ✗'));
   chequear(nuevaEscribio, 'la corrida nueva (por el guardian) no subio la OT');
   chequear(escribioLaVieja === 0 && correccionIntacta, 'la corrida vieja que el guardian dejo atras escribio al despertar y piso una correccion posterior (Codex, ronda 6)');
+
+  // 10. Una foto que no sube
+  const otA = otCola(), otB = otCola({ id: 42, clientId: 'cli_2', numero: 777001 });
+  const p10 = await correr({}, otA, { ots: [otA, otB], fotoQueFalla: 'despues_0.jpg', otQueFalla: otA.numero });
+  const aEscrita = !!p10.docs.cli_1, bEscrita = !!(p10.docs.cli_2 && p10.docs.cli_2.firmada === true);
+  const aSeQueda = p10.eliminadas.indexOf(41) < 0, bSale = p10.eliminadas.indexOf(42) >= 0;
+  const avisa = p10.errores.some(e => /Una foto no subió/.test(e));
+  console.log('10) Foto que no sube    → la OT: ' + (!aEscrita && aSeQueda ? 'no se sube sin ella y se queda en la cola ✓' : (aEscrita ? 'SE SUBIO SIN LA FOTO' : '') + (aSeQueda ? '' : ' SALIO DE LA COLA') + ' ✗') +
+    ' · aviso: ' + (avisa ? 'si ✓' : 'NO ✗') + ' · la de atras: ' + (bEscrita && bSale ? 'sube igual ✓' : 'TRABADA ✗'));
+  chequear(!aEscrita && aSeQueda, 'una foto que no subio se perdio: la OT se subio sin ella o salio de la cola con su base64 (regla 4)');
+  chequear(avisa, 'cuando una foto no sube no se le avisa al tecnico');
+  chequear(bEscrita && bSale, 'la OT de una foto que no sube traba a las que vienen detras');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });

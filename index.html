@@ -17143,6 +17143,15 @@ async function sincronizarOTsPendientes() {
         }
 
         var urlsAntes = [], urlsDespues = [], urlTimbre = null, urlsAudio = [];
+        /* UNA FOTO QUE NO SUBE ES UNA FALLA DE ESTA VUELTA (24-10-2026). `subirCloudinary` devuelve null ante un
+           corte, un plazo vencido o un rechazo de Cloudinary, y antes la cola la omitia: subia la OT sin esa
+           foto y la borraba del telefono con su base64 (regla 4). Ahora la OT se queda en la cola, con todas
+           sus fotos, y se reintenta en la vuelta siguiente. */
+        var _subirOFallar = async function(dato, nombre) {
+          var u = await subirCloudinary(dato, ot.numero, nombre);
+          if (!u) throw Object.assign(new Error('no se pudo subir ' + nombre), { code: 'foto-no-subio' });
+          return u;
+        };
         if (yaFirmada) {
           urlsAntes = yaFirmada.fotosAntes || [];
           urlsDespues = yaFirmada.fotosDespues || [];
@@ -17150,20 +17159,17 @@ async function sincronizarOTsPendientes() {
         } else {
           for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
             if (!ot.fotosAntes[i]) continue;
-            var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
-            if (u) urlsAntes.push(u);
+            urlsAntes.push(await _subirOFallar(ot.fotosAntes[i], 'antes_' + i + '.jpg'));
           }
           for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
             if (!ot.fotosDespues[i]) continue;
-            var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
-            if (u) urlsDespues.push(u);
+            urlsDespues.push(await _subirOFallar(ot.fotosDespues[i], 'despues_' + i + '.jpg'));
           }
-          if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
+          if (ot.fotoTimbre) urlTimbre = await _subirOFallar(ot.fotoTimbre, 'timbre.jpg');
 
           for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
             var a = ot.audiosBase64[i];
-            var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
-            if (u) urlsAudio.push(u);
+            urlsAudio.push(await _subirOFallar(a.data, 'audio_' + i + '.' + a.ext));
           }
 
           var otDoc = {
@@ -17283,6 +17289,15 @@ async function sincronizarOTsPendientes() {
           if (!_otsRechazadasAvisadas[ot.id]) {
             _otsRechazadasAvisadas[ot.id] = true;
             _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+          }
+          continue;
+        }
+        if (err && err.code === 'foto-no-subio') {
+          // Se queda esta OT; las demas siguen (si es la señal, fallaran igual; si Cloudinary rechaza esta foto,
+          // no traba a las que vienen detras). Un aviso por OT mientras la app este abierta.
+          if (!_otsRechazadasAvisadas['foto-' + ot.id]) {
+            _otsRechazadasAvisadas['foto-' + ot.id] = true;
+            _error('subir las fotos de la OT #' + ot.numero, null, 'Una foto no subió. La OT queda guardada en el teléfono con todas sus fotos y se reintentará sola.');
           }
           continue;
         }
