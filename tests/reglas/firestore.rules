@@ -81,7 +81,10 @@ service cloud.firestore {
     }
     match /ordenes/{id} {
       allow read: if esUsuario();
-      allow create: if esUsuario() && request.resource.data.get('tecnico', '') is string && subidoPorEsQuienEscribe();
+      // Con el campo `tecnico` (texto) siempre: asi tampoco nace una orden fantasma con solo el enlace
+      // del PDF (el set(merge) de guardarYEnviarPDF cuando la OT todavia no subio; el enlace se encola).
+      allow create: if esUsuario() && ('tecnico' in request.resource.data) && request.resource.data.tecnico is string
+        && subidoPorEsQuienEscribe();
       allow update: if esUsuario() && noDesfirma() && (
         esPanel() ||
         (mismoTecnico() && (

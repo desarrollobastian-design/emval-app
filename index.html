@@ -17019,6 +17019,8 @@ function cerrarModalCorreos(ev) {
 
 async function sincronizarOTsPendientes() {
   if (!navigator.onLine || !window._firebaseReady) return;
+  // ot.id -> ya se le aviso al tecnico que el servidor no la acepto (vive mientras la app este abierta)
+  var _otsRechazadasAvisadas = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
   var pendientes;
   try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
   if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
@@ -17044,6 +17046,14 @@ async function sincronizarOTsPendientes() {
       var yaFirmada = null;
       if (ot.clientId) {
         var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get(), 25000, 'sync leer OT');
+        /* OJO con la compensacion local: si el `set` del cierre original sigue PENDIENTE en el SDK (el
+           cierre sin señal de siempre), esta lectura ya la muestra "firmada" aunque el servidor todavia
+           no la tenga. Darla por subida con eso borraria de la cola algo que no salio (regla 4). Se
+           deja para la vuelta siguiente, sin subir ni reescribir nada: el SDK la envia solo. */
+        if (_arriba.metadata && _arriba.metadata.hasPendingWrites) {
+          console.log('OT #' + ot.numero + ': su escritura anterior sigue en camino; se confirma en la proxima vuelta.');
+          continue;
+        }
         if (_arriba.exists && (_arriba.data() || {}).firmada === true) yaFirmada = _arriba.data() || {};
       }
 
@@ -17161,7 +17171,11 @@ async function sincronizarOTsPendientes() {
       // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
       // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.
       if (err && err.code === 'permission-denied') {
-        _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+        // Una vez por OT y por sesion de la app, no en cada vuelta de 90 s (revisor del PR #64, punto 11).
+        if (!_otsRechazadasAvisadas[ot.id]) {
+          _otsRechazadasAvisadas[ot.id] = true;
+          _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+        }
         continue;
       }
       _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');

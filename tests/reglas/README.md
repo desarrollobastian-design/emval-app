@@ -47,7 +47,7 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
 
 | Qué | Comando | Tiene que dar |
 |---|---|---|
-| Reglas de la etapa 2 (76 casos, con los ataques de las dos revisiones de Codex) | `npm run reglas` | `OK`, exit 0 |
+| Reglas de la etapa 2 (78 casos, con los ataques de las revisiones de Codex y del revisor) | `npm run reglas` | `OK`, exit 0 |
 | **Contraprueba**: las mismas pruebas con las reglas de hoy (`capa1-referencia.rules`, reconstrucción) | `npm run reglas-capa1` | `FALLA`, exit 1 |
 | Transición de la etapa 1, paso 1b (10 casos, con su contraprueba adentro) | `npm run transicion` | `OK`, exit 0 |
 | Herramienta de cuentas (tramos 1 a 8, con 2b, 2c, 3b, 4b y 6a a 6c) | `npm run cuentas` | `OK`, exit 0 |
@@ -64,6 +64,9 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
     - en una hoja firmada, un técnico **rellena** el PDF vacío; no lo reemplaza, no sube la generación y
       no toca la hoja que subió otra sesión (`subidoPor`);
     - `subidoPor` solo puede ser la sesión que escribe;
+    - una orden nace siempre con el campo `tecnico`: no nace una fantasma con solo el enlace del PDF;
+    - el payload real con el que la cola vieja reintentaba una hoja firmada (fotos resubidas) se niega a
+      propósito; la app ya no lo manda (`tests/la-hoja-firmada-no-se-traba-en-la-cola.js`);
     - «Realizada» va una sola vez, sin cambiar el vínculo, y solo con una hoja firmada que declara esa
       cotización y que subió la sesión que escribe (o cuyo técnico es quien escribe).
   - `directorio` y `tecnicos` no los escribe nadie desde la app: solo el Admin SDK.

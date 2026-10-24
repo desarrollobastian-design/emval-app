@@ -11,6 +11,9 @@
       rellena el enlace del PDF; sale de la cola y no hay rechazo.
    2. La OT ya firmada arriba CON enlace: tampoco se vuelve a subir el PDF; el aviso usa ese enlace.
    3. La OT que no esta arriba: el camino de siempre (sube fotos, la crea firmada con `subidoPor`).
+   4. La escritura del cierre SIGUE PENDIENTE en el SDK (la lectura la ve firmada solo por la
+      compensacion local): la OT NO sale de la cola (regla 4) y no se sube ni se escribe nada; se
+      confirma en la vuelta siguiente.
 
    Uso:  node tests/la-hoja-firmada-no-se-traba-en-la-cola.js index.html
    Sale 0 si todo se cumple; 1 si no. */
@@ -48,7 +51,11 @@ function crearNube(docs) {
   }
   const ref = (col, id) => ({
     id,
-    get: async () => ({ exists: !!docs[id], data: () => docs[id] ? JSON.parse(JSON.stringify(docs[id])) : undefined }),
+    get: async () => {
+      const d = docs[id] ? JSON.parse(JSON.stringify(docs[id])) : undefined;
+      const pendiente = !!(d && d.__pendiente); if (d) delete d.__pendiente;
+      return { exists: !!d, data: () => d, metadata: { hasPendingWrites: pendiente } };
+    },
     set: async (d, op) => { revisar(id, d); escrituras.push({ id, campos: Object.keys(d) }); docs[id] = Object.assign(op && op.merge ? (docs[id] || {}) : {}, d); },
     update: async d => {
       if (!docs[id]) throw Object.assign(new Error('no existe'), { code: 'not-found' });
@@ -127,6 +134,14 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
     (creada.firmada === true && creada.subidoPor === 'u_tec' ? 'creada firmada, con subidoPor ✓' : 'NO ✗') + ' · cola: ' + (c.eliminadas.length === 1 ? 'sale ✓' : 'SE QUEDA ✗'));
   chequear(c.subidas === 3 && creada.firmada === true && c.eliminadas.length === 1, 'la OT que no estaba arriba no se subio por el camino de siempre');
   chequear(creada.subidoPor === 'u_tec', 'la hoja subida desde la cola no dice que sesion la subio (subidoPor)');
+
+  // 4. La escritura del cierre sigue pendiente en el SDK
+  const d = await correr({ cli_1: arriba({ __pendiente: true }) }, otCola());
+  const escribio = d.escrituras.length;
+  console.log('4) Escritura pendiente → cola: ' + (d.eliminadas.length === 0 ? 'se queda ✓' : 'LA BORRA SIN CONFIRMAR ✗') +
+    ' · subidas: ' + (d.subidas === 0 && d.pdfs === 0 ? 'ninguna ✓' : (d.subidas + d.pdfs) + ' ✗') + ' · escrituras: ' + (escribio === 0 ? 'ninguna ✓' : escribio + ' ✗'));
+  chequear(d.eliminadas.length === 0, 'con la escritura del cierre todavia pendiente en el SDK, la OT se saco de la cola sin que el servidor la tuviera (regla 4)');
+  chequear(d.subidas === 0 && d.pdfs === 0 && escribio === 0, 'con la escritura pendiente se volvio a subir o a escribir');
 
   terminar();
 })().catch(e => { console.error('FALLA — la prueba se cayo:', e && e.message); process.exit(1); });

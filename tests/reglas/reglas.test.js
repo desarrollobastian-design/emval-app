@@ -92,7 +92,8 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     ['tecnico desactivado NO se reactiva', () => updateDoc(doc(baja, 'directorio/u_baja'), { activo: true }), false],
     // ── tecnico ──
     ['tecnico lee ordenes (consulta pausa==true, no filtra por tecnico)', () => getDocs(query(collection(tec, 'ordenes'), where('pausa', '==', true))), true],
-    ['tecnico crea una orden', () => setDoc(doc(tec, 'ordenes/o_nueva'), { numero: 10, pausa: false, firmada: true }), true],
+    ['tecnico crea una orden', () => setDoc(doc(tec, 'ordenes/o_nueva'), { numero: 10, pausa: false, firmada: true, tecnico: 'Tomas Prueba' }), true],
+    ['tecnico NO crea una orden sin el campo tecnico (fantasma con solo el enlace del PDF)', () => setDoc(doc(tec, 'ordenes/o_fantasma'), { pdfUrlCloudinary: 'x', pdfHojaGen: 1 }, { merge: true }), false],
     ['tecnico rellena el enlace vacio del PDF (hoja anterior a subidoPor)', () => updateDoc(doc(tec, 'ordenes/o_firmada'), { pdfUrlCloudinary: 'x' }), true],
     ['tecnico borra una pausada', () => deleteDoc(doc(tec, 'ordenes/o_pausa')), true],
     ['tecnico NO borra una hoja firmada', () => deleteDoc(doc(tec, 'ordenes/o_firmada')), false],
@@ -145,6 +146,16 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     ['tecnico NO sube la generacion del PDF (regenerar es del panel)', () => updateDoc(doc(tec, 'ordenes/o_con_pdf'), { pdfHojaGen: 2 }), false],
     ['tecnico NO rellena el PDF de una hoja firmada que subio otra sesion', () => updateDoc(doc(tec, 'ordenes/o_ajena'), { pdfUrlCloudinary: 'x' }), false],
     ['tecnico NO se pone de subidoPor en una hoja firmada ajena', () => updateDoc(doc(tec, 'ordenes/o_ajena'), { subidoPor: 'u_tec' }), false],
+    // El payload REAL que mandaba sincronizarOTsPendientes hasta bf16f79 al reintentar una hoja que ya
+    // estaba firmada: fotos re-subidas (URL nueva) y todo el contenido. La regla lo niega a proposito
+    // (el contenido firmado no se reescribe); la app ya no lo manda: lee primero y, si esta firmada, solo
+    // rellena el PDF (tests/la-hoja-firmada-no-se-traba-en-la-cola.js). Revisor y Codex, 24-10-2026.
+    ['la cola NO reescribe las fotos ni la firma de una hoja ya firmada (payload real del reintento viejo)', () => setDoc(doc(tec, 'ordenes/o_propia'), {
+      numero: 13, local: 'Local Prueba', tipo: 'correctivo', tecnico: 'Otro Prueba', fecha: '24-10-2026', descripcionProblema: '', ceco: '',
+      descripcionTrabajo: 'x', pendientesMateriales: '', numEquipos: '', serviciosPreventivo: [],
+      fotosAntes: ['https://res.cloudinary.com/x/nueva_antes_0.jpg'], fotosDespues: ['https://res.cloudinary.com/x/nueva_despues_0.jpg'],
+      fotoTimbre: 'https://res.cloudinary.com/x/nueva_timbre.jpg', audios: [], firmada: true, firmaImagen: 'data:firma',
+      pausa: false, enEspera: false, estado: 'Terminada', creadoEn: new Date(), subidoPor: 'u_tec' }, { merge: true }), false],
     ['tecnico rellena el PDF de la hoja que subio su sesion (telefono compartido)', () => updateDoc(doc(tec, 'ordenes/o_propia'), { pdfUrl: 'p', pdfUrlCloudinary: 'c', pdfHojaGen: 1 }), true],
     ['tecnico NO crea una orden con la sesion de otro en subidoPor', () => setDoc(doc(tec, 'ordenes/o_nueva_ajena'), { numero: 17, firmada: true, tecnico: 'Tomas Prueba', subidoPor: 'u_otro' }), false],
     ['tecnico crea una orden con su sesion en subidoPor', () => setDoc(doc(tec, 'ordenes/o_nueva_propia'), { numero: 18, firmada: true, tecnico: 'Tomas Prueba', subidoPor: 'u_tec' }), true],
