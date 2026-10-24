@@ -258,14 +258,20 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   fs.writeFileSync(otroProy, JSON.stringify(Object.assign({}, r2, { proyecto: 'otro-proyecto' })));
   const viejo = path.join(DIR_RESP, 'prueba-formato-viejo.json');
   fs.writeFileSync(viejo, JSON.stringify({ creado: r2.creado, proyecto: r2.proyecto, creadas: [UID.a], directorio: [] }));
+  // Formato 2: el de la herramienta de 74606f5..7b61086 (revisor, ronda 4): se rechaza, no se adivina.
+  const formato2 = path.join(DIR_RESP, 'prueba-formato-2.json');
+  fs.writeFileSync(formato2, JSON.stringify(Object.assign({}, r2, { formato: 2 })));
+  const dF2 = correr(['--deshacer', formato2], { confirmar: 'DESHACER' });
   const dOtro = correr(['--deshacer', otroProy], { confirmar: 'DESHACER' });
   const dViejo = correr(['--deshacer', viejo], { confirmar: 'DESHACER' });
   const anaTrasNegativas = !!(await cuenta(UID.a));
   console.log('6a) Deshacer    → respaldo de otro proyecto: ' + (dOtro.status === 2 && /proyecto/.test(dOtro.salida) ? 'se niega ✓' : 'exit ' + dOtro.status + ' ✗') +
     ' · de formato viejo: ' + (dViejo.status === 2 && /formato viejo/.test(dViejo.salida) ? 'se niega ✓' : 'exit ' + dViejo.status + ' ✗') +
+    ' · de formato 2: ' + (dF2.status === 2 && /formato 2/.test(dF2.salida) ? 'se niega ✓' : 'exit ' + dF2.status + ' ✗') +
     ' · cuenta de Ana: ' + (anaTrasNegativas ? 'sigue ✓' : 'BORRADA ✗'));
   chequear(dOtro.status === 2 && /proyecto/.test(dOtro.salida) && anaTrasNegativas, '--deshacer aplico un respaldo de otro proyecto (Codex P1 nuevo 3)');
   chequear(dViejo.status === 2 && /formato viejo/.test(dViejo.salida) && anaTrasNegativas, '--deshacer aplico un respaldo sin diario');
+  chequear(dF2.status === 2 && /formato 2/.test(dF2.salida) && anaTrasNegativas, '--deshacer acepto un respaldo de formato 2 (sin el estado de las cuentas) (revisor, ronda 4)');
   // 6b. Algo cambia DESPUES de la corrida 2 (la ficha de Beto) y se deshace la corrida 2.
   // (set y no update: con una herramienta que ya la borro en 6a, la prueba falla en su tramo, no se cae)
   await db.doc('directorio/' + UID.b).set(Object.assign({}, (await db.doc('directorio/' + UID.b).get()).data() || {}, { letra: 'Z' }));

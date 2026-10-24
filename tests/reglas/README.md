@@ -92,7 +92,8 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
     - **3b:** las fichas de personas omitidas y las huérfanas también quedan solo con los campos
       permitidos; la huérfana se informa.
   - `--deshacer` (**6a a 6c**):
-    - se niega con un respaldo de otro proyecto o de formato viejo;
+    - se niega con un respaldo de otro proyecto, de formato viejo o de formato 2. Solo acepta el formato 3,
+      que guarda en el diario el estado de cada cuenta creada (revisor, ronda 4);
     - revierte SOLO lo que esa corrida cambió (su diario) y no pisa lo que cambió después;
     - repetido después de que la herramienta vuelve a crear la cuenta, no la borra ni le pisa la ficha;
     - (ronda 3 de Codex) si la ficha de alguien que creó esa corrida cambió después, su cuenta tampoco se

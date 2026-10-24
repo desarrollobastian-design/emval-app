@@ -17047,7 +17047,18 @@ async function sincronizarOTsPendientes() {
   await (async function() {
     // Un servidor que ya pidio sesion (etapa 2) y no hay sesion: no se intenta. Cada intento sube las
     // fotos a Cloudinary para que lo rechacen. Se espera la sesion: al abrirse, la cola vuelve a correr.
-    if (yo._servidorPideSesion && typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase()) return;
+    // Con tope (revisor, ronda 4): si tras 3 vueltas CON señal la sesion sigue sin abrirse (aunque venga
+    // "en camino"), se avisa una vez: el tecnico no se queda sin saber que lo suyo no sube.
+    if (yo._servidorPideSesion && typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase()) {
+      if (navigator.onLine) yo._vueltasSinSesion = (yo._vueltasSinSesion || 0) + 1;
+      var _avisos = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
+      if (yo._vueltasSinSesion >= 3 && !_avisos['sin-sesion']) {
+        _avisos['sin-sesion'] = true;
+        _error('subir lo pendiente', null, 'Falta entrar con señal en este teléfono para subir lo pendiente. Queda guardada.');
+      }
+      return;
+    }
+    yo._vueltasSinSesion = 0;
     if (!navigator.onLine || !window._firebaseReady) return;
     // ot.id -> ya se le aviso al tecnico que el servidor no la acepto (vive mientras la app este abierta)
     var _otsRechazadasAvisadas = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
@@ -17079,11 +17090,12 @@ async function sincronizarOTsPendientes() {
              sacaba la OT de la cola aunque el servidor ya no la tuviera (p. ej., la borro el panel). Sin
              señal, esta lectura falla y la OT se queda para la vuelta siguiente, como cualquier corte. */
           var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get({ source: 'server' }), 25000, 'sync leer OT');
-          /* OJO con la compensacion local, que se aplica TAMBIEN a la lectura del servidor: si el `set` del
-             cierre original sigue PENDIENTE en el SDK (el cierre sin señal de siempre), esta lectura ya la
-             muestra "firmada" aunque el servidor todavia no la tenga. Darla por subida con eso borraria de
-             la cola algo que no salio (regla 4). Se deja para la vuelta siguiente, sin subir ni reescribir
-             nada: el SDK la envia solo. Y una lectura que diga venir de la cache tampoco se acepta. */
+          /* OJO con la compensacion local: si el `set` del cierre original sigue PENDIENTE en el SDK (el
+             cierre sin señal de siempre), una lectura puede mostrarla "firmada" aunque el servidor todavia
+             no la tenga (comprobado con `get()` en el emulador; con `source: 'server'` no se pudo
+             demostrar ni descartar, revisor ronda 4). Darla por subida con eso borraria de la cola algo
+             que no salio (regla 4): con escrituras pendientes, o con una lectura que diga venir de la
+             cache, se deja para la vuelta siguiente, sin subir ni reescribir nada. El SDK la envia solo. */
           if (_arriba.metadata && (_arriba.metadata.hasPendingWrites || _arriba.metadata.fromCache)) {
             console.log('OT #' + ot.numero + ': su escritura anterior sigue en camino; se confirma en la proxima vuelta.');
             continue;

@@ -237,7 +237,9 @@ async function principal() {
 
   // ── Respaldo (sin secretos) y DIARIO de cada cambio de esta corrida, con su antes y su despues ──
   // --deshacer usa SOLO el diario: revierte lo que esta corrida cambio y nada mas (Codex, revision final).
-  const resp = { formato: 2, creado: new Date().toISOString(), proyecto: proyecto, modo: modo,
+  // Formato 3 (revisor, ronda 4): el diario guarda el estado de cada cuenta creada. Un respaldo de
+  // formato 2 no lo trae y --deshacer lo rechaza: no adivina.
+  const resp = { formato: 3, creado: new Date().toISOString(), proyecto: proyecto, modo: modo,
     cuentas: [], directorio: [], diario: [] };
   for (const p of plan) {
     try { resp.cuentas.push(cuentaParaRespaldo(await auth.getUser(p.uid))); } catch (e) {}
@@ -363,7 +365,8 @@ async function principal() {
 }
 
 // Deshace una corrida con su respaldo (Codex, revision final del PR #64):
-//  - solo un respaldo con diario (formato 2) y del MISMO proyecto al que esta conectada;
+//  - solo un respaldo de formato 3 (diario con el estado de cada cuenta) y del MISMO proyecto al que esta
+//    conectada; uno de otro formato se rechaza explicitamente;
 //  - revierte cada cambio del diario solo si sigue como lo dejo esa corrida; si cambio despues, NO lo
 //    pisa: lo informa y sale con 2;
 //  - por persona, ficha y cuenta se deciden JUNTAS: si cualquiera cambio despues (la cuenta se volvio a
@@ -372,8 +375,9 @@ async function principal() {
 async function deshacer(db, auth, modo, proyecto) {
   const r = JSON.parse(fs.readFileSync(path.resolve(DESHACER), 'utf8'));
   console.log('cuentas-auth · ' + modo + ' · DESHACER ' + DESHACER);
-  if (r.formato !== 2 || !Array.isArray(r.diario)) {
-    console.log('⛔ Respaldo sin diario (formato viejo): no se deshace solo. Revisarlo a mano. No se cambio nada.');
+  if (r.formato !== 3 || !Array.isArray(r.diario)) {
+    console.log('⛔ Respaldo de ' + (r.formato ? 'formato ' + r.formato + ', de una version anterior de esta herramienta' : 'formato viejo, sin diario') +
+      ': no se deshace solo (no trae lo que hace falta para no pisar cambios). Revisarlo a mano. No se cambio nada.');
     process.exit(2);
   }
   if (r.proyecto !== proyecto) {

@@ -19,7 +19,8 @@
    6. Rechazo sin sesion de Firebase: si la sesion viene en camino (quien entro sin señal), no se avisa
       nada; si no, el aviso dice que hay que entrar con señal (no "avisale a CorexOn"). La OT se queda.
       (Ronda 4) Mientras no haya sesion, NO se vuelve a intentar (no se suben fotos para nada); y ese aviso
-      no tapa un rechazo distinto que llegue despues, con sesion.
+      no tapa un rechazo distinto que llegue despues, con sesion. Con tope: si la sesion "en camino" no se
+      abre en 3 vueltas con señal, se avisa UNA vez (revisor, ronda 4).
    7. (Ronda 4) Dos corridas a la vez de la misma cola: una sola sube y escribe; la otra corre despues y
       ve la hoja ya firmada.
 
@@ -178,6 +179,8 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
   const subidas6a = f6a.subidas; await f6a.otra();                        // otra vuelta, todavia sin sesion
   const enCamino = f6a.errores.length === 0 && f6a.eliminadas.length === 0;
   const suspende6a = f6a.subidas === subidas6a;
+  await f6a.otra(); await f6a.otra(); await f6a.otra();                  // tres vueltas mas, con señal y sin sesion
+  const conTope = f6a.errores.length === 1 && /entrar con señal/.test(f6a.errores[0]) && f6a.subidas === subidas6a;
   const o6b = { sinSesion: true };
   const f6b = await correr({}, otCola(), o6b);
   const diceSenal = f6b.errores.length === 1 && /entrar con señal/.test(f6b.errores[0]) && !/CorexOn/.test(f6b.errores[0]) && f6b.eliminadas.length === 0;
@@ -187,11 +190,12 @@ const arriba = (extra) => Object.assign({ numero: 425996, tecnico: 'Tomas Prueba
   const distintoVisible = f6b.errores.length === 2 && /CorexOn/.test(f6b.errores[1]);
   console.log('6) Sin sesion           → con la sesion en camino: ' + (enCamino ? 'no avisa, se queda' : 'AVISA') + (suspende6a ? ', no reintenta ✓' : ', REINTENTA (sube fotos) ✗') +
     ' · sin forma de abrirla: ' + (diceSenal ? 'dice que entre con señal, se queda' : (f6b.errores[0] || 'sin aviso')) + (suspende6b ? ', no reintenta ✓' : ', REINTENTA ✗') +
-    ' · rechazo distinto despues: ' + (distintoVisible ? 'se ve ✓' : 'TAPADO ✗'));
+    ' · rechazo distinto despues: ' + (distintoVisible ? 'se ve ✓' : 'TAPADO ✗') + ' · en camino 3 vueltas: ' + (conTope ? 'avisa una vez ✓' : f6a.errores.length + ' avisos ✗'));
   chequear(enCamino, 'con la sesion de quien entro sin señal en camino, el rechazo avisa al tecnico de un problema que se arregla solo (revisor, obs. 1)');
   chequear(diceSenal, 'sin sesion el aviso no dice que hay que entrar con señal (dice avisar a CorexOn), o la OT salio de la cola');
   chequear(suspende6a && suspende6b, 'sin sesion se sigue reintentando (y subiendo fotos) en cada vuelta (Codex, ronda 4)');
   chequear(distintoVisible, 'el aviso de "falta entrar con señal" tapo un rechazo distinto que llego despues, con sesion (Codex, ronda 4)');
+  chequear(conTope, 'con la sesion "en camino" que nunca se abre, el tecnico no recibe ningun aviso tras 3 vueltas con señal (revisor, ronda 4)');
 
   // 7. Dos corridas a la vez
   const g7 = await correr({}, otCola(), { concurrentes: true });
