@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// RECONSTRUCCION de las reglas "capa 1" vigentes en produccion desde el 02-10-2026, a partir de su
+// descripcion en el tablero (fila 70): las 9 colecciones de la app se leen, crean y modifican sin
+// sesion; se borra solo en ordenes, cotizaciones, cadenas y tecnicos. NO es copia de la consola.
+// Sirve UNICAMENTE de contraprueba: `node reglas.test.js --capa1` tiene que FALLAR con estas.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{col}/{id} {
+      allow read, create, update: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow delete: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos'];
+    }
+  }
+}

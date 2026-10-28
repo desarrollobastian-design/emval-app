@@ -1,0 +1,8 @@
+{
+  "name": "emval-tools",
+  "private": true,
+  "description": "Dependencias de las herramientas de tools/ que usan el Admin SDK (cuentas-auth.js). No se publican (tools/ esta excluido de Pages).",
+  "dependencies": {
+    "firebase-admin": "14.4.0"
+  }
+}

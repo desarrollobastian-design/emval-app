@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// TRANSICION PARA LA ETAPA 1 DE FIREBASE AUTH — el PASO 1b de Bastian, ANTES de fusionar el PR #64.
+// Decidido por Bastian (23-10-2026, por el lider): los DOS cambios van juntos, en una sola publicacion.
+//
+// (1) AGREGAR el bloque `directorio`: se lee sin sesion y no lo escribe nadie desde afuera (solo
+//     tools/cuentas-auth.js, con el Admin SDK, que no pasa por estas reglas). Sin esto, un telefono sin
+//     cache no puede leer `directorio` (las reglas "capa 1" solo abren las 9 colecciones de siempre) y la
+//     pantalla de entrada le sale vacia (Codex P1-5).
+// (2) CAMBIAR la regla general: sacar 'tecnicos' de las listas de crear, modificar y borrar. La lectura
+//     sigue abierta, porque los telefonos con la version vieja la necesitan para entrar. Hoy cualquiera
+//     puede agregar a `tecnicos` un "Administrador" con su propio hash antes de que corra
+//     tools/cuentas-auth.js (Codex P1-5: fuente no confiable).
+//     Es CAMBIAR, no agregar: las reglas de Firestore suman permisos, y un `allow write: if false`
+//     aparte no quita el que ya da la regla general.
+//     COSTO: en un telefono con la version vieja (v72 o menos), Pedro ya no puede agregar, editar ni
+//     eliminar tecnicos, ni cambiar su clave desde el panel: le sale «No se pudo …» y no se guarda nada.
+//     La version nueva (v73) ya no escribe `tecnicos` (D1-B: lo hace CorexOn con la herramienta).
+//
+// Este archivo es la RECONSTRUCCION de las reglas de hoy (capa1-referencia.rules) con los dos cambios,
+// solo para probarlo: NO se pega tal cual. En la consola se hacen los dos cambios sobre las reglas
+// reales (guia clic a clic: progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md, paso 1b).
+// Prueba: `npm run transicion` (tests/reglas/transicion.test.js).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── reconstruccion de "capa 1" con el cambio (2): 'tecnicos' solo en la lectura ──
+    match /{col}/{id} {
+      allow read: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow create, update: if col in ['ordenes', 'cotizaciones', 'cadenas', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow delete: if col in ['ordenes', 'cotizaciones', 'cadenas'];
+    }
+
+    // ── (1) el bloque nuevo ──
+    match /directorio/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

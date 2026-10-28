@@ -1290,7 +1290,7 @@
     <div id="panel-personal">
       <!-- Secundario: es la puerta de entrada al formulario, no el compromiso. Cuando el
            formulario esta abierto, el primario es "Guardar" y los dos se ven a la vez. -->
-      <button class="btn btn-secondary btn-sm" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar personal</button>
+      <div id="aviso-gestion-usuarios" class="card" style="margin-bottom:12px;font-size:13px;color:var(--texto2);line-height:1.5;">Las altas, las bajas y los cambios de PIN o contraseña los hace CorexOn. Escríbenos si necesitas uno.</div>
       <input type="text" id="personal-buscar" aria-label="Buscar personal" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
         <div style="font-size:15px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
@@ -1537,6 +1537,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
+<!-- Firebase Authentication (etapa 1, 23-10-2026). Sin señal en frio puede no cargar: entrar sin
+     señal no lo necesita (verificador local, ver _entrarConCuenta). -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
 firebase.initializeApp({
   apiKey: "AIzaSyAlIQW1wl8rRx4MlbOBz3Zgq9pS01Ys7B4",
@@ -2258,13 +2261,21 @@ async function _reportarPausadasDelTelefono(forzar) {
         conContenido: _hojaTieneContenido(ot)
       };
     });
-    const firma = JSON.stringify(items);
+    // Para pasar a la etapa 2 de Auth (reglas que piden sesion) hay que saber que CADA telefono ya
+    // tiene la version nueva, una sesion de Firebase y la cola vacia: tools/estado-telefonos.js.
+    const auth = { etapa: AUTH_ETAPA, sesion: !!_uidSesionFirebase(), uid: _uidSesionFirebase() };
+    const colas = await _contarColas();
+    const otsPendientes = colas.ots;
+    const firma = JSON.stringify([items, auth, colas]);
     // Sin cambios basta con refrescar el "visto hace" cada 6 h.
     if (!forzar && firma === _ultimoReportePausadas.firma && Date.now() - _ultimoReportePausadas.en < 21600000) return;
     await _conTimeout(window.firebase.firestore().collection('alertas').doc('pausadas_' + _deviceIdCorreos()).set({
       tipo: 'pausadas',            // sin `activa`: cargarAlertaCorreos no lo confunde con correos
       dispositivo: _deviceIdCorreos(),
       usuario: _tecnicoActual() || '',
+      auth: auth,
+      otsPendientes: otsPendientes,
+      colas: colas,
       items: items,
       total: items.length,
       actualizadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
@@ -2301,32 +2312,370 @@ let estado = {
   fotoActualId: null, fotoActualTipo: null, fotoActualIdx: null
 };
 
-const PINS = {}; // Cargado dinamicamente desde Firebase
-const ADMIN_HASHES = {}; // { nombre: sha256Hash } solo para Administradores
-// Un Administrador sin passwordHash no entra con NINGUNA clave: no hay clave por defecto. Se dice
-// por que y a quien pedirlo, para que no se quede probando contrasenas que nunca van a servir.
-const ADMIN_SIN_ACCESO = 'Tu acceso de administrador no está activado. Pídele a CorexOn que lo active.';
+/* =========== ENTRAR: FIREBASE AUTHENTICATION (etapa 1, 23-10-2026) ===========
+   Antes la app validaba el PIN y la clave EN EL NAVEGADOR, contra `tecnicos.pin` (texto plano) y
+   `tecnicos.passwordHash` (SHA-256 sin sal): para eso la coleccion entera tenia que leerse sin
+   sesion, y quedaba copiada en cada telefono (emval_users_cache). Ahora:
+   - La lista de la pantalla de entrada sale de `directorio`, que no tiene secretos.
+   - CON SEÑAL se entra con Firebase Auth: la clave la verifica Firebase en su servidor y limita
+     los intentos. Al tecnico se le pide SU PIN DE SIEMPRE (_claveFirebaseDePin lo alarga a lo que
+     Firebase exige; no es un secreto). El Administrador, su clave de siempre.
+   - SIN SEÑAL se compara contra un verificador que el telefono guardo la ultima vez que esa
+     persona entro con señal (PBKDF2, sal propia). La primera vez en un telefono hay que tener señal.
+   - Cerrar sesion en la app NO cierra la sesion de Firebase: las colas de la noche suben con la
+     ultima cuenta valida del telefono (con las reglas de la etapa 2 eso es lo que las deja subir).
+   - No hay clave por defecto en ningun lado (PR #63): tests/admin-sin-clave-no-entra.js.
+   Las cuentas las crea tools/cuentas-auth.js. Diseño: progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md */
+const AUTH_ETAPA = 1;
+const DOMINIO_CORREO_CUENTA = 'emval-app.firebaseapp.com';
+// Las dos tienen que ser IDENTICAS a las de tools/cuentas-auth.js (lo vigila
+// tests/la-clave-de-firebase-sale-del-pin.js): si difieren, nadie entra.
+function _claveFirebaseDePin(pin) { return 'emval-pin-' + String(pin); }
+function _correoDeCuenta(uid) { return String(uid).toLowerCase() + '@' + DOMINIO_CORREO_CUENTA; }
+const ACCESO_DESACTIVADO = 'Tu acceso no está activado. Pídele a CorexOn que lo active.';
+// La entrada con cuenta no esta habilitada en el proyecto de Firebase (proveedor apagado, apiKey o dominio
+// no autorizados): no es la señal ni el PIN de nadie, y no se arregla reintentando (revisor del PR #64).
+const ENTRADA_NO_ACTIVADA = 'La entrada no está activada. Pídele a CorexOn que la revise.';
+const _AUTH_SIN_CONFIGURAR = ['auth/operation-not-allowed', 'auth/app-not-authorized', 'auth/invalid-api-key', 'auth/unauthorized-domain'];
+const PRIMERA_VEZ_CON_SENAL = 'Sin señal: la primera vez en este teléfono tienes que entrar con señal.';
+// Ya entro aqui, pero el verificador vencio o se borro: el mensaje dice cual de las dos (regla 11).
+const SIN_SENAL_VENCIDO = 'Sin señal: pasaron más de 14 días sin entrar con señal en este teléfono. Entra con señal.';
+const SIN_SENAL_TRAS_FALLOS = 'Sin señal: hubo 5 PIN equivocados en este teléfono. Entra con señal.';
+const SIN_SENAL_PRIVILEGIADO = 'Sin señal no se puede entrar como administrador o supervisor. Entra con señal.';
+const AUTH_MS_INICIO = 15000;
+const _FICHAS = {};          // nombre -> { uid, correo, cargo } (del directorio)
 let pinActual = '';
 let _pinTimer = null;   // la validacion del PIN agendada al cuarto digito (ver validarPin)
+let _credPendiente = null;   // entro SIN señal: { uid, correo, clave } solo en memoria, para Firebase
 
 async function sha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 }
 
+function _authFirebase() {
+  try { return (window.firebase && typeof window.firebase.auth === 'function') ? window.firebase.auth() : null; }
+  catch (e) { return null; }
+}
+function _uidSesionFirebase() {
+  const a = _authFirebase();
+  return (a && a.currentUser && a.currentUser.uid) || '';
+}
+// Administrador y Supervisor tienen permisos de panel: no dejan verificador en el telefono y su
+// sesion de Firebase se cierra al salir (revision de Codex del PR #64, 23-10-2026).
+function _esPrivilegiado(cargo) { return cargo === 'Administrador' || cargo === 'Supervisor'; }
+
+// Si el SDK de Auth no cargo en el arranque (en frio y sin señal: el service worker no guarda
+// gstatic), se vuelve a pedir cuando haya señal. Sin esto la pestaña quedaba sin sesion de Firebase
+// hasta recargarla, y con las reglas de la etapa 2 su cola no subiria (Codex P2-6).
+const SDK_AUTH_URL = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+let _sdkAuthCargando = null;
+function _cargarSdkAuth() {
+  if (_authFirebase()) return Promise.resolve(true);
+  if (!window.firebase || navigator.onLine === false || typeof document === 'undefined') return Promise.resolve(false);
+  if (_sdkAuthCargando) return _sdkAuthCargando;
+  _sdkAuthCargando = new Promise(function(resolve) {
+    const s = document.createElement('script');
+    s.src = SDK_AUTH_URL;
+    const listo = function(ok){ _sdkAuthCargando = null; resolve(ok && !!_authFirebase()); };
+    s.onload = function(){ listo(true); };
+    s.onerror = function(){ listo(false); };
+    setTimeout(function(){ listo(false); }, 15000);
+    (document.head || document.body).appendChild(s);
+  });
+  return _sdkAuthCargando;
+}
+
+// Verificador local: PBKDF2-SHA256 con sal aleatoria. Es lo unico del secreto que vive en el
+// telefono, y solo de un tecnico que entro con señal en ESE telefono. Como el PIN son 4 digitos,
+// quien copie este registro puede probar las 10.000 combinaciones fuera de linea (Codex P1-1): por
+// eso el verificador dura poco y se pierde con los fallos, y Administrador/Supervisor no tienen.
+// Una clave de localStorage POR PERSONA (revision de Codex, ronda 4): con todos en una sola clave, leer y
+// reescribirla entera no es atomico entre pestañas, y guardar el de una persona podia resucitar el que
+// otra pestaña acababa de borrar. Asi, cada operacion toca solo la clave de quien corresponde.
+const VERIF_PREFIJO = 'emval_verif_';
+const VERIF_ITER = 150000;
+const VERIF_MAX_DIAS = 14;      // sin entrar con señal en 14 dias, sin señal ya no se entra
+const VERIF_MAX_FALLOS = 5;     // 5 PIN equivocados sin señal borran el verificador
+function _hex(buf) { return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2, '0'); }).join(''); }
+async function _pbkdf2(secreto, salHex, iter) {
+  const clave = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(secreto)), 'PBKDF2', false, ['deriveBits']);
+  const sal = new Uint8Array(salHex.match(/../g).map(function(h){ return parseInt(h, 16); }));
+  return _hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: sal, iterations: iter, hash: 'SHA-256' }, clave, 256));
+}
+function _leerVerificador(uid) {
+  try { return JSON.parse(localStorage.getItem(VERIF_PREFIJO + uid) || 'null'); } catch (e) { return null; }
+}
+function _escribirVerificador(uid, v) {
+  try { localStorage.setItem(VERIF_PREFIJO + uid, JSON.stringify(v)); } catch (e) {}
+}
+function _borrarVerificador(uid) {
+  try { localStorage.removeItem(VERIF_PREFIJO + uid); } catch (e) {}
+}
+async function _guardarVerificador(uid, secreto) {
+  try {
+    const sal = _hex(crypto.getRandomValues(new Uint8Array(16)));
+    const h = await _pbkdf2(secreto, sal, VERIF_ITER);
+    // Solo la clave de `uid`, que acaba de entrar con señal: no toca la de nadie mas (ronda 4).
+    _escribirVerificador(uid, { sal: sal, it: VERIF_ITER, h: h, en: Date.now(), fallos: 0 });
+  } catch (e) { console.warn('No se pudo guardar el verificador local:', e && e.message); }
+}
+// true / false; null si nunca entro con señal aqui; 'vencido' o 'fallos' si ya no sirve. Lo que queda
+// en su lugar es una lapida { fin, en } SIN sal ni hash: solo dice por que, para el mensaje.
+async function _verificarLocal(uid, secreto) {
+  const v = _leerVerificador(uid);
+  if (v && (v.fin === 'vencido' || v.fin === 'fallos')) return v.fin;
+  if (!v || !v.sal || !v.h) return null;
+  if (!v.en || Date.now() - v.en > VERIF_MAX_DIAS * 86400000) {
+    _escribirVerificador(uid, { fin: 'vencido', en: Date.now() });
+    return 'vencido';
+  }
+  let ok;
+  try { ok = (await _pbkdf2(secreto, v.sal, v.it || VERIF_ITER)) === v.h; } catch (e) { return null; }
+  // Revision final de Codex (nuevo 7): la derivacion tarda (un `await`) y en ese rato otra pestaña
+  // pudo anotar sus propios fallos. Escribir la copia leida arriba los borraba: seis intentos a la
+  // vez dejaban UN fallo y el verificador seguia ahi. Se vuelve a leer AHORA y se escribe sin otro
+  // `await` de por medio, asi lectura y escritura quedan juntas.
+  const w = _leerVerificador(uid);
+  if (!w || w.sal !== v.sal || w.h !== v.h) {
+    // Lo cambio otra pestaña mientras tanto: si dejo una lapida, manda la lapida.
+    if (w && (w.fin === 'vencido' || w.fin === 'fallos')) return w.fin;
+    return null;
+  }
+  if (!ok) {
+    w.fallos = (w.fallos || 0) + 1;
+    _escribirVerificador(uid, w.fallos >= VERIF_MAX_FALLOS ? { fin: 'fallos', en: Date.now() } : w);
+  }
+  return ok;
+}
+
+// Limite de intentos por persona EN ESTE TELEFONO (persistente: sobrevive a recargar). Tras 5
+// fallos seguidos hay que esperar 1 min, y la espera se duplica con cada fallo (tope 30 min).
+// Firebase tiene su propio limite en el servidor; este frena antes, tambien sin señal.
+const INTENTOS_KEY = 'emval_intentos';
+const INTENTOS_LIBRES = 5;
+function _leerIntentos() { try { return JSON.parse(localStorage.getItem(INTENTOS_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function _esperaIntentos(uid) { const x = _leerIntentos()[uid]; return x && x.hasta ? Math.max(0, x.hasta - Date.now()) : 0; }
+function _registrarFallo(uid) {
+  const todos = _leerIntentos();
+  const x = todos[uid] || { fallos: 0 };
+  x.fallos++;
+  if (x.fallos >= INTENTOS_LIBRES) x.hasta = Date.now() + Math.min(30, Math.pow(2, x.fallos - INTENTOS_LIBRES)) * 60000;
+  todos[uid] = x;
+  try { localStorage.setItem(INTENTOS_KEY, JSON.stringify(todos)); } catch (e) {}
+}
+function _limpiarFallos(uid) {
+  const todos = _leerIntentos();
+  if (todos[uid]) { delete todos[uid]; try { localStorage.setItem(INTENTOS_KEY, JSON.stringify(todos)); } catch (e) {} }
+}
+
+// Inicio de sesion en Firebase. 'ok' | 'rechazada' | 'bloqueada' | 'desactivada' | 'otra-cuenta' |
+// 'no-activada' | 'sin-red'. Un timeout es 'sin-red': no saber no es un rechazo (regla 3 de AGENTS.md).
+// 'otra-cuenta': Firebase entro, pero con un UID que no es el de la ficha (Codex P1-2): se sale.
+// 'no-activada': el proyecto no acepta la entrada (_AUTH_SIN_CONFIGURAR); no cuenta como fallo.
+async function _iniciarSesionFirebase(correo, clave, uidEsperado) {
+  let a = _authFirebase();
+  if (!a && await _cargarSdkAuth()) a = _authFirebase();
+  if (!a) return 'sin-red';
+  const intento = a.signInWithEmailAndPassword(correo, clave);
+  try {
+    const r = await _conTimeout(intento, AUTH_MS_INICIO, 'iniciar sesión');
+    const uid = (r && r.user && r.user.uid) || (a.currentUser && a.currentUser.uid) || '';
+    if (uidEsperado && uid !== uidEsperado) {
+      try { await a.signOut(); } catch (e) {}
+      return 'otra-cuenta';
+    }
+    return 'ok';
+  } catch (e) {
+    const c = (e && e.code) || '';
+    if (c === 'auth/wrong-password' || c === 'auth/invalid-credential' || c === 'auth/invalid-login-credentials' ||
+        c === 'auth/user-not-found' || c === 'auth/invalid-email') return 'rechazada';
+    if (c === 'auth/too-many-requests') return 'bloqueada';
+    if (c === 'auth/user-disabled') return 'desactivada';
+    if (_AUTH_SIN_CONFIGURAR.indexOf(c) >= 0) return 'no-activada';
+    // Revision final de Codex (P1-2): tras un timeout, la respuesta de Firebase puede llegar DESPUES
+    // y dejar abierta una sesion que nadie reviso. Si llega, se revisa ahi (_sesionTardia).
+    intento.then(function(r){ _sesionTardia(r, uidEsperado); }, function(){});
+    return 'sin-red';
+  }
+}
+// Una respuesta de inicio de sesion que llego despues de darla por perdida. Se queda solo si es de
+// quien esta en la app (o de la salida diferida, que la necesita para subir su cola). Si no, se cierra:
+// ningun permiso queda abierto por una respuesta que llego tarde.
+function _sesionTardia(r, uidEsperado) {
+  const a = _authFirebase();
+  const uid = (r && r.user && r.user.uid) || '';
+  if (!a || !uid) return;
+  const duenio = _uidEnLaApp || (_salidaDiferida && _credPendiente ? _credPendiente.uid : '');
+  if (uid === uidEsperado && uid === duenio) {
+    if (_credPendiente && _credPendiente.uid === uid) _credPendiente = null;
+    return;
+  }
+  if (a.currentUser && a.currentUser.uid === uid) { try { a.signOut(); } catch (e) {} }
+}
+
+function _textoEspera(ms) {
+  const min = Math.max(1, Math.ceil(ms / 60000));
+  return 'Demasiados intentos. Espera ' + min + (min === 1 ? ' minuto' : ' minutos') + ' y vuelve a intentar.';
+}
+
+// Decide si `nombre` entra con `secreto` (PIN o clave). Devuelve { ok, sinSenal, msg }.
+async function _entrarConCuenta(nombre, secreto, esClave) {
+  const f = _FICHAS[nombre];
+  if (!f || !f.uid) return { ok: false, msg: ACCESO_DESACTIVADO };
+  const espera = _esperaIntentos(f.uid);
+  if (espera > 0) return { ok: false, msg: _textoEspera(espera) };
+  const privilegiado = _esPrivilegiado(f.cargo);
+  const claveFb = esClave ? String(secreto) : _claveFirebaseDePin(secreto);
+  const incorrecto = esClave ? 'Contraseña incorrecta, intenta de nuevo' : 'PIN incorrecto, intenta de nuevo';
+  const correo = f.correo || _correoDeCuenta(f.uid);
+  const r = await _iniciarSesionFirebase(correo, claveFb, f.uid);
+  if (r === 'ok') {
+    _limpiarFallos(f.uid);
+    if (privilegiado) _borrarVerificador(f.uid); else await _guardarVerificador(f.uid, claveFb);
+    _credPendiente = null;
+    _uidEnLaApp = f.uid;
+    _marcarSalidaDiferida(false);   // entro alguien con señal: la sesion del telefono es la suya
+    return { ok: true };
+  }
+  if (r === 'rechazada') { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
+  if (r === 'bloqueada') return { ok: false, msg: 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.' };
+  if (r === 'desactivada') return { ok: false, msg: ACCESO_DESACTIVADO };
+  if (r === 'otra-cuenta') return { ok: false, msg: 'No se pudo comprobar tu cuenta. Avísale a CorexOn.' };
+  if (r === 'no-activada') return { ok: false, msg: ENTRADA_NO_ACTIVADA };
+  // Sin señal. Administrador y Supervisor no entran sin señal: no hay verificador suyo en el telefono.
+  if (privilegiado) return { ok: false, msg: SIN_SENAL_PRIVILEGIADO };
+  const v = await _verificarLocal(f.uid, claveFb);
+  if (v === true) {
+    _limpiarFallos(f.uid);
+    // La sesion de Firebase que hubiera en el telefono es de OTRA persona: se cierra (es local, no
+    // necesita señal) para que nada de este turno corra con sus permisos. Al volver la señal se
+    // abre la de quien entro (_reintentarSesionPendiente).
+    if (_uidSesionFirebase() && _uidSesionFirebase() !== f.uid) {
+      try { await _authFirebase().signOut(); } catch (e) {}
+    }
+    _credPendiente = { uid: f.uid, correo: correo, clave: claveFb };
+    _uidEnLaApp = f.uid;
+    _marcarSalidaDiferida(false);   // la salida de antes quedo atras: ahora el telefono es de quien entro
+    return { ok: true, sinSenal: true };
+  }
+  if (v === false) { _registrarFallo(f.uid); return { ok: false, msg: incorrecto }; }
+  if (v === 'vencido') return { ok: false, msg: SIN_SENAL_VENCIDO };
+  if (v === 'fallos') return { ok: false, msg: SIN_SENAL_TRAS_FALLOS };
+  return { ok: false, msg: PRIMERA_VEZ_CON_SENAL };
+}
+
+// Quien entro SIN señal inicia sesion en Firebase apenas vuelve la señal (lo llaman 'online',
+// la vuelta a primer plano y el intervalo de 90 s). Nunca muestra nada: si falla, reintenta.
+async function _reintentarSesionPendiente() {
+  const p = _credPendiente;
+  if (!p) return;
+  if (_uidSesionFirebase() === p.uid) { _credPendiente = null; return; }
+  const r = await _iniciarSesionFirebase(p.correo, p.clave, p.uid);
+  // 'sin-red' y 'no-activada' la conservan: la señal vuelve, y la entrada la reactiva CorexOn.
+  if (r === 'ok' || r === 'rechazada' || r === 'desactivada' || r === 'otra-cuenta') _credPendiente = null;
+  // Con la sesion recien abierta, la cola se vuelve a correr (revisor, obs. 1): el `online` la lanza a
+  // los 2 s y con mala señal la sesion puede llegar despues; sin esto esperaria la vuelta de 90 s.
+  if (r === 'ok') {
+    if (typeof sincronizarOTsPendientes === 'function') setTimeout(sincronizarOTsPendientes, 500);
+    if (typeof sincronizarEnlacesPDFPendientes === 'function') setTimeout(sincronizarEnlacesPDFPendientes, 1500);
+  }
+}
+
+// SALIR (Codex P1-2): la sesion de Firebase se cierra al salir de la app. Administrador y Supervisor,
+// en el acto. Un tecnico con trabajo todavia sin subir la conserva hasta que su cola se vacie: si se
+// cerrara de inmediato, con las reglas de la etapa 2 su OT de la tarde quedaria trabada en el
+// telefono hasta que alguien vuelva a entrar con señal (regla 4: lo que no salio no se pierde).
+// Revision final de Codex (P1-2), tres casos que la dejaban abierta para siempre o sin poder subir:
+// - recargar la pagina: la marca vive en el telefono (SALIDA_KEY), no solo en memoria;
+// - elegir a alguien en la lista sin entrar: lo que frena el cierre es quien ENTRO (_uidEnLaApp),
+//   no `estado.usuario`;
+// - entrar sin señal (sin sesion todavia) y salir con cola: se conserva la credencial en memoria
+//   para que, al volver la señal, la cola suba con su sesion y recien ahi se cierre.
+const SALIDA_KEY = 'emval_salida_diferida';
+let _uidEnLaApp = '';   // quien entro de verdad (PIN o clave comprobados); '' al salir
+let _salidaDiferida = (function(){ try { return localStorage.getItem(SALIDA_KEY) === '1'; } catch (e) { return false; } })();
+function _marcarSalidaDiferida(si) {
+  _salidaDiferida = !!si;
+  try { if (si) localStorage.setItem(SALIDA_KEY, '1'); else localStorage.removeItem(SALIDA_KEY); } catch (e) {}
+}
+// Lo que el telefono tiene sin subir, cola por cola. null = no se pudo contar (ante la duda, hay).
+async function _contarColas() {
+  const c = { ots: null, pausadas: null, correos: null, enlaces: null, cierres: null, bajas: null };
+  try { c.ots = (await _obtenerOTsPendientes()).length; } catch (e) {}
+  try { c.pausadas = cargarOTsPausadas().filter(function(o){ return o && !o.autoDraft && o.pendienteSync; }).length; } catch (e) {}
+  try { c.correos = _cargarCorreosPendientes().length; } catch (e) {}
+  try { c.enlaces = _leerEnlacesPDFPendientes().length; } catch (e) {}
+  try { c.cierres = _leerCierresPausadaPendientes().length; } catch (e) {}
+  try { c.bajas = _leerBajasPendientes().length; } catch (e) {}
+  return c;
+}
+async function _hayTrabajoSinSubir() {
+  const c = await _contarColas();
+  return Object.keys(c).some(function(k){ return c[k] === null || c[k] > 0; });   // no saber no es "vacia"
+}
+async function _cerrarSesionFirebase(cargo) {
+  const a = _authFirebase();
+  const conSesion = !!(a && a.currentUser);
+  _uidEnLaApp = '';
+  // Con sesion, o con la credencial de quien entro sin señal: si queda cola, se difiere.
+  if (!_esPrivilegiado(cargo) && (conSesion || _credPendiente) && await _hayTrabajoSinSubir()) {
+    _marcarSalidaDiferida(true);
+    return;
+  }
+  _marcarSalidaDiferida(false);
+  _credPendiente = null;
+  if (conSesion) { try { await a.signOut(); } catch (e) {} }
+}
+// La corren el intervalo de 90 s, la vuelta de la señal y el arranque: si la salida quedo diferida
+// y la cola ya esta vacia (y nadie ENTRO mientras tanto), se cierra la sesion.
+async function _completarSalidaDiferida() {
+  if (!_salidaDiferida || _uidEnLaApp) return;
+  if (await _hayTrabajoSinSubir()) return;
+  _marcarSalidaDiferida(false);
+  _credPendiente = null;
+  const a = _authFirebase();
+  if (a && a.currentUser) { try { await a.signOut(); } catch (e) {} }
+}
+
+// Las sincronizaciones del arranque esperan (hasta `ms`) a que Firebase restaure la sesion del
+// telefono, para que la cola suba con ella. Despues siguen igual, haya sesion o no.
+let _authRestaurada = null;
+function _esperarSesionFirebase(ms) {
+  if (!_authRestaurada) {
+    _authRestaurada = new Promise(function(resolve) {
+      const a = _authFirebase();
+      if (!a || typeof a.onAuthStateChanged !== 'function') return resolve(false);
+      let listo = false;
+      try { a.onAuthStateChanged(function(u){ if (!listo) { listo = true; resolve(!!u); } }); }
+      catch (e) { resolve(false); }
+    });
+  }
+  return Promise.race([_authRestaurada, new Promise(function(r){ setTimeout(function(){ r(false); }, ms || 5000); })]);
+}
+
 async function verificarPasswordAdmin() {
-  if (!ADMIN_HASHES[estado.usuario]) { toast(ADMIN_SIN_ACCESO); return false; }
   // Antes esto era un prompt() nativo: la contrasena del administrador se veia en pantalla,
   // en un local, delante de quien pasara. Ahora es un campo type="password" con boton de ojo.
+  const f = _FICHAS[estado.usuario];
+  if (!f || !f.uid) { toast(ACCESO_DESACTIVADO); return false; }
+  const espera = _esperaIntentos(f.uid);
+  if (espera > 0) { toast(_textoEspera(espera)); return false; }
   const pass = await _pedirTexto('Escribe tu contraseña para confirmar esta acción.', {
     titulo: 'Confirmar como administrador',
     password: true,
     okTexto: 'Confirmar',
   });
   if (pass === null) return false;   // cancelado; `null` no es lo mismo que ''
-  const hash = await sha256(pass);
-  if (hash === ADMIN_HASHES[estado.usuario]) return true;
-  toast('Contraseña incorrecta');
+  // Sin verificador en el telefono (es privilegiado): la confirma Firebase, con señal.
+  const r = await _iniciarSesionFirebase(f.correo || _correoDeCuenta(f.uid), pass, f.uid);
+  if (r === 'ok') { _limpiarFallos(f.uid); return true; }
+  if (r === 'sin-red') { toast('Sin señal no se puede confirmar. Intenta con señal.'); return false; }
+  if (r === 'bloqueada') { toast('Demasiados intentos seguidos. Espera unos minutos.'); return false; }
+  if (r === 'no-activada') { toast(ENTRADA_NO_ACTIVADA); return false; }
+  if (r === 'desactivada') { toast(ACCESO_DESACTIVADO); return false; }
+  if (r === 'rechazada') _registrarFallo(f.uid);
+  toast(r === 'otra-cuenta' ? 'No se pudo comprobar tu cuenta. Avísale a CorexOn.' : 'Contraseña incorrecta');
   return false;
 }
 
@@ -2616,12 +2965,6 @@ function seleccionarUsuario(nombre, cargo, letra) {
   document.getElementById('admin-pass-section').style.display = esAdmin ? 'block' : 'none';
   document.getElementById('pin-subtitulo').textContent = esAdmin ? 'Ingresa tu contraseña' : 'Ingresa tu PIN de 4 números';
   document.getElementById('admin-pass-error').style.display = 'none';
-  if (esAdmin && !ADMIN_HASHES[nombre]) {
-    // Se avisa al entrar, antes de que escriba nada (ver ADMIN_SIN_ACCESO).
-    const errSin = document.getElementById('admin-pass-error');
-    errSin.textContent = ADMIN_SIN_ACCESO;
-    errSin.style.display = 'block';
-  }
   if (esAdmin) {
     document.getElementById('admin-pass-input').value = '';
     setTimeout(function(){ document.getElementById('admin-pass-input').focus(); }, 350);
@@ -2699,54 +3042,57 @@ function loginExitoso() {
 /* LA CARRERA DE LOS 200 MS (Codex, revision del PR #63, 23-10-2026). pinInput agendaba
    validarPin 200 ms despues del cuarto digito y validarPin leia `estado.usuario` AL CORRER: si en
    ese intervalo se elegia a un Administrador (seleccionarUsuario no borraba el PIN tecleado), se
-   comparaba el PIN escrito con el del Administrador y se entraba como el SIN su contraseña. Los PIN
-   se pueden leer en Firestore, asi que eso abria la cuenta de Pedro. Ahora: el PIN viaja con quien
-   lo tecleo (`quien`), elegir a otra persona lo borra y cancela la validacion, un Administrador no
-   entra nunca por PIN, y la pantalla del PIN tiene que seguir abierta. */
-function validarPin(quien) {
+   comparaba el PIN escrito con el del Administrador y se entraba como el SIN su contraseña. Ahora: el
+   PIN viaja con quien lo tecleo (`quien`), elegir a otra persona lo borra y cancela la validacion,
+   un Administrador no entra nunca por PIN, y la pantalla del PIN tiene que seguir abierta. Con Firebase
+   Auth la cuenta del Administrador ademas no acepta una clave derivada de un PIN. */
+let _entrando = false;   // un toque de mas mientras Firebase responde no lanza un segundo intento
+
+async function validarPin(quien) {
+  if (_entrando) return;
   const enPantallaPin = (function(){ const s = document.getElementById('s-pin'); return !!(s && s.classList.contains('active')); })();
   if (quien !== estado.usuario || estado.cargo === 'Administrador' || !enPantallaPin) {
     pinActual = '';
     actualizarDots();
     return;
   }
-  const esperado = PINS[estado.usuario];
-  // Sin PIN valido no se entra, pero se dice POR QUE. "PIN incorrecto" mandaria al tecnico
-  // a probar combinaciones para siempre por un problema que solo el administrador resuelve.
-  if (!esperado) {
-    toast('Este usuario no tiene PIN. Pídele al administrador que lo configure.');
-    pinActual = '';
-    actualizarDots();
-    return;
-  }
-  if (pinActual === esperado) {
+  // Instantanea ANTES del primer await (regla 2): con mala señal la respuesta puede llegar cuando
+  // ya se eligio a otra persona, y no puede hacer entrar a esa otra.
+  const nombre = estado.usuario, pin = pinActual;
+  if (!nombre || pin.length !== 4) return;
+  _entrando = true;
+  let r;
+  try { r = await _entrarConCuenta(nombre, pin, false); }
+  finally { _entrando = false; }
+  if (estado.usuario !== nombre) return;
+  if (r.ok) {
     loginExitoso();
+    if (r.sinSenal) toast('Entraste sin señal. Tu trabajo sube solo cuando vuelva la señal.');
   } else {
-    toast('PIN incorrecto, intenta de nuevo');
+    toast(r.msg);
     pinActual = '';
     actualizarDots();
   }
 }
 
 async function validarPassword() {
+  if (_entrando) return;
   const inp = document.getElementById('admin-pass-input');
   const errDiv = document.getElementById('admin-pass-error');
-  const pass = inp.value;
-  if (!ADMIN_HASHES[estado.usuario]) {
-    // Sin hash no se compara nada: ninguna clave abre esta cuenta, ni siquiera una vacia.
-    inp.value = '';
-    errDiv.textContent = ADMIN_SIN_ACCESO;
-    errDiv.style.display = 'block';
-    return;
-  }
-  if (!pass) return;
-  const hash = await sha256(pass);
-  if (hash === ADMIN_HASHES[estado.usuario]) {
+  const nombre = estado.usuario, pass = inp.value;
+  if (!nombre || !pass) return;   // ninguna clave, ni vacia, se prueba sin una cuenta detras
+  _entrando = true;
+  let r;
+  try { r = await _entrarConCuenta(nombre, pass, true); }
+  finally { _entrando = false; }
+  if (estado.usuario !== nombre) return;
+  if (r.ok) {
     errDiv.style.display = 'none';
     loginExitoso();
+    if (r.sinSenal) toast('Entraste sin señal. Lo que hagas sube solo cuando vuelva la señal.');
   } else {
     inp.value = '';
-    errDiv.textContent = 'Contraseña incorrecta, intenta de nuevo';
+    errDiv.textContent = r.msg;
     errDiv.style.display = 'block';
     inp.focus();
   }
@@ -2754,7 +3100,10 @@ async function validarPassword() {
 
 function cerrarSesion() {
   guardarBorradorOTActual();
+  const cargo = estado.cargo;
   estado.usuario = null;
+  // Tambien Firebase (Codex P1-2): si no, el navegador seguia con los permisos de quien salio.
+  _cerrarSesionFirebase(cargo);
   go('s-usuarios');
 }
 
@@ -3842,8 +4191,19 @@ function _esTimeout(e) {
 function _fetchConTimeout(url, opts, ms) {
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, ms || 30000);
-  return fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal }))
-    .finally(function(){ clearTimeout(to); });
+  return fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal })).then(function(resp) {
+    /* EL CUERPO TAMBIEN CORRE CONTRA EL MISMO PLAZO (revision de Codex, ronda 5). Antes el temporizador se
+       cortaba al llegar las cabeceras y `resp.json()` podia quedar colgado sin limite: con las colas de una
+       sola corrida, eso dejaba la cola trabada hasta recargar. Ahora el plazo se corta recien cuando el
+       cuerpo termino de leerse; si vence antes, la lectura falla (AbortError) como cualquier corte. Si
+       nadie lee el cuerpo (un HEAD), el plazo vence sobre una respuesta ya usada: no hace nada. */
+    ['json', 'text', 'blob', 'arrayBuffer'].forEach(function(m) {
+      if (typeof resp[m] !== 'function') return;
+      var leer = resp[m].bind(resp);
+      resp[m] = function() { return leer().finally(function(){ clearTimeout(to); }); };
+    });
+    return resp;
+  }, function(e) { clearTimeout(to); throw e; });
 }
 
 async function subirCloudinary(dataUrl, carpeta, nombre) {
@@ -4823,6 +5183,11 @@ async function guardarEnFirebase(otBase, desc, fecha) {
       otData.pausa = false;
       otData.enEspera = false;
       otData.estado = 'Terminada';
+      // Quien la subio (la sesion de Firebase que escribe, no quien la cerro): con las reglas de la
+      // etapa 2, solo esa sesion completa despues el enlace del PDF (revision final de Codex, P1-3).
+      // Se lee al escribir, no en `snap`: lo que la regla compara es la sesion de ESTA escritura.
+      const _subidoPor = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
+      if (_subidoPor) otData.subidoPor = _subidoPor;
       await _conTimeout(db.collection('ordenes').doc(clientId).set(otData, { merge: true }), 25000, 'set OT');
     }
 
@@ -7655,28 +8020,8 @@ async function cargarTecnicosAdmin() {
       detalle.innerHTML = _cargoLabel(d.cargo || 'Tecnico en terreno') + (esAdminCargo ? ' | Contraseña: <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> protegida' : ' | PIN: ' + (d.pin || '----'));
       info.appendChild(nombre);
       info.appendChild(detalle);
-      const btns = document.createElement('div');
-      btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
-      if (esAdminCargo) {
-        const btnPass = document.createElement('button');
-        btnPass.textContent = 'Cambiar contraseña';
-        btnPass.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
-        btnPass.onclick = (function(id, nombre){ return function(){ cambiarPasswordAdmin(id, nombre); }; })(doc.id, d.nombre);
-        btns.appendChild(btnPass);
-      } else {
-        const btnEdit = document.createElement('button');
-        btnEdit.textContent = 'Editar';
-        btnEdit.style.cssText = 'background:var(--azul);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
-        btnEdit.onclick = (function(id, data){ return function(){ editarTecnico(id, data); }; })(doc.id, d);
-        btns.appendChild(btnEdit);
-      }
-      const btnDel = document.createElement('button');
-      btnDel.textContent = 'Eliminar';
-      btnDel.style.cssText = 'background:var(--rojo);color:white;border:none;border-radius:var(--radio-sm);padding:5px 10px;font-size:12px;cursor:pointer;';
-      btnDel.onclick = (function(id){ return function(){ eliminarTecnico(id); }; })(doc.id);
-      btns.appendChild(btnDel);
+      // Sin botones desde la etapa 1 de Auth (D1-B): ver GESTION_POR_COREXON.
       div.appendChild(info);
-      div.appendChild(btns);
       lista.appendChild(div);
     });
   } catch(e) {
@@ -7687,95 +8032,18 @@ async function cargarTecnicosAdmin() {
   }
 }
 
-async function cambiarPasswordAdmin(docId, nombre) {
-  const nueva = await _pedirTexto('Mínimo 6 caracteres.', {
-    titulo: 'Nueva contraseña para ' + nombre,
-    password: true,
-    okTexto: 'Continuar',
-  });
-  if (nueva === null) return;   // cancelado: no molestar con un toast
-  if (nueva.trim().length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
-  const confirmar = await _pedirTexto('Escríbela otra vez para confirmar.', {
-    titulo: 'Confirma la nueva contraseña',
-    password: true,
-    okTexto: 'Guardar',
-  });
-  if (confirmar === null) return;
-  if (nueva !== confirmar) { toast('Las contraseñas no coinciden'); return; }
-  try {
-    const h = await sha256(nueva.trim());
-    await window.firebase.firestore().collection('tecnicos').doc(docId).update({ passwordHash: h });
-    ADMIN_HASHES[nombre] = h;
-    toast('Contraseña actualizada correctamente');
-  } catch(e) { _error('actualizar la contraseña', e); }
-}
-
-
-function mostrarFormTecnico() {
-  editandoTecnicoId = null;
-  document.getElementById('tec-nombre').value = '';
-  document.getElementById('tec-cargo').value = 'Tecnico en terreno';
-  document.getElementById('tec-pin').value = '';
-  document.getElementById('form-tecnico-titulo').textContent = 'Nuevo técnico';
-  document.getElementById('form-tecnico').style.display = 'block';
-}
+/* GESTION DE USUARIOS: desde la etapa 1 de Firebase Auth (23-10-2026) la hace CorexOn con
+   tools/cuentas-auth.js (decision de Bastian, D1-B). Sin servidor, el navegador no puede cambiarle
+   la clave de Firebase a otra persona: un PIN cambiado solo en `tecnicos` dejaria a ese tecnico
+   sin poder entrar, y un alta hecha solo aqui no tendria cuenta ni ficha en el directorio. */
+const GESTION_POR_COREXON = 'Las altas, las bajas y los cambios de PIN o contraseña los hace CorexOn. Escríbenos si necesitas uno.';
+function cambiarPasswordAdmin() { toast(GESTION_POR_COREXON); }
+function mostrarFormTecnico() { toast(GESTION_POR_COREXON); }
 function cancelarFormTecnico() { document.getElementById('form-tecnico').style.display = 'none'; editandoTecnicoId = null; }
 
-function editarTecnico(id, d) {
-  editandoTecnicoId = id;
-  document.getElementById('tec-nombre').value = d.nombre || '';
-  document.getElementById('tec-cargo').value = d.cargo || 'Tecnico en terreno';
-  document.getElementById('tec-pin').value = d.pin || '';
-  document.getElementById('form-tecnico-titulo').textContent = 'Editar técnico';
-  document.getElementById('form-tecnico').style.display = 'block';
-}
-
-async function guardarTecnico() {
-  const nombre = document.getElementById('tec-nombre').value.trim();
-  const cargo = document.getElementById('tec-cargo').value.trim();
-  const pin = document.getElementById('tec-pin').value.trim();
-  if (!nombre) { toast('Ingresa el nombre'); return; }
-  // EXACTAMENTE 4 digitos: el teclado del login (pinInput) topea en 4 y valida ahi.
-  // Un PIN mas largo se guardaria sin queja y el tecnico no podria entrar NUNCA,
-  // sin ningun mensaje que se lo explique. Antes esto decia `pin.length < 4` (solo minimo)
-  // y el input era type="number", que ignora maxlength por spec HTML.
-  if (!/^\d{4}$/.test(pin)) { toast('El PIN debe ser exactamente 4 números'); return; }
-  // El formulario seguia vivo durante el await: un doble toque creaba DOS tecnicos.
-  const soltar = _bloquear(document.getElementById('btn-guardar-tecnico'));
-  try {
-    const db = window.firebase.firestore();
-    const data = { nombre, cargo, pin, letra: nombre.charAt(0).toUpperCase() };
-    // _conTimeout: offline, el add()/update() de Firestore no resuelve ni rechaza. Sin esto
-    // el `finally` de abajo no corre y el boton "Guardar" se apaga para siempre.
-    if (editandoTecnicoId) {
-      await _conTimeout(db.collection('tecnicos').doc(editandoTecnicoId).update(data), 25000, 'update tecnico');
-      toast('Técnico actualizado');
-    } else {
-      await _conTimeout(db.collection('tecnicos').add(data), 25000, 'add tecnico');
-      toast('Técnico agregado');
-    }
-    cancelarFormTecnico();
-    await cargarTecnicosAdmin();
-    await cargarUsuariosApp();
-  } catch(e) {
-    console.error(e);
-    if (_esTimeout(e)) toast('Sin respuesta del servidor. Revisa la lista antes de volver a guardar: el técnico puede haberse creado igual.');
-    else toast('No se pudo guardar el técnico. Intenta de nuevo.');
-  }
-  finally { soltar(); }
-}
-
-async function eliminarTecnico(id) {
-  if (!await _confirmar('El técnico dejará de aparecer en la pantalla de inicio y no podrá entrar a la app.', { titulo: 'Eliminar técnico', okTexto: 'Eliminar', peligro: true })) return;
-  const ok = await verificarPasswordAdmin();
-  if (!ok) return;
-  try {
-    await window.firebase.firestore().collection('tecnicos').doc(id).delete();
-    toast('Técnico eliminado');
-    await cargarTecnicosAdmin();
-    await cargarUsuariosApp();
-  } catch(e) { _error('eliminar el técnico', e); }
-}
+function editarTecnico() { toast(GESTION_POR_COREXON); }
+async function guardarTecnico() { toast(GESTION_POR_COREXON); }
+async function eliminarTecnico() { toast(GESTION_POR_COREXON); }
 
 
 
@@ -7867,6 +8135,8 @@ function _renderListaUsuarios(docs) {
   const lista = document.getElementById('lista-usuarios');
   if (!lista) return;
   lista.innerHTML = '';
+  // Quien salio del directorio deja de poder entrar desde este render (no queda una ficha vieja).
+  Object.keys(_FICHAS).forEach(function(k){ delete _FICHAS[k]; });
   /* LITERAL-FIRMADO: paleta de avatares (misma razon). Color estable por cargo. */
   const colorFijoPorCargo = {
     'Administrador':       '#2D5AA0',
@@ -7880,20 +8150,11 @@ function _renderListaUsuarios(docs) {
   sorted.forEach(function(d) {
     if (d.nombre === 'Supervisor') return; // el boton supervisor se agrega aparte
     if (_ocultoTecnico(d.nombre)) return;  // cuentas ocultas (dev/pruebas)
-    // Falla CERRADO. Antes era `d.pin || '1234'`: un tecnico sin PIN en Firestore recibia
-    // 1234 en silencio, y la pantalla de login lista a todos por nombre en un sitio publico.
-    // Un PIN ausente o mal formado ahora niega el acceso y lo dice (ver validarPin).
+    if (d.activo === false) return;        // dado de baja en el directorio
+    // Solo lo que hace falta para iniciar sesion: el secreto lo verifica Firebase (ver
+    // _entrarConCuenta). Sin clave por defecto en ningun caso (PR #63).
     const cargo = d.cargo || 'Tecnico en terreno';
-    // Un Administrador entra SOLO con su contraseña: su PIN (si lo tiene en Firestore) no se carga.
-    PINS[d.nombre] = (cargo !== 'Administrador' && /^\d{4}$/.test(String(d.pin || ''))) ? String(d.pin) : null;
-    if (cargo === 'Administrador') {
-      // Sin passwordHash no hay acceso: NINGUNA clave por defecto. Hasta el 22-10-2026 aca se
-      // calculaba el hash de una clave temporal escrita en este archivo (el repo es publico) y se
-      // guardaba en Firestore, asi que todo Administrador nuevo quedaba con esa clave. Ahora la
-      // asigna otro administrador (cambiarPasswordAdmin) o CorexOn; validarPassword avisa.
-      if (d.passwordHash) ADMIN_HASHES[d.nombre] = d.passwordHash;
-      else delete ADMIN_HASHES[d.nombre];
-    }
+    _FICHAS[d.nombre] = { uid: d._id, correo: d.correo || (d._id ? _correoDeCuenta(d._id) : ''), cargo: cargo };
     const color = colorFijoPorCargo[cargo] || _colorPorNombre(d.nombre);
     lista.appendChild(_crearUsuarioItem(d.nombre, cargo, d.letra || d.nombre.charAt(0).toUpperCase(), color));
   });
@@ -7917,10 +8178,14 @@ async function cargarUsuariosApp(_intento) {
   }
   try {
     const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    // `directorio`, no `tecnicos`: se lee sin sesion y no trae PIN ni hash (etapa 1 de Auth).
+    const snap = await db.collection('directorio').get();
     if (snap.empty) { if (!hayCache) _renderListaUsuarios([]); return; }
-    const docs = snap.docs.map(function(d){ return Object.assign({ _id: d.id }, d.data()); });
-    _cacheUsuarios(docs); // Guardar en cache para offline
+    const docs = snap.docs.map(function(d){
+      const x = d.data() || {};
+      return { _id: d.id, nombre: x.nombre || '', cargo: x.cargo || '', letra: x.letra || '', correo: x.correo || '', activo: x.activo };
+    }).sort(function(a, b){ return String(a.nombre).localeCompare(String(b.nombre)); });
+    _cacheUsuarios(docs); // Guardar en cache para offline (sin secretos)
     _renderListaUsuarios(docs);
   } catch(e) {
     // Sin señal real: nos quedamos con lo que ya pintamos del cache.
@@ -13326,15 +13591,19 @@ async function _cargarListaTecnicosEnModal(lista, currentTec, onPick) {
   _cargando(lista, 3);
   try {
     const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    // `directorio` y no `tecnicos`: con las reglas de la etapa 2, `tecnicos` (PIN y hash) solo lo
+    // lee el Administrador, y aqui tambien entra el Supervisor.
+    const snap = await db.collection('directorio').get();
     _cargado(lista);
     lista.innerHTML = '';
     const tecnicos = snap.docs
-      .map(function(doc){ return doc.data(); })
+      .map(function(doc){ return doc.data() || {}; })
       .filter(function(t){
         const c = (t.cargo || '').toLowerCase();
-        return c.indexOf('supervisor') === -1 && c.indexOf('administrador') === -1;
-      });
+        return t.activo !== false && !_ocultoTecnico(t.nombre) &&
+          c.indexOf('supervisor') === -1 && c.indexOf('administrador') === -1;
+      })
+      .sort(function(a, b){ return String(a.nombre || '').localeCompare(String(b.nombre || '')); });
 
     if (tecnicos.length === 0) {
       lista.innerHTML = _vacio('Aún no hay técnicos', 'Agrégalos en Administración → Personal.');
@@ -16500,77 +16769,102 @@ function _encolarEnlacePDF(otDocId, pdfUrl, pdfUrlCloudinary, rescate) {
 }
 
 async function sincronizarEnlacesPDFPendientes() {
-  if (!navigator.onLine || !window._firebaseReady) return;
-  var lista = _leerEnlacesPDFPendientes();
-  if (!lista.length) return;
-  var db = window.firebase.firestore();
-  var quedan = [];
-  for (var i = 0; i < lista.length; i++) {
-    var it = lista[i];
-    try {
-      /* Rescate: el enlace se encolo SIN URL porque la respuesta de Cloudinary nunca volvio.
-         Se pregunta si el archivo aparecio. Si todavia no esta, sigue pendiente — nunca se
-         descarta, que es el invariante de las cuatro colas: el codigo no borra lo que no
-         logro aplicar. Un HEAD no gasta cuota de EmailJS ni de nada. */
-      if (!it.pdfUrl && !it.pdfUrlCloudinary && it.publicId) {
-        var _rescatada = await _urlPDFSiYaEsta(it.publicId);
-        if (!_rescatada) { quedan.push(it); continue; }
-        it.pdfUrlCloudinary = _rescatada;
-        console.log('PDF rescatado desde la cola de enlaces:', _rescatada);
-      }
-      /* update(), NUNCA set({merge}) como en el camino directo: aca la OT puede no existir
-         todavia en Firestore (sigue en la cola del dispositivo). Un set con merge la CREARIA
-         con dos campos y nada mas — una orden fantasma, sin numero ni tipo, colandose en las
-         listas. update() falla con not-found y el enlace se queda esperando a que la OT suba. */
-      /* SOLO los campos que traen valor. Un enlace encolado puede tener una sola de las dos
-         URLs (Cloudinary subio y el registro de 'pdfs' no, o al reves). Escribir la otra como
-         '' pisaria con vacio un enlace que ya estaba bueno en el documento — el reintento
-         dejaria la OT peor que antes de reintentar. */
-      var _campos = {};
-      if (it.pdfUrl) _campos.pdfUrl = it.pdfUrl;
-      if (it.pdfUrlCloudinary) _campos.pdfUrlCloudinary = it.pdfUrlCloudinary;
-      if (!Object.keys(_campos).length) continue;   // nada que escribir: se descarta
-      await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
-        25000, 'reintento enlace pdf');
-      console.log('Enlace de PDF aplicado a la OT', it.otDocId);
-      /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
-         quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
-         orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
-         (ver _SELLO_SIN_PDF); sin el, el libro de despachos lo tiraria en silencio. */
-      if (it.aviso && it.pdfUrlCloudinary) {
-        var _a = it.aviso;
-        var _urlHSRescatada = it.pdfUrlCloudinary;
-        // A la VISTA, como el cierre (ver _urlPDFVista). La URL rescatada viene sin segmento de
-        // version (_urlPDFSiYaEsta) y /files/ la sirve igual: medido 24-09-2026.
-        if (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function') {
-          var _nombreHSRescatada = _nombrePDFHoja({
-            otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco, local: _a.local, fecha: _a.fecha,
-            cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
-          });
-          _urlHSRescatada = _urlPDFVista(it.pdfUrlCloudinary, _nombreHSRescatada);
+  /* UNA SOLA CORRIDA A LA VEZ (revision de Codex, ronda 4). Lee la lista al empezar y la reescribe
+     entera al terminar: dos corridas a la vez aplicaban dos veces y la segunda podia borrar de la
+     lista un enlace encolado mientras tanto.
+     Si piden otra mientras corre, se hace UNA mas al terminar, para no perder la que la pidio. */
+  var yo = sincronizarEnlacesPDFPendientes;
+  // Guardian (revision de Codex, ronda 5): una corrida que lleva mas de 15 min se da por colgada y se libera,
+  // para que una promesa que nunca termina no deje la cola trabada hasta recargar.
+  if (yo._corriendo && Date.now() - (yo._desde || 0) < 15 * 60000) { yo._otraVez = true; return; }
+  yo._corriendo = true;
+  yo._desde = Date.now();
+  var turno = yo._turno = (yo._turno || 0) + 1;   // solo esta corrida libera su candado
+  try {
+  await (async function() {
+    if (!navigator.onLine || !window._firebaseReady) return;
+    var lista = _leerEnlacesPDFPendientes();
+    if (!lista.length) return;
+    var db = window.firebase.firestore();
+    var quedan = [];
+    for (var i = 0; i < lista.length; i++) {
+      var it = lista[i];
+      try {
+        /* Rescate: el enlace se encolo SIN URL porque la respuesta de Cloudinary nunca volvio.
+           Se pregunta si el archivo aparecio. Si todavia no esta, sigue pendiente — nunca se
+           descarta, que es el invariante de las cuatro colas: el codigo no borra lo que no
+           logro aplicar. Un HEAD no gasta cuota de EmailJS ni de nada. */
+        if (!it.pdfUrl && !it.pdfUrlCloudinary && it.publicId) {
+          var _rescatada = await _urlPDFSiYaEsta(it.publicId);
+          if (!_rescatada) { quedan.push(it); continue; }
+          it.pdfUrlCloudinary = _rescatada;
+          console.log('PDF rescatado desde la cola de enlaces:', _rescatada);
         }
-        await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
-          _urlHSRescatada, '', _a.clientId);
-        if (_a.emailLocal) {
-          await _enviarCorreo({
-            email_admin: _a.emailLocal,
-            ot_numero: _numOTCorreo(_a.numero),
-            local: String(_a.local || ''),
-            fecha: String(_a.fecha || ''),
-            tecnico: String(_a.tecnico || ''),
-            tipo: _a.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-            trabajo: String(_a.trabajo || ''),
-            pdf_url: _urlHSRescatada
-          }, _a.clientId ? { sello: 'ot_' + _a.clientId + '__local' } : undefined);
+        /* update(), NUNCA set({merge}) como en el camino directo: aca la OT puede no existir
+           todavia en Firestore (sigue en la cola del dispositivo). Un set con merge la CREARIA
+           con dos campos y nada mas — una orden fantasma, sin numero ni tipo, colandose en las
+           listas. update() falla con not-found y el enlace se queda esperando a que la OT suba. */
+        /* SOLO los campos que traen valor. Un enlace encolado puede tener una sola de las dos
+           URLs (Cloudinary subio y el registro de 'pdfs' no, o al reves). Escribir la otra como
+           '' pisaria con vacio un enlace que ya estaba bueno en el documento — el reintento
+           dejaria la OT peor que antes de reintentar. */
+        var _campos = {};
+        if (it.pdfUrl) _campos.pdfUrl = it.pdfUrl;
+        if (it.pdfUrlCloudinary) _campos.pdfUrlCloudinary = it.pdfUrlCloudinary;
+        if (!Object.keys(_campos).length) continue;   // nada que escribir: se descarta
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+        await _conTimeout(db.collection('ordenes').doc(it.otDocId).update(_campos),
+          25000, 'reintento enlace pdf');
+        console.log('Enlace de PDF aplicado a la OT', it.otDocId);
+        if (yo._turno !== turno) return;   // ronda 7: el aviso lo manda la vigente, que reaplica el enlace
+        /* El aviso que salio sin enlace ahora se puede corregir. Va DESPUES de que el enlace
+           quedo escrito: si el update falla, no se manda un correo prometiendo un PDF que la
+           orden no apunta. El sufijo _SELLO_SIN_PDF del primer aviso es lo que deja pasar este
+           (ver _SELLO_SIN_PDF); sin el, el libro de despachos lo tiraria en silencio. */
+        if (it.aviso && it.pdfUrlCloudinary) {
+          var _a = it.aviso;
+          var _urlHSRescatada = it.pdfUrlCloudinary;
+          // A la VISTA, como el cierre (ver _urlPDFVista). La URL rescatada viene sin segmento de
+          // version (_urlPDFSiYaEsta) y /files/ la sirve igual: medido 24-09-2026.
+          if (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function') {
+            var _nombreHSRescatada = _nombrePDFHoja({
+              otNumero: _a.numero, tipo: _a.tipo, ceco: _a.ceco, local: _a.local, fecha: _a.fecha,
+              cotizacionNumero: _a.cotizacionNumero, descripcionTrabajo: _a.trabajo
+            });
+            _urlHSRescatada = _urlPDFVista(it.pdfUrlCloudinary, _nombreHSRescatada);
+          }
+          await _notificarOTCompletada(_a.numero, _a.local, _a.tecnico, _a.tipo, _a.fecha,
+            _urlHSRescatada, '', _a.clientId);
+          if (yo._turno !== turno) return;   // ronda 7
+          if (_a.emailLocal) {
+            await _enviarCorreo({
+              email_admin: _a.emailLocal,
+              ot_numero: _numOTCorreo(_a.numero),
+              local: String(_a.local || ''),
+              fecha: String(_a.fecha || ''),
+              tecnico: String(_a.tecnico || ''),
+              tipo: _a.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+              trabajo: String(_a.trabajo || ''),
+              pdf_url: _urlHSRescatada
+            }, _a.clientId ? { sello: 'ot_' + _a.clientId + '__local' } : undefined);
+          }
         }
+      } catch(e) {
+        // No se aplico: sigue pendiente. Se reintenta en el proximo ciclo.
+        console.warn('Enlace de PDF sigue pendiente (' + it.otDocId + '):', e && e.message);
+        quedan.push(it);
       }
-    } catch(e) {
-      // No se aplico: sigue pendiente. Se reintenta en el proximo ciclo.
-      console.warn('Enlace de PDF sigue pendiente (' + it.otDocId + '):', e && e.message);
-      quedan.push(it);
+    }
+    if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+    _escribirEnlacesPDFPendientes(quedan);
+  })();
+  } finally {
+    // Si el guardian ya la dio por colgada y corre otra, esta no le suelta el candado a la otra.
+    if (yo._turno === turno) {
+      yo._corriendo = false;
+      if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
     }
   }
-  _escribirEnlacesPDFPendientes(quedan);
 }
 
 function _abrirDBOffline() {
@@ -16609,8 +16903,10 @@ async function _obtenerOTsPendientes() {
   });
 }
 
-async function _eliminarOTPendiente(id) {
+// `sigue` (opcional): se pregunta despues de abrir la base; si dice que no, no se borra y devuelve false.
+async function _eliminarOTPendiente(id, sigue) {
   var db = await _abrirDBOffline();
+  if (sigue && !sigue()) return false;
   return new Promise(function(resolve, reject) {
     var tx = db.transaction('ots_pendientes', 'readwrite');
     tx.objectStore('ots_pendientes').delete(id);
@@ -16764,131 +17060,258 @@ function cerrarModalCorreos(ev) {
 }
 
 async function sincronizarOTsPendientes() {
-  if (!navigator.onLine || !window._firebaseReady) return;
-  var pendientes;
-  try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
-  if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
-
-  // OJO: no usar pendingBar.textContent — borraria el icono y el <span id="pending-count">,
-  // dejando la barra rota (sin contador) hasta recargar. Solo se cambia la etiqueta.
-  var pendingLabel = document.getElementById('pending-label');
-  if (pendingLabel) pendingLabel.textContent = 'OT(s) sincronizando...';
-
-  for (var pi = 0; pi < pendientes.length; pi++) {
-    var ot = pendientes[pi];
-    try {
-      toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
-
-      var urlsAntes = [];
-      for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
-        if (!ot.fotosAntes[i]) continue;
-        var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
-        if (u) urlsAntes.push(u);
+  /* UNA SOLA CORRIDA A LA VEZ (revision de Codex, ronda 4). La llaman el `online` (2 s), la sesion
+     recien abierta (_reintentarSesionPendiente), el arranque y el intervalo de 90 s: dos corridas
+     a la vez leian lo mismo y escribian dos veces (la segunda pisaba una correccion posterior).
+     Si piden otra mientras corre, se hace UNA mas al terminar, para no perder la que la pidio. */
+  var yo = sincronizarOTsPendientes;
+  // Guardian (revision de Codex, ronda 5): una corrida que lleva mas de 15 min se da por colgada y se libera,
+  // para que una promesa que nunca termina no deje la cola trabada hasta recargar.
+  if (yo._corriendo && Date.now() - (yo._desde || 0) < 15 * 60000) { yo._otraVez = true; return; }
+  yo._corriendo = true;
+  yo._desde = Date.now();
+  var turno = yo._turno = (yo._turno || 0) + 1;   // solo esta corrida libera su candado
+  /* Ronda 6 de Codex: el guardian deja entrar una corrida nueva, pero la vieja seguia viva y, si despertaba
+     tarde, escribia igual (pisaba una correccion posterior). Ahora cada escritura de la corrida vieja se
+     corta: antes de escribir, comprueba que su turno siga siendo el vigente; si no, sale sin escribir y sin
+     soltar el candado de la otra (ver `finally`). */
+  try {
+  await (async function() {
+    // Un servidor que ya pidio sesion (etapa 2) y no hay sesion: no se intenta. Cada intento sube las
+    // fotos a Cloudinary para que lo rechacen. Se espera la sesion: al abrirse, la cola vuelve a correr.
+    // Con tope (revisor, ronda 4): si tras 3 vueltas CON señal la sesion sigue sin abrirse (aunque venga
+    // "en camino"), se avisa una vez: el tecnico no se queda sin saber que lo suyo no sube.
+    if (yo._servidorPideSesion && typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase()) {
+      if (navigator.onLine) yo._vueltasSinSesion = (yo._vueltasSinSesion || 0) + 1;
+      var _avisos = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
+      if (yo._vueltasSinSesion >= 3 && !_avisos['sin-sesion']) {
+        _avisos['sin-sesion'] = true;
+        _error('subir lo pendiente', null, 'Falta entrar con señal en este teléfono para subir lo pendiente. Queda guardada.');
       }
-      var urlsDespues = [];
-      for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
-        if (!ot.fotosDespues[i]) continue;
-        var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
-        if (u) urlsDespues.push(u);
-      }
-      var urlTimbre = null;
-      if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
+      return;
+    }
+    yo._vueltasSinSesion = 0;
+    if (!navigator.onLine || !window._firebaseReady) return;
+    // ot.id -> ya se le aviso al tecnico que el servidor no la acepto (vive mientras la app este abierta)
+    var _otsRechazadasAvisadas = window._otsRechazadasAvisadas = window._otsRechazadasAvisadas || {};
+    var pendientes;
+    try { pendientes = await _obtenerOTsPendientes(); } catch(e) { return; }
+    if (pendientes.length === 0) { actualizarIndicadorPendientes(); return; }
 
-      var urlsAudio = [];
-      for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
-        var a = ot.audiosBase64[i];
-        var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
-        if (u) urlsAudio.push(u);
-      }
+    // OJO: no usar pendingBar.textContent — borraria el icono y el <span id="pending-count">,
+    // dejando la barra rota (sin contador) hasta recargar. Solo se cambia la etiqueta.
+    var pendingLabel = document.getElementById('pending-label');
+    if (pendingLabel) pendingLabel.textContent = 'OT(s) sincronizando...';
 
-      var db = window.firebase.firestore();
-      var otDoc = {
-        numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
-        tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
-        descripcionProblema: ot.descripcionProblema || '',
-        ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
-        pendientesMateriales: ot.pendientesMateriales || '',
-        numEquipos: ot.numEquipos || '',
-        serviciosPreventivo: ot.serviciosPreventivo || [],
-        fotosAntes: urlsAntes, fotosDespues: urlsDespues,
-        fotoTimbre: urlTimbre, audios: urlsAudio,
-        firmada: true, firmaImagen: ot.firmaBase64,
-        // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
-        pausa: false, enEspera: false, estado: 'Terminada',
-        creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
-      };
-      // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
-      // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
-      if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
-      if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
-      if (ot.clientId) {
-        // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
-        await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
-      } else {
-        // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
-        await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
-      }
+    for (var pi = 0; pi < pendientes.length; pi++) {
+      var ot = pendientes[pi];
+      try {
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+        toast('Subiendo OT #' + ot.numero + ' (' + (pi+1) + '/' + pendientes.length + ')...');
 
-      // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link
-      var pdfUrlSync = '';
-      if (ot.pdfBase64) {
-        pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
-        if (pdfUrlSync && ot.clientId) {
-          // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
-          // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
-          // se encola en vez de perderse — misma razon que en guardarYEnviarPDF.
-          try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
-          catch(e) {
-            console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
-            _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
+        var db = window.firebase.firestore();
+        /* ¿YA ESTA ARRIBA, FIRMADA? (revision final de Codex del PR #64, P1 nuevo 2). Con mala señal el
+           primer intento puede haberse guardado sin que el telefono alcanzara a saberlo, y la OT sigue
+           en la cola. Reintentar volvia a subir las fotos (Cloudinary entrega URLs nuevas) y a reescribir
+           el contenido de una hoja firmada: las reglas de la etapa 2 no se lo dejan a un tecnico, asi que
+           quedaba trabada para siempre, y sin reglas pisaba una correccion del Administrador. Se pregunta
+           primero: si ya esta firmada, no se sube ni se reescribe nada de su contenido; solo se completa
+           lo que falte (el enlace del PDF) y sale de la cola como subida. */
+        var yaFirmada = null;
+        if (ot.clientId) {
+          /* AL SERVIDOR, no a la cache (revision de Codex, ronda 3): una copia firmada vieja en la cache
+             sacaba la OT de la cola aunque el servidor ya no la tuviera (p. ej., la borro el panel). Sin
+             señal, esta lectura falla y la OT se queda para la vuelta siguiente, como cualquier corte. */
+          var _arriba = await _conTimeout(db.collection('ordenes').doc(ot.clientId).get({ source: 'server' }), 25000, 'sync leer OT');
+          /* OJO con la compensacion local: si el `set` del cierre original sigue PENDIENTE en el SDK (el
+             cierre sin señal de siempre), una lectura puede mostrarla "firmada" aunque el servidor todavia
+             no la tenga (comprobado con `get()` en el emulador; con `source: 'server'` no se pudo
+             demostrar ni descartar, revisor ronda 4). Darla por subida con eso borraria de la cola algo
+             que no salio (regla 4): con escrituras pendientes, o con una lectura que diga venir de la
+             cache, se deja para la vuelta siguiente, sin subir ni reescribir nada. El SDK la envia solo. */
+          if (_arriba.metadata && (_arriba.metadata.hasPendingWrites || _arriba.metadata.fromCache)) {
+            console.log('OT #' + ot.numero + ': su escritura anterior sigue en camino; se confirma en la proxima vuelta.');
+            continue;
+          }
+          if (_arriba.exists && (_arriba.data() || {}).firmada === true) yaFirmada = _arriba.data() || {};
+        }
+
+        var urlsAntes = [], urlsDespues = [], urlTimbre = null, urlsAudio = [];
+        if (yaFirmada) {
+          urlsAntes = yaFirmada.fotosAntes || [];
+          urlsDespues = yaFirmada.fotosDespues || [];
+          urlTimbre = yaFirmada.fotoTimbre || null;
+        } else {
+          for (var i = 0; i < (ot.fotosAntes || []).length; i++) {
+            if (!ot.fotosAntes[i]) continue;
+            if (yo._turno !== turno) return;   // ronda 7: antes de cada subida (cada una puede tardar)
+            var u = await subirCloudinary(ot.fotosAntes[i], ot.numero, 'antes_' + i + '.jpg');
+            if (u) urlsAntes.push(u);
+          }
+          for (var i = 0; i < (ot.fotosDespues || []).length; i++) {
+            if (!ot.fotosDespues[i]) continue;
+            if (yo._turno !== turno) return;   // ronda 7
+            var u = await subirCloudinary(ot.fotosDespues[i], ot.numero, 'despues_' + i + '.jpg');
+            if (u) urlsDespues.push(u);
+          }
+          if (yo._turno !== turno) return;   // ronda 7
+          if (ot.fotoTimbre) urlTimbre = await subirCloudinary(ot.fotoTimbre, ot.numero, 'timbre.jpg');
+
+          for (var i = 0; i < (ot.audiosBase64 || []).length; i++) {
+            var a = ot.audiosBase64[i];
+            if (yo._turno !== turno) return;   // ronda 7
+            var u = await subirCloudinary(a.data, ot.numero, 'audio_' + i + '.' + a.ext);
+            if (u) urlsAudio.push(u);
+          }
+
+          var otDoc = {
+            numero: ot.numero, local: ot.local, tipo: _normTipo(ot.tipo),
+            tecnico: ot.tecnico || _tecnicoActual(), fecha: ot.fecha,
+            descripcionProblema: ot.descripcionProblema || '',
+            ceco: ot.ceco || '', descripcionTrabajo: ot.descripcionTrabajo,
+            pendientesMateriales: ot.pendientesMateriales || '',
+            numEquipos: ot.numEquipos || '',
+            serviciosPreventivo: ot.serviciosPreventivo || [],
+            fotosAntes: urlsAntes, fotosDespues: urlsDespues,
+            fotoTimbre: urlTimbre, audios: urlsAudio,
+            firmada: true, firmaImagen: ot.firmaBase64,
+            // Igual que en el cierre online: subir desde la cola es cerrar, no pausar.
+            pausa: false, enEspera: false, estado: 'Terminada',
+            creadoEn: window.firebase.firestore.FieldValue.serverTimestamp()
+          };
+          // Solo con valor: esta cola puede repetir el set(merge) HORAS despues del cierre, cuando Pedro
+          // ya cotizo la OT, y un '' le borraba el folio de su COT (ver guardarEnFirebase).
+          if (ot.cotizacionId) otDoc.cotizacionId = ot.cotizacionId;
+          if (ot.cotizacionNumero) otDoc.cotizacionNumero = ot.cotizacionNumero;
+          // Quien la sube (ver guardarEnFirebase): la sesion que escribe, leida al escribir.
+          var _subidoPorSync = typeof _uidSesionFirebase === 'function' ? _uidSesionFirebase() : '';
+          if (_subidoPorSync) otDoc.subidoPor = _subidoPorSync;
+          if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+          if (ot.clientId) {
+            // Idempotente: mismo doc(clientId) que intentó guardarEnFirebase → nunca se duplica
+            await _conTimeout(db.collection('ordenes').doc(ot.clientId).set(otDoc, { merge: true }), 25000, 'sync set OT');
+          } else {
+            // OTs encoladas por versiones anteriores (sin clientId): comportamiento previo
+            await _conTimeout(db.collection('ordenes').add(otDoc), 25000, 'sync add OT');
           }
         }
-      }
 
-      // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
-      if (ot.cotizacionId) {
-        await _vincularCotizacionRealizada(ot.cotizacionId, {
-          otDocId: ot.clientId,
-          numero: ot.numero, fecha: ot.fecha,
-          urlsAntes: urlsAntes, urlsDespues: urlsDespues,
-          urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,
-          tecnico: ot.tecnico || _tecnicoActual()
-        });
-      }
+        // Subir el PDF generado offline (si vino en la cola) para que el correo lleve link. Si la hoja
+        // ya estaba arriba CON su enlace, no se vuelve a subir: se usa el que tiene.
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+        var pdfUrlSync = '';
+        if (yaFirmada && yaFirmada.pdfUrlCloudinary) {
+          pdfUrlSync = yaFirmada.pdfUrlCloudinary;
+        } else if (ot.pdfBase64) {
+          pdfUrlSync = (await _subirPDFaCloudinary(ot.pdfBase64, ot)) || '';
+          if (yo._turno !== turno) return;   // ronda 7: la subida del PDF puede tardar 30 s
+          if (pdfUrlSync && ot.clientId) {
+            // Con _conTimeout: un update colgado aca paraba el bucle entero (el `break` del catch)
+            // y las OT siguientes de la cola se quedaban sin subir. Y si no se logra, el enlace
+            // se encola en vez de perderse — misma razon que en guardarYEnviarPDF.
+            try { await _conTimeout(db.collection('ordenes').doc(ot.clientId).update({ pdfUrlCloudinary: pdfUrlSync }), 25000, 'enlazar pdf (sync)'); }
+            catch(e) {
+              console.warn('No se pudo guardar pdfUrl en la OT (sync):', e);
+              if (yo._turno !== turno) return;   // ronda 7: la OT sigue en la cola, la vigente la resuelve
+              _encolarEnlacePDF(ot.clientId, '', pdfUrlSync);
+            }
+          }
+        }
 
-      // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
-      // Si falla, _enviarCorreo lo encola y se reintenta solo.
-      if (ot.emailLocal && pdfUrlSync) {
-        // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
-        // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
-        await _enviarCorreo({
-          email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
-          fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
-          tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
-          trabajo: String(ot.descripcionTrabajo || ''),
-          // A la VISTA con el nombre de SMU, igual que el cierre online (ver _urlPDFVista).
-          pdf_url: (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
-            ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
-        }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
-      }
+        // Si la OT provenía de una cotización previa, unir el recibo al sincronizar
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+        if (ot.cotizacionId) {
+          await _vincularCotizacionRealizada(ot.cotizacionId, {
+            otDocId: ot.clientId,
+            numero: ot.numero, fecha: ot.fecha,
+            urlsAntes: urlsAntes, urlsDespues: urlsDespues,
+            urlTimbre: urlTimbre, firmaBase64: ot.firmaBase64,
+            tecnico: ot.tecnico || _tecnicoActual()
+          });
+        }
 
-      await _eliminarOTPendiente(ot.id);
-      toast('OT #' + ot.numero + ' sincronizada ✓');
-      _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
-        (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
-          ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
-        ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
-        ot.clientId);
-    } catch(err) {
-      console.error('Error sincronizando OT pendiente:', err);
-      _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');
-      break;
+        // Correo al local con el PDF (el que no se pudo enviar offline), ya con link.
+        // Si falla, _enviarCorreo lo encola y se reintenta solo.
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+        if (ot.emailLocal && pdfUrlSync) {
+          // Mismo sello que en guardarYEnviarPDF: si el cierre ya logro mandar este aviso, aca no
+          // se manda de nuevo. Los dos productores comparten identidad por el clientId de la OT.
+          await _enviarCorreo({
+            email_admin: ot.emailLocal, ot_numero: _numOTCorreo(ot.numero), local: String(ot.local || ''),
+            fecha: String(ot.fecha || ''), tecnico: String(ot.tecnico || _tecnicoActual()),
+            tipo: ot.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo',
+            trabajo: String(ot.descripcionTrabajo || ''),
+            // A la VISTA con el nombre de SMU, igual que el cierre online (ver _urlPDFVista).
+            pdf_url: (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+              ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync
+          }, ot.clientId ? { sello: 'ot_' + ot.clientId + '__local' } : undefined);
+        }
+
+        if (yo._turno !== turno) return;   // ronda 6: esta corrida ya no es la vigente, no escribe
+        // Ronda 7: abrir IndexedDB tambien es una espera; si en ella dejo de ser la vigente, la OT se queda
+        // en la cola (ya esta arriba: la vigente o la vuelta siguiente la sacan y mandan el aviso).
+        if ((await _eliminarOTPendiente(ot.id, function() { return yo._turno === turno; })) === false) return;
+        toast('OT #' + ot.numero + ' sincronizada ✓');
+        _notificarOTCompletada(ot.numero, ot.local, ot.tecnico, ot.tipo, ot.fecha,
+          (typeof _urlPDFVista === 'function' && typeof _nombrePDFHoja === 'function')
+            ? _urlPDFVista(pdfUrlSync, _nombrePDFHoja(ot)) : pdfUrlSync,
+          ot.emailLocal ? '' : 'ATENCION: el local "' + (ot.local || '') + '" no tiene correo configurado, no se le envio la OT.',
+          ot.clientId);
+      } catch(err) {
+        console.error('Error sincronizando OT pendiente:', err);
+        // Ronda 8: el error de una corrida que ya no es la vigente no le toca las marcas ni le avisa nada al
+        // tecnico; la OT sigue en la cola y la vigente dice lo que pase.
+        if (yo._turno !== turno) return;
+        // Rechazo de las reglas (etapa 2 de Auth): no es la señal, y reintentar en el acto no cambia
+        // nada. La OT se QUEDA en la cola (el codigo nunca la borra) y se sigue con las demas: una
+        // sola rechazada no puede trabar las que vienen detras. Sin señal si se corta, como siempre.
+        if (err && err.code === 'permission-denied') {
+          // Sin sesion de Firebase, el rechazo es por eso (revision de Codex, ronda 3, y revisor, obs. 1):
+          // - si la sesion de quien entro sin señal ya viene en camino, no se avisa nada: al abrirse
+          //   vuelve a correr la cola (_reintentarSesionPendiente);
+          // - si no hay como abrirla (recargo despues de salir, por ejemplo), se dice que hay que entrar
+          //   con señal: no es un caso para CorexOn.
+          // Ronda 4 de Codex: sin sesion el servidor rechazaria TODAS, asi que se corta la corrida y no se
+          // vuelve a intentar hasta que haya sesion (ver arriba). Su aviso tiene su propia marca: no tapa
+          // un rechazo distinto de la misma OT que llegue despues, con sesion.
+          var _sinSesion = typeof _uidSesionFirebase === 'function' && !_uidSesionFirebase();
+          if (_sinSesion) {
+            yo._servidorPideSesion = true;
+            var _enCamino = typeof _credPendiente !== 'undefined' && _credPendiente;
+            if (!_enCamino && !_otsRechazadasAvisadas['sin-sesion']) {
+              _otsRechazadasAvisadas['sin-sesion'] = true;
+              _error('subir lo pendiente', null, 'Falta entrar con señal en este teléfono para subir lo pendiente. Queda guardada.');
+            }
+            break;
+          }
+          // Una vez por OT y por sesion de la app, no en cada vuelta de 90 s (revisor del PR #64, punto 11).
+          if (!_otsRechazadasAvisadas[ot.id]) {
+            _otsRechazadasAvisadas[ot.id] = true;
+            _error('subir la OT #' + ot.numero, null, 'El servidor no la aceptó. Queda guardada en el teléfono: avísale a CorexOn.');
+          }
+          continue;
+        }
+        _error('sincronizar la OT #' + ot.numero, null, 'Se reintentará sola al recuperar la señal.');
+        break;
+      }
+    }
+    actualizarIndicadorPendientes();
+  })();
+  } finally {
+    // Si el guardian ya la dio por colgada y corre otra, esta no le suelta el candado a la otra.
+    if (yo._turno === turno) {
+      yo._corriendo = false;
+      if (yo._otraVez) { yo._otraVez = false; setTimeout(yo, 0); }
     }
   }
-  actualizarIndicadorPendientes();
 }
 
 window.addEventListener('online', function() {
+  // Modo visor (?pdf=): esa pestaña solo muestra un PDF. Antes este listener no tenia la guardia
+  // y al volver la señal el visor corria todas las sincronizaciones (inventario del 23-10-2026).
+  if (_soloVisorPDF) return;
+  // Primero la sesion de quien entro sin señal: la cola sube con ella.
+  _reintentarSesionPendiente();
   actualizarIndicadorPendientes();
   setTimeout(sincronizarOTsPendientes, 2000);
   setTimeout(sincronizarPausadasPendientes, 2500);
@@ -16898,6 +17321,7 @@ window.addEventListener('online', function() {
   // Despues de subir la OT cerrada: recien ahi tiene sentido borrar su registro "En Pausa".
   setTimeout(sincronizarCierresPausadaPendientes, 4000);
   setTimeout(sincronizarBajasPendientes, 4400);
+  setTimeout(_completarSalidaDiferida, 9000);
 });
 window.addEventListener('offline', function() {
   actualizarIndicadorPendientes();
@@ -16929,6 +17353,7 @@ document.addEventListener('visibilitychange', function() {
     // salen al instante si no hay pendientes, así que es seguro llamarlas cada vez.
     // En modo visor (?pdf=) no: esa pestaña solo muestra un PDF, no tiene nada que subir.
     if (_soloVisorPDF) return;
+    _reintentarSesionPendiente();
     actualizarIndicadorPendientes();
     setTimeout(sincronizarOTsPendientes, 800);
     setTimeout(sincronizarPausadasPendientes, 1200);
@@ -16947,12 +17372,20 @@ function _cacheCadenas(cadenas) {
 function _getCadenasCached() {
   try { var v = localStorage.getItem('emval_cadenas_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
 }
+// La lista de entrada en cache: SOLO lo del directorio (nombre, cargo, letra, correo, activo).
+// La clave vieja `emval_users_cache` guardaba `tecnicos` entero, PIN y hash incluidos: se borra.
+var _CAMPOS_FICHA = ['_id', 'nombre', 'cargo', 'letra', 'correo', 'activo'];
 function _cacheUsuarios(docs) {
-  try { localStorage.setItem('emval_users_cache', JSON.stringify(docs)); } catch(e) {}
+  try {
+    localStorage.setItem('emval_directorio_cache', JSON.stringify((docs || []).map(function(d) {
+      var f = {}; _CAMPOS_FICHA.forEach(function(k){ if (d[k] !== undefined) f[k] = d[k]; }); return f;
+    })));
+  } catch(e) {}
 }
 function _getUsuariosCached() {
-  try { var v = localStorage.getItem('emval_users_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+  try { var v = localStorage.getItem('emval_directorio_cache'); return v ? JSON.parse(v) : null; } catch(e) { return null; }
 }
+try { localStorage.removeItem('emval_users_cache'); } catch(e) {}
 
 // Iniciar carga. Los loaders son CACHE-FIRST: pintan de inmediato desde localStorage
 // (así la app abre aunque no haya señal) y se auto-reintentan para refrescar cuando
@@ -16985,12 +17418,19 @@ actualizarIndicadorPendientes();
 // En modo visor (?pdf=) NO corren: esa pestaña no es el teléfono de un técnico, no tiene
 // trabajo pendiente que subir, y sus peticiones competían con la carga del PDF.
 if (!_soloVisorPDF) {
-  setTimeout(sincronizarOTsPendientes, 3500);
-  setTimeout(sincronizarPausadasPendientes, 3000);
-  setTimeout(sincronizarCorreosPendientes, 4000);
-  setTimeout(sincronizarEnlacesPDFPendientes, 4500);
-  setTimeout(sincronizarCierresPausadaPendientes, 5000);
-  setTimeout(sincronizarBajasPendientes, 5400);
+  // Etapa 1 de Auth: el primer intento espera (hasta 5 s) a que Firebase restaure la sesion del
+  // telefono, para que la cola suba con ella; los tiempos de siempre se cuentan desde que abrio la app.
+  var _t0Arranque = Date.now();
+  _esperarSesionFirebase(5000).then(function() {
+    var pasado = Date.now() - _t0Arranque;
+    [[sincronizarPausadasPendientes, 3000], [sincronizarOTsPendientes, 3500], [sincronizarCorreosPendientes, 4000],
+     [sincronizarEnlacesPDFPendientes, 4500], [sincronizarCierresPausadaPendientes, 5000], [sincronizarBajasPendientes, 5400],
+     // Ultimo: si la salida quedo diferida antes de recargar y la cola ya se vacio, se cierra la sesion.
+     [_completarSalidaDiferida, 9000]
+    ].forEach(function(x) { setTimeout(x[0], Math.max(300, x[1] - pasado)); });
+  });
+  setInterval(_reintentarSesionPendiente, 90000);
+  setInterval(_completarSalidaDiferida, 90000);
   setInterval(sincronizarOTsPendientes, 90000);
   setInterval(sincronizarPausadasPendientes, 90000);
   setInterval(sincronizarCorreosPendientes, 90000);
