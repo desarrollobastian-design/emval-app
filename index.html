@@ -6743,6 +6743,14 @@ async function guardarCotizacion() {
   const nombreServicio = document.getElementById('cot-nombre-servicio').value.trim();
   const totales = calcTotalCot();
   const soltar = _bloquear(document.getElementById('btn-guardar-cot'));
+  /* `guardada`: desde que Firestore confirma el add/update, la cotizacion YA EXISTE. Un error
+     despues (refrescar la lista a la que se vuelve) no puede decir "puede haberse creado igual"
+     ni dejar el formulario abierto: el segundo Guardar crea OTRA cotizacion con otro folio (en
+     una edicion, `_editandoCotizacionId` ya quedo en null). Encontrado revisando el aviso que vio
+     Pedro el 06-11-2026 12:10; su caso fue OTRO (una previa cuyo `add` no respondio a tiempo, y
+     quedo guardada una sola vez), pero este camino reproduce la misma pantalla. */
+  let guardada = false;
+  const origen = window._cotizacionOrigen || 's-supervisor';
   try {
     const db = window.firebase.firestore();
     // Una EDICION conserva su numero: renumerar cambiaria el folio de un documento que el
@@ -6809,6 +6817,7 @@ async function guardarCotizacion() {
       const docRef = await _conTimeout(db.collection('cotizaciones').add(cotData), 25000, 'add cotizacion');
       savedDocId = docRef.id;
     }
+    guardada = true;
     // La HS necesita llevar el folio de su COT. Guardarlo tambien en la OT evita depender de
     // haber abierto antes la pantalla de cotizaciones para nombrar/compartir ambos archivos.
     if (!cotizacionActual.esPrevia && cotData.otId) {
@@ -6831,21 +6840,21 @@ async function guardarCotizacion() {
       }
     }).catch(function(e){ console.warn('Error generando PDF para subir:', e); });
     // Volver segun el origen
-    const origen = window._cotizacionOrigen || 's-supervisor';
     if (origen === 's-ots-tecnico-detalle' && window._cotizacionTecnicoActivo) {
       const nombreTec = window._cotizacionTecnicoActivo;
-      document.getElementById('detalle-tecnico-nombre').textContent = nombreTec;
-      const db2 = window.firebase.firestore();
-      // Sin orderBy: excluiria en silencio las OT sin 'creadoEn'. Orden por fecha real en el cliente.
-      const snap2 = await _conTimeout(db2.collection('ordenes').get(), 25000, 'get ordenes');
-      const grupo2 = { nombre: nombreTec, ots: [] };
-      snap2.docs.slice().sort(function(a, b){ return _fechaOTms(b.data()) - _fechaOTms(a.data()); }).forEach(function(doc) {
-        if (doc.data().tecnico === nombreTec) {
-          grupo2.ots.push({ id: doc.id, ...doc.data() });
-        }
-      });
+      /* Se vuelve con las OT que el detalle YA tenia (`_grupoTecnicoActivo`, lo deja verOTsTecnico),
+         sin bajar de nuevo la coleccion `ordenes` ENTERA. Esa descarga (7 MB el 02-10-2026, con las
+         fotos dentro de cada OT) tenia tope de 25 s: con datos moviles se puede pasar, y el
+         Administrador lee "Sin respuesta del servidor" con la cotizacion ya guardada. Lo que cambia al cotizar —que
+         la OT quede "ya cotizada"— lo resuelve verOTsTecnico leyendo `cotizaciones`, no `ordenes`. */
+      const previo = window._grupoTecnicoActivo;
       toast('Cotización guardada');
-      await verOTsTecnico(nombreTec, grupo2);
+      if (previo && previo.nombre === nombreTec && previo.grupo) {
+        await verOTsTecnico(nombreTec, previo.grupo);
+      } else {
+        go('s-ots-tecnicos');
+        cargarOTsTecnicos();
+      }
     } else if (origen === 's-preventivos') {
       toast('Cotización guardada');
       go('s-preventivos');
@@ -6862,7 +6871,12 @@ async function guardarCotizacion() {
     }
   } catch(e) {
     console.error(e);
-    if (_esTimeout(e)) toast('Sin respuesta del servidor. Revisa la lista antes de volver a guardar: la cotización puede haberse creado igual.');
+    if (guardada) {
+      // Ya esta en Firestore: no se invita a guardarla otra vez. Se sale del formulario.
+      toast('Cotización guardada. No se pudo actualizar la lista: ábrela de nuevo para verla.');
+      try { go(origen === 's-ots-tecnico-detalle' ? 's-ots-tecnicos' : origen); } catch(e2) {}
+    }
+    else if (_esTimeout(e)) toast('Sin respuesta del servidor. Revisa la lista antes de volver a guardar: la cotización puede haberse creado igual.');
     else toast('No se pudo guardar la cotización. Intenta de nuevo.');
   } finally { soltar(); }
 }
@@ -11726,6 +11740,8 @@ function _bloquePendientesMateriales(ot) {
 }
 
 async function verOTsTecnico(nombre, grupo) {
+  // Lo usa guardarCotizacion para volver aca sin bajar de nuevo toda la coleccion `ordenes`.
+  window._grupoTecnicoActivo = { nombre: nombre, grupo: grupo };
   document.getElementById('detalle-tecnico-nombre').textContent = nombre;
   const lista = document.getElementById('lista-ots-tecnico-detalle');
   _cargando(lista, 4);
