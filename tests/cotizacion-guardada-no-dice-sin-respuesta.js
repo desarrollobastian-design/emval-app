@@ -1,11 +1,12 @@
 /* Prueba de regresion — una cotizacion ya guardada no dice "Sin respuesta del servidor".
 
-   Caso real, 06-11-2026, 12:09. Pedro (Administrador) lleno una cotizacion y al guardar leyo
+   Encontrado el 06-11-2026 revisando un reclamo de Pedro (Administrador): al guardar leyo
    "Sin respuesta del servidor. Revisa la lista antes de volver a guardar: la cotizacion puede
-   haberse creado igual.", con el formulario todavia abierto. Le escribio a Bastian "No puedo hacer
-   cotizaciones".
+   haberse creado igual.", con el formulario todavia abierto. Su caso fue OTRO (una previa desde
+   Carpetas cuyo add no respondio a tiempo; quedo guardada una sola vez, verificado en Firestore),
+   pero este camino produce la misma pantalla con la cotizacion ya guardada.
 
-   Por que pasaba: cuando la cotizacion se abre desde el detalle de un tecnico (Correctivos ->
+   El camino: cuando la cotizacion se abre desde el detalle de un tecnico (Correctivos ->
    tecnico -> OT -> Cotizar), `guardarCotizacion`, DESPUES de guardarla, volvia a bajar la coleccion
    `ordenes` ENTERA (7 MB el 02-10-2026, con las fotos dentro de cada OT) con tope de 25 s, para
    repintar la lista de ese tecnico. Con datos moviles el tope se pasa, el error cae en el mismo

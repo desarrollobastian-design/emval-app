@@ -6746,7 +6746,9 @@ async function guardarCotizacion() {
   /* `guardada`: desde que Firestore confirma el add/update, la cotizacion YA EXISTE. Un error
      despues (refrescar la lista a la que se vuelve) no puede decir "puede haberse creado igual"
      ni dejar el formulario abierto: el segundo Guardar crea OTRA cotizacion con otro folio (en
-     una edicion, `_editandoCotizacionId` ya quedo en null). Caso Pedro, 06-11-2026 12:09. */
+     una edicion, `_editandoCotizacionId` ya quedo en null). Encontrado revisando el aviso que vio
+     Pedro el 06-11-2026 12:10; su caso fue OTRO (una previa cuyo `add` no respondio a tiempo, y
+     quedo guardada una sola vez), pero este camino reproduce la misma pantalla. */
   let guardada = false;
   const origen = window._cotizacionOrigen || 's-supervisor';
   try {
@@ -6842,8 +6844,8 @@ async function guardarCotizacion() {
       const nombreTec = window._cotizacionTecnicoActivo;
       /* Se vuelve con las OT que el detalle YA tenia (`_grupoTecnicoActivo`, lo deja verOTsTecnico),
          sin bajar de nuevo la coleccion `ordenes` ENTERA. Esa descarga (7 MB el 02-10-2026, con las
-         fotos dentro de cada OT) tenia tope de 25 s: con datos moviles se pasaba y Pedro leia
-         "Sin respuesta del servidor" con la cotizacion ya guardada. Lo que cambia al cotizar —que
+         fotos dentro de cada OT) tenia tope de 25 s: con datos moviles se puede pasar, y el
+         Administrador lee "Sin respuesta del servidor" con la cotizacion ya guardada. Lo que cambia al cotizar —que
          la OT quede "ya cotizada"— lo resuelve verOTsTecnico leyendo `cotizaciones`, no `ordenes`. */
       const previo = window._grupoTecnicoActivo;
       toast('Cotización guardada');

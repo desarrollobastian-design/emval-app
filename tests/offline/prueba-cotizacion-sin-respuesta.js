@@ -1,7 +1,8 @@
 /* Prueba de flujo real — guardar una cotizacion desde el detalle de un tecnico con mala señal.
 
-   Caso real, 06-11-2026, 12:09: Pedro guardo una cotizacion y leyo "Sin respuesta del servidor",
-   con el formulario abierto. Despues de guardar, `guardarCotizacion` volvia a bajar la coleccion
+   Encontrado el 06-11-2026 revisando un reclamo de Pedro ("Sin respuesta del servidor" con el
+   formulario abierto; su caso fue otro: una previa cuyo add no respondio a tiempo). En este
+   camino, despues de guardar, `guardarCotizacion` volvia a bajar la coleccion
    `ordenes` ENTERA con tope de 25 s para repintar la lista del tecnico; con datos moviles el tope
    se pasa. tests/cotizacion-guardada-no-dice-sin-respuesta.js lo mide con la funcion suelta; este
    guion lo corre en la app entera, por la interfaz, en un telefono emulado:
