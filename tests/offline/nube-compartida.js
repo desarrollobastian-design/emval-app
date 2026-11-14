@@ -103,6 +103,16 @@ const STUB_NUBE = `(function(){
   }
   var fs = function() {
     return { collection: coleccion,
+      // Lote: en orden, uno tras otro (la nube falsa no es atomica; alcanza para el flujo).
+      batch: function() {
+        var ops = [];
+        return {
+          set: function(ref, d, o){ ops.push(function(){ return ref.set(d, o); }); },
+          update: function(ref, d){ ops.push(function(){ return ref.update(d); }); },
+          delete: function(ref){ ops.push(function(){ return ref.delete(); }); },
+          commit: function(){ return ops.reduce(function(p, f){ return p.then(f); }, Promise.resolve()); }
+        };
+      },
       runTransaction: function(){ return Promise.resolve(1); },
       enablePersistence: function(){ return Promise.resolve(); } };
   };

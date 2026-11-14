@@ -180,3 +180,28 @@ entraba cualquiera y el teléfono guardaba PIN y hash.
 
 **Cuándo repetirla:** ante cualquier cambio en `_entrarConCuenta`, `validarPin`, `validarPassword`, el
 verificador local, `cargarUsuariosApp` o `stub-auth.js`.
+
+---
+
+# `prueba-tecnico-desde-el-panel.js` — Pedro agrega a un técnico y el técnico entra (14-11-2026)
+
+Dos teléfonos sobre la nube compartida (`nube-compartida.js`, que desde aquí tiene `batch()`) y con cuentas de
+Firebase Auth falsas compartidas en Node (`STUB_CUENTAS` dentro del guion: instancia principal + las instancias
+aparte que abre el panel).
+
+```bash
+node tests/offline/preparar.js origin/main
+cd tests/offline/sitio && python -m http.server 8765
+node tests/offline/prueba-tecnico-desde-el-panel.js http://127.0.0.1:8765/index.html    # 0
+node tests/offline/prueba-tecnico-desde-el-panel.js http://127.0.0.1:8765/prefix.html   # CONTRAPRUEBA: 1
+```
+
+Tramos: línea de control (Pedro abre Personal) · agregar (cuenta + `tecnicos` + `directorio` con el mismo uid y
+correo) · nombre repetido · el técnico entra desde su teléfono con el PIN que le dio Pedro · cambio de PIN (con
+señal, el viejo ya no entra) · baja y reactivación en la pantalla de entrada · sin botones para Supervisor y
+Administrador · la sesión de Pedro sigue siendo la suya y cada instancia aparte se cierra.
+
+🔑 `estado.usuario` queda puesto al tocar el nombre, **antes** del PIN: el guion da por entrado solo a quien salió
+de la pantalla del PIN (medirlo con `estado.usuario` daba por buena una entrada con el PIN viejo).
+
+📍 14-11-2026: rama 8/8 OK; contra `origin/main` (`d8deeb6`) falla en 5 (no hay botón para agregar).

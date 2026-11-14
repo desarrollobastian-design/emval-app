@@ -25,6 +25,13 @@ se niegan a correr con un modo emulador a medias. Pages no publica `tests/`.
 > - El archivo es una reconstrucción para probar: los cambios se hacen sobre las reglas reales. La guía
 >   clic a clic está en el diseño (`progress/2026-10-22_2100_chat-proyecto_emval-auth-diseno.md`).
 
+> 🔑 **Técnicos desde el panel (14-11-2026): `gestion-tecnicos.rules`.** Para que Pedro agregue, cambie el PIN,
+> dé de baja y reactive técnicos en terreno desde la app, Bastián hace en la consola, sobre las reglas
+> publicadas (paso 1b), los 3 cambios que dice la cabecera del archivo: las funciones `ficha`, `esAdmin` y
+> `soloTecnico`, el bloque `directorio` reemplazado y el bloque `tecnicos` nuevo. Sin eso, la app muestra
+> «Firebase no dejó guardar: falta activar el permiso» y no escribe nada. La etapa 2 (`firestore.rules`)
+> ya trae lo mismo.
+
 ## Requisitos (una vez)
 - **Java 21** en el `PATH`. En este equipo está en `C:\Users\corex\Herramientas\jdk-21` (Temurin JRE,
   checksum de Adoptium verificado el 23-10-2026). Con poca memoria libre en el equipo, Java no arranca
@@ -50,6 +57,7 @@ En Git Bash: `export PATH="/c/Users/corex/Herramientas/jdk-21/bin:$PATH"`. En Po
 | Reglas de la etapa 2 (78 casos, con los ataques de las revisiones de Codex y del revisor) | `npm run reglas` | `OK`, exit 0 |
 | **Contraprueba**: las mismas pruebas con las reglas de hoy (`capa1-referencia.rules`, reconstrucción) | `npm run reglas-capa1` | `FALLA`, exit 1 |
 | Transición de la etapa 1, paso 1b (10 casos, con su contraprueba adentro) | `npm run transicion` | `OK`, exit 0 |
+| Técnicos desde el panel, sobre el paso 1b (28 casos; contraprueba: con el 1b, Pedro no agrega) | `npm run gestion` | `OK`, exit 0 |
 | Herramienta de cuentas (tramos 1 a 8, con 2b, 2c, 3b, 4b y 6a a 6c) | `npm run cuentas` | `OK`, exit 0 |
 | Estado de los teléfonos (13 teléfonos, 7 tramos) | `npm run estado` | `OK`, exit 0 |
 

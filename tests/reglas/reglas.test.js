@@ -166,8 +166,12 @@ const ARCHIVO = CAPA1 ? 'capa1-referencia.rules' : 'firestore.rules';
     ['tecnico NO vuelve a tocar una cotizacion ya Realizada (fotos, firma)', () => updateDoc(doc(tec, 'cotizaciones/c2'), { estadoCot: 'Realizada', fotosAntes: ['otra'] }), false],
     // ── administrador ──
     ['admin lee tecnicos', () => getDoc(doc(adm, 'tecnicos/u_tec')), true],
-    ['admin NO escribe tecnicos desde la app (D1-B: lo hace el Admin SDK)', () => updateDoc(doc(adm, 'tecnicos/u_tec'), { pin: '0000' }), false],
-    ['admin NO escribe el directorio desde la app (solo el Admin SDK)', () => setDoc(doc(adm, 'directorio/u_otro'), { nombre: 'Otro', cargo: 'Tecnico en terreno', activo: true }), false],
+    // Desde el 14-11-2026 el Administrador gestiona TECNICOS EN TERRENO desde el panel; el detalle de
+    // esa regla esta en gestion-tecnicos.test.js. Aqui, que la etapa 2 no la deshaga ni la agrande.
+    ['admin cambia el PIN de un tecnico en terreno', () => updateDoc(doc(adm, 'tecnicos/u_tec'), { pin: '0000' }), true],
+    ['admin NO convierte a un tecnico en Administrador', () => updateDoc(doc(adm, 'tecnicos/u_tec'), { cargo: 'Administrador' }), false],
+    ['admin agrega un tecnico en terreno al directorio', () => setDoc(doc(adm, 'directorio/u_otro'), { nombre: 'Otro', cargo: 'Tecnico en terreno', activo: true }), true],
+    ['admin NO agrega un Supervisor al directorio', () => setDoc(doc(adm, 'directorio/u_otro2'), { nombre: 'Otro', cargo: 'Supervisor', activo: true }), false],
     ['admin escribe cadenas', () => updateDoc(doc(adm, 'cadenas/k1'), { nombre: 'CADENA 2' }), true],
     ['admin borra una hoja firmada', () => deleteDoc(doc(adm, 'ordenes/o_firmada')), true],
     ['admin NO borra un PDF', () => deleteDoc(doc(adm, 'pdfs/p_aleatorio')), false]

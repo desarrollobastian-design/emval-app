@@ -7,7 +7,8 @@
     "reglas-capa1": "firebase emulators:exec --only firestore --project demo-emval \"node reglas.test.js --capa1\"",
     "cuentas": "firebase emulators:exec --only auth,firestore --project demo-emval \"node cuentas-auth.test.js\"",
     "estado": "firebase emulators:exec --only auth,firestore --project demo-emval \"node estado-telefonos.test.js\"",
-    "transicion": "firebase emulators:exec --only firestore --project demo-emval \"node transicion.test.js\""
+    "transicion": "firebase emulators:exec --only firestore --project demo-emval \"node transicion.test.js\"",
+    "gestion": "firebase emulators:exec --only firestore --project demo-emval \"node gestion-tecnicos.test.js\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",

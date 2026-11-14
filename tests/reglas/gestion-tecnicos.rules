@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// GESTION DE TECNICOS DESDE EL PANEL (14-11-2026, pedido de Pedro) — sobre la TRANSICION de la etapa 1
+// (transicion-etapa1.rules, el paso 1b, publicado el 28-10-2026).
+//
+// Hasta ahora `directorio` no lo escribia nadie desde la app y `tecnicos` tampoco (D1-B): altas, bajas y
+// PIN los hacia CorexOn con tools/cuentas-auth.js. Ahora el ADMINISTRADOR, con su sesion de Firebase,
+// puede crear y cambiar fichas de TECNICOS EN TERRENO, y de nadie mas:
+//   - el cargo escrito tiene que ser 'Tecnico en terreno', y si la ficha ya existia, tambien el de antes
+//     (nadie se convierte en Supervisor o Administrador, y la ficha de Pedro no se toca desde aqui);
+//   - el directorio solo con sus campos de siempre (los de CAMPOS_FICHA en tools/cuentas-auth.js);
+//   - borrar, no: la baja es `activo: false` y se revierte.
+// Quien es Administrador lo dice SU ficha en `directorio` (la escribio el Admin SDK), no lo que diga
+// la peticion. Sin sesion o con una cuenta cualquiera, nada cambia respecto del paso 1b.
+//
+// QUE HAY QUE CAMBIAR EN LA CONSOLA (lo hace Bastian; las reglas reales no son esta reconstruccion):
+//   1. Pegar las funciones `ficha`, `esAdmin` y `soloTecnico` dentro de `match /databases/...`.
+//   2. Reemplazar el bloque `match /directorio/{uid}` por el de abajo.
+//   3. Agregar el bloque `match /tecnicos/{id}` de abajo (la regla general sigue sin dar escritura en
+//      `tecnicos`: las reglas suman permisos, y este bloque da solo lo de aqui).
+// Prueba: `npm run gestion` (tests/reglas/gestion-tecnicos.test.js), con su contraprueba adentro.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── reconstruccion del paso 1b, sin cambios ──
+    match /{col}/{id} {
+      allow read: if col in ['ordenes', 'cotizaciones', 'cadenas', 'tecnicos', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow create, update: if col in ['ordenes', 'cotizaciones', 'cadenas', 'pdfs',
+        'alertas', 'bajas', 'contadores', 'correos_purgados'];
+      allow delete: if col in ['ordenes', 'cotizaciones', 'cadenas'];
+    }
+
+    // ── (1) funciones nuevas ──
+    function ficha() {
+      return get(/databases/$(database)/documents/directorio/$(request.auth.uid));
+    }
+    function esAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/directorio/$(request.auth.uid))
+        && ficha().data.get('activo', true) != false
+        && ficha().data.get('cargo', '') == 'Administrador';
+    }
+    // Lo que queda escrito es un tecnico en terreno, y lo que habia (si habia) tambien.
+    function soloTecnico() {
+      return request.resource.data.get('cargo', '') == 'Tecnico en terreno'
+        && (resource == null || resource.data.get('cargo', '') == 'Tecnico en terreno');
+    }
+
+    // ── (2) el bloque `directorio`, reemplazado ──
+    match /directorio/{uid} {
+      allow read: if true;
+      allow create, update: if esAdmin() && soloTecnico()
+        && request.resource.data.keys().hasOnly(['nombre', 'cargo', 'letra', 'correo', 'activo', 'actualizadoEn'])
+        && request.resource.data.get('nombre', '') is string && request.resource.data.get('nombre', '') != ''
+        && request.resource.data.get('activo', true) is bool;
+    }
+
+    // ── (3) el bloque `tecnicos`, nuevo ──
+    match /tecnicos/{id} {
+      allow create, update: if esAdmin() && soloTecnico()
+        && request.resource.data.get('nombre', '') is string && request.resource.data.get('nombre', '') != ''
+        && !('passwordHash' in request.resource.data);
+    }
+  }
+}
