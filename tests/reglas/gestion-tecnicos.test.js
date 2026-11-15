@@ -62,7 +62,7 @@ function alta(db, uid, nombre, cargo) {
 (async () => {
   const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8085').split(':');
   const env = await initializeTestEnvironment({ projectId: 'demo-emval-gestion',
-    firestore: { rules: fs.readFileSync(path.join(__dirname, 'gestion-tecnicos.rules'), 'utf8'), host, port: Number(port) } });
+    firestore: { rules: fs.readFileSync(process.env.REGLAS_GESTION || path.join(__dirname, 'gestion-tecnicos.rules'), 'utf8'), host, port: Number(port) } });
   await sembrar(env);
   const adm = env.authenticatedContext('u_admin').firestore();
   const admBaja = env.authenticatedContext('u_adminbaja').firestore();

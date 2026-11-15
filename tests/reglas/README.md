@@ -31,6 +31,9 @@ se niegan a correr con un modo emulador a medias. Pages no publica `tests/`.
 > `soloTecnico`, el bloque `directorio` reemplazado y el bloque `tecnicos` nuevo. Sin eso, la app muestra
 > «Firebase no dejó guardar: falta activar el permiso» y no escribe nada. La etapa 2 (`firestore.rules`)
 > ya trae lo mismo.
+> ✅ **Publicadas el 15-11-2026, 14:46** (ruleset `9e363bbf`, releído igual al archivo; antes `bf6c196e`, el paso 1b).
+> Antes de publicar se probó el texto exacto con `REGLAS_GESTION=<archivo> npm run gestion` (28/28) y
+> `REGLAS_TRANSICION=<archivo> npm run transicion` (10/10). Volver atrás: publicar de nuevo el ruleset `bf6c196e`.
 
 ## Requisitos (una vez)
 - **Java 21** en el `PATH`. En este equipo está en `C:\Users\corex\Herramientas\jdk-21` (Temurin JRE,
