@@ -71,6 +71,13 @@ const EMULADOR = require('./admin-sdk').revisarEmulador() === '';
 //    que sigan siendo identicas: si difieren, nadie entra. ─────────────────────────────────────
 function _claveFirebaseDePin(pin) { return 'emval-pin-' + String(pin); }
 function _correoDeCuenta(uid) { return String(uid).toLowerCase() + '@' + DOMINIO_CORREO; }
+// Un tecnico agregado desde el panel (14-11-2026) tiene un correo que NO sale de su uid: Firebase elige
+// el uid al crear la cuenta en el navegador, y la app anota el correo en `tecnicos.correo` (y en
+// `directorio.correo`). Se respeta solo si es del dominio de la app; si no, el de siempre.
+function correoDeFicha(uid, t) {
+  const c = String((t && t.correo) || '').toLowerCase();
+  return /^[a-z0-9_-]+@/.test(c) && c.endsWith('@' + DOMINIO_CORREO) ? c : _correoDeCuenta(uid);
+}
 const PIN_VALIDO = /^\d{4}$/;
 const sha256hex = t => crypto.createHash('sha256').update(String(t)).digest('hex');
 
@@ -171,7 +178,7 @@ async function principal() {
   for (const d of snap.docs) {
     const t = d.data() || {};
     const uid = d.id, cargo = t.cargo || 'Tecnico en terreno', nombre = t.nombre || '';
-    const p = { uid, nombre, cargo, letra: t.letra || (nombre.charAt(0) || '?').toUpperCase(), correo: _correoDeCuenta(uid) };
+    const p = { uid, nombre, cargo, letra: t.letra || (nombre.charAt(0) || '?').toUpperCase(), correo: correoDeFicha(uid, t) };
     const ficha = fichas[uid] || null;
     let usuario = null;
     try { usuario = await auth.getUser(uid); } catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
@@ -431,5 +438,5 @@ async function deshacer(db, auth, modo, proyecto) {
   process.exit(conflictos.length || fallas ? 2 : 0);
 }
 
-module.exports = { _claveFirebaseDePin, _correoDeCuenta, hashDeLaClaveQuemada, DOMINIO_CORREO, fichaPermitida, CAMPOS_FICHA };
+module.exports = { _claveFirebaseDePin, _correoDeCuenta, correoDeFicha, hashDeLaClaveQuemada, DOMINIO_CORREO, fichaPermitida, CAMPOS_FICHA };
 if (require.main === module) principal().catch(e => { console.error('FALLA: ' + (e && (e.code || e.message))); process.exit(1); });

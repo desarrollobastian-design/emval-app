@@ -19,6 +19,8 @@
       exit 2); con --autorizar, si.
    2c. (nuevo 6) Una cuenta existente con OTRO correo: no se toca, no se le publica ficha, se informa
       (sin imprimir su correo) y sale con 2.
+   2d. (14-11-2026) Un tecnico agregado desde el panel (correo anotado en tecnicos, no derivado del uid,
+      y dado de baja): se reconoce, su ficha conserva ese correo y la baja, y su cuenta no se toca.
    3b. (P2-8) Las fichas que la corrida no escribe —de una persona omitida y una huerfana— tambien
       quedan solo con los campos permitidos; la huerfana se informa.
    5. Correrla otra vez no cambia ninguna cuenta.
@@ -56,17 +58,20 @@ function chequear(ok, detalle) { if (!ok) fallos.push('  ✗ ' + detalle); retur
 const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 
 // Valores SOLO de prueba (no son de nadie).
-const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141', PIN_T = '2718', PIN_U = '1618', PIN_V = '1414';
+const PIN_A = '4821', PIN_B = '7305', PIN_S = '6190', PIN_C_VIEJO = '5511', PIN_H = '6622', PIN_M = '3141', PIN_T = '2718', PIN_U = '1618', PIN_V = '1414', PIN_N = '9182';
 const CLAVE_ADMIN = 'clave-solo-de-prueba-admin', CLAVE_VIEJA_B = 'clave-vieja-de-beto', CLAVE_RITA = 'clave-solo-de-prueba-rita';
 const CLAVE_E = 'clave-solo-de-prueba-esteban', CLAVE_M = 'clave-solo-de-prueba-marta';
 const CORREO_REAL_M = 'marta.otra@ejemplo.test';
-const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, PIN_T, PIN_U, PIN_V, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
+// Correo de una cuenta creada desde el panel: del dominio de la app, pero no sale de su uid.
+const CORREO_APP_N = 'zq9panel00000000000x@emval-app.firebaseapp.com';
+const SECRETOS = [PIN_A, PIN_B, PIN_S, PIN_C_VIEJO, PIN_H, PIN_M, PIN_T, PIN_U, PIN_V, PIN_N, CLAVE_ADMIN, CLAVE_VIEJA_B, CLAVE_RITA, CLAVE_E, CLAVE_M,
   sha(CLAVE_ADMIN), sha(CLAVE_RITA), sha(CLAVE_E), 'nota-secreta-de-prueba'];
 // El correo real de una cuenta no es un secreto (el respaldo local lo guarda para reconocerla), pero la
 // herramienta no lo imprime: se revisa aparte, solo en las salidas.
 const UID = { a: 'tecA0000000000000001', b: 'tecB0000000000000002', c: 'tecC0000000000000003',
   p: 'admP0000000000000004', q: 'admQ0000000000000005', s: 'supS0000000000000006', r: 'admR0000000000000007',
-  e: 'admE0000000000000008', m: 'tecM0000000000000009', t: 'tecT0000000000000011', u: 'tecU0000000000000012', v: 'tecV0000000000000013' };
+  e: 'admE0000000000000008', m: 'tecM0000000000000009', t: 'tecT0000000000000011', u: 'tecU0000000000000012', v: 'tecV0000000000000013',
+  n: 'tecN0000000000000014' };
 const HUERFANA = 'huerH000000000000010';
 const DIR_RESP = path.join(RAIZ, 'tools', 'respaldos');
 
@@ -132,14 +137,20 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   await db.doc('tecnicos/' + UID.m).set({ nombre: 'Marta Prueba', cargo: 'Tecnico en terreno', pin: PIN_M, letra: 'M' });
   await auth.createUser({ uid: UID.m, email: CORREO_REAL_M, password: CLAVE_M, displayName: 'Marta Prueba' });
   const martaAntes = (await cuenta(UID.m)).toJSON();
+  // Nico lo agrego Pedro desde el panel (14-11-2026): su correo NO sale de su uid (Firebase elige el uid al
+  // crear la cuenta en el navegador) y la app lo anoto en tecnicos y en directorio. Ademas, Pedro lo dio de baja.
+  await db.doc('tecnicos/' + UID.n).set({ nombre: 'Nico Panel', cargo: 'Tecnico en terreno', pin: PIN_N, letra: 'N', correo: CORREO_APP_N, activo: false });
+  await auth.createUser({ uid: UID.n, email: CORREO_APP_N, password: _claveFirebaseDePin(PIN_N), displayName: 'Nico Panel' });
+  await db.doc('directorio/' + UID.n).set({ nombre: 'Nico Panel', cargo: 'Tecnico en terreno', letra: 'N', correo: CORREO_APP_N, activo: false, actualizadoEn: '2026-11-14T12:00:00.000Z' });
+  const nicoAntes = (await cuenta(UID.n)).toJSON();
 
   // 1. Simulacion
   const sim = correr([]);
   const fichas0 = (await db.collection('directorio').get()).size;
-  console.log('1) Simulacion   → exit ' + sim.status + (sim.status === 2 ? ' ✓' : ' ✗') + ', nadie creado: ' + (!(await cuenta(UID.a)) && fichas0 === 4 ? '✓' : '✗') +
+  console.log('1) Simulacion   → exit ' + sim.status + (sim.status === 2 ? ' ✓' : ' ✗') + ', nadie creado: ' + (!(await cuenta(UID.a)) && fichas0 === 5 ? '✓' : '✗') +
     ', clave quemada: ' + (/CLAVE QUEMADA/.test(sim.salida) ? 'avisa ✓' : 'NO AVISA ✗'));
   chequear(sim.status === 2, 'la simulacion con gente que quedaria sin cuenta no sale con 2 (sale ' + sim.status + ')');
-  chequear(!(await cuenta(UID.a)) && fichas0 === 4, 'la simulacion escribio');
+  chequear(!(await cuenta(UID.a)) && fichas0 === 5, 'la simulacion escribio');
   chequear(/CLAVE QUEMADA/.test(sim.salida), 'la simulacion no avisa del Administrador con la clave quemada');
 
   // 2. Ejecutar sin autorizar a nadie
@@ -178,6 +189,17 @@ const respaldos = () => fs.existsSync(DIR_RESP) ? fs.readdirSync(DIR_RESP).filte
   chequear(JSON.stringify(martaDespues) === JSON.stringify(martaAntes), 'la cuenta existente con otro correo se cambio (nuevo 6)');
   chequear(!fichaM, 'a una cuenta con otro correo se le publico una ficha con el correo derivado: la app no podria entrar (nuevo 6)');
   chequear(/OTRO correo/.test(lineaM) && !ej.salida.includes(CORREO_REAL_M), 'la cuenta con otro correo no se informa, o se imprime su correo');
+
+  // 2d. Tecnico agregado desde el panel: su correo es el anotado, no el derivado del uid (14-11-2026)
+  const nicoDespues = (await cuenta(UID.n)).toJSON();
+  const fichaN = (await db.doc('directorio/' + UID.n).get()).data() || {};
+  const lineaN = (ej.salida.split('\n').find(l => l.includes('Nico Panel')) || '');
+  const nicoOk = !/OTRO correo/.test(lineaN) && fichaN.correo === CORREO_APP_N && fichaN.activo === false;
+  console.log('2d) Del panel   → Nico: ' + (!/OTRO correo/.test(lineaN) ? 'reconocido ✓' : 'TRATADO COMO OTRO CORREO ✗') +
+    ', ficha ' + (fichaN.correo === CORREO_APP_N ? 'con su correo ✓' : 'CON OTRO CORREO ✗') + ', ' + (fichaN.activo === false ? 'sigue de baja ✓' : 'REACTIVADO ✗') +
+    ', cuenta ' + (JSON.stringify(nicoDespues) === JSON.stringify(nicoAntes) ? 'intacta ✓' : 'TOCADA ✗'));
+  chequear(nicoOk, 'un tecnico agregado desde el panel se trata como cuenta con otro correo, o su ficha pierde el correo o la baja');
+  chequear(JSON.stringify(nicoDespues) === JSON.stringify(nicoAntes), 'la cuenta de un tecnico agregado desde el panel fue modificada');
 
   // 3. Ficha limpia y respaldo sin valores de mas
   const fichaAna = (await db.doc('directorio/' + UID.a).get()).data() || {};

@@ -44,7 +44,7 @@ async function probar(env, archivo, casos) {
   const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8085').split(':');
   const correr = async (archivo, armar) => {
     const env = await initializeTestEnvironment({ projectId: 'demo-emval-' + archivo.replace(/\W/g, ''),
-      firestore: { rules: fs.readFileSync(path.join(__dirname, archivo), 'utf8'), host, port: Number(port) } });
+      firestore: { rules: fs.readFileSync((archivo === 'transicion-etapa1.rules' && process.env.REGLAS_TRANSICION) || path.join(__dirname, archivo), 'utf8'), host, port: Number(port) } });
     const anon = env.unauthenticatedContext().firestore();
     const cuenta = env.authenticatedContext('u_cualquiera').firestore();
     console.log(archivo + ':');

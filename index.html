@@ -1290,20 +1290,14 @@
     <div id="panel-personal">
       <!-- Secundario: es la puerta de entrada al formulario, no el compromiso. Cuando el
            formulario esta abierto, el primario es "Guardar" y los dos se ven a la vez. -->
-      <div id="aviso-gestion-usuarios" class="card" style="margin-bottom:12px;font-size:13px;color:var(--texto2);line-height:1.5;">Las altas, las bajas y los cambios de PIN o contraseña los hace CorexOn. Escríbenos si necesitas uno.</div>
+      <button id="btn-agregar-tecnico" class="btn btn-secondary btn-sm" onclick="mostrarFormTecnico()" style="margin-bottom:12px;">+ Agregar técnico</button>
+      <div id="aviso-gestion-usuarios" class="card" style="margin-bottom:12px;font-size:13px;color:var(--texto2);line-height:1.5;">Aquí agregas técnicos en terreno, les cambias el PIN y los das de baja o los reactivas. Supervisores y administradores los gestiona CorexOn.</div>
       <input type="text" id="personal-buscar" aria-label="Buscar personal" placeholder="Buscar personal..." style="width:100%;padding:8px 12px;border:1px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;margin-bottom:12px;" onkeyup="filtrarPersonal();">
       <div id="form-tecnico" style="display:none;" class="card">
         <div style="font-size:15px;font-weight:500;margin-bottom:12px;" id="form-tecnico-titulo">Nuevo técnico</div>
-        <div class="field"><label for="tec-nombre">Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" /></div>
-        <div class="field">
-          <label for="tec-cargo">Rol</label>
-          <select id="tec-cargo" style="width:100%;padding:11px 13px;border:1.5px solid var(--gris3);border-radius:var(--radio-sm);font-size:16px;font-family:inherit;">
-            <option value="Tecnico en terreno">Técnico en terreno</option>
-            <option value="Supervisor">Supervisor</option>
-            <option value="Administrador">Administrador</option>
-          </select>
-        </div>
-        <div class="field"><label for="tec-pin">PIN (4 números)</label><input type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" id="tec-pin" placeholder="Ej: 1234" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" /></div>
+        <div class="field"><label for="tec-nombre">Nombre completo</label><input type="text" id="tec-nombre" placeholder="Ej: Juan Perez" autocomplete="off" /></div>
+        <div style="font-size:13px;color:var(--texto2);margin-bottom:12px;">Rol: Técnico en terreno</div>
+        <div class="field"><label for="tec-pin" id="tec-pin-label">PIN (4 números)</label><input type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" id="tec-pin" placeholder="Ej: 1234" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" /></div>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-secondary btn-sm" onclick="cancelarFormTecnico()" style="flex:1;">Cancelar</button>
           <button id="btn-guardar-tecnico" class="btn btn-primary btn-sm" onclick="guardarTecnico()" style="flex:1;">Guardar</button>
@@ -8009,33 +8003,81 @@ async function cargarTecnicosAdmin() {
   _cargando(lista, 3);          // el skeleton va ANTES del await, o no se ve nunca
   try {
     const db = window.firebase.firestore();
-    const snap = await db.collection('tecnicos').orderBy('nombre').get();
+    const snap = await _conTimeout(db.collection('tecnicos').orderBy('nombre').get(), 20000, 'leer tecnicos');
+    // `directorio` dice quien puede entrar (y si esta de baja). Si no se puede leer, la lista sale
+    // igual, pero sin decir nada de la entrada: no saber no es "sin acceso".
+    let fichas = null;
+    try {
+      const dir = await _conTimeout(db.collection('directorio').get(), 12000, 'leer directorio');
+      fichas = {};
+      dir.docs.forEach(function(x) { fichas[x.id] = x.data() || {}; });
+    } catch (e) {
+      // SILENCIO-FIRMADO: la lista de personal sale igual; solo no dice quien esta de baja o sin acceso.
+      console.warn('No se pudo leer el directorio:', e && e.message);
+    }
     _cargado(lista);
     lista.innerHTML = '';
     if (snap.empty) {
-      lista.innerHTML = _vacio('Aún no hay personal', 'Agrega al primero con el botón + Agregar.');
+      lista.innerHTML = _vacio('Aún no hay personal', 'Agrega al primero con el botón + Agregar técnico.');
       return;
     }
     snap.docs.forEach(function(doc) {
       const d = doc.data();
       if (_ocultoTecnico(d.nombre)) return;  // cuenta oculta (dev/pruebas)
+      const cargo = d.cargo || CARGO_TECNICO;
+      const ficha = fichas ? (fichas[doc.id] || null) : undefined;
+      const deBaja = (ficha && ficha.activo === false) || d.activo === false;
       const div = document.createElement('div');
       div.className = 'card';
       div.setAttribute('data-tecnico', d.nombre);
-      div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;';
+      div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;' + (deBaja ? 'opacity:.65;' : '');
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.style.cssText = 'flex:1;min-width:140px;';
       const nombre = document.createElement('div');
       nombre.style.cssText = 'font-size:15px;font-weight:500;';
       nombre.textContent = d.nombre;
       const detalle = document.createElement('div');
       detalle.style.cssText = 'font-size:12px;color:var(--texto3);margin-top:2px;';
-      const esAdminCargo = (d.cargo || '') === 'Administrador';
-      detalle.innerHTML = _cargoLabel(d.cargo || 'Tecnico en terreno') + (esAdminCargo ? ' | Contraseña: <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> protegida' : ' | PIN: ' + (d.pin || '----'));
+      const esAdminCargo = cargo === 'Administrador';
+      detalle.innerHTML = _cargoLabel(cargo) + (esAdminCargo ? ' | Contraseña: <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> protegida' : ' | PIN: ' + _escHtml(d.pin || '----'));
       info.appendChild(nombre);
       info.appendChild(detalle);
-      // Sin botones desde la etapa 1 de Auth (D1-B): ver GESTION_POR_COREXON.
+      // Lo que dice el directorio, en palabras: dado de baja, o sin acceso todavia (no hay ficha).
+      let nota = '';
+      if (deBaja) nota = 'Dado de baja: no aparece en la pantalla de entrada.';
+      else if (fichas && !ficha) nota = 'Sin acceso a la app todavía: falta su cuenta. Avísale a CorexOn.';
+      if (nota) {
+        const n = document.createElement('div');
+        n.style.cssText = 'font-size:12px;color:var(--texto2);margin-top:4px;';
+        n.textContent = nota;
+        info.appendChild(n);
+      }
       div.appendChild(info);
+      // Solo los tecnicos en terreno se gestionan desde aqui (ver GESTION DE TECNICOS).
+      if (cargo === CARGO_TECNICO) {
+        const btns = document.createElement('div');
+        btns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+        const estilo = 'border:none;border-radius:var(--radio-sm);padding:8px 12px;font-size:13px;cursor:pointer;min-height:36px;color:#fff;';
+        if (!deBaja) {
+          const bPin = document.createElement('button');
+          bPin.textContent = 'Cambiar PIN';
+          bPin.style.cssText = estilo + 'background:var(--azul);';
+          bPin.onclick = (function(id, n){ return function(){ editarTecnico(id, n); }; })(doc.id, d.nombre);
+          btns.appendChild(bPin);
+          const bBaja = document.createElement('button');
+          bBaja.textContent = 'Dar de baja';
+          bBaja.style.cssText = estilo + 'background:var(--rojo);';
+          bBaja.onclick = (function(id, n, b){ return function(){ eliminarTecnico(id, n, b); }; })(doc.id, d.nombre, bBaja);
+          btns.appendChild(bBaja);
+        } else {
+          const bAlta = document.createElement('button');
+          bAlta.textContent = 'Reactivar';
+          bAlta.style.cssText = estilo + 'background:var(--verde);';
+          bAlta.onclick = (function(id, n, b){ return function(){ reactivarTecnico(id, n, b); }; })(doc.id, d.nombre, bAlta);
+          btns.appendChild(bAlta);
+        }
+        div.appendChild(btns);
+      }
       lista.appendChild(div);
     });
   } catch(e) {
@@ -8046,18 +8088,281 @@ async function cargarTecnicosAdmin() {
   }
 }
 
-/* GESTION DE USUARIOS: desde la etapa 1 de Firebase Auth (23-10-2026) la hace CorexOn con
-   tools/cuentas-auth.js (decision de Bastian, D1-B). Sin servidor, el navegador no puede cambiarle
-   la clave de Firebase a otra persona: un PIN cambiado solo en `tecnicos` dejaria a ese tecnico
-   sin poder entrar, y un alta hecha solo aqui no tendria cuenta ni ficha en el directorio. */
-const GESTION_POR_COREXON = 'Las altas, las bajas y los cambios de PIN o contraseña los hace CorexOn. Escríbenos si necesitas uno.';
-function cambiarPasswordAdmin() { toast(GESTION_POR_COREXON); }
-function mostrarFormTecnico() { toast(GESTION_POR_COREXON); }
-function cancelarFormTecnico() { document.getElementById('form-tecnico').style.display = 'none'; editandoTecnicoId = null; }
+/* =========== GESTION DE TECNICOS DESDE EL PANEL (14-11-2026, pedido de Pedro) ===========
+   Desde la etapa 1 de Auth (D1-B, 23-10) las altas, bajas y PIN los hacia solo CorexOn con
+   tools/cuentas-auth.js. Ahora el Administrador lo hace desde aqui, SOLO con tecnicos en terreno:
+   agregar, cambiar el PIN, dar de baja y reactivar. Supervisores y administradores siguen con la
+   herramienta: un cargo con permisos de panel no se concede desde un telefono (y las reglas de
+   Firestore tampoco lo dejan: tests/reglas/gestion-tecnicos.rules).
+   Como se hace sin servidor:
+   - La cuenta de Firebase del tecnico se crea (o se le cambia la clave) en una INSTANCIA APARTE de
+     Firebase sin persistencia (_authAparte): la sesion de Pedro en la app no se toca nunca.
+   - El id de su documento en `tecnicos` y en `directorio` es el uid de la cuenta: la entrada exige que
+     coincidan (_iniciarSesionFirebase, 'otra-cuenta'). Firebase elige el uid al crear la cuenta, asi
+     que el correo sale de un id nuevo y queda escrito en `directorio.correo` y `tecnicos.correo`
+     (la entrada y tools/cuentas-auth.js usan ese).
+   - Cambiar el PIN = entrar en la instancia aparte con el PIN guardado y cambiar la clave. Antes se
+     anota `pinNuevo`: si algo se corta a medias, el intento siguiente prueba los dos.
+   - Baja = `activo: false` en `directorio` y en `tecnicos`. No borra la cuenta ni el historial y se
+     revierte con Reactivar.
+   Limite conocido: SIN señal, un telefono donde ese tecnico ya entro acepta su PIN anterior (o lo deja
+   entrar estando de baja) hasta que ese telefono vea el directorio nuevo o pasen 14 dias
+   (VERIF_MAX_DIAS). Con señal manda Firebase.
+   Prueba: tests/tecnicos-se-gestionan-desde-el-panel.js. */
+const CARGO_TECNICO = 'Tecnico en terreno';
+const GESTION_MS = 8000;    // por paso. Un alta (leer, cuenta, ficha) cabe bajo la guardia de _bloquear
+// (_MAX_BLOQUEO_MS); un cambio de PIN puede pasarla con mala señal, y por eso hay ademas _gestionEnCurso:
+// aunque el boton vuelva, no arranca un segundo cambio mientras el primero sigue.
+let _gestionEnCurso = false;
+const GESTION_EN_CURSO = 'Espera: todavía se está guardando el cambio anterior.';
+const SOLO_TECNICOS = 'Desde aquí se gestionan solo técnicos en terreno. Supervisores y administradores los gestiona CorexOn.';
+function _normNombre(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function _ahoraISO() { return new Date().toISOString(); }
 
-function editarTecnico() { toast(GESTION_POR_COREXON); }
-async function guardarTecnico() { toast(GESTION_POR_COREXON); }
-async function eliminarTecnico() { toast(GESTION_POR_COREXON); }
+// Una instancia de Firebase aparte, sin persistencia, para crear o tocar la cuenta de OTRA persona sin
+// cerrar ni cambiar la sesion de quien esta en la app. Se cierra siempre (cerrar()).
+async function _authAparte() {
+  if (!_authFirebase() && !(await _cargarSdkAuth())) { const e = new Error('sin-sdk-auth'); e.code = 'sin-sdk-auth'; throw e; }
+  const fb = window.firebase;
+  const nombreApp = 'emval-gestion-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const app = fb.initializeApp(fb.app().options, nombreApp);
+  const auth = app.auth();
+  try { await _conTimeout(auth.setPersistence(fb.auth.Auth.Persistence.NONE), 3000, 'persistencia'); } catch (e) {}
+  return {
+    auth: auth,
+    cerrar: function() {
+      try { Promise.resolve(auth.signOut()).catch(function(){}); } catch (e) {}
+      try { Promise.resolve(app.delete()).catch(function(){}); } catch (e) {}
+    }
+  };
+}
+
+// El mensaje dice la causa y no promete lo que no paso (regla 11). `paso` dice donde se corto.
+function _msgGestion(e, paso) {
+  const c = (e && e.code) || '';
+  if (_esTimeout(e)) {
+    if (paso === 'ficha') return 'Sin respuesta del servidor. Revisa la lista antes de volver a intentarlo: puede haber quedado guardado.';
+    if (paso === 'clave') return 'Sin respuesta del servidor. Puede que el PIN haya cambiado: vuelve a intentarlo con señal.';
+    return 'Sin respuesta del servidor. No se guardó nada: vuelve a intentarlo con señal.';
+  }
+  if (c === 'sin-sdk-auth' || c === 'auth/network-request-failed') return 'Sin señal. No se guardó nada: vuelve a intentarlo con señal.';
+  if (c === 'permission-denied' || /permission/i.test(String(e && e.message))) return 'Firebase no dejó guardar: falta activar el permiso. Avísale a CorexOn.';
+  if (c === 'auth/too-many-requests') return 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.';
+  if (c === 'auth/email-already-in-use') return 'No se pudo crear la cuenta (ya existía). Vuelve a intentarlo.';
+  if (_AUTH_SIN_CONFIGURAR.indexOf(c) >= 0) return 'Firebase no permite crear cuentas desde la app. Avísale a CorexOn.';
+  return 'No se pudo guardar. Vuelve a intentarlo.';
+}
+
+// Lee la ficha de `tecnicos` y comprueba que sea un tecnico en terreno. { ref, t } o { msg }.
+async function _tecnicoGestionable(db, id) {
+  const ref = db.collection('tecnicos').doc(id);
+  const doc = await _conTimeout(ref.get(), GESTION_MS, 'leer tecnico');
+  const t = doc && doc.exists ? (doc.data() || {}) : null;
+  if (!t) return { msg: 'Ese técnico ya no está en la lista. Recarga la pantalla.' };
+  if ((t.cargo || CARGO_TECNICO) !== CARGO_TECNICO) return { msg: SOLO_TECNICOS };
+  return { ref: ref, t: t };
+}
+
+// Alta: cuenta de Firebase + ficha en `tecnicos` + ficha en `directorio`. { ok, msg, uid }.
+async function _altaTecnico(nombre, pin) {
+  nombre = String(nombre || '').replace(/\s+/g, ' ').trim();
+  pin = String(pin || '').trim();
+  if (estado.cargo !== 'Administrador') return { ok: false, msg: 'Solo el Administrador agrega técnicos.' };
+  if (!nombre) return { ok: false, msg: 'Escribe el nombre del técnico.' };
+  // EXACTAMENTE 4 digitos: el teclado de la entrada valida al cuarto (pinInput).
+  if (!/^\d{4}$/.test(pin)) return { ok: false, msg: 'El PIN debe ser exactamente 4 números.' };
+  const db = window.firebase.firestore();
+  let paso = 'leer';
+  try {
+    // Nombre repetido: la entrada busca a cada persona por su nombre (_FICHAS[nombre]); dos iguales
+    // se pisan y uno de los dos no podria entrar nunca.
+    const r = await Promise.all([
+      _conTimeout(db.collection('directorio').get(), GESTION_MS, 'leer directorio'),
+      _conTimeout(db.collection('tecnicos').get(), GESTION_MS, 'leer tecnicos')
+    ]);
+    const n = _normNombre(nombre);
+    const repetido = r[0].docs.concat(r[1].docs).some(function(x) { return _normNombre((x.data() || {}).nombre) === n; });
+    if (repetido) return { ok: false, msg: 'Ya hay alguien llamado «' + nombre + '». Usa otro nombre, por ejemplo con el apellido.' };
+
+    paso = 'cuenta';
+    const correo = _correoDeCuenta(db.collection('tecnicos').doc().id);
+    const ap = await _authAparte();
+    let uid = '';
+    try {
+      const cred = await _conTimeout(ap.auth.createUserWithEmailAndPassword(correo, _claveFirebaseDePin(pin)), GESTION_MS, 'crear cuenta');
+      uid = (cred && cred.user && cred.user.uid) || '';
+    } finally { ap.cerrar(); }
+    if (!uid) return { ok: false, msg: 'Firebase no devolvió la cuenta. No se guardó nada: vuelve a intentarlo.' };
+
+    // Si esto falla, la cuenta queda sin ficha: no es nadie (no aparece ni escribe). Reintentar crea
+    // otra cuenta con otro correo; la primera queda huerfana e inofensiva.
+    paso = 'ficha';
+    const letra = nombre.charAt(0).toUpperCase();
+    const ahora = _ahoraISO();
+    const lote = db.batch();
+    lote.set(db.collection('tecnicos').doc(uid), { nombre: nombre, cargo: CARGO_TECNICO, pin: pin, letra: letra,
+      correo: correo, activo: true, creadoEn: ahora, creadoPor: _uidEnLaApp || '' });
+    lote.set(db.collection('directorio').doc(uid), { nombre: nombre, cargo: CARGO_TECNICO, letra: letra,
+      correo: correo, activo: true, actualizadoEn: ahora });
+    await _conTimeout(lote.commit(), GESTION_MS, 'guardar ficha');
+    return { ok: true, uid: uid, msg: nombre + ' ya puede entrar con su PIN.' };
+  } catch (e) {
+    // SILENCIO-FIRMADO: no se traga: el mensaje con la causa vuelve a guardarTecnico, que lo muestra.
+    console.error('alta de tecnico (' + paso + '):', e);
+    return { ok: false, msg: _msgGestion(e, paso) };
+  }
+}
+
+// Cambiar el PIN: entrar como el tecnico en la instancia aparte y cambiarle la clave. { ok, msg }.
+async function _cambiarPinTecnico(id, pinNuevo) {
+  pinNuevo = String(pinNuevo || '').trim();
+  if (estado.cargo !== 'Administrador') return { ok: false, msg: 'Solo el Administrador cambia el PIN.' };
+  if (!/^\d{4}$/.test(pinNuevo)) return { ok: false, msg: 'El PIN debe ser exactamente 4 números.' };
+  const db = window.firebase.firestore();
+  const FV = window.firebase.firestore.FieldValue;
+  let paso = 'leer';
+  try {
+    const g = await _tecnicoGestionable(db, id);
+    if (!g.ref) return { ok: false, msg: g.msg };
+    const t = g.t;
+    if (t.pin === pinNuevo && !t.pinNuevo) return { ok: false, msg: 'Ese ya es su PIN.' };
+    const correo = t.correo || _correoDeCuenta(id);
+    // El PIN de la ficha, y el anotado si un cambio anterior quedo a medias.
+    const candidatos = [t.pin, t.pinNuevo].filter(function(p, i, a) { return p && /^\d{4}$/.test(String(p)) && a.indexOf(p) === i; });
+
+    paso = 'cuenta';
+    const ap = await _authAparte();
+    try {
+      let cred = null, pinVigente = '';
+      for (const p of candidatos) {
+        try {
+          cred = await _conTimeout(ap.auth.signInWithEmailAndPassword(correo, _claveFirebaseDePin(p)), GESTION_MS, 'entrar como tecnico');
+          pinVigente = String(p);
+          break;
+        } catch (e) {
+          const c = (e && e.code) || '';
+          if (c === 'auth/user-not-found') return { ok: false, msg: t.nombre + ' no tiene cuenta todavía. Avísale a CorexOn.' };
+          if (c === 'auth/user-disabled') return { ok: false, msg: 'La cuenta de ' + t.nombre + ' está deshabilitada. Avísale a CorexOn.' };
+          if (c !== 'auth/wrong-password' && c !== 'auth/invalid-credential' && c !== 'auth/invalid-login-credentials') throw e;
+        }
+      }
+      const user = (cred && cred.user) || ap.auth.currentUser;
+      if (!user) return { ok: false, msg: 'El PIN guardado de ' + t.nombre + ' no coincide con su cuenta. Avísale a CorexOn.' };
+      if (user.uid !== id) return { ok: false, msg: 'La cuenta de ' + t.nombre + ' no coincide con su ficha. Avísale a CorexOn.' };
+      if (pinVigente === pinNuevo) {
+        // Un cambio anterior quedo a medias con este mismo PIN: la cuenta ya lo tiene, falta la ficha.
+        paso = 'ficha';
+        await _conTimeout(g.ref.update({ pin: pinNuevo, pinNuevo: FV.delete() }), GESTION_MS, 'guardar pin');
+        return { ok: true, msg: 'PIN de ' + t.nombre + ' cambiado.' };
+      }
+      // Antes de tocar la cuenta, la ficha anota el vigente y el nuevo: si algo se corta, se prueban los dos.
+      paso = 'anotar';
+      await _conTimeout(g.ref.update({ pin: pinVigente, pinNuevo: pinNuevo }), GESTION_MS, 'anotar pin');
+      paso = 'clave';
+      await _conTimeout(user.updatePassword(_claveFirebaseDePin(pinNuevo)), GESTION_MS, 'cambiar clave');
+    } finally { ap.cerrar(); }
+    paso = 'ficha';
+    await _conTimeout(g.ref.update({ pin: pinNuevo, pinNuevo: FV.delete() }), GESTION_MS, 'guardar pin');
+    return { ok: true, msg: 'PIN de ' + t.nombre + ' cambiado. Con señal ya entra con el nuevo.' };
+  } catch (e) {
+    console.error('cambio de PIN (' + paso + '):', e);
+    // La clave ya cambio pero la ficha no alcanzo a decirlo: el intento siguiente prueba `pinNuevo`.
+    if (paso === 'ficha' && !_esTimeout(e)) return { ok: false, msg: 'El PIN cambió, pero no se alcanzó a anotar. Vuelve a guardarlo con el mismo PIN.' };
+    return { ok: false, msg: _msgGestion(e, paso) };
+  }
+}
+
+// Baja (activo=false) o reactivacion (activo=true), en `tecnicos` y en `directorio`. { ok, msg }.
+async function _activarTecnico(id, activo) {
+  if (estado.cargo !== 'Administrador') return { ok: false, msg: 'Solo el Administrador da de baja o reactiva.' };
+  const db = window.firebase.firestore();
+  let paso = 'leer';
+  try {
+    const g = await _tecnicoGestionable(db, id);
+    if (!g.ref) return { ok: false, msg: g.msg };
+    const dirRef = db.collection('directorio').doc(id);
+    const dir = await _conTimeout(dirRef.get(), GESTION_MS, 'leer ficha');
+    paso = 'ficha';
+    const lote = db.batch();
+    lote.update(g.ref, { activo: !!activo });
+    // Sin ficha en el directorio no hay nada que activar ahi: esa persona no entra igual.
+    if (dir && dir.exists) lote.update(dirRef, { activo: !!activo, actualizadoEn: _ahoraISO() });
+    await _conTimeout(lote.commit(), GESTION_MS, activo ? 'reactivar' : 'dar de baja');
+    if (activo && !(dir && dir.exists)) return { ok: true, msg: g.t.nombre + ' quedó activo, pero todavía no tiene acceso a la app. Avísale a CorexOn.' };
+    return { ok: true, msg: activo ? g.t.nombre + ' puede volver a entrar.' : g.t.nombre + ' quedó dado de baja. Su historial no se borra.' };
+  } catch (e) {
+    // SILENCIO-FIRMADO: no se traga: el mensaje con la causa vuelve a _cambiarActivo, que lo muestra.
+    console.error((activo ? 'reactivar' : 'baja') + ' de tecnico (' + paso + '):', e);
+    return { ok: false, msg: _msgGestion(e, paso) };
+  }
+}
+
+function cambiarPasswordAdmin() { toast(SOLO_TECNICOS); }
+function mostrarFormTecnico() {
+  editandoTecnicoId = null;
+  const nom = document.getElementById('tec-nombre');
+  nom.value = ''; nom.disabled = false;
+  document.getElementById('tec-pin').value = '';
+  document.getElementById('tec-pin-label').textContent = 'PIN (4 números)';
+  document.getElementById('form-tecnico-titulo').textContent = 'Nuevo técnico';
+  document.getElementById('form-tecnico').style.display = 'block';
+  nom.focus();
+}
+function cancelarFormTecnico() {
+  document.getElementById('form-tecnico').style.display = 'none';
+  document.getElementById('tec-nombre').disabled = false;
+  editandoTecnicoId = null;
+}
+// "Editar" es cambiar el PIN. El nombre no se cambia: las hojas ya firmadas y "Ver OTs por tecnico"
+// lo buscan por nombre, y la firma del tecnico (FIRMAS_TECNICOS) tambien.
+function editarTecnico(id, nombre) {
+  editandoTecnicoId = id;
+  const nom = document.getElementById('tec-nombre');
+  nom.value = nombre || ''; nom.disabled = true;
+  document.getElementById('tec-pin').value = '';
+  document.getElementById('tec-pin-label').textContent = 'PIN nuevo (4 números)';
+  document.getElementById('form-tecnico-titulo').textContent = 'Cambiar PIN';
+  document.getElementById('form-tecnico').style.display = 'block';
+  document.getElementById('tec-pin').focus();
+}
+async function guardarTecnico() {
+  // Instantanea ANTES del primer await (regla 2): el formulario puede cambiar mientras tanto.
+  const id = editandoTecnicoId;
+  const nombre = document.getElementById('tec-nombre').value;
+  const pin = document.getElementById('tec-pin').value;
+  // Doble toque: dos altas crearian dos cuentas.
+  if (_gestionEnCurso) { toast(GESTION_EN_CURSO); return; }
+  _gestionEnCurso = true;
+  const soltar = _bloquear(document.getElementById('btn-guardar-tecnico'));
+  let r = null;
+  try {
+    r = id ? await _cambiarPinTecnico(id, pin) : await _altaTecnico(nombre, pin);
+  } finally { _gestionEnCurso = false; soltar(); }
+  toast(r.msg);
+  if (r.ok) {
+    cancelarFormTecnico();
+    await cargarTecnicosAdmin();
+    await cargarUsuariosApp();
+  }
+}
+async function _cambiarActivo(id, nombre, activo, btn) {
+  if (_gestionEnCurso) { toast(GESTION_EN_CURSO); return; }
+  _gestionEnCurso = true;
+  const soltar = _bloquear(btn, activo ? 'Reactivando…' : 'Dando de baja…');
+  let r = null;
+  try { r = await _activarTecnico(id, activo); }
+  finally { _gestionEnCurso = false; soltar(); }
+  toast(r.msg);
+  if (r.ok) { await cargarTecnicosAdmin(); await cargarUsuariosApp(); }
+}
+async function eliminarTecnico(id, nombre, btn) {
+  if (!await _confirmar(nombre + ' dejará de aparecer en la pantalla de entrada. Sus hojas y su historial se mantienen, y puedes reactivarlo después.',
+    { titulo: 'Dar de baja', okTexto: 'Dar de baja', peligro: true })) return;
+  await _cambiarActivo(id, nombre, false, btn);
+}
+async function reactivarTecnico(id, nombre, btn) { await _cambiarActivo(id, nombre, true, btn); }
 
 
 

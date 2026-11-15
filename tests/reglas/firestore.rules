@@ -8,7 +8,8 @@ rules_version = '2';
 // Publicarlas: consola de Firebase -> Firestore Database -> Reglas -> pegar este archivo -> Publicar.
 // Lo hace Bastian. Prueba: tests/reglas/reglas.test.js contra el emulador (README de esta carpeta).
 //
-// Quien es quien: `directorio/{uid}` (lo escribe solo el Admin SDK, tools/cuentas-auth.js). Una cuenta de Firebase sin
+// Quien es quien: `directorio/{uid}` (lo escribe el Admin SDK, tools/cuentas-auth.js; los tecnicos en
+// terreno, tambien el Administrador desde el panel). Una cuenta de Firebase sin
 // ficha en el directorio, o con `activo: false`, NO es usuario de la app aunque haya iniciado sesion:
 // el alta de cuentas de Firebase Auth no se puede cerrar sin Identity Platform, asi que cualquiera
 // puede crear una; lo que no puede es darse una ficha.
@@ -29,20 +30,33 @@ service cloud.firestore {
     function esAdmin() { return esUsuario() && ficha().data.cargo == 'Administrador'; }
     function esPanel() { return esUsuario() && ficha().data.cargo in ['Administrador', 'Supervisor']; }
 
-    // La pantalla de entrada lista a la gente ANTES de iniciar sesion: el directorio no tiene
-    // secretos (nombre, cargo, letra, correo de la cuenta, activo). Lo escribe SOLO
-    // tools/cuentas-auth.js con el Admin SDK (que no pasa por estas reglas): desde la app, nadie
-    // (D1-B, 23-10-2026). Asi nadie puede darse una ficha ni cambiarse el cargo.
-    match /directorio/{uid} {
-      allow read: if true;
-      allow write: if false;
+    // Lo que queda escrito es un tecnico en terreno, y lo que habia (si habia) tambien.
+    function soloTecnico() {
+      return request.resource.data.get('cargo', '') == 'Tecnico en terreno'
+        && (resource == null || resource.data.get('cargo', '') == 'Tecnico en terreno');
     }
 
-    // Todavia guarda PIN y hash (hasta la etapa 3): lo lee solo el Administrador y no lo escribe
-    // nadie desde la app (D1-B: altas, bajas y PIN los hace CorexOn con el Admin SDK).
+    // La pantalla de entrada lista a la gente ANTES de iniciar sesion: el directorio no tiene
+    // secretos (nombre, cargo, letra, correo de la cuenta, activo). Supervisores y administradores los
+    // escribe SOLO tools/cuentas-auth.js con el Admin SDK (que no pasa por estas reglas). Desde el
+    // 14-11-2026 el Administrador agrega, da de baja y reactiva TECNICOS EN TERRENO desde el panel
+    // (gestion-tecnicos.rules es la misma regla sobre el paso 1b): nadie se da una ficha, nadie sube
+    // de cargo y nadie borra.
+    match /directorio/{uid} {
+      allow read: if true;
+      allow create, update: if esAdmin() && soloTecnico()
+        && request.resource.data.keys().hasOnly(['nombre', 'cargo', 'letra', 'correo', 'activo', 'actualizadoEn'])
+        && request.resource.data.get('nombre', '') is string && request.resource.data.get('nombre', '') != ''
+        && request.resource.data.get('activo', true) is bool;
+    }
+
+    // Todavia guarda PIN y hash (hasta la etapa 3): lo lee solo el Administrador. Escribe solo el
+    // Administrador, y solo fichas de tecnicos en terreno (alta, PIN y baja desde el panel, 14-11-2026).
     match /tecnicos/{id} {
       allow read: if esAdmin();
-      allow write: if false;
+      allow create, update: if esAdmin() && soloTecnico()
+        && request.resource.data.get('nombre', '') is string && request.resource.data.get('nombre', '') != ''
+        && !('passwordHash' in request.resource.data);
     }
 
     // ORDENES (revision de Codex del PR #64, 23-10-2026: cualquier usuario podia desfirmar una hoja
