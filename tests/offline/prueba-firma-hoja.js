@@ -46,7 +46,9 @@ const PT_POR_MM = 72 / 25.4;
 const PIE_A4 = 285;
 
 // El tecnico con mas hojas cerradas en produccion (93 de 202) y firma cargada.
-const TECNICO = 'Lucas Fernández';
+// --tecnico "Pedro Arce M" prueba la firma de otro (17-11-2026: se agrego la de Pedro como tecnico).
+const _iTec = process.argv.indexOf('--tecnico');
+const TECNICO = (_iTec > 0 && process.argv[_iTec + 1]) || 'Lucas Fernández';
 
 const TIPOS = { '.html': 'text/html', '.json': 'application/json', '.png': 'image/png', '.js': 'application/javascript' };
 function servir() {
