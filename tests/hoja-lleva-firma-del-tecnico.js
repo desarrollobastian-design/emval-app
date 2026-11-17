@@ -297,6 +297,15 @@ console.log('La hoja de servicio tiene que salir firmada por quien la ejecuto\n'
     const pesos = [...bloqueF.matchAll(/img:\s*'data:image\/[a-z]+;base64,([A-Za-z0-9+/=]+)'/g)]
       .map(x => x[1].length / 1024);
     chequear(claves.length > 0, 'FIRMAS_TECNICOS esta vacio');
+    /* Quien firma hojas hoy, por clave _normTexto. Desde la etapa 1 de Auth `tecnicos` ya no se
+       lee sin sesion (tools/embeber-firmas-tecnicos.js responde 403), asi que esta lista es el
+       registro: si un tecnico sale de aca o su clave se escribe distinto, su hoja sale sin firma
+       y nada avisa. 17-11-2026: «Pedro Arce M», el Administrador dado de alta como tecnico para
+       las hojas que ejecuta el mismo (su cuenta de administrador, «Pedro Arce», NO firma hojas). */
+    const DEBEN_FIRMAR = ['jose quiroz', 'lucas fernandez', 'nelson herrera', 'pedro arce m'];
+    const faltan = DEBEN_FIRMAR.filter(k => claves.indexOf(k) < 0);
+    chequear(faltan.length === 0, 'sin firma embebida: ' + faltan.join(', ') +
+      ' — sus hojas saldrian con el nombre y sin la firma que pide SMU');
     chequear(claves.every(k => k === k.toLowerCase() && !/[À-ɏ]/.test(k)),
       'hay claves con mayusculas o tildes (' + claves.filter(k => k !== k.toLowerCase() ||
       /[À-ɏ]/.test(k)).join(', ') + '): no van a calzar con _normTexto y esas hojas salen sin firma');

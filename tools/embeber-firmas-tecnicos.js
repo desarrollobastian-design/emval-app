@@ -98,8 +98,9 @@ const ALTO_MAX = 22, ANCHO_MAX = 62;
   // ── Cruce contra la coleccion real de tecnicos ────────────────────────────────────────
   let tecnicos = null;
   if (verificar) {
-    // Solo LECTURA. La API key del cliente esta en index.html y las reglas permiten leer sin
-    // autenticacion (ver la seccion de Firestore por REST en CLAUDE.md).
+    // Solo LECTURA, con la API key del cliente que esta en index.html. Funcionaba mientras las
+    // reglas dejaban leer sin autenticacion; desde la etapa 1 de Auth (28-10-2026) responde 403
+    // y hay que confirmar el nombre en la app y correr con --sin-verificar.
     const src0 = fs.readFileSync(destino, 'utf8');
     const mk = src0.match(/apiKey:\s*"([^"]+)"/);
     if (!mk) { console.error('No se encontro la apiKey en index.html.'); process.exit(1); }
@@ -108,6 +109,12 @@ const ALTO_MAX = 22, ANCHO_MAX = 62;
     try {
       const r = await fetch(url);
       const j = await r.json();
+      // 17-11-2026: desde la etapa 1 de Auth las reglas ya no dejan leer `tecnicos` sin sesion
+      // y esto responde 403. Antes se leia `j.documents || []` sin mirar el codigo: un 403 se
+      // volvia "cero tecnicos" y las 3 firmas vigentes salian como huerfanas. Un error no es
+      // una lista vacia: se detiene y dice por que.
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + ((j.error && j.error.status) || '') +
+        (r.status === 403 ? ' — las reglas ya no dejan leer `tecnicos` sin sesion; confirma el nombre en la app y usa --sin-verificar' : ''));
       tecnicos = (j.documents || [])
         .map(d => (d.fields && d.fields.nombre && d.fields.nombre.stringValue) || '')
         .filter(Boolean);
